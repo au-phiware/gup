@@ -243,6 +243,7 @@ fn modifier_flags_propagated_through_dispatch() {
 // ---------------------------------------------------------------------------
 
 #[test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 fn performance_10k_elements_50_handlers() {
     let counter = Arc::new(AtomicU32::new(0));
 

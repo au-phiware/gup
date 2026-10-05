@@ -64,6 +64,7 @@ async fn get_context() -> Arc<RenderContext> {
 /// setup and buffer upload overhead, so the threshold accounts for this
 /// fixed cost (especially in debug builds).
 #[tokio::test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 async fn test_point_query_1k_threshold() {
     let context = get_context().await;
     let data = generate_grid(1_000);
@@ -93,6 +94,7 @@ async fn test_point_query_1k_threshold() {
 
 /// 10K points: point query must complete in <100ms.
 #[tokio::test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 async fn test_point_query_10k_threshold() {
     let context = get_context().await;
     let data = generate_grid(10_000);
@@ -151,6 +153,7 @@ async fn test_point_query_100k_threshold() {
 
 /// 10K points, medium region: must complete in <200ms.
 #[tokio::test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 async fn test_region_query_10k_medium_threshold() {
     let context = get_context().await;
     let data = generate_grid(10_000);
@@ -213,6 +216,7 @@ async fn test_region_query_100k_large_threshold() {
 
 /// Batch of 10 queries on 10K points: must complete in <500ms.
 #[tokio::test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 async fn test_batch_query_10x10k_threshold() {
     let context = get_context().await;
     let data = generate_grid(10_000);
@@ -250,6 +254,7 @@ async fn test_batch_query_10x10k_threshold() {
 
 /// Streaming query on 10K points: must complete in <200ms.
 #[tokio::test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 async fn test_streaming_query_10k_threshold() {
     let context = get_context().await;
     let data = generate_grid(10_000);
@@ -288,6 +293,7 @@ async fn test_streaming_query_10k_threshold() {
 
 /// Subsequent queries should be faster than the first (spatial index cached).
 #[tokio::test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 async fn test_subsequent_query_faster() {
     let context = get_context().await;
     let data = generate_grid(10_000);

@@ -454,6 +454,7 @@ async fn test_axis_with_different_configurations() -> Result<(), Box<dyn std::er
 
 // Performance and memory tests
 #[tokio::test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 async fn test_axis_performance_with_large_tick_count() {
     let axis = LinearAxis::with_position(AxisPosition::Bottom);
 

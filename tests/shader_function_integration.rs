@@ -125,6 +125,7 @@ async fn test_wgsl_function_output() -> GupResult<()> {
 }
 
 #[tokio::test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 async fn test_shader_function_performance() -> GupResult<()> {
     use std::time::Instant;
 
@@ -298,6 +299,7 @@ async fn test_shader_uniform_backward_compatibility() -> GupResult<()> {
 }
 
 #[tokio::test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 async fn test_shader_uniform_generation_performance() -> GupResult<()> {
     use gup::shader_function::ShaderUniform;
     use std::time::Instant;

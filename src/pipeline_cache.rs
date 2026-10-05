@@ -538,6 +538,7 @@ mod gpu_tests {
 
     /// Timed comparison: 100 Selections with vs without a cache.
     #[test]
+    #[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
     fn gpu_benchmark_cached_vs_uncached() {
         pollster::block_on(async {
             let context = match crate::GupContext::headless().await {

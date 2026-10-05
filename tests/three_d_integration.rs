@@ -744,6 +744,7 @@ async fn line3d_headless_render() {
 
 /// Assert that rendering 100K sphere instances completes in < 16ms per frame.
 #[tokio::test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 async fn sphere3d_100k_performance() {
     let (device, queue) = headless_context().await;
 

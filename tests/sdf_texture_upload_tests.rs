@@ -229,6 +229,7 @@ async fn test_text_layout_produces_vertices() {
 // =============================================================================
 
 #[tokio::test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 async fn test_ascii_preload_performance() {
     let context = create_test_context().await;
 
@@ -256,6 +257,7 @@ async fn test_ascii_preload_performance() {
 }
 
 #[tokio::test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 async fn test_texture_upload_adds_minimal_overhead() {
     let context = create_test_context().await;
 

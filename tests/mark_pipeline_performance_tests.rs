@@ -37,6 +37,7 @@ async fn create_test_context() -> GupResult<Arc<GupContext>> {
 /// Test that pipeline creation meets performance targets.
 /// Target: <10ms per pipeline creation (excluding initial shader compilation)
 #[tokio::test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 async fn test_pipeline_creation_performance() -> GupResult<()> {
     let context = create_test_context().await?;
     let device = &context.device;
@@ -65,6 +66,7 @@ async fn test_pipeline_creation_performance() -> GupResult<()> {
 /// Test that cached pipeline access meets performance targets.
 /// Target: Cached pipeline access in <1ms
 #[tokio::test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 async fn test_cached_pipeline_performance() -> GupResult<()> {
     let context = create_test_context().await?;
     let device = &context.device;
@@ -97,6 +99,7 @@ async fn test_cached_pipeline_performance() -> GupResult<()> {
 /// Test bind group creation performance.
 /// Target: <5ms per bind group creation
 #[tokio::test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 async fn test_bind_group_creation_performance() -> GupResult<()> {
     let context = create_test_context().await?;
     let device = &context.device;
@@ -174,6 +177,7 @@ async fn test_pipeline_cache_memory_efficiency() -> GupResult<()> {
 /// Test registry operations performance with multiple mark types.
 /// Verify that registry scales well with multiple registered marks
 #[tokio::test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 async fn test_registry_scalability() -> GupResult<()> {
     let context = create_test_context().await?;
     let device = &context.device;
@@ -224,6 +228,7 @@ async fn test_registry_scalability() -> GupResult<()> {
 /// Benchmark mark attribute processing performance.
 /// Test conversion from high-level attributes to GPU data
 #[tokio::test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 async fn test_attribute_processing_performance() -> GupResult<()> {
     // Create test attributes
     let attribute_count = 10_000;

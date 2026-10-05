@@ -1061,6 +1061,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
     fn test_performance_requirements() {
         use std::time::Instant;
 

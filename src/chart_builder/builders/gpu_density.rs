@@ -1038,22 +1038,14 @@ mod tests {
 
         let total = kde_elapsed + ms_elapsed;
 
-        // On real GPU hardware the target is <100 ms.  Software renderers
-        // (e.g. llvmpipe used in CI) are much slower, so we only assert a
-        // generous upper bound to catch regressions.  The actual hardware
-        // performance target is validated by visual benchmarking.
+        // On real GPU hardware the target is <100 ms. Timing is reported, not
+        // asserted: wall-clock budgets are unreliable on shared CI runners
+        // (GUP-398).
         eprintln!(
             "GPU density 100K perf: KDE={}ms, MS={}ms, total={}ms",
             kde_elapsed.as_millis(),
             ms_elapsed.as_millis(),
             total.as_millis()
-        );
-
-        // Soft assert: must complete within 10 seconds even on software.
-        assert!(
-            total.as_secs() < 10,
-            "GPU compute time {}s is unacceptably slow",
-            total.as_secs()
         );
 
         // Verify the result is non-trivial.

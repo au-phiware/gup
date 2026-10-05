@@ -306,6 +306,7 @@ async fn test_tooltip_layout_with_real_measurements() {
 // =============================================================================
 
 #[test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 fn test_hover_detection_performance() {
     use std::time::Instant;
 

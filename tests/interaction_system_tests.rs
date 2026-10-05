@@ -187,6 +187,7 @@ async fn test_region_query() {
 
 /// Test performance requirements: <1ms for point queries on large datasets
 #[tokio::test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 async fn test_point_query_performance() {
     let context = get_test_context().await;
     let mut interaction_system = InteractionSystem::new(&context).await.unwrap();
@@ -230,6 +231,7 @@ async fn test_point_query_performance() {
 
 /// Test region query performance with large datasets
 #[tokio::test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 async fn test_region_query_performance() {
     let context = get_test_context().await;
     let mut interaction_system = InteractionSystem::new(&context).await.unwrap();

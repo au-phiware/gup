@@ -378,6 +378,7 @@ fn test_blend_config_custom_ignores_override_when_locked() {
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 async fn test_dynamic_attribute_update_performance() -> GupResult<()> {
     let _context = create_test_context().await?;
 
@@ -405,6 +406,7 @@ async fn test_dynamic_attribute_update_performance() -> GupResult<()> {
 }
 
 #[tokio::test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 async fn test_state_transition_performance() -> GupResult<()> {
     let _context = create_test_context().await?;
 

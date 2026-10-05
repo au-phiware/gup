@@ -595,6 +595,7 @@ fn test_focus_ring_style_variants() {
 }
 
 #[test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 fn test_performance_1000_focus_elements() {
     use gup::accessibility::selection_focus::{FocusPointDescriptor, SelectionFocusBridge};
     use std::time::Instant;

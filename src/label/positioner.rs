@@ -1234,6 +1234,7 @@ mod tests {
     // -- Performance: 500 labels --
 
     #[test]
+    #[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
     fn test_performance_500_labels() {
         let mut positioner = LabelPositioner::new();
         let axis_info = AxisInfo::horizontal(2000.0);

@@ -1867,6 +1867,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
     fn test_glyph_positioning_performance() {
         // Test glyph positioning performance - a core part of text layout
         use std::time::Instant;
@@ -1940,6 +1941,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
     fn test_collision_detection_performance() {
         // Test collision detection performance with many existing labels
         use std::time::Instant;
@@ -1983,6 +1985,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
     fn test_collision_grid_efficiency() {
         // Test that collision grid scales well with many bounds
         use std::time::Instant;
@@ -2320,6 +2323,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
     fn test_clipping_detection_performance() {
         // Verify clipping detection completes in <1ms for 100 text elements
         use std::time::Instant;
@@ -2537,6 +2541,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
     fn test_text_wrapping_performance() {
         // Verify wrapping 100 labels takes <5ms
         use std::time::Instant;
@@ -3125,6 +3130,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
     fn test_ellipsis_performance() {
         use std::time::Instant;
 

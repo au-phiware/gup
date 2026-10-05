@@ -405,6 +405,7 @@ async fn test_custom_container_bounds() {
 // =============================================================================
 
 #[tokio::test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 async fn test_clipping_performance_500_labels() {
     let context = create_test_context().await;
     let font_atlas = FontAtlas::new(context.device(), context.queue(), 16.0).unwrap();

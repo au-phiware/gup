@@ -269,6 +269,7 @@ async fn test_gpu_resident_vs_cpu_narrowing_consistency() {
 // --- Performance Test ---
 
 #[tokio::test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 async fn test_gpu_resident_query_latency() {
     let mut system = create_test_interaction_system().await;
     system.set_spatial_algorithm(SpatialAlgorithm::Morton);

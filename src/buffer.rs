@@ -1704,6 +1704,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
     async fn test_download_performance_10k() {
         use std::time::Instant;
 
@@ -2161,6 +2162,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
     async fn test_allocation_latency_improvement() {
         use std::time::Instant;
 

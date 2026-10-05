@@ -179,6 +179,7 @@ set -euo pipefail
 mask ci gallery
 mask ci wasm
 mask ci visual-regression
+mask ci tests
 mask ci dogfood
 mask ci performance
 echo "mask ci: all workflows passed locally"
@@ -228,6 +229,24 @@ cargo test -p gup-core --lib --test scatter_png -- --test-threads=1
 cargo test -p gup-core --doc
 cargo test -p gup-core --test compile_fail
 mask smoke-examples
+```
+
+### ci tests
+
+> Tests workflow: every workspace member's tests, then the `debug` feature
+
+The only CI job that runs the root crate's full suite. Built without debug info
+(as on CI) so the 111 integration-test binaries fit on disk; even so, check that
+`CARGO_TARGET_DIR` has about 10 GB free.
+
+```bash
+set -euo pipefail
+export VK_ICD_FILENAMES="${GUP_LAVAPIPE_ICD:-$LIBGL_DRIVERS_PATH/../../share/vulkan/icd.d/lvp_icd.x86_64.json}"
+export WGPU_BACKEND=vulkan
+export CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_DEV_STRIP=debuginfo CARGO_INCREMENTAL=0
+unset WAYLAND_DISPLAY
+xvfb-run -a cargo test --workspace -- --test-threads=1
+./scripts/test_debug_feature.sh
 ```
 
 ### ci dogfood

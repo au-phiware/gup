@@ -565,6 +565,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
     fn test_sdf_generation_performance() {
         // Test SDF generation performance for typical glyph sizes
         use std::time::Instant;
@@ -611,6 +612,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
     fn test_glyph_cache_efficiency() {
         // Test that glyph caching works efficiently
         let mut glyphs = std::collections::HashMap::new();

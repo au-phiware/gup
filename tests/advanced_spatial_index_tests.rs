@@ -270,6 +270,7 @@ fn test_both_algorithms_find_same_elements_for_region() {
 // --- Performance Comparison Tests ---
 
 #[test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 fn test_morton_performance_vs_linear_scan() {
     let elements = make_grid_elements(100, 100, 10.0); // 10K elements
     let bounds = Aabb::new([-10.0, -10.0], [1010.0, 1010.0]);
@@ -317,6 +318,7 @@ fn test_morton_performance_vs_linear_scan() {
 }
 
 #[test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 fn test_hierarchical_performance_vs_linear_scan() {
     let elements = make_clustered_positions(&[
         ([100.0, 100.0], 2500),

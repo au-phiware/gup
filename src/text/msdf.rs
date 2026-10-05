@@ -2944,6 +2944,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
     fn test_msdf_generation_performance() {
         // Full ASCII set should generate within 200ms
         use std::time::Instant;

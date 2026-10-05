@@ -101,6 +101,7 @@ fn test_statistics_compute_structure() {
 
 /// Benchmark: CPU mean calculation performance
 #[test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 fn test_mean_performance() {
     let data: Vec<f32> = (0..1_000_000).map(|x| x as f32).collect();
     let mean = Mean::new(data);

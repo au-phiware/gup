@@ -804,6 +804,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
     async fn test_blend_mode_performance() {
         let mut context = RenderContext::new().await.unwrap();
 
@@ -1044,6 +1045,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
     async fn test_raii_guard_no_performance_overhead() {
         let mut context = RenderContext::new().await.unwrap();
 

@@ -10,6 +10,7 @@ use gup::*;
 use std::time::Instant;
 
 #[test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 fn test_gradient_creation_performance() {
     // Test creation time for both implementations
 
@@ -56,6 +57,7 @@ fn test_gradient_creation_performance() {
 }
 
 #[test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 fn test_buffer_data_generation_performance() {
     // Test buffer data generation for large gradients
     let colors: Vec<Vec4> = (0..100)
@@ -96,6 +98,7 @@ fn test_buffer_data_generation_performance() {
 }
 
 #[test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 fn test_builder_performance() {
     // Test builder pattern performance
     let start = Instant::now();
@@ -127,6 +130,7 @@ fn test_builder_performance() {
 }
 
 #[test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 fn test_large_gradient_creation() {
     // Test creation of very large gradients (stress test)
     let sizes = [10, 50, 100, 200, 500];
@@ -162,6 +166,7 @@ fn test_large_gradient_creation() {
 type GradientPreset = (&'static str, fn() -> ColorGradientStorage);
 
 #[test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 fn test_preset_gradient_performance() {
     // Test preset gradient creation performance
     let presets: Vec<GradientPreset> = vec![
@@ -244,6 +249,7 @@ fn test_memory_efficiency() {
 }
 
 #[test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 fn test_wgsl_generation_performance() {
     // Test WGSL code generation performance
     let start = Instant::now();

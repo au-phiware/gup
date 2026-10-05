@@ -37,6 +37,15 @@ dispatch. It is too long (316 Criterion benchmarks) to run on every push.
 - **Long-term Storage**: Keeps benchmark results and a trend data point
   (`scripts/perf_trend.sh record`) as a 90-day artifact
 
+### Tests (`tests.yml`)
+
+Runs `cargo test --workspace -- --test-threads=1` on lavapipe, then the lib and
+every `required-features = ["debug"]` integration test with `--features debug`
+(`scripts/test_debug_feature.sh`). It is the only workflow that runs the root
+crate's whole suite. Tests that assert a wall-clock budget are `#[ignore]`d with
+a "wall-clock budget ... (GUP-398)" reason; shared runners are too noisy for
+them. `mask ci tests` runs it locally.
+
 ## Toolchain and GPU (all workflows)
 
 - The Rust toolchain is pinned in `rust-toolchain.toml`. Workflows install it

@@ -1683,6 +1683,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
     async fn gpu_brush_completes_within_timeout() {
         // Verify the GPU path completes well within the default 50ms
         // timeout for a moderate dataset.

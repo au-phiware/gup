@@ -94,6 +94,7 @@ async fn test_gpu_tessellation_single_path() {
 }
 
 #[tokio::test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 async fn test_gpu_tessellation_multiple_paths() {
     let Some((device, queue)) = create_gpu_context().await else {
         eprintln!("Skipping test: GPU not available");

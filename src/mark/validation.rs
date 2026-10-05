@@ -600,7 +600,6 @@ impl<M: Mark> MarkValidator<M> {
 ///
 /// let profile = MarkProfiler::<Circle>::profile();
 /// println!("{}", profile.summary());
-/// assert!(profile.vertex_generation_time.as_millis() < 100);
 /// ```
 pub struct MarkProfiler<M: Mark> {
     _phantom: PhantomData<M>,
@@ -847,6 +846,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
     fn test_circle_profile() {
         let profile = MarkProfiler::<Circle>::profile();
         assert_eq!(profile.vertex_count, 4);

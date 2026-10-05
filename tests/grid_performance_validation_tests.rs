@@ -29,6 +29,7 @@ fn standard_bounds() -> ChartBounds {
 // ---------------------------------------------------------------------------
 
 #[test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 fn test_grid_generation_under_50us_for_20_lines() {
     // Performance target: <0.05ms (50µs) for generating 20 grid lines
     let bounds = standard_bounds();
@@ -244,6 +245,7 @@ fn test_memory_usage_large_grid() {
 // ---------------------------------------------------------------------------
 
 #[test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 fn test_disabled_grid_is_instant() {
     let bounds = standard_bounds();
     let h_ticks = make_ticks(50, bounds.left as f64, bounds.right as f64);
@@ -388,6 +390,7 @@ fn test_cache_invalidation_on_tick_change() {
 // ---------------------------------------------------------------------------
 
 #[test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 fn test_fingerprint_computation_is_fast() {
     let bounds = standard_bounds();
     let config = GridConfiguration::default();

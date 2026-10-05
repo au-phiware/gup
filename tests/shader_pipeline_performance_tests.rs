@@ -263,6 +263,7 @@ mod tests {
     // -------------------------------------------------------------------
 
     #[test]
+    #[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
     fn test_pipeline_creation_under_10ms() {
         // Target: pipeline creation < 10ms for complex compositions.
         let start = std::time::Instant::now();
@@ -284,6 +285,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
     fn test_shader_generation_overhead_vs_baseline() {
         // Target: shader function overhead < 1% vs hand-written shaders.
         // We measure WGSL generation time only (not GPU execution).
@@ -375,6 +377,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
     fn test_batch_pipeline_generation_time() {
         // Validates that batch generation stays under targets.
         let mut batch = PipelineBatch::new();

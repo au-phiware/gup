@@ -1024,6 +1024,7 @@ mod tests {
     // -- Performance: dispatch is allocation-free on hot path ---------------
 
     #[test]
+    #[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
     fn dispatch_performance_baseline() {
         // Verify that dispatch of 50 handlers across 100 hits completes
         // well under 16ms (the frame budget).
@@ -1334,6 +1335,7 @@ mod tests {
     // -- Benchmark: 1000 mousemove events coalesced to 1 dispatch ----------
 
     #[test]
+    #[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
     fn benchmark_1000_mousemove_coalesced_to_one_dispatch() {
         use std::sync::atomic::{AtomicU32, Ordering};
         let dispatch_count = std::sync::Arc::new(AtomicU32::new(0));

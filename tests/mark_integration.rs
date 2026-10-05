@@ -276,6 +276,7 @@ async fn test_line_vertex_buffer_gpu_compatibility() -> GupResult<()> {
 }
 
 #[tokio::test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 async fn test_mark_performance_targets() -> GupResult<()> {
     let _context = create_test_context().await?;
 

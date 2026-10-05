@@ -4,6 +4,7 @@ use gup::mark::*;
 use std::time::Instant;
 
 #[test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 fn test_path_mark_vertex_generation_performance() {
     let start = Instant::now();
     for _ in 0..10000 {
@@ -20,6 +21,7 @@ fn test_path_mark_vertex_generation_performance() {
 }
 
 #[test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 fn test_composite_mark_vertex_generation_performance() {
     let start = Instant::now();
     for _ in 0..10000 {
@@ -35,6 +37,7 @@ fn test_composite_mark_vertex_generation_performance() {
 }
 
 #[test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 fn test_text_mark_vertex_generation_performance() {
     let start = Instant::now();
     for _ in 0..10000 {
@@ -60,6 +63,7 @@ fn test_mark_vertex_memory_efficiency() {
 }
 
 #[test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 fn test_transform_to_matrix_performance() {
     let transform = Transform::identity();
 

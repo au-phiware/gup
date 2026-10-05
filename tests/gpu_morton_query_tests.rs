@@ -245,6 +245,7 @@ fn test_morton_cpu_region_query_finds_elements() {
 // --- Performance Comparison ---
 
 #[test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 fn test_cpu_morton_query_performance_baseline() {
     // Establish a baseline for CPU Morton query performance at scale.
     let elements: Vec<ElementPosition> = (0..100_000)

@@ -428,6 +428,7 @@ async fn test_upload_all_ignores_dirty_state() -> GupResult<()> {
 // ---------------------------------------------------------------------------
 
 #[tokio::test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 async fn test_attribute_update_upload_performance() -> GupResult<()> {
     let context = create_test_context().await?;
     let device = &context.device;

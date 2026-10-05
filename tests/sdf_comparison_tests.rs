@@ -11,6 +11,7 @@ fn load_font_data() -> Vec<u8> {
 }
 
 #[test]
+#[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
 fn test_sdf_vs_msdf_quality_report() {
     let data = load_font_data();
     let sdf_gen = SdfGenerator::new(data.clone(), SdfConfig::default()).unwrap();

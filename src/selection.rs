@@ -5673,6 +5673,7 @@ fn vs_main() -> VertexOutput {
     }
 
     #[test]
+    #[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
     fn gpu_shader_binding_performance_100k() {
         use crate::shader_function::LinearScale;
         use std::time::Instant;
@@ -6008,6 +6009,7 @@ fn vs_main() -> VertexOutput {
     }
 
     #[test]
+    #[ignore = "wall-clock budget: unreliable on shared CI runners; run with --ignored on a hardware GPU (GUP-398)"]
     fn gpu_update_shader_uniforms_performance() {
         use crate::shader_function::LinearScale;
         use std::time::Instant;
