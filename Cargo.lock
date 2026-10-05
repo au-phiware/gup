@@ -1786,6 +1786,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "gup-text"
+version = "0.1.0"
+dependencies = [
+ "bytemuck",
+ "fontdue",
+ "pollster",
+ "thiserror 2.0.18",
+ "wgpu",
+]
+
+[[package]]
 name = "gup-visual-regression"
 version = "0.1.0"
 dependencies = [

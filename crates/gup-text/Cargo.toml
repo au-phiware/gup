@@ -1,0 +1,23 @@
+[package]
+name = "gup-text"
+version = "0.1.0"
+authors = ["Corin Lawson <corin@phiware.com.au>"]
+edition = "2024"
+description = "Gup's text system (RFC-001 S2): one font and glyph atlas per device, a measuring API and glyph runs drawn into a caller's render pass"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/au-phiware/gup"
+publish = false
+# The bundled Inter font is under the SIL Open Font License 1.1
+# (fonts/Inter-OFL.txt), not the crate's licence.
+include = ["src/**", "fonts/**", "tests/**", "Cargo.toml"]
+
+# RFC-001 §11: a leaf crate. It must never depend on `gup` or `gup-core`;
+# `gup-core` depends on it. wgpu matches the version gup-core resolves.
+[dependencies]
+wgpu = { version = "27.0", features = ["wgsl"] }
+bytemuck = { version = "1.23", features = ["derive"] }
+fontdue = "0.9"
+thiserror = "2.0"
+
+[dev-dependencies]
+pollster = "0.3"
