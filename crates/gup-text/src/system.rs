@@ -9,6 +9,7 @@ use crate::error::Result;
 use crate::font::Font;
 use crate::layout::{Bounds, Run, TextMetrics};
 use std::collections::HashMap;
+use std::sync::OnceLock;
 
 /// Where `gup-text` writes GPU memory: glyph instances and atlas texels.
 ///
@@ -182,7 +183,10 @@ struct AtlasTexture {
 /// prepare while holding it; the returned [`GlyphBatch`] draws without it.
 pub struct TextSystem {
     device: wgpu::Device,
-    font: Font,
+    /// Set by [`with_font`](Self::with_font), or the bundled Inter on
+    /// first use: parsing Inter takes about 18 ms (release), which a
+    /// device that never draws text should not pay.
+    font: OnceLock<Font>,
     atlas: GlyphAtlas,
     texture: Option<AtlasTexture>,
     bind_group_layout: wgpu::BindGroupLayout,
@@ -197,7 +201,7 @@ pub struct TextSystem {
 impl std::fmt::Debug for TextSystem {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TextSystem")
-            .field("font", &self.font)
+            .field("font", &self.font.get())
             .field("atlas_size", &self.atlas.size())
             .field("glyphs", &self.atlas.len())
             .finish_non_exhaustive()
@@ -205,13 +209,17 @@ impl std::fmt::Debug for TextSystem {
 }
 
 impl TextSystem {
-    /// A text system with the bundled Inter font.
+    /// A text system with the bundled Inter font, loaded on first use.
     pub fn new(device: &wgpu::Device) -> Self {
-        Self::with_font(device, Font::inter())
+        Self::build(device, OnceLock::new())
     }
 
     /// A text system with `font`.
     pub fn with_font(device: &wgpu::Device, font: Font) -> Self {
+        Self::build(device, OnceLock::from(font))
+    }
+
+    fn build(device: &wgpu::Device, font: OnceLock<Font>) -> Self {
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("gup-text atlas"),
             entries: &[
@@ -259,17 +267,17 @@ impl TextSystem {
 
     /// The font.
     pub fn font(&self) -> &Font {
-        &self.font
+        self.font.get_or_init(Font::inter)
     }
 
     /// Measure `text` at `size` logical pixels.
     pub fn measure(&self, text: &str, size: f32) -> TextMetrics {
-        self.font.measure(text, size)
+        self.font().measure(text, size)
     }
 
     /// The ink box of `run` in logical pixels (see [`Font::ink_bounds`]).
     pub fn ink_bounds(&self, run: &Run<'_>) -> Bounds {
-        self.font.ink_bounds(run)
+        self.font().ink_bounds(run)
     }
 
     /// Width and height of the glyph atlas in texels.
@@ -286,7 +294,7 @@ impl TextSystem {
     /// its glyph quads to `glyphs`, rasterising new glyphs at the glyphs'
     /// scale into the atlas.
     pub fn layout(&mut self, run: &Run<'_>, color: [f32; 4], glyphs: &mut Glyphs) -> Result<()> {
-        let font = self.font.clone();
+        let font = self.font().clone();
         let mut result = Ok(());
         font.walk(run, glyphs.scale, |g| {
             if result.is_err() || g.metrics.width == 0 || g.metrics.height == 0 {
