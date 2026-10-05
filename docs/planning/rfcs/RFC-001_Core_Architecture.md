@@ -1420,3 +1420,62 @@ the one place the old and new paths get a device.
   point can share it.
 - **S13 (hosts):** never use `Device ==` to decide whether a host device is
   Gup's. Compare `ContextId`s, or wrap the host device once with `from_wgpu`.
+
+## S2 findings (2026-10-06, GUP-400)
+
+[GUP-400](../stories/GUP-400_RFC_001_S2_Extract_Gup_Text.md) extracted
+`crates/gup-text`, a leaf crate that depends only on wgpu, fontdue, bytemuck and
+thiserror. It replaced gup-core's temporary text module.
+
+- **One `TextSystem` per `Context`.** It lives under the existing
+  `LockRank::Text` lock, so S2 adds no new lock. `Renderer::prepare` lays out
+  and prepares a text item while holding only that lock. The resulting
+  `GlyphBatch` draws without it, allocates nothing and takes no locks.
+- **The measuring API is unchanged for the harness.** `measure` returns width,
+  cap height and descent; `ink_bounds` takes a run. `Layout`'s `PlacedText`
+  keeps its shape. `Anchor`, `HAlign` and `VAlign` now live in `gup-text`, and
+  `gup_core::scene` re-exports them.
+- **Uploads are still counted.** gup-text writes through an `Uploader` trait,
+  which gup-core implements with its counters. The atlas uploads only the dirty
+  rectangle, packed tight (S0b finding 6): a 60-frame zoom wrote 220 B of texels
+  in 2 writes.
+- **Decision: bitmap rasterisation, no MSDF.** Glyphs are rasterised at
+  `size × dpr` and drawn 1:1 on whole physical pixels. This is sharp at any dpr
+  for the horizontal, fixed-size text every current caller draws. `msdf.rs` and
+  `sdf_tuning.rs` (over 3,400 lines) were not ported. MSDF returns when a caller
+  needs free rotation or continuously scaled text. 90° axis titles can use
+  rotated bitmap quads.
+- **Inter Regular 4.1 is the default face** (SIL OFL 1.1, in
+  `crates/gup-text/fonts/`). The scatter golden was re-blessed and checked by
+  eye, and the window frame is still byte-identical to it. The old path keeps
+  Squada One (`assets/fonts/default.ttf` is unchanged). Two limits:
+  - fontdue reads only the legacy `kern` table, and Inter has none, so text is
+    unkerned.
+  - Inter's default digits are proportional; tabular figures are the `tnum`
+    feature.
+
+  GUP-405 adds rustybuzz shaping for both.
+
+- **Parsing Inter is not free**: 18 ms in release, 120 ms in debug, because
+  fontdue parses every outline. It is parsed lazily, once per process, so a
+  `Context` that never draws text does not pay for it.
+
+### Proposed adjustments to S3 and later
+
+- **S3 WASM budget:** the bundled Inter is 411 KB, or 194 KB gzipped. That is
+  about half of the ≤ +400 KB gz budget (risk 10) before any code is counted.
+  Report the font separately in the measurement. If the budget is tight, subset
+  Inter to Latin and the symbols labels use. Squada One was 9 KB gzipped.
+- **S3 `Renderer`:** a `GlyphBatch` binds its atlas at group 0 and carries
+  clip-space quads, so it needs no view uniform. `Prepared::draw` rebinds the
+  view for each mark and rule draw. When `TargetDesc` gains `dpr`, pass it to
+  `Glyphs::new`/`clear`; today it is `desc.width / scene.width`. Text pipelines
+  are cached in the `TextSystem` by `(format, samples)`, so MSAA needs no extra
+  work in gup-text.
+- **S3 `SvgTarget`:** measure SVG text with the same `gup_text::Font` so that
+  layout matches. Name the font family `Inter`, and decide whether to embed it
+  (`@font-face`, 194 KB gzipped) or accept a fallback face in viewers without
+  Inter.
+- **S7 (layout, guides):** the tick-density rule from the S0b review needs
+  stable label widths. With proportional digits a label's width changes with its
+  value. GUP-405's `tnum` fixes that.

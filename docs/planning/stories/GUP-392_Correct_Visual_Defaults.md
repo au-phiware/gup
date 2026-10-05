@@ -91,6 +91,17 @@ Verified against `main` on 2026-10-04:
 
 ### AC2: Inter as the default font
 
+> **Note (2026-10-06, GUP-400):** the font item is done for the surviving path.
+> [GUP-400](GUP-400_RFC_001_S2_Extract_Gup_Text.md) vendored Inter Regular 4.1
+> as `crates/gup-text/fonts/Inter-Regular.ttf`, with its SIL OFL 1.1 licence as
+> `crates/gup-text/fonts/Inter-OFL.txt`. `gup-text` and `gup-core` use it by
+> default, and the `gup_core` scatter golden was re-blessed with it. GUP-400
+> left `assets/fonts/default.ttf` (Squada One) unchanged, so the frozen old path
+> and its goldens did not change. If this story still swaps the old path's font,
+> it should `include_bytes!` the vendored file rather than add a second copy or
+> a second licence. Tabular figures need OpenType feature support (`tnum`),
+> which `gup-text` lacks (see GUP-400's follow-ups).
+
 - [ ] The embedded fallback font (`assets/fonts/default.ttf`) is replaced with
       [Inter](https://github.com/rsms/inter) (SIL OFL 1.1), a static weight
       appropriate for UI text (e.g. Regular) with tabular figures available.

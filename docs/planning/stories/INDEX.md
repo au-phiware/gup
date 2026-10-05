@@ -62,17 +62,18 @@ survives into `gup-core`.
 
 ## RFC-001 Migration
 
-**Old-path LOC remaining: 28876 (re-measured 2026-10-05 after GUP-399: −6, the
-device request in `render.rs` replaced by a shim over `gup_core::Context`)**.
-Measured as the non-blank, non-comment-only, non-`#[cfg(test)]`-block line count
-of the old render path (`src/selection.rs`, `src/mark/`, `src/shader_function/`,
-`src/shader_pipeline.rs`, `src/chart_builder*`, `src/context.rs`,
-`src/render.rs`). Re-measure with `mask old-path-loc`
-(`scripts/old_path_loc.pl`) after each RFC-001 story. This metric exists per
-[RFC-001](../rfcs/RFC-001_Core_Architecture.md)'s Orchestrator review point 1
-("parallel-system risk"): it must trend to 0 as S14 (the flip and delete) lands,
-or the old and new paths will ossify side by side the way four scale systems and
-three composition systems did before.
+**Old-path LOC remaining: 28935 (re-measured 2026-10-06 after GUP-400: Δ 0; S2
+adds the `gup-text` crate and leaves the frozen path untouched. The 28935 was
+already the count when GUP-400 started, 59 above the 28876 recorded after
+GUP-399)**. Measured as the non-blank, non-comment-only,
+non-`#[cfg(test)]`-block line count of the old render path (`src/selection.rs`,
+`src/mark/`, `src/shader_function/`, `src/shader_pipeline.rs`,
+`src/chart_builder*`, `src/context.rs`, `src/render.rs`). Re-measure with
+`mask old-path-loc` (`scripts/old_path_loc.pl`) after each RFC-001 story. This
+metric exists per [RFC-001](../rfcs/RFC-001_Core_Architecture.md)'s Orchestrator
+review point 1 ("parallel-system risk"): it must trend to 0 as S14 (the flip and
+delete) lands, or the old and new paths will ossify side by side the way four
+scale systems and three composition systems did before.
 
 Stories implementing
 [RFC-001: Core Architecture](../rfcs/RFC-001_Core_Architecture.md) (accepted
@@ -108,17 +109,18 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   primary, with GL as a fallback. The lock order is checked in debug builds.
   gup-core builds for wasm32. The 29 wgpu_types doctest failures are gone. The
   full root suite is verified on CI.
-- [GUP-400](GUP-400_RFC_001_S2_Extract_Gup_Text.md) 🚧 — RFC-001 step S2:
-  extracts a `gup-text` leaf crate (font, layout, msdf, atlas survive from
-  `src/text/`) with one `TextSystem` per `Context`, a measuring API and
-  glyph-run drawing into a pass, replacing `gup-core`'s temporary internal text
-  module; coordinates the Inter font swap with GUP-392. Deps: GUP-399 ✅.
+- [GUP-400](GUP-400_RFC_001_S2_Extract_Gup_Text.md) ✅ — RFC-001 step S2: the
+  `gup-text` leaf crate (Inter bundled, OFL) with one `TextSystem` per
+  `Context`: measuring and ink bounds, layout at any dpr into a growable,
+  dirty-rectangle bitmap atlas, and `GlyphBatch::draw` into the caller's pass.
+  `gup-core`'s temporary text module is deleted and its golden re-blessed with
+  Inter. MSDF is not ported; the decision is recorded. Deps: GUP-399 ✅.
 - [GUP-401](GUP-401_RFC_001_S3_Scene_Renderer_RenderTarget.md) 📋 — RFC-001 step
   S3: turns GUP-395's `ImageTarget`/`encode_scene` into the general
   `RenderTarget`/`Renderer` trait family (adds `TextureTarget` and
   draw-in-pass), adds MSAA, `Rects`/`Gradient` scene items and a guides-only
   `SvgTarget`, and measures `gup-core`'s WASM binary-size cost against the ≤
-  +400 KB gz budget (RFC-001 §12 risk 10). Deps: GUP-399 ✅, GUP-400 📋.
+  +400 KB gz budget (RFC-001 §12 risk 10). Deps: GUP-399 ✅, GUP-400 ✅.
 
 ## GPU Rendering Pipeline
 
