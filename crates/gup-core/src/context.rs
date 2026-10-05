@@ -178,6 +178,15 @@ impl std::fmt::Debug for Context {
     }
 }
 
+/// How [`Context::with_options`] creates its device.
+#[derive(Clone, Debug, Default)]
+pub struct ContextOptions {
+    /// Features to enable if the adapter has them, such as
+    /// `TIMESTAMP_QUERY` for GPU timing. Read [`Caps::features`] to see
+    /// which were enabled.
+    pub optional_features: wgpu::Features,
+}
+
 impl Context {
     /// Create a context with its own instance, adapter and device.
     ///
@@ -185,6 +194,12 @@ impl Context {
     /// (not the WebGPU defaults), so column chunks can be large on capable
     /// hardware (RFC-001 §2). Respects `WGPU_BACKEND` and friends.
     pub async fn new() -> Result<Self> {
+        Self::with_options(ContextOptions::default()).await
+    }
+
+    /// Like [`Context::new`], also enabling whichever of
+    /// [`ContextOptions::optional_features`] the adapter supports.
+    pub async fn with_options(options: ContextOptions) -> Result<Self> {
         let instance = wgpu::Instance::new(&wgpu::InstanceDescriptor::from_env_or_default());
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -204,7 +219,7 @@ impl Context {
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: Some("gup-core device"),
-                required_features: wgpu::Features::empty(),
+                required_features: options.optional_features & adapter.features(),
                 required_limits,
                 experimental_features: wgpu::ExperimentalFeatures::disabled(),
                 memory_hints: wgpu::MemoryHints::Performance,

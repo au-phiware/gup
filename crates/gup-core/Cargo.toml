@@ -27,6 +27,14 @@ thiserror = "2.0"
 # `WindowTarget` and `show` (feature `window`, on by default).
 winit = { version = "0.30", optional = true }
 
+[[example]]
+name = "scatter_window"
+required-features = ["window"]
+
+[[example]]
+name = "zoom_bench"
+required-features = ["window"]
+
 [features]
 default = ["window"]
 # A winit window target and a minimal `show()`.
