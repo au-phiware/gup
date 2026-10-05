@@ -59,6 +59,11 @@ survives into `gup-core`.
   cause, pin the Rust toolchain in `rust-toolchain.toml` for the flake and every
   workflow, put the gallery sync check in the hook, and add `mask ci` to
   reproduce CI locally.
+- [GUP-404](GUP-404_Triage_Every_Ignored_Test.md) 📋 — Classify every one of the
+  Tests workflow's 278 ignored tests/doctests into needs-hardware, timing
+  budget, obsolete/frozen-path, or hidden-failure, with a checked-in inventory
+  and a lint rejecting any `#[ignore]` without a reason from an allowed set.
+  Deps: GUP-398 ✅.
 
 ## RFC-001 Migration
 
