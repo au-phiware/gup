@@ -1190,3 +1190,131 @@ fn fs_main(v: circle::Varyings) -> @location(0) vec4<f32> {
 - **S5/S6:** fold in assumptions 1–7. Pin the trybuild snapshots to the dev
   shell's rustc: CI runs the compile-fail suite on 1.93.1 so `stable` wording
   changes don't break it.
+
+## S0b findings (2026-10-05, GUP-396)
+
+[GUP-396](../stories/GUP-396_Gup_Core_Vertical_Slice_Window_Performance.md)
+added the window half of S0: the §7 `RenderTarget` trait with
+`Renderer::prepare` → `Prepared::draw`, `WindowTarget`, a minimal
+`gup_core::show`, `Context::with_options`, upload counters, and
+`PositionScale::set_domain`/`invert` with `Plot::zoom`. Same machine as S0a:
+Intel HD Graphics 630 (KBL GT2), Mesa 26.0.0 Vulkan, niri (Wayland) on a
+1920×1080 60.02 Hz panel at scale 1, rustc 1.93.1.
+
+With S0a this closes the S0 gate: exit criteria (2) and (3) hold.
+
+### Exit criterion 2: window/PNG parity
+
+`show` with `GUP_SCREENSHOT_PATH` draws one frame into the window's surface,
+copies that surface texture back (`COPY_SRC` surface usage) and writes it as
+PNG. The surface is `Bgra8UnormSrgb`, rendered through a `Bgra8Unorm` view;
+`ImageTarget` renders into `Rgba8Unorm`.
+`cargo test -p gup-core --test window_parity -- --ignored --nocapture` compares
+the window's 720×450 frame with an `ImageTarget` render of the same `Plot` and
+with the golden `tests/golden/gup_core/scatter.png`, using CIEDE2000 from the
+GUP-388 harness:
+
+| Comparison                | Pixels  | ΔE max | ΔE mean | ΔE > 0 | ΔE ≥ 2 |
+| ------------------------- | ------- | -----: | ------: | -----: | -----: |
+| window vs `ImageTarget`   | 324,000 |      0 |       0 |      0 |      0 |
+| window vs golden PNG      | 324,000 |      0 |       0 |      0 |      0 |
+| control: double sRGB enc. | 324,000 |  28.67 |   0.866 | 16,397 | 16,397 |
+
+The window is byte-identical to the PNG. The control encodes the window's pixels
+a second time, which is what an sRGB view would do. It fails the threshold on
+every anti-aliased and coloured pixel, so the zero is meaningful. The non-sRGB
+view policy (§7) is what makes the window and the PNG equal.
+
+### Exit criterion 3: 100K points at ≥ 60 fps, 0 column bytes
+
+`cargo run -p gup-core --release --example zoom_bench -- …` runs 100,000 points
+(linear x, log y, viridis fill, constant radius) in a borderless fullscreen
+1920×1080 window. It sets both domains every frame: it zooms to 5% of the extent
+and back, twice, over 60 warm-up and 600 measured frames. Each frame takes the
+same path as `show`: `Plot::resolve`, `Renderer::prepare`, one pass with
+`Prepared::draw`, then `WindowTarget::present`. Frame interval is the `Instant`
+difference between consecutive frame starts. GPU time is the render pass
+measured by `TIMESTAMP_QUERY` (resolved once after the run).
+
+| Run (radius 3 px unless noted)  | Frame interval median / p95 (ms) | fps median / p95 | > 25 ms | CPU work median / p95 (ms) | GPU pass median / p95 (ms) |
+| ------------------------------- | -------------------------------: | ---------------: | ------: | -------------------------: | -------------------------: |
+| `Fifo` (vsync), redraw-paced    |                  16.661 / 16.887 |      60.0 / 59.2 |       0 |              0.754 / 0.806 |              3.039 / 5.564 |
+| `Fifo`, radius 4.5              |                  16.654 / 16.861 |      60.0 / 59.3 |       0 |              0.768 / 0.894 |              3.058 / 7.477 |
+| `Mailbox`, uncapped (no vsync)  |                    4.074 / 6.917 |    245.5 / 144.6 |       0 |              0.647 / 0.783 |              2.674 / 5.854 |
+| `Mailbox`, uncapped, radius 4.5 |                    4.615 / 6.520 |    216.7 / 153.4 |       0 |              0.674 / 0.825 |              3.061 / 5.559 |
+
+- **The target is met with about 2.5× headroom at p95.** Under vsync the median
+  is the panel's refresh (16.66 ms), and no frame missed a refresh. Without
+  vsync the same loop runs at a median of 245 fps.
+- **It is GPU-bound, and the CPU is idle.** Uncapped, 3.4 ms of the 4.1 ms
+  median frame is spent in `acquire`, waiting for a swapchain image. CPU work
+  (resolve with ticks and text, prepare, encode, submit) is 0.65 ms. The GPU
+  pass is 2.7 ms median and 5.9 ms p95; the p95 frames are the zoomed-out, dense
+  ones.
+- **Column bytes written during the 600 zoomed frames: 0, in 0 writes.** The
+  only column write in the process is the startup upload (1,200,384 B, one
+  write). Per frame the run writes 88 B of uniforms in 3 writes (`Encodings` 64
+  B, `Chunk` 8 B, view 16 B) and about 9.4 KB of guide instances (axis rules and
+  glyph quads, rebuilt because the ticks move). It wrote no textures.
+- **How the counter works.** Every GPU write in `gup-core` goes through
+  `Context::write_buffer`/`buffer_with_data`/`write_texture`, counted by
+  `Upload` kind. `context::tests::every_gpu_write_is_counted` fails if any
+  source file calls `queue.write_buffer`, `write_texture`, `create_buffer_init`
+  or `create_texture_with_data`, or maps a buffer at creation, directly. The
+  headless `tests/zoom_uploads.rs` repeats the claim in CI: 300 zoomed frames of
+  100K points into an `ImageTarget` give 0 column bytes and exactly 3 uniform
+  writes per frame.
+
+`Sqrt` size is not in S0's scales. Whichever story adds it (S5) should bind
+`Circle::RADIUS` through it and re-run `zoom_bench`.
+
+### What changed in the S0a design
+
+1. **Uniforms are written in place.** `Selection` keeps its `LayerGpu`. When the
+   program, context, column chunk and LUTs are unchanged, `prepare` only calls
+   `write_uniforms`. The `Renderer` keeps the view uniform, the atlas bind group
+   and grow-only guide instance buffers. The rescale test asserts that the
+   layer's `Arc<LayerGpu>` is reused.
+2. **`RenderTarget::present` takes a `CommandBuffer`, as §7 says.** A readback
+   target copies the frame out in a second command buffer, submitted in the same
+   `submit`. `ImageTarget` and `WindowTarget` share one `Readback`, which
+   handles BGRA as well as RGBA.
+3. **Zoom is pixel-space and inverted.** `DynPositionScale::zoom` pulls the
+   range ends towards the anchor and maps them back with `invert`. That is
+   correct for any monotone scale, including log, without per-scale zoom code.
+   S9's zoom and pan behaviours can build on `invert`.
+4. **Teardown order is a real constraint.** wgpu's GL backend binds its EGL
+   display to winit's Wayland connection when a surface is created, even when
+   the Vulkan adapter is the one in use. If any wgpu object outlives the event
+   loop, dropping the instance segfaults in `eglTerminate`. `show` drops the
+   surface, the renderer and the plot's GPU state in
+   `ApplicationHandler::exiting`. S8's `GupApp` must keep this rule. A `Context`
+   that only ever enables the primary backends would avoid it.
+5. **winit paces `RedrawRequested` to frame callbacks** on Wayland, even with a
+   `Mailbox` swapchain. To measure without vsync, drive frames from
+   `about_to_wait` under `ControlFlow::Poll` (`zoom_bench --uncapped`).
+6. **The temporary atlas re-uploaded all 1 MB per new glyph.** It now uploads
+   only the dirty rows (2 MB → 18 KB over the headless zoom test). `gup-text`
+   (S2) should keep a dirty-rectangle upload.
+
+### Proposed adjustments to S1–S3
+
+- **S1 (`Context`):** keep `with_options` and the upload counters (`UploadStats`
+  is cheap: eight relaxed atomics). Make the "every write is counted" test part
+  of the crate's contract, so S4's tail appends are counted as `Upload::Column`.
+  Consider defaulting `Context::new` to primary backends and keeping GL as an
+  explicit fallback (finding 4).
+- **S2 (`gup-text`):** keep a dirty-rectangle atlas upload. Text layout of 26
+  tick labels and a title is part of the 0.2 ms resolve, so no glyph-run cache
+  is needed yet.
+- **S3 (`Scene`/`Renderer`/targets):** `RenderTarget`, `Frame`, `Renderer` and
+  `Prepared` exist now with the §7 signatures, except that `TargetDesc` has no
+  `dpr` yet: dpr is still `desc.width / scene.width`. What remains is
+  `TextureTarget`, draw-in-pass for hosts (`Prepared::draw` already takes no
+  locks and allocates nothing), MSAA, rects and gradients. `WindowTarget` needs
+  no changes for S3. Its wasm canvas path is untested.
+- **S8 (`GupApp`/`show`):** start from `gup_core::show`. It already handles
+  resize, wheel zoom about the cursor, Escape, `GUP_SCREENSHOT_PATH` and safe
+  teardown. winit allows one event loop per process, so `show` runs once. The
+  `GupApp` design should decide whether to support re-entry
+  (`run_app_on_demand`).

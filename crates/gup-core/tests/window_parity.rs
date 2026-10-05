@@ -15,6 +15,8 @@
 //!
 //! winit allows one event loop per process, so this file holds one test.
 
+#![cfg(feature = "window")]
+
 mod common;
 
 use common::scatter::{self, HEIGHT, WIDTH};
