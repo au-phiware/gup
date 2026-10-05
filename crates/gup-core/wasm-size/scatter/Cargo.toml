@@ -1,0 +1,21 @@
+# WASM size harness (GUP-401, RFC-001 §12 risk 10): the reference scatter
+# drawn through gup-core in a browser. Its own workspace, so gup-core's
+# features (wgpu `naga-ir`) do not leak into the baseline. Build with
+# `mask wasm-size`.
+[package]
+name = "gup-core-wasm-size-scatter"
+version = "0.0.0"
+edition = "2024"
+license = "GPL-3.0-or-later"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+[dependencies]
+gup-core = { path = "../..", default-features = false }
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+
+[workspace]

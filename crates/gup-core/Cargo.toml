@@ -16,7 +16,9 @@ publish = false
 [dependencies]
 wgpu = { version = "27.0", features = ["wgsl", "naga-ir"] }
 naga = { version = "27.0.3", features = ["wgsl-in", "wgsl-out"] }
-naga_oil = "0.20"
+# Without the default `glsl` feature: gup-core composes WGSL only, and
+# naga's GLSL front and back ends cost ~0.5 MB of wasm (GUP-401).
+naga_oil = { version = "0.20", default-features = false }
 encase = "0.12"
 bytemuck = { version = "1.23", features = ["derive"] }
 pollster = "0.3"
