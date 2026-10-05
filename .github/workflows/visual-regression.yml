@@ -1,7 +1,4 @@
-# Visual regression (GUP-388): harness unit tests, chart-builder golden      - name: gup-core (RFC-001 core)
-        run: |
-          cargo test -p gup-text -- --test-threads=1
-          cargo test -p gup-text -- --test-threads=1
+# Visual regression (GUP-388): harness unit tests, chart-builder golden
 # images with structural checks, the examples smoke test, and the quarantined
 # gup-culling-lod crate (GUP-390).
 #
