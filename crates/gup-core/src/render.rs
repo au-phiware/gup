@@ -5,7 +5,7 @@
 //! state and the single render pass that draws marks, rules and text.
 
 use crate::channel::Color;
-use crate::context::{Context, ContextId};
+use crate::context::{Context, ContextId, Upload};
 use crate::error::{Error, Result};
 use crate::scene::{ItemKind, Rule, Scene};
 use crate::shader::glue::Glue;
@@ -14,7 +14,6 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
-use wgpu::util::DeviceExt;
 
 /// Everything about a target that pipelines depend on (RFC-001 §7).
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
@@ -59,6 +58,8 @@ impl std::fmt::Debug for GlueProgram {
 pub(crate) struct LayerGpu {
     pub context: ContextId,
     pub program: Arc<GlueProgram>,
+    enc_buffer: wgpu::Buffer,
+    chunk_buffer: wgpu::Buffer,
     pub enc_bind_group: wgpu::BindGroup,
     pub chunk_bind_group: wgpu::BindGroup,
     /// The column chunk and each vertex column's byte range in it.
@@ -404,18 +405,20 @@ impl LayerUniforms<'_> {
         vertices_per_instance: u32,
     ) -> LayerGpu {
         let device = cx.device();
-        let enc = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("gup encodings"),
-            contents: &self.encodings,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
+        let enc = cx.buffer_with_data(
+            Upload::Uniform,
+            "gup encodings",
+            wgpu::BufferUsages::UNIFORM,
+            &self.encodings,
+        );
         let mut chunk_bytes = self.chunk;
         chunk_bytes.resize(DYNAMIC_ALIGN as usize, 0);
-        let chunk = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("gup chunk uniforms"),
-            contents: &chunk_bytes,
-            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-        });
+        let chunk = cx.buffer_with_data(
+            Upload::Uniform,
+            "gup chunk uniforms",
+            wgpu::BufferUsages::UNIFORM,
+            &chunk_bytes,
+        );
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("gup lut sampler"),
             mag_filter: wgpu::FilterMode::Linear,
@@ -426,26 +429,32 @@ impl LayerUniforms<'_> {
             .luts
             .iter()
             .map(|lut| {
-                let texture = device.create_texture_with_data(
-                    cx.queue(),
-                    &wgpu::TextureDescriptor {
-                        label: Some("gup palette lut"),
-                        size: wgpu::Extent3d {
-                            width: lut.len() as u32,
-                            height: 1,
-                            depth_or_array_layers: 1,
-                        },
-                        mip_level_count: 1,
-                        sample_count: 1,
-                        dimension: wgpu::TextureDimension::D2,
-                        // Not *Srgb: the LUT holds sRGB-encoded values and
-                        // must not be linearised by the sampler.
-                        format: wgpu::TextureFormat::Rgba8Unorm,
-                        usage: wgpu::TextureUsages::TEXTURE_BINDING,
-                        view_formats: &[],
-                    },
-                    wgpu::util::TextureDataOrder::LayerMajor,
+                let size = wgpu::Extent3d {
+                    width: lut.len() as u32,
+                    height: 1,
+                    depth_or_array_layers: 1,
+                };
+                let texture = device.create_texture(&wgpu::TextureDescriptor {
+                    label: Some("gup palette lut"),
+                    size,
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    // Not *Srgb: the LUT holds sRGB-encoded values and
+                    // must not be linearised by the sampler.
+                    format: wgpu::TextureFormat::Rgba8Unorm,
+                    usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+                    view_formats: &[],
+                });
+                cx.write_texture(
+                    texture.as_image_copy(),
                     bytemuck::cast_slice(lut),
+                    wgpu::TexelCopyBufferLayout {
+                        offset: 0,
+                        bytes_per_row: Some(size.width * 4),
+                        rows_per_image: None,
+                    },
+                    size,
                 );
                 texture.create_view(&Default::default())
             })
@@ -484,6 +493,8 @@ impl LayerUniforms<'_> {
         LayerGpu {
             context: cx.id(),
             program: self.program,
+            enc_buffer: enc,
+            chunk_buffer: chunk,
             enc_bind_group,
             chunk_bind_group,
             columns,
@@ -491,6 +502,27 @@ impl LayerUniforms<'_> {
             instances,
             vertices_per_instance,
         }
+    }
+}
+
+impl LayerGpu {
+    /// Whether this GPU state can take new uniform values from `program`
+    /// without being rebuilt: same context, program and column chunk.
+    pub(crate) fn reusable(
+        &self,
+        cx: &Context,
+        program: &Arc<GlueProgram>,
+        columns: &wgpu::Buffer,
+    ) -> bool {
+        self.context == cx.id() && Arc::ptr_eq(&self.program, program) && &self.columns == columns
+    }
+
+    /// Write new `Encodings` and `Chunk` uniform values into the existing
+    /// buffers: the per-frame path of a zoom or pan. Writes no column
+    /// bytes and creates no GPU objects.
+    pub(crate) fn write_uniforms(&self, cx: &Context, encodings: &[u8], chunk: &[u8]) {
+        cx.write_buffer(Upload::Uniform, &self.enc_buffer, 0, encodings);
+        cx.write_buffer(Upload::Uniform, &self.chunk_buffer, 0, chunk);
     }
 }
 
@@ -546,15 +578,16 @@ pub(crate) fn encode_scene(
 
     // Prepare everything that needs locks or allocation before the pass.
     let view_bgl = cx.pipelines().view_bgl(device);
-    let view_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-        label: Some("gup view"),
-        contents: bytemuck::bytes_of(&ViewUniform {
+    let view_buffer = cx.buffer_with_data(
+        Upload::Uniform,
+        "gup view",
+        wgpu::BufferUsages::UNIFORM,
+        bytemuck::bytes_of(&ViewUniform {
             size: [scene.width, scene.height],
             dpr,
             padding: 0.0,
         }),
-        usage: wgpu::BufferUsages::UNIFORM,
-    });
+    );
     let view_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("gup view"),
         layout: &view_bgl,
@@ -597,7 +630,7 @@ pub(crate) fn encode_scene(
                         color,
                     }));
                 }
-                let atlas_view = text.atlas_view(device, cx.queue());
+                let atlas_view = text.atlas_view(cx);
                 drop(text);
                 let text_bgl = cx.pipelines().text_bgl(device);
                 let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
@@ -693,13 +726,12 @@ fn instanced<I: bytemuck::Pod>(
         return Ok(None);
     }
     let pipeline = cx.pipelines().guide_pipeline(cx, kind, desc)?;
-    let buffer = cx
-        .device()
-        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("gup guide instances"),
-            contents: bytemuck::cast_slice(instances),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
+    let buffer = cx.buffer_with_data(
+        Upload::Instances,
+        "gup guide instances",
+        wgpu::BufferUsages::VERTEX,
+        bytemuck::cast_slice(instances),
+    );
     Ok(Some(Draw::Instanced {
         pipeline,
         buffer,

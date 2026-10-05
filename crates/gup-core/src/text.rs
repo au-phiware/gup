@@ -10,6 +10,7 @@
 //! replaces it with the extracted `gup-text` crate (one `TextSystem` per
 //! `Context`, Inter bundled).
 
+use crate::context::Context;
 use crate::geom::Rect;
 use crate::scene::{HAlign, TextRun, VAlign};
 use std::collections::HashMap;
@@ -203,13 +204,9 @@ impl TextSystem {
     }
 
     /// The atlas texture view, uploading new glyphs first.
-    pub(crate) fn atlas_view(
-        &mut self,
-        device: &wgpu::Device,
-        queue: &wgpu::Queue,
-    ) -> wgpu::TextureView {
+    pub(crate) fn atlas_view(&mut self, cx: &Context) -> wgpu::TextureView {
         let (texture, view) = self.texture.get_or_insert_with(|| {
-            let texture = device.create_texture(&wgpu::TextureDescriptor {
+            let texture = cx.device().create_texture(&wgpu::TextureDescriptor {
                 label: Some("gup glyph atlas"),
                 size: wgpu::Extent3d {
                     width: ATLAS_SIZE,
@@ -227,7 +224,7 @@ impl TextSystem {
             (texture, view)
         });
         if self.dirty {
-            queue.write_texture(
+            cx.write_texture(
                 texture.as_image_copy(),
                 &self.pixels,
                 wgpu::TexelCopyBufferLayout {

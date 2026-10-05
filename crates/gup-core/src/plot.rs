@@ -163,6 +163,28 @@ impl Plot {
             .expect("the layer just pushed has this type")
     }
 
+    /// Zoom both position scales by `factor` about the logical-pixel point
+    /// `at` (`factor < 1` zooms in). The values under `at` stay where they
+    /// are; a log scale zooms in log space. Only the scales' domains
+    /// change, so the next [`resolve`](Self::resolve) writes uniforms and
+    /// no column bytes. Does nothing before the first resolve has fitted
+    /// and ranged the scales.
+    pub fn zoom(&mut self, at: Point, factor: f64) -> Result<()> {
+        if !(factor.is_finite() && factor > 0.0) {
+            return Err(Error::config(
+                "zoom factor",
+                format!("{factor} must be finite and positive"),
+            ));
+        }
+        if let Some(x) = &self.x {
+            x.zoom(f64::from(at.x), factor)?;
+        }
+        if let Some(y) = &self.y {
+            y.zoom(f64::from(at.y), factor)?;
+        }
+        Ok(())
+    }
+
     /// Resolve domains, ticks, text, the plot rect and GPU state for a
     /// `width × height` logical-pixel chart.
     pub fn resolve(&mut self, cx: &Context, width: f32, height: f32) -> Result<Resolved> {
@@ -415,21 +437,23 @@ mod tests {
     use crate::marks::Circle;
     use crate::scale::{Linear, Log};
     use crate::scene::ItemKind;
+    use std::sync::Arc;
 
-    fn batch_buffer(r: &Resolved) -> wgpu::Buffer {
+    fn batch(r: &Resolved) -> Arc<crate::render::LayerGpu> {
         r.scene
             .items
             .iter()
             .find_map(|i| match &i.kind {
-                ItemKind::Marks(b) => Some(b.gpu.columns.clone()),
+                ItemKind::Marks(b) => Some(Arc::clone(&b.gpu)),
                 _ => None,
             })
             .unwrap()
     }
 
     /// Changing a domain re-resolves with new uniforms only: the glue is
-    /// not recomposed, the pipeline is a cache hit and the column chunk is
-    /// the same buffer (no column bytes re-uploaded).
+    /// not recomposed, the pipeline is a cache hit, the layer's GPU state
+    /// (column chunk, uniform buffers, bind groups) is reused and the
+    /// upload counter shows 0 column bytes and only uniform writes.
     #[test]
     fn rescale_reuses_program_pipeline_and_columns() {
         let cx = Context::new_blocking().unwrap();
@@ -443,20 +467,72 @@ mod tests {
         .attr(Circle::Y, y.encode(|r: &(f64, f64)| r.1));
         let first = plot.resolve(&cx, 300.0, 200.0).unwrap();
         let target = ImageTarget::new(&cx, 300, 200).unwrap();
-        target.render_blocking(&cx, &first.scene).unwrap();
+        let image = target.render_blocking(&cx, &first.scene).unwrap();
         let before = cx.pipelines().stats;
+        let uploads = cx.upload_stats();
 
-        *x.write() = Linear::new().domain(2.0, 3.0);
+        x.write().set_domain(2.0, 3.0).unwrap();
         let second = plot.resolve(&cx, 300.0, 200.0).unwrap();
-        target.render_blocking(&cx, &second.scene).unwrap();
+        let zoomed = target.render_blocking(&cx, &second.scene).unwrap();
         let after = cx.pipelines().stats;
+        let written = cx.upload_stats() - uploads;
 
         assert_eq!(before.programs_composed, 1);
         assert_eq!(after.programs_composed, 1, "glue recomposed");
         assert_eq!(after.pipelines_created, before.pipelines_created);
         assert!(after.pipeline_hits > before.pipeline_hits);
-        assert_eq!(batch_buffer(&first), batch_buffer(&second));
+        assert!(
+            Arc::ptr_eq(&batch(&first), &batch(&second)),
+            "layer GPU state rebuilt"
+        );
         assert_ne!(first.layout.x_ticks, second.layout.x_ticks);
+        assert_ne!(image, zoomed, "the new domain did not reach the GPU");
+
+        assert_eq!(written.columns, Default::default(), "{written:?}");
+        assert_eq!(written.textures, Default::default(), "{written:?}");
+        // Encodings + chunk uniforms, then the view uniform.
+        assert_eq!(written.uniforms.writes, 3, "{written:?}");
+    }
+
+    /// Zooming the plot about a point keeps that point's data values fixed
+    /// on both axes and narrows both domains.
+    #[test]
+    fn zoom_narrows_both_domains_about_the_anchor() {
+        let cx = Context::new_blocking().unwrap();
+        let mut plot = Plot::new();
+        let (x, y) = (plot.x(Linear::new()), plot.y(Log::new()));
+        plot.add(Selection::<(f64, f64), Circle>::new(vec![
+            (0.0, 1.0),
+            (100.0, 1e4),
+        ]))
+        .attr(Circle::X, x.encode(|r: &(f64, f64)| r.0))
+        .attr(Circle::Y, y.encode(|r: &(f64, f64)| r.1));
+        let r = plot.resolve(&cx, 400.0, 300.0).unwrap();
+        let at = Point::new(
+            r.layout.plot.x + 0.3 * r.layout.plot.width,
+            r.layout.plot.y + 0.6 * r.layout.plot.height,
+        );
+        let (xv, yv) = (
+            x.read().invert(f64::from(at.x)),
+            y.read().invert(f64::from(at.y)),
+        );
+        let (xd, yd) = (
+            x.read().current_domain().unwrap(),
+            y.read().current_domain().unwrap(),
+        );
+        plot.zoom(at, 0.5).unwrap();
+        let (zx, zy) = (
+            x.read().current_domain().unwrap(),
+            y.read().current_domain().unwrap(),
+        );
+        assert!(((zx.1 - zx.0) / (xd.1 - xd.0) - 0.5).abs() < 1e-9, "{zx:?}");
+        assert!(((zy.1 / zy.0).log10() / (yd.1 / yd.0).log10() - 0.5).abs() < 1e-9);
+        assert!((x.read().invert(f64::from(at.x)) - xv).abs() < 1e-9);
+        assert!((y.read().invert(f64::from(at.y)) / yv - 1.0).abs() < 1e-9);
+        // Domains are now explicit, so re-resolving keeps them.
+        plot.resolve(&cx, 400.0, 300.0).unwrap();
+        assert_eq!(x.read().current_domain().unwrap(), zx);
+        assert!(plot.zoom(at, 0.0).is_err());
     }
 
     #[test]

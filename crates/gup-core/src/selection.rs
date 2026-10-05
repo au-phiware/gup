@@ -10,12 +10,15 @@ use crate::column::ColumnStore;
 use crate::context::Context;
 use crate::encoding::{Encoding, IntoEncoding, Resource};
 use crate::error::{Error, Result};
-use crate::render::LayerUniforms;
+use crate::render::{LayerGpu, LayerUniforms};
 use crate::scene::MarkBatch;
 use crate::shader::glue::{self, ChannelSource, Glue, GlueChannel, GlueSpec};
 use std::any::Any;
 use std::marker::PhantomData;
 use std::sync::Arc;
+
+/// The palette LUTs a layer's GPU state was built with.
+type Luts = Vec<Vec<[u8; 4]>>;
 
 /// Rows of `T` drawn as mark `M`.
 ///
@@ -35,6 +38,10 @@ pub struct Selection<T, M: Mark> {
     encodings: Vec<Option<Encoding<T>>>,
     /// Evaluated columns, one per column-encoded channel in channel order.
     columns: Option<ColumnStore>,
+    /// GPU state from the last `prepare` and the LUTs it holds. Later
+    /// prepares with the same program, context and columns only write
+    /// uniforms into it.
+    gpu: Option<(Arc<LayerGpu>, Luts)>,
     _mark: PhantomData<fn() -> M>,
 }
 
@@ -56,6 +63,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             rows: rows.into(),
             encodings: M::CHANNELS.iter().map(|_| None).collect(),
             columns: None,
+            gpu: None,
             _mark: PhantomData,
         }
     }
@@ -80,6 +88,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         self.encodings[usize::from(channel.slot())] = Some(encoding.into_encoding());
         // S0a re-evaluates every column; per-column invalidation is S4.
         self.columns = None;
+        self.gpu = None;
         self
     }
 
@@ -227,14 +236,29 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             .collect();
         let store = self.columns.as_mut().expect("checked above");
         let buffer = store.upload(cx)?.clone();
-        let gpu = LayerUniforms {
-            program,
-            encodings,
-            chunk,
-            luts: luts.iter().map(Vec::as_slice).collect(),
+
+        // Zoom, pan and resize land here every frame: write the new
+        // uniform values into the existing buffers.
+        if let Some((gpu, held)) = &self.gpu
+            && gpu.reusable(cx, &program, &buffer)
+            && *held == luts
+        {
+            gpu.write_uniforms(cx, &encodings, &chunk);
+            return Ok(MarkBatch {
+                gpu: Arc::clone(gpu),
+            });
         }
-        .build(cx, buffer, ranges, rows, M::VERTICES_PER_INSTANCE);
-        Ok(MarkBatch { gpu: Arc::new(gpu) })
+        let gpu = Arc::new(
+            LayerUniforms {
+                program,
+                encodings,
+                chunk,
+                luts: luts.iter().map(Vec::as_slice).collect(),
+            }
+            .build(cx, buffer, ranges, rows, M::VERTICES_PER_INSTANCE),
+        );
+        self.gpu = Some((Arc::clone(&gpu), luts));
+        Ok(MarkBatch { gpu })
     }
 
     fn glue_source(&self) -> Glue {

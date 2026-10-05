@@ -127,6 +127,28 @@ impl PositionScale for Linear {
         self.range = (f64::from(r0.0), f64::from(r1.0));
     }
 
+    fn set_domain(&mut self, d0: f64, d1: f64) -> Result<()> {
+        if !(d0.is_finite() && d1.is_finite()) || d0 == d1 {
+            return Err(Error::config(
+                "linear scale domain",
+                format!("({d0}, {d1}) must be finite and non-empty"),
+            ));
+        }
+        self.domain = Some((d0, d1));
+        self.explicit = true;
+        Ok(())
+    }
+
+    fn invert(&self, px: f64) -> f64 {
+        let k = self.k();
+        let d0 = self.resolved_domain().0;
+        if k == 0.0 {
+            d0
+        } else {
+            d0 + (px - self.range.0) / k
+        }
+    }
+
     fn nice(&mut self) {
         let (mut lo, mut hi) = self.resolved_domain();
         if lo == hi {
@@ -158,6 +180,43 @@ impl PositionScale for Linear {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::scale::{DynPositionScale, ScaleRef};
+
+    #[test]
+    fn invert_undoes_eval() {
+        let s = Linear::new().domain(10.0, 20.0).range(Px(100.0), Px(300.0));
+        assert_eq!(s.invert(200.0), 15.0);
+        assert_eq!(s.invert(s.eval(12.5)), 12.5);
+    }
+
+    #[test]
+    fn set_domain_makes_the_domain_explicit() {
+        let mut s = Linear::new();
+        s.set_domain(-5.0, 5.0).unwrap();
+        s.fit_domain((0.0, 100.0)).unwrap();
+        assert_eq!(s.current_domain(), Some((-5.0, 5.0)));
+        assert!(!s.is_auto());
+        assert!(s.set_domain(1.0, 1.0).is_err());
+        assert!(s.set_domain(f64::NAN, 1.0).is_err());
+    }
+
+    /// Zooming keeps the value under the anchor where it is, and works the
+    /// same through the object-safe handle the plot holds.
+    #[test]
+    fn zoom_keeps_the_anchor_fixed() {
+        let s = ScaleRef::new(Linear::new().domain(0.0, 100.0).range(Px(0.0), Px(500.0)));
+        let anchor = 100.0; // value 20
+        s.zoom(anchor, 0.5).unwrap();
+        assert_eq!(s.current_domain(), Some((10.0, 60.0)));
+        assert_eq!(DynPositionScale::eval(&s, 20.0), anchor);
+        let log = ScaleRef::new(crate::Log::new().domain(1.0, 1e4).range(Px(400.0), Px(0.0)));
+        log.zoom(200.0, 0.5).unwrap(); // value 100, two decades each way
+        let (d0, d1) = log.current_domain().unwrap();
+        assert!(
+            (d0 - 10.0).abs() < 1e-9 && (d1 - 1e3).abs() < 1e-9,
+            "{d0} {d1}"
+        );
+    }
 
     #[test]
     fn eval_maps_domain_onto_range() {

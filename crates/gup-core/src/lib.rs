@@ -43,7 +43,7 @@ pub mod target;
 mod text;
 
 pub use channel::{Channel, ChannelDesc, Color, ConstValue, GpuType, Mark, Px, Role, Visual};
-pub use context::{Caps, Context, ContextId};
+pub use context::{Caps, Context, ContextId, Upload, UploadStats, WriteCount};
 pub use encoding::{
     ColumnMarker, ColumnValue, ConstMarker, CpuMirror, DynColumnEncoding, DynShaderFn, Encoded,
     Encoding, IntoEncoding, Resource, ShaderFn,

@@ -12,7 +12,7 @@
 //! S0a scope: exactly one chunk. Chunking, append, retention policies,
 //! validity bits and dictionary encoding are RFC-001 S4.
 
-use crate::context::{Context, ContextId};
+use crate::context::{Context, ContextId, Upload};
 use crate::error::{Error, Result};
 
 /// How a column's values are stored on the GPU.
@@ -219,7 +219,9 @@ impl ColumnStore {
                     | wgpu::BufferUsages::COPY_SRC,
                 mapped_at_creation: false,
             });
-            cx.queue().write_buffer(&buffer, 0, &self.bytes);
+            // The only place column bytes are written (counted as
+            // `Upload::Column`).
+            cx.write_buffer(Upload::Column, &buffer, 0, &self.bytes);
             self.buffer = Some((cx.id(), buffer));
         }
         Ok(&self.buffer.as_ref().expect("uploaded above").1)

@@ -41,8 +41,14 @@ pub trait PositionScale: ShaderFn<In = f32, Out = Px> + CpuMirror {
     fn current_domain(&self) -> Option<(f64, f64)>;
     /// Whether the domain is data-driven (not set explicitly).
     fn is_auto(&self) -> bool;
+    /// Set an explicit domain, e.g. to zoom or pan. Only uniforms derived
+    /// from the domain change; no column bytes are re-uploaded.
+    fn set_domain(&mut self, d0: f64, d1: f64) -> Result<()>;
     /// Set the pixel range the domain maps onto.
     fn set_range(&mut self, r0: Px, r1: Px);
+    /// The domain value drawn at pixel `px`: the inverse of
+    /// [`CpuMirror::eval`].
+    fn invert(&self, px: f64) -> f64;
     /// Extend the domain to round values.
     fn nice(&mut self);
     /// About `count` ticks inside the domain.
@@ -120,6 +126,22 @@ pub(crate) trait DynPositionScale: Send + Sync {
     fn set_range(&self, r0: Px, r1: Px);
     fn ticks(&self, count: usize) -> Ticks;
     fn eval(&self, x: f64) -> f64;
+    fn current_domain(&self) -> Option<(f64, f64)>;
+    fn set_domain(&self, d0: f64, d1: f64) -> Result<()>;
+    fn invert(&self, px: f64) -> f64;
+
+    /// Zoom by `factor` about pixel `anchor`: the domain becomes the values
+    /// now drawn at the range ends pulled towards (`factor < 1`) or pushed
+    /// away from (`factor > 1`) the anchor. Working in pixels and inverting
+    /// makes this right for every scale (a log scale zooms in log space).
+    fn zoom(&self, anchor: f64, factor: f64) -> Result<()> {
+        let Some((d0, d1)) = self.current_domain() else {
+            return Ok(());
+        };
+        let (r0, r1) = (self.eval(d0), self.eval(d1));
+        let at = |r: f64| self.invert(anchor + (r - anchor) * factor);
+        self.set_domain(at(r0), at(r1))
+    }
 }
 
 impl<S: PositionScale> DynPositionScale for ScaleRef<S> {
@@ -141,6 +163,18 @@ impl<S: PositionScale> DynPositionScale for ScaleRef<S> {
 
     fn eval(&self, x: f64) -> f64 {
         self.read().eval(x)
+    }
+
+    fn current_domain(&self) -> Option<(f64, f64)> {
+        self.read().current_domain()
+    }
+
+    fn set_domain(&self, d0: f64, d1: f64) -> Result<()> {
+        self.write().set_domain(d0, d1)
+    }
+
+    fn invert(&self, px: f64) -> f64 {
+        self.read().invert(px)
     }
 }
 

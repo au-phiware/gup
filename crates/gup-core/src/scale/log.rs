@@ -129,6 +129,28 @@ impl PositionScale for Log {
         self.range = (f64::from(r0.0), f64::from(r1.0));
     }
 
+    fn set_domain(&mut self, d0: f64, d1: f64) -> Result<()> {
+        if !(d0 > 0.0 && d1 > 0.0 && d0.is_finite() && d1.is_finite()) || d0 == d1 {
+            return Err(Error::config(
+                "log scale domain",
+                format!("({d0}, {d1}) must be finite, positive and non-empty"),
+            ));
+        }
+        self.domain = Some((d0, d1));
+        self.explicit = true;
+        Ok(())
+    }
+
+    fn invert(&self, px: f64) -> f64 {
+        let (d0, d1) = self.resolved_domain();
+        let span = self.range.1 - self.range.0;
+        if span == 0.0 {
+            return d0;
+        }
+        let t = (px - self.range.0) / span;
+        (d0.log2() + t * (d1.log2() - d0.log2())).exp2()
+    }
+
     /// Extend the domain to whole powers of the base.
     fn nice(&mut self) {
         let (d0, d1) = self.resolved_domain();
@@ -187,6 +209,28 @@ fn format_log_tick(v: f64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn invert_undoes_eval_in_log_space() {
+        let s = Log::new().domain(1.0, 1e6).range(Px(400.0), Px(0.0));
+        for x in [1.0, 3.0, 1e3, 4.2e5, 1e6] {
+            assert!((s.invert(s.eval(x)) / x - 1.0).abs() < 1e-12, "{x}");
+        }
+        assert!((s.invert(200.0) - 1e3).abs() < 1e-9);
+    }
+
+    #[test]
+    fn set_domain_rejects_non_positive_or_empty_domains() {
+        let mut s = Log::new();
+        s.set_domain(10.0, 1e4).unwrap();
+        assert_eq!(s.current_domain(), Some((10.0, 1e4)));
+        assert!(!s.is_auto());
+        for (d0, d1) in [(0.0, 10.0), (-1.0, 10.0), (5.0, 5.0), (1.0, f64::INFINITY)] {
+            let err = s.set_domain(d0, d1).unwrap_err();
+            assert!(err.to_string().contains("positive"), "{err}");
+        }
+        assert_eq!(s.current_domain(), Some((10.0, 1e4)));
+    }
 
     #[test]
     fn eval_maps_decades_evenly() {
