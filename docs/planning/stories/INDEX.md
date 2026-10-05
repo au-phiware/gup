@@ -48,7 +48,7 @@ survives into `gup-core`.
   the dogfood suite's local pixel measurements with GUP-388's shared
   visual-assertion module and layout metadata, without loosening any tracked
   gap. Deps: GUP-394 ✅, GUP-388 ✅.
-- [GUP-398](GUP-398_Honest_And_Fast_Quality_Gates.md) 🚧 — Make the clippy gate
+- [GUP-398](GUP-398_Honest_And_Fast_Quality_Gates.md) ✅ — Make the clippy gate
   strict across all workspace members (the hook's `--fix` run exits 0 on 99
   warnings; without `--fix` there are 106 errors), prove every `mask all-check`
   check and CI job actually fails on a seeded violation, and make the local hook
