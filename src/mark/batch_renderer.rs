@@ -1039,7 +1039,7 @@ impl InstancedBatchRenderer {
     /// rendering performance.
     pub fn sorted_batch_order(&self) -> Vec<usize> {
         use super::performance_opt::{SortedBatch, sort_batches_by_state};
-        use crate::mixable::BlendMode;
+        use crate::render::BlendMode;
 
         let sorted_batches: Vec<SortedBatch> = self
             .batches

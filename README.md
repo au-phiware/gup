@@ -178,11 +178,6 @@ detailed roadmap.
 
 ## Documentation
 
-### Migration Guides
-
-- [**Migration from Observable Plot**](./docs/MIGRATION_FROM_OBSERVABLE_PLOT.md) -
-  Comprehensive guide for Observable Plot users transitioning to Gup
-
 ### Technical Documentation
 
 - [`MISSION_AND_GOALS.md`](./docs/MISSION_AND_GOALS.md) - Project vision and

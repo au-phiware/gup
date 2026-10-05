@@ -30,19 +30,8 @@ use gup::accessibility::{
 };
 use gup::context::GupContext;
 use gup::error::GupResult;
-use gup::mark::{Circle, Mark, MarkInfo, MarkInfoImpl, MarkRenderer};
+use gup::mark::{Circle, MarkInfo, MarkInfoImpl};
 use std::sync::Arc;
-
-#[repr(C)]
-#[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-struct CircleInstanceData {
-    center: [f32; 2],
-    radius: f32,
-    fill_color: [f32; 4],
-    stroke_width: f32,
-    stroke_color: [f32; 4],
-    _padding: [f32; 2],
-}
 
 #[tokio::main]
 async fn main() -> GupResult<()> {
@@ -59,9 +48,6 @@ async fn main() -> GupResult<()> {
 
     // Demonstrate pattern renderer setup
     demonstrate_pattern_renderer(device, queue)?;
-
-    // Demonstrate complete rendering setup
-    demonstrate_rendering_setup(device, queue)?;
 
     // Demonstrate accessibility integration
     demonstrate_accessibility_integration()?;
@@ -147,70 +133,9 @@ fn demonstrate_pattern_renderer(device: &wgpu::Device, queue: &wgpu::Queue) -> G
     Ok(())
 }
 
-/// Demonstrate complete rendering setup with patterns.
-fn demonstrate_rendering_setup(device: &wgpu::Device, queue: &wgpu::Queue) -> GupResult<()> {
-    println!("3. Complete Rendering Setup");
-    println!("----------------------------");
-
-    // Create mark renderer
-    let mut mark_renderer = MarkRenderer::new(device);
-
-    // Upload vertices
-    let vertices = Circle::generate_vertices();
-    mark_renderer.upload_vertices(device, queue, &vertices)?;
-    println!("  ✓ Uploaded {} vertices", vertices.len());
-
-    // Create sample instance data
-    let instances = vec![
-        CircleInstanceData {
-            center: [100.0, 100.0],
-            radius: 20.0,
-            fill_color: [1.0, 0.0, 0.0, 1.0], // Red
-            stroke_width: 2.0,
-            stroke_color: [0.0, 0.0, 0.0, 1.0],
-            _padding: [0.0; 2],
-        },
-        CircleInstanceData {
-            center: [200.0, 100.0],
-            radius: 20.0,
-            fill_color: [0.0, 1.0, 0.0, 1.0], // Green
-            stroke_width: 2.0,
-            stroke_color: [0.0, 0.0, 0.0, 1.0],
-            _padding: [0.0; 2],
-        },
-        CircleInstanceData {
-            center: [300.0, 100.0],
-            radius: 20.0,
-            fill_color: [0.0, 0.0, 1.0, 1.0], // Blue
-            stroke_width: 2.0,
-            stroke_color: [0.0, 0.0, 0.0, 1.0],
-            _padding: [0.0; 2],
-        },
-    ];
-
-    mark_renderer.upload_instances(device, queue, &instances)?;
-    println!("  ✓ Uploaded {} instances", instances.len());
-
-    // Upload indices
-    if let Some(indices) = Circle::generate_indices() {
-        mark_renderer.upload_indices(device, queue, &indices)?;
-        println!("  ✓ Uploaded {} indices", indices.len());
-    }
-
-    // Create pattern renderer for accessibility
-    let pattern = Pattern::Dots { spacing: 8.0 };
-    let pattern_uniforms = PatternUniforms::from_pattern(&pattern, Color::BLACK, Color::WHITE);
-    let _pattern_renderer = PatternRenderer::new(device, pattern_uniforms);
-    println!("  ✓ Pattern renderer ready with {:?}", pattern);
-
-    println!("  ✓ All rendering resources uploaded\n");
-
-    Ok(())
-}
-
 /// Demonstrate accessibility system integration.
 fn demonstrate_accessibility_integration() -> GupResult<()> {
-    println!("4. Accessibility Integration");
+    println!("3. Accessibility Integration");
     println!("----------------------------");
 
     let mut accessibility = AccessibilitySystem::new();
@@ -237,46 +162,4 @@ fn demonstrate_accessibility_integration() -> GupResult<()> {
     println!("  Essential for colorblind and low-vision users");
 
     Ok(())
-}
-
-/// Demonstrate usage in rendering loop (conceptual).
-#[allow(dead_code)]
-fn rendering_loop_example() {
-    println!("\n5. Rendering Loop Integration (Conceptual)");
-    println!("-------------------------------------------");
-    println!(
-        "
-In a real rendering loop:
-
-```rust
-// Create render pass
-let mut render_pass = encoder.begin_render_pass(&desc);
-
-// Choose pipeline based on accessibility mode
-if accessibility.contrast_mode() == ContrastMode::Pattern {{
-    // Use pattern pipeline
-    let pattern_pipeline = registry.get_pattern_pipeline::<Circle>(device)?;
-    let pattern_bind_group = pattern_renderer.bind_group();
-
-    mark_renderer.render_marks_with_patterns::<Circle>(
-        &mut render_pass,
-        pattern_pipeline,
-        instance_bind_group,
-        pattern_bind_group,
-        instance_count,
-    )?;
-}} else {{
-    // Use standard pipeline
-    let pipeline = registry.get_pipeline::<Circle>(device)?;
-
-    mark_renderer.render_marks::<Circle>(
-        &mut render_pass,
-        pipeline,
-        instance_bind_group,
-        instance_count,
-    )?;
-}}
-```
-"
-    );
 }

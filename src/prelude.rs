@@ -13,7 +13,7 @@ pub use crate::error::{GupError, GupResult};
 // Chart builder API (Observable Plot style)
 pub use crate::chart_builder::{
     AxisScale, ChartBuilder, ChartConfig,
-    accessor::{AccessorValue, ConstantAccessor, FieldAccessor, color, size, x, y},
+    accessor::{AccessorValue, ConstantAccessor},
     builders::{
         AccessorFunction, AreaChartBuilder, BarChartBuilder, ConfigurableBuilder,
         GridCapableBuilder, HeatmapBuilder, LineChartBuilder, LineInterpolation, LineSegment,
@@ -27,7 +27,6 @@ pub use crate::chart_builder::{
         heatmap::{AggregateFunc, HeatmapCell},
         line, scatter,
     },
-    plot_api::{BoundPlotBuilder, PlotBuilder, plot},
 };
 
 // Selection API (low-level)
@@ -52,9 +51,6 @@ pub use crate::mark::advanced_rendering::{
     MarkViewport, MultiPassConfig, MultiPassRenderer, RenderPassConfig, RenderStateManager,
     UploadStats,
 };
-
-// Mixable trait for composition
-pub use crate::mixable::Mixable;
 
 // Shader functions
 pub use crate::shader_function::{
@@ -225,15 +221,6 @@ pub use crate::layout::{
     ForceDirected, GraphChartBuilder, GraphLayout, LayoutEdge, LayoutEngine, LayoutNode,
     LayoutRect, LayoutResult, NodePosition, TreeNode, TreemapAlgorithm, TreemapCell,
     TreemapOptions, TreemapResult,
-};
-
-// Integration and plugin system
-pub use crate::integration::{
-    ExternalRenderer, ExternalVisualizationBuilder, ExternalVisualizationWrapper, wrap_point_data,
-    wrap_with_custom_render,
-};
-pub use crate::plugins::{
-    MixablePlugin, MixablePluginRegistry, PluginMetadata, global_registry, try_make_mixable,
 };
 
 // SVG export

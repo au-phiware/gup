@@ -396,7 +396,7 @@ pub fn scatter<T>() -> ScatterPlotBuilder<T> {
 mod tests {
     use super::*;
     use crate::RenderContext;
-    use crate::chart_builder::accessor::{AccessorValue, x, y};
+    use crate::chart_builder::accessor::AccessorValue;
 
     #[derive(Debug, Clone)]
     struct TestPoint {
@@ -456,8 +456,8 @@ mod tests {
         let context = Arc::new(RenderContext::new().await.unwrap());
 
         let builder = scatter()
-            .x(x("x_val"))
-            .y(y("y_val"))
+            .x(|d: &TestPoint| AccessorValue::Float(d.x_val))
+            .y(|d: &TestPoint| AccessorValue::Float(d.y_val))
             .point_size(8.0)
             .fill_color([1.0, 0.0, 0.0, 1.0]);
 
@@ -495,20 +495,22 @@ mod tests {
         let context = Arc::new(RenderContext::new().await.unwrap());
 
         // Missing Y accessor should fail
-        let builder = scatter().x(x("x_val"));
+        let builder = scatter().x(|d: &TestPoint| AccessorValue::Float(d.x_val));
         let result = builder.build_with_data(data.clone(), context.clone());
         assert!(result.is_err());
         let error_str = format!("{:?}", result.unwrap_err());
         assert!(error_str.contains("Missing required accessor"));
 
         // Missing X accessor should fail
-        let builder = scatter().y(y("y_val"));
+        let builder = scatter().y(|d: &TestPoint| AccessorValue::Float(d.y_val));
         let result = builder.build_with_data(data.clone(), context.clone());
         assert!(result.is_err());
 
         // Empty data should fail
         let empty_data: Vec<TestPoint> = vec![];
-        let builder = scatter().x(x("x_val")).y(y("y_val"));
+        let builder = scatter()
+            .x(|d: &TestPoint| AccessorValue::Float(d.x_val))
+            .y(|d: &TestPoint| AccessorValue::Float(d.y_val));
         let result = builder.build_with_data(empty_data, context);
         assert!(result.is_err());
         let error_str = format!("{:?}", result.unwrap_err());

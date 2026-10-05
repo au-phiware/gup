@@ -729,7 +729,7 @@ the GPU complexity.
 - [Architecture](mark-system/architecture.md) — Design principles, component
   hierarchy, and data flow
 - [API Reference](mark-system/api-reference.md) — Complete API documentation for
-  Mark, MarkRegistry, and MarkRenderer
+  Mark and MarkRegistry
 - [Performance Guide](mark-system/performance.md) — Benchmarks, optimization
   strategies, and profiling
 - [Tutorial 6: Custom Marks](tutorials/06_custom_marks.md) — Step-by-step

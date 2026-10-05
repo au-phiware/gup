@@ -38,7 +38,7 @@
 //! ```
 
 use crate::error::{GupError, GupResult};
-use crate::mixable::BlendMode;
+use crate::render::BlendMode;
 use std::collections::{HashMap, HashSet};
 use wgpu::RenderPass;
 

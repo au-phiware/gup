@@ -81,18 +81,12 @@ tutorials, performance guide, and troubleshooting.
 ### [📊 Mark System](./mark-system/README.md)
 
 Comprehensive documentation for the mark system: architecture overview,
-component relationships, API reference for Mark trait, MarkRegistry, and
-MarkRenderer, and a performance optimization guide.
+component relationships, API reference for the Mark trait and MarkRegistry, and
+a performance optimization guide.
 
 ### [🔲 Custom Mark Guide](./CUSTOM_MARK_GUIDE.md)
 
 Guide for building custom mark types and extending the mark system.
-
-### [🔀 Transpilation Validation Report](./transpilation-validation-report.md)
-
-Analysis of the Rust-to-WGSL transpilation system: approach comparison,
-technical validation results, performance benchmarks, developer experience
-assessment, and implementation recommendation.
 
 ### [🔍 Existing Solutions Analysis](./existing-solutions-analysis.md)
 

@@ -1011,8 +1011,6 @@ println!("Grid fingerprint: {}", fingerprint);
 
 - [Custom Mark Guide](CUSTOM_MARK_GUIDE.md) — Building custom marks including
   line marks used by the grid system
-- [Migration Guide](MIGRATION_FROM_OBSERVABLE_PLOT.md) — Transitioning to Gup's
-  chart builder API
 - [Accessibility Guide](ACCESSIBILITY_KNOWN_ISSUES.md) — Grid accessibility
   considerations including high-contrast themes
 - [Tutorial 1: Getting Started](tutorials/01_getting_started.md) — Create your

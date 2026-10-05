@@ -32,11 +32,11 @@
 //!     SalesPoint { revenue: 200.0, profit: 45.0, region: "South".to_string() },
 //! ];
 //!
-//! // Observable Plot-style API
-//! let chart = gup::plot()
-//!     .data(sales_data)
-//!     .scatter(x("revenue"), y("profit"))
-//!     .color(color("region"));
+//! let chart = scatter()
+//!     .x(|d: &SalesPoint| AccessorValue::Float(d.revenue))
+//!     .y(|d: &SalesPoint| AccessorValue::Float(d.profit))
+//!     .title("Revenue vs profit");
+//! # let _ = (chart, sales_data);
 //! # Ok(())
 //! # }
 //! ```
@@ -45,19 +45,11 @@ pub mod accessor;
 pub mod builders;
 pub mod colorbar;
 pub mod labels;
-pub mod optimized_accessor;
-pub mod pipeline_cache;
-pub mod plot_api;
-pub mod shader_specialization;
 
 pub use accessor::*;
 pub use builders::*;
 pub use colorbar::*;
 pub use labels::*;
-pub use optimized_accessor::*;
-pub use pipeline_cache::*;
-pub use plot_api::*;
-pub use shader_specialization::*;
 
 use crate::RenderContext;
 use crate::axis::{
@@ -75,7 +67,6 @@ use crate::shader_function::{BandScale, ColorScale, LinearScale, LogScale, Point
 use crate::text::TextStyle;
 use crate::text::hover_reveal::{ClippedTextRegistry, HoverRevealState, TooltipConfig};
 use crate::{MaybeSend, MaybeSync};
-use std::marker::PhantomData;
 use std::sync::Arc;
 
 /// Rich axis geometry output containing line vertices and instanced tick data.
@@ -298,90 +289,6 @@ pub trait ChartBuilder<T>: Sized {
     /// This method transforms the high-level chart configuration into
     /// GPU-accelerated Selection primitives.
     fn build_with_data(self, data: Vec<T>, context: Arc<RenderContext>) -> GupResult<Self::Output>;
-
-    /// Convenience method to build and render in one step.
-    fn render_with_data(self, data: Vec<T>, context: Arc<RenderContext>) -> GupResult<Self::Output>
-    where
-        Self::Output: crate::Mixable,
-    {
-        let output = self.build_with_data(data, context)?;
-        // The render method is called during the mixable render process
-        Ok(output)
-    }
-}
-
-/// A chart builder that has been bound to specific data.
-///
-/// This intermediate type enables method chaining while preserving type
-/// information about the data and chart configuration.
-pub struct BoundChartBuilder<B, T>
-where
-    B: ChartBuilder<T>,
-{
-    pub(crate) builder: B,
-    pub(crate) data: Vec<T>,
-    pub(crate) context: Arc<RenderContext>,
-    pub(crate) _phantom: PhantomData<T>,
-}
-
-impl<B, T> BoundChartBuilder<B, T>
-where
-    B: ChartBuilder<T>,
-{
-    /// Create a new bound chart builder.
-    pub fn new(builder: B, data: Vec<T>, context: Arc<RenderContext>) -> Self {
-        Self {
-            builder,
-            data,
-            context,
-            _phantom: PhantomData,
-        }
-    }
-
-    /// Build the chart using the bound data and context.
-    pub fn build(self) -> GupResult<B::Output> {
-        self.builder.build_with_data(self.data, self.context)
-    }
-
-    /// Build and render the chart in one step.
-    pub fn render(self) -> GupResult<B::Output>
-    where
-        B::Output: crate::Mixable,
-    {
-        self.builder.render_with_data(self.data, self.context)
-    }
-
-    // Convert this builder to a low-level Selection for advanced customization.
-    //
-    // This enables seamless transition from high-level builder APIs to
-    // low-level Selection operations when needed.
-    //
-    // TODO: Disabled until Selection type is fully implemented
-    /*
-    pub fn into_selection<M>(self) -> GupResult<Selection<T, M>>
-    where
-        T: Clone + MaybeSend + MaybeSync + std::fmt::Debug + 'static,
-        M: crate::selection::Mark,
-        M::AttributeValue: Default + Clone,
-    {
-        Selection::new(self.data, self.context)
-    }
-    */
-
-    /// Access the underlying data for inspection.
-    pub fn data(&self) -> &[T] {
-        &self.data
-    }
-
-    /// Get the number of data points.
-    pub fn len(&self) -> usize {
-        self.data.len()
-    }
-
-    /// Check if the dataset is empty.
-    pub fn is_empty(&self) -> bool {
-        self.data.is_empty()
-    }
 }
 
 /// Horizontal alignment for chart title text.
@@ -3170,123 +3077,6 @@ pub(crate) struct ChartArea {
     pub margins: Margins,
 }
 
-// Render layer manager for proper z-ordering of visual elements.
-//
-// This manager ensures that visual elements are rendered in the correct order:
-// 1. Background layer (chart background)
-// 2. Grid layer (grid lines behind data)
-// 3. Data layer (main visualization data)
-// 4. Axis layer (axes on top of data)
-// 5. Annotation layer (labels, legends, etc.)
-//
-// TODO: This is currently a stub pending full Selection type implementation
-/*
-#[derive(Debug)]
-pub struct RenderLayerManager {
-    /// Background layer elements
-    background_layer: Vec<Box<dyn RenderableElement>>,
-    /// Grid layer elements (grid lines)
-    grid_layer: Vec<Selection<LineAttributes, crate::selection::Line>>,
-    /// Data layer elements (main visualization)
-    data_layer: Vec<Box<dyn RenderableElement>>,
-    /// Axis layer elements
-    axis_layer: Vec<Box<dyn RenderableElement>>,
-    /// Annotation layer elements
-    annotation_layer: Vec<Box<dyn RenderableElement>>,
-}
-
-/// Trait for elements that can be rendered in layers.
-pub trait RenderableElement: std::fmt::Debug {
-    /// Render this element using the provided context.
-    fn render(&mut self, context: &mut RenderContext) -> GupResult<()>;
-}
-
-impl RenderLayerManager {
-    /// Create a new empty render layer manager.
-    pub fn new() -> Self {
-        Self {
-            background_layer: Vec::new(),
-            grid_layer: Vec::new(),
-            data_layer: Vec::new(),
-            axis_layer: Vec::new(),
-            annotation_layer: Vec::new(),
-        }
-    }
-
-    /// Add grid selections to the grid layer.
-    pub fn add_grid_selections(
-        &mut self,
-        selections: Vec<Selection<LineAttributes, crate::selection::Line>>,
-    ) {
-        self.grid_layer.extend(selections);
-    }
-
-    /// Add a data element to the data layer.
-    pub fn add_data_element(&mut self, element: Box<dyn RenderableElement>) {
-        self.data_layer.push(element);
-    }
-
-    /// Add an axis element to the axis layer.
-    pub fn add_axis_element(&mut self, element: Box<dyn RenderableElement>) {
-        self.axis_layer.push(element);
-    }
-
-    /// Render all layers in the correct z-order.
-    pub fn render_all_layers(&mut self, context: &mut RenderContext) -> GupResult<()> {
-        // Layer 1: Background
-        for element in &mut self.background_layer {
-            element.render(context)?;
-        }
-
-        // Layer 2: Grid lines (behind data)
-        for selection in &mut self.grid_layer {
-            selection.render()?;
-        }
-
-        // Layer 3: Data visualization (on top of grid)
-        for element in &mut self.data_layer {
-            element.render(context)?;
-        }
-
-        // Layer 4: Axes (on top of data)
-        for element in &mut self.axis_layer {
-            element.render(context)?;
-        }
-
-        // Layer 5: Annotations (on top of everything)
-        for element in &mut self.annotation_layer {
-            element.render(context)?;
-        }
-
-        Ok(())
-    }
-
-    /// Clear all layers.
-    pub fn clear(&mut self) {
-        self.background_layer.clear();
-        self.grid_layer.clear();
-        self.data_layer.clear();
-        self.axis_layer.clear();
-        self.annotation_layer.clear();
-    }
-
-    /// Get the total number of elements across all layers.
-    pub fn total_element_count(&self) -> usize {
-        self.background_layer.len()
-            + self.grid_layer.len()
-            + self.data_layer.len()
-            + self.axis_layer.len()
-            + self.annotation_layer.len()
-    }
-}
-
-impl Default for RenderLayerManager {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-*/
-
 /// Error types specific to chart building operations.
 #[derive(Debug, Clone)]
 pub enum ChartBuilderError {
@@ -3499,48 +3289,6 @@ mod tests {
         assert!(error_str.contains("color"));
         assert!(error_str.contains("Color"));
         assert!(error_str.contains("f32"));
-    }
-
-    #[tokio::test]
-    async fn test_bound_chart_builder_data_access() {
-        let data = vec![
-            TestData {
-                x: 1.0,
-                y: 2.0,
-                value: 10.0,
-                category: "A".to_string(),
-            },
-            TestData {
-                x: 3.0,
-                y: 4.0,
-                value: 20.0,
-                category: "B".to_string(),
-            },
-        ];
-
-        let context = Arc::new(RenderContext::new().await.unwrap());
-
-        // Create a mock builder for testing
-        struct MockBuilder;
-        impl ChartBuilder<TestData> for MockBuilder {
-            type Output = ();
-
-            fn build_with_data(
-                self,
-                _data: Vec<TestData>,
-                _context: Arc<RenderContext>,
-            ) -> GupResult<Self::Output> {
-                Ok(())
-            }
-        }
-
-        let bound_builder = BoundChartBuilder::new(MockBuilder, data.clone(), context);
-
-        assert_eq!(bound_builder.len(), 2);
-        assert!(!bound_builder.is_empty());
-        assert_eq!(bound_builder.data().len(), 2);
-        assert_eq!(bound_builder.data()[0].x, 1.0);
-        assert_eq!(bound_builder.data()[1].category, "B");
     }
 
     #[test]

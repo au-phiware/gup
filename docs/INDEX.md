@@ -27,7 +27,6 @@ Quick access to all documents in `docs/`. For stories and planning, see
   reference
 - [mark-system/performance.md](mark-system/performance.md) — Mark system
   performance guide
-- [BLEND_MODES.md](BLEND_MODES.md) — GPU blend mode implementation reference
 - [GRID_SYSTEM.md](GRID_SYSTEM.md) — Axis and grid system architecture
 - [text-rendering-architecture.md](text-rendering-architecture.md) — SDF text
   rendering pipeline design
@@ -37,10 +36,6 @@ Quick access to all documents in `docs/`. For stories and planning, see
 ## Developer Guides
 
 - [CUSTOM_MARK_GUIDE.md](CUSTOM_MARK_GUIDE.md) — How to create custom mark types
-- [MIGRATION_FROM_OBSERVABLE_PLOT.md](MIGRATION_FROM_OBSERVABLE_PLOT.md) —
-  Migrating from Observable Plot to Gup
-- [SHADER_FN_MIGRATION_GUIDE.md](SHADER_FN_MIGRATION_GUIDE.md) — Migrating to
-  the ShaderFn system
 - [TYPE_CONSTRUCTION_GUIDE.md](TYPE_CONSTRUCTION_GUIDE.md) — Using the type
   construction macros
 - [EVENT_FORWARDING.md](EVENT_FORWARDING.md) — Interaction and event forwarding
@@ -81,13 +76,9 @@ Quick access to all documents in `docs/`. For stories and planning, see
   configuration
 - [CI_BENCHMARK_INTEGRATION.md](CI_BENCHMARK_INTEGRATION.md) — CI benchmark
   integration guide
-- [GPU_TIMESTAMP_INTEGRATION.md](GPU_TIMESTAMP_INTEGRATION.md) — GPU timestamp
-  query integration
 - [CROSS_PLATFORM_AXIS_PERFORMANCE.md](CROSS_PLATFORM_AXIS_PERFORMANCE.md) —
   Axis performance across platforms
 - [WASM_PERFORMANCE.md](WASM_PERFORMANCE.md) — WebAssembly performance guide
-- [ERROR_HANDLING_OPTIMIZATION.md](ERROR_HANDLING_OPTIMIZATION.md) — Error
-  handling performance optimizations
 - [VISUAL_REGRESSION_TESTING.md](VISUAL_REGRESSION_TESTING.md) — Visual
   regression testing setup
 
@@ -105,8 +96,6 @@ Quick access to all documents in `docs/`. For stories and planning, see
   solutions deep-dive
 - [graphics-programming.md](graphics-programming.md) — Graphics programming
   reference notes
-- [transpilation-validation-report.md](transpilation-validation-report.md) —
-  Rust→WGSL transpiler validation report
 - [research/rust_to_wgsl_research.md](research/rust_to_wgsl_research.md) —
   Rust-to-WGSL transpilation research
 - [research/technical_feasibility_assessment.md](research/technical_feasibility_assessment.md)

@@ -16,7 +16,7 @@
 
 use crate::error::GupResult;
 use crate::mark::{Mark, MarkInfo, MarkInfoImpl};
-use crate::mixable::BlendMode;
+use crate::render::BlendMode;
 use std::any::TypeId;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -105,7 +105,7 @@ impl EnhancedCacheStats {
 ///
 /// ```rust,ignore
 /// use gup::mark::performance_opt::EnhancedPipelineCache;
-/// use gup::mixable::BlendMode;
+/// use gup::render::BlendMode;
 ///
 /// let mut cache = EnhancedPipelineCache::new();
 ///

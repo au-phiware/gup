@@ -29,35 +29,17 @@ a mark type. Performance scales with instance count rather than mark complexity.
 
 ## Optimization Strategies
 
-### 1. Pre-allocate Buffers
-
-Avoid GPU buffer reallocation during rendering by pre-sizing buffers:
-
-```rust
-// Calculate expected data size
-let instance_size = std::mem::size_of::<CircleInstance>();
-let expected_instances = 10_000;
-
-let renderer = MarkRenderer::with_capacity(
-    &device,
-    1024,                                // vertex data (small)
-    instance_size * expected_instances,  // instance data
-    Some(256),                           // index data
-);
-```
-
-Buffer reallocation requires a new GPU allocation and data copy. The default
-1.5× growth factor amortizes this cost, but pre-allocation avoids it entirely.
-
-### 2. Minimize Pipeline Switches
+### 1. Minimize Pipeline Switches
 
 Each call to `render_pass.set_pipeline()` has a GPU cost. Group instances by
 mark type to minimize switches:
 
 ```rust
 // Good: batch by type (2 pipeline switches)
-renderer.render_marks::<Circle>(&mut pass, &circle_pipeline, &circle_bg, 5000)?;
-renderer.render_marks::<Rectangle>(&mut pass, &rect_pipeline, &rect_bg, 3000)?;
+pass.set_pipeline(&circle_pipeline);
+pass.draw_indexed(0..6, 0, 0..5000);
+pass.set_pipeline(&rect_pipeline);
+pass.draw_indexed(0..6, 0, 0..3000);
 
 // Avoid: interleaving types (more switches)
 ```
@@ -65,7 +47,7 @@ renderer.render_marks::<Rectangle>(&mut pass, &rect_pipeline, &rect_bg, 3000)?;
 The `InstancedBatchRenderer` handles this automatically by sorting draw calls by
 pipeline.
 
-### 3. Use Hand-Optimized Shaders
+### 2. Use Hand-Optimized Shaders
 
 Generated shaders are flexible but may miss optimization opportunities. For
 performance-critical marks, provide hand-written WGSL:
@@ -82,7 +64,7 @@ impl Mark for PerformanceCriticalMark {
 
 All seven built-in marks use hand-optimized shaders.
 
-### 4. Compact Instance Data
+### 3. Compact Instance Data
 
 GPU bandwidth is a common bottleneck. Keep per-instance data as small as
 possible:
@@ -110,7 +92,7 @@ Remember WGSL alignment rules:
 - `vec4<f32>` needs 16-byte alignment
 - Add explicit padding fields to match GPU expectations
 
-### 5. Viewport Culling
+### 4. Viewport Culling
 
 Skip instances outside the visible area using the `CullingManager`:
 
@@ -136,7 +118,7 @@ for instance in &instances {
 }
 ```
 
-### 6. Compute Shader Filtering
+### 5. Compute Shader Filtering
 
 For large datasets, use the GPU to filter instances before rendering:
 
@@ -154,22 +136,6 @@ let result = filter.filter(&device, &queue, &instance_buffer, &filter_params)?;
 
 This moves culling and filtering work from the CPU to the GPU, which is
 significantly faster for 10K+ instances.
-
-### 7. Multi-Pass Efficiency
-
-When using multi-pass rendering, all passes execute within a single render pass
-(no additional render pass creation overhead):
-
-```rust
-// Single render pass, multiple draw calls
-renderer.render_marks_multi_pass::<Circle>(
-    &mut render_pass,
-    &multi_pass_config,
-    &pipelines,       // One pipeline per pass
-    &bind_group,
-    instance_count,
-)?;
-```
 
 ## Profiling
 
@@ -193,39 +159,11 @@ Performance classifications:
 | Acceptable | < 1ms           | Consider optimization      |
 | Needs Work | ≥ 1ms           | Optimize vertex generation |
 
-### Performance Metrics
-
-Track rendering performance per frame with `MarkPerformanceMetrics`. The
-simplest approach is to use the tracked render methods which automatically
-accumulate counters:
-
-```rust
-// At the start of each frame, reset counters
-renderer.reset_performance_counters();
-
-// Use tracked variants — metrics are updated automatically
-renderer.render_marks_tracked::<Circle>(&mut pass, &pipeline, &bind_group, 500)?;
-renderer.render_marks_tracked::<Rectangle>(&mut pass, &pipeline2, &bind_group2, 200)?;
-
-// At the end of the frame, read metrics
-let metrics = renderer.get_performance_metrics();
-println!("Draw calls:       {}", metrics.draw_calls);        // 2
-println!("Total instances:  {}", metrics.total_instances);    // 700
-println!("Pipeline switches: {}", metrics.pipeline_switches); // 0
-```
-
-You can also accumulate metrics manually via `metrics_mut()` when using the
-non-tracked `render_marks()` variant.
-
 ### GPU Timing
 
-For GPU-side timing, use the project's GPU timestamp integration (see
-[GPU Timestamp Integration](../GPU_TIMESTAMP_INTEGRATION.md)):
-
-```rust
-// GPU timestamps measure actual shader execution time,
-// not just CPU-side submission time.
-```
+For GPU-side timing, wrap render passes with `GpuTimer` (`gup::gpu_timer`),
+which uses timestamp queries to measure actual shader execution time rather than
+CPU-side submission time.
 
 ## Scaling Considerations
 

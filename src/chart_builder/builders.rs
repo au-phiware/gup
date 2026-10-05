@@ -43,7 +43,7 @@ pub use line::*;
 pub use scatter::*;
 pub use violin::*;
 
-use super::accessor::{AccessorValue, FieldAccessor};
+use super::accessor::AccessorValue;
 use super::{AxisScale, ChartBuilderError};
 use crate::error::GupResult;
 use crate::grid::{Color, GridConfiguration, GridLineConfig};
@@ -509,7 +509,6 @@ pub struct AccessorFunction<T> {
     function: Arc<dyn Fn(&T) -> AccessorValue + Send + Sync>,
     #[cfg(target_arch = "wasm32")]
     function: Arc<dyn Fn(&T) -> AccessorValue>,
-    field_name: Option<String>,
     _phantom: PhantomData<T>,
 }
 
@@ -521,21 +520,6 @@ impl<T> AccessorFunction<T> {
     {
         Self {
             function: Arc::new(function),
-            field_name: None,
-            _phantom: PhantomData,
-        }
-    }
-
-    /// Create a new accessor function from a field name.
-    pub fn from_field(field_name: &str) -> Self {
-        let field_name_owned = field_name.to_string();
-        Self {
-            function: Arc::new(move |_data| {
-                // In a real implementation, this would use reflection or a registry
-                // For now, return a placeholder value
-                AccessorValue::Float(0.0)
-            }),
-            field_name: Some(field_name_owned),
             _phantom: PhantomData,
         }
     }
@@ -544,17 +528,11 @@ impl<T> AccessorFunction<T> {
     pub fn apply(&self, data: &T) -> AccessorValue {
         (self.function)(data)
     }
-
-    /// Get the field name if this accessor is field-based.
-    pub fn field_name(&self) -> Option<&str> {
-        self.field_name.as_deref()
-    }
 }
 
 impl<T> std::fmt::Debug for AccessorFunction<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("AccessorFunction")
-            .field("field_name", &self.field_name)
             .field("function", &"<closure>")
             .finish()
     }
@@ -564,19 +542,12 @@ impl<T> Clone for AccessorFunction<T> {
     fn clone(&self) -> Self {
         Self {
             function: Arc::clone(&self.function),
-            field_name: self.field_name.clone(),
             _phantom: PhantomData,
         }
     }
 }
 
-/// Convert various accessor types to internal AccessorFunction.
-impl<T> From<FieldAccessor> for AccessorFunction<T> {
-    fn from(field_accessor: FieldAccessor) -> Self {
-        AccessorFunction::from_field(field_accessor.field_name())
-    }
-}
-
+/// Convert closures to the internal AccessorFunction.
 impl<T, F> From<F> for AccessorFunction<T>
 where
     F: Fn(&T) -> AccessorValue + MaybeSend + MaybeSync + 'static,
@@ -1040,7 +1011,6 @@ impl SegmentNdcMapper {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::chart_builder::accessor::x;
 
     #[derive(Debug, Clone)]
     struct TestData {
@@ -1065,23 +1035,16 @@ mod tests {
 
         let result = closure_accessor.apply(&data);
         assert_eq!(result, AccessorValue::Float(10.0));
-
-        // Test field-based accessor
-        let field_accessor = AccessorFunction::<TestData>::from_field("x");
-        assert_eq!(field_accessor.field_name(), Some("x"));
-    }
-
-    #[test]
-    fn test_field_accessor_conversion() {
-        let field_accessor = x("revenue");
-        let accessor_function: AccessorFunction<TestData> = field_accessor.into();
-        assert_eq!(accessor_function.field_name(), Some("revenue"));
     }
 
     #[test]
     fn test_validate_required_accessors() {
-        let x_accessor = Some(AccessorFunction::<TestData>::from_field("x"));
-        let y_accessor = Some(AccessorFunction::<TestData>::from_field("y"));
+        let x_accessor = Some(AccessorFunction::<TestData>::new(|d: &TestData| {
+            AccessorValue::Float(d.x)
+        }));
+        let y_accessor = Some(AccessorFunction::<TestData>::new(|d: &TestData| {
+            AccessorValue::Float(d.y)
+        }));
 
         // Both provided - should succeed
         let result = validate_required_accessors(&x_accessor, &y_accessor);
@@ -1104,15 +1067,6 @@ mod tests {
             assert!(error_str.contains("Missing required accessor"));
             assert!(error_str.contains("y"));
         }
-    }
-
-    #[test]
-    fn test_accessor_function_clone_preserves_field_name() {
-        let accessor = AccessorFunction::<TestData>::from_field("test_field");
-        let cloned_accessor = accessor.clone();
-
-        assert_eq!(accessor.field_name(), cloned_accessor.field_name());
-        assert_eq!(cloned_accessor.field_name(), Some("test_field"));
     }
 
     #[test]
@@ -1152,17 +1106,6 @@ mod tests {
             cloned.apply(&data),
             AccessorValue::String("hello".to_string())
         );
-    }
-
-    #[test]
-    fn test_accessor_function_clone_none_field_name() {
-        // Closure-based accessor has no field_name
-        let accessor =
-            AccessorFunction::<TestData>::new(|d: &TestData| AccessorValue::Float(d.value));
-        let cloned = accessor.clone();
-
-        assert_eq!(accessor.field_name(), None);
-        assert_eq!(cloned.field_name(), None);
     }
 
     #[test]

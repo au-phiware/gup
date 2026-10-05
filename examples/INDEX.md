@@ -38,9 +38,7 @@ Run any example with: `cargo run --example <name>`
 | `boxplot_rendering_demo`          | Box plot rendering pipeline demo                  |
 | `boxplot_builder_demo`            | Box plot chart builder API                        |
 | `multi_category_boxplot`          | Multi-category box plots                          |
-| `observable_plot_showcase`        | Chart builder API showcase                        |
 | `observable_plot_visual_showcase` | Visual showcase of chart builder API              |
-| `integration_showcase`            | Full integration showcase of multiple chart types |
 | `custom_mark_demo`                | Implementing a custom mark type                   |
 | `multi_pass_mark_demo`            | Multi-pass mark rendering                         |
 | `bar_chart`                       | Bar chart variations                              |
@@ -120,7 +118,6 @@ Run any example with: `cargo run --example <name>`
 | `animation_events`            | Animation event system               |
 | `spline_animation_curves`     | Spline-interpolated animation curves |
 | `keyframe_animation_storage`  | Storage buffer keyframe animation    |
-| `async_streaming_demo`        | Async data streaming to GPU          |
 | `data_transition_scatter`     | Data transition scatter animation    |
 | `streaming_live_chart`        | Streaming live data chart            |
 | `streaming_lod_scatter`       | Streaming LOD scatter plot           |
@@ -140,19 +137,17 @@ Run any example with: `cargo run --example <name>`
 
 ## Blend Modes
 
-| Example                | Description                     |
-| ---------------------- | ------------------------------- |
-| `blend_modes_showcase` | GPU blend mode showcase         |
-| `visual_blend_demo`    | Visual blend mode demonstration |
+| Example             | Description                     |
+| ------------------- | ------------------------------- |
+| `visual_blend_demo` | Visual blend mode demonstration |
 
 ---
 
 ## Composition
 
-| Example                               | Description                            |
-| ------------------------------------- | -------------------------------------- |
-| `parallel_composition_demo`           | Parallel composition of visualizations |
-| `composition_error_recovery_showcase` | Error recovery in composition chains   |
+| Example                     | Description                            |
+| --------------------------- | -------------------------------------- |
+| `parallel_composition_demo` | Parallel composition of visualizations |
 
 ---
 

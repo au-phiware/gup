@@ -366,7 +366,7 @@ async fn main() -> GupResult<()> {
 - **[Custom Mark Guide](../CUSTOM_MARK_GUIDE.md)** — the full architectural
   reference for the mark system.
 - **[Mark System docs](../mark-system/README.md)** — detailed API reference for
-  `MarkRegistry` and `MarkRenderer`.
+  `Mark` and `MarkRegistry`.
 - **[`tutorial06_custom_marks` example](../../examples/tutorials/tutorial06_custom_marks.rs)**
   — run exactly this tutorial's custom mark example.
 - **[`custom_mark_demo` example](../../examples/custom_mark_demo.rs)** —

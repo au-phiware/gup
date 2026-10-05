@@ -53,15 +53,12 @@ Once you're comfortable with the basics, these examples show advanced features:
 
 Deep dives into specific library capabilities:
 
-| Example                               | Description                     |
-| ------------------------------------- | ------------------------------- |
-| `observable_plot_showcase`            | Full Observable Plot-style API  |
-| `observable_plot_visual_showcase`     | Visual Observable Plot examples |
-| `label_formatting_demo`               | Advanced label formatting       |
-| `axis_showcase`                       | Axis configuration options      |
-| `grid_visual_demo`                    | Grid styling and customization  |
-| `blend_modes_showcase`                | GPU blend mode demonstrations   |
-| `composition_error_recovery_showcase` | Error handling patterns         |
+| Example                           | Description                     |
+| --------------------------------- | ------------------------------- |
+| `observable_plot_visual_showcase` | Visual Observable Plot examples |
+| `label_formatting_demo`           | Advanced label formatting       |
+| `axis_showcase`                   | Axis configuration options      |
+| `grid_visual_demo`                | Grid styling and customization  |
 
 ### 7. Technical Deep Dives
 
@@ -77,7 +74,6 @@ For understanding the library internals:
 | `shader_pipeline_demo` | Custom shader integration                       |
 | `gpu_debug_demo`       | GPU debugging tools                             |
 | `buffer_demo`          | GPU buffer management                           |
-| `async_streaming_demo` | Async data streaming                            |
 
 ## Quick Start
 

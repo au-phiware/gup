@@ -24,13 +24,11 @@
 //!
 //! # System Overview
 //!
-//! The mark system consists of three core components:
+//! The mark system consists of two core components:
 //!
 //! - [`Mark`] — Trait defining geometry, shaders, and attributes for a visual
 //!   primitive.
 //! - [`MarkRegistry`] — Type-safe runtime registry with pipeline caching.
-//! - [`MarkRenderer`] — GPU buffer manager handling vertex, instance, and index
-//!   data.
 //!
 //! # Built-in Marks
 //!
@@ -52,7 +50,7 @@
 //! # Quick Start
 //!
 //! ```rust,no_run
-//! use gup::mark::{Circle, Mark, MarkRegistry, MarkRenderer};
+//! use gup::mark::{Circle, MarkRegistry};
 //! use gup::GupContext;
 //! use std::sync::Arc;
 //!
@@ -60,10 +58,6 @@
 //! let context = Arc::new(GupContext::headless().await?);
 //! let mut registry = MarkRegistry::new();
 //! registry.register::<Circle>();
-//!
-//! let mut renderer = MarkRenderer::new(&context.device);
-//! let vertices = Circle::generate_vertices();
-//! renderer.upload_vertices(&context.device, &context.queue, &vertices)?;
 //!
 //! let pipeline = registry.get_pipeline::<Circle>(&context.device)?;
 //! # Ok(())
@@ -111,7 +105,6 @@ pub mod path;
 pub mod performance_opt;
 pub mod radix_sort;
 pub mod rectangle;
-pub mod renderer;
 pub mod sphere3d;
 pub mod text;
 pub mod unified_culling_pipeline;
@@ -153,7 +146,6 @@ pub use performance_opt::{
     MarkPerformanceMetrics, PipelineCacheKey, SizeClass, SortedBatch,
 };
 pub use rectangle::{Rectangle, RectangleAttributes, RectangleVertex};
-pub use renderer::MarkRenderer;
 pub use sphere3d::{Sphere3D, Sphere3DAttributes, Sphere3DInstance, Sphere3DVertex};
 pub use text::{Text, TextMarkAttributes, TextVertex};
 pub use unified_culling_pipeline::UnifiedCullingPipeline;
@@ -1134,7 +1126,7 @@ impl MarkRegistry {
         &mut self,
         device: &Device,
         blend_config: &advanced_rendering::MarkBlendConfig,
-        context_blend: Option<crate::mixable::BlendMode>,
+        context_blend: Option<crate::render::BlendMode>,
     ) -> GupResult<Arc<RenderPipeline>> {
         // For marks that use default alpha blending and no override, use regular pipeline
         let resolved = blend_config.resolve_blend_state(context_blend);

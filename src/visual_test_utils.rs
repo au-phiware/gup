@@ -8,7 +8,7 @@
 //! Particularly useful for validating blend modes and visual correctness.
 
 use crate::error::{GupError, GupResult};
-use crate::mixable::BlendMode;
+use crate::render::BlendMode;
 use std::collections::HashMap;
 use wgpu::util::DeviceExt;
 use wgpu::*;

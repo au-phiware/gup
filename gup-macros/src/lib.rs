@@ -23,9 +23,6 @@ use syn::{Data, DeriveInput, Fields, parse_macro_input};
 mod crate_path;
 mod mark_derive;
 mod mark_type_id;
-mod mixable_derive;
-mod shader_fn;
-pub(crate) mod transpile;
 mod wgsl_function;
 mod wgsl_keywords;
 mod wgsl_struct;
@@ -77,54 +74,6 @@ pub fn wgsl_function(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut tokens = proc_macro2::TokenStream::new();
     input.to_tokens(&mut tokens);
     TokenStream::from(tokens)
-}
-
-/// Procedural macro for writing shader functions in Rust syntax.
-///
-/// `#[shader_fn]` transpiles the function body from Rust to WGSL using the
-/// Rust-to-WGSL transpilation pipeline and generates the same output as
-/// `#[wgsl_function]`: a configuration struct plus a `ComposableShaderFunction`
-/// implementation. Both approaches are fully interchangeable — functions
-/// created with either macro can be mixed in the same `ShaderPipeline`.
-///
-/// # When to Use
-///
-/// Use `#[shader_fn]` when you want the transpiler to convert your Rust
-/// expressions, control flow, and method calls into WGSL automatically.
-/// Use `#[wgsl_function]` when you want to write WGSL syntax directly.
-///
-/// # Example
-///
-/// ```rust,ignore
-/// use gup::shader_fn;
-///
-/// #[shader_fn]
-/// fn linear_scale(value: f32, domain_min: f32, domain_max: f32,
-///                 range_min: f32, range_max: f32) -> f32 {
-///     let normalised = (value - domain_min) / (domain_max - domain_min);
-///     range_min + normalised * (range_max - range_min)
-/// }
-/// ```
-///
-/// This generates:
-/// - A `LinearScale` struct with configuration fields
-/// - A `LinearScaleUniforms` struct for GPU uniforms
-/// - An implementation of `ComposableShaderFunction` for `LinearScale`
-/// - Transpiled WGSL code from the Rust function body
-///
-/// Like `#[wgsl_function]`, generated code uses absolute `::gup::` paths and
-/// accepts a `crate = "path::to::gup"` argument for re-exporting crates.
-#[proc_macro_attribute]
-pub fn shader_fn(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let crate_path = match crate_path::parse_attribute_args(attr.into(), "shader_fn") {
-        Ok(path) => path,
-        Err(err) => return err.to_compile_error().into(),
-    };
-    let function = parse_macro_input!(item as syn::ItemFn);
-    match shader_fn::expand_shader_fn(function, crate_path) {
-        Ok(tokens) => TokenStream::from(tokens),
-        Err(err) => err.to_compile_error().into(),
-    }
 }
 
 /// Derive macro for automatically implementing the `ShaderType` trait.
@@ -245,50 +194,6 @@ pub fn derive_shader_type(input: TokenStream) -> TokenStream {
     };
 
     generated.into()
-}
-
-/// Derive macro for automatically implementing the `Mixable` trait.
-///
-/// This macro generates a `Mixable` implementation for custom structs,
-/// enabling them to be used in Gup's composition system with minimal boilerplate.
-///
-/// # Attributes
-///
-/// - `#[mixable(render_type = "points")]` - Specify the rendering type (points, lines, triangles)
-/// - `#[mixable(vertex_data)]` - Mark a field as containing vertex data for GPU rendering
-/// - `#[mixable(uniform_data)]` - Mark a field as containing uniform data
-/// - `#[mixable(texture_data)]` - Mark a field as containing texture data
-/// - `#[mixable(binding = N)]` - Specify the binding index for uniform/texture fields
-///
-/// # Examples
-///
-/// ```rust,ignore
-/// use gup_macros::Mixable;
-///
-/// #[derive(Mixable)]
-/// #[mixable(render_type = "points")]
-/// struct ScatterPlot {
-///     #[mixable(vertex_data)]
-///     points: Vec<[f32; 2]>,
-///
-///     #[mixable(uniform_data, binding = 0)]
-///     color: [f32; 4],
-/// }
-/// ```
-///
-/// This generates:
-/// - A `Mixable` trait implementation with point-based rendering
-/// - Proper vertex data extraction from the `points` field
-/// - Uniform binding setup for the `color` field
-/// - Validation methods to ensure data integrity
-#[proc_macro_derive(Mixable, attributes(mixable, gup))]
-pub fn derive_mixable(input: TokenStream) -> TokenStream {
-    let input = parse_macro_input!(input as DeriveInput);
-
-    match mixable_derive::generate_mixable_impl(&input) {
-        Ok(tokens) => tokens.into(),
-        Err(error) => error.to_compile_error().into(),
-    }
 }
 
 /// Derive macro for automatically implementing the `WgslStructType` trait.

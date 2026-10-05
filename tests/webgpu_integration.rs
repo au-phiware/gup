@@ -2,7 +2,7 @@
 // Copyright (C) 2025 Corin Lawson <corin@phiware.com.au>
 //
 
-use gup::{GpuScatterPlot, Mixable, RenderContext};
+use gup::RenderContext;
 
 #[tokio::test]
 async fn test_render_context_initialization() {
@@ -33,47 +33,6 @@ async fn test_render_context_with_viewport() {
 }
 
 #[tokio::test]
-async fn test_basic_gpu_rendering() {
-    let mut context = RenderContext::new().await.unwrap();
-
-    let mut scatter_plot = GpuScatterPlot::new(
-        vec![(0.0, 0.0), (0.5, 0.5), (-0.5, -0.5)],
-        [1.0, 0.0, 0.0, 1.0],
-    );
-
-    let result = scatter_plot.render(&mut context);
-    assert!(result.is_ok(), "GPU rendering should succeed");
-}
-
-#[tokio::test]
-async fn test_composed_gpu_rendering() {
-    let mut context = RenderContext::new().await.unwrap();
-
-    let plot1 = GpuScatterPlot::new(vec![(0.0, 0.0)], [1.0, 0.0, 0.0, 1.0]);
-    let plot2 = GpuScatterPlot::new(vec![(0.5, 0.5)], [0.0, 1.0, 0.0, 1.0]);
-
-    let mut composed = plot1.mix(plot2);
-    let result = composed.render(&mut context);
-
-    assert!(result.is_ok(), "Composed GPU rendering should succeed");
-}
-
-#[tokio::test]
-async fn test_scatter_plot_validation() {
-    let empty_plot = GpuScatterPlot::new(vec![], [1.0, 0.0, 0.0, 1.0]);
-    assert!(
-        !empty_plot.is_valid(),
-        "Empty scatter plot should be invalid"
-    );
-
-    let valid_plot = GpuScatterPlot::new(vec![(0.0, 0.0)], [1.0, 0.0, 0.0, 1.0]);
-    assert!(
-        valid_plot.is_valid(),
-        "Non-empty scatter plot should be valid"
-    );
-}
-
-#[tokio::test]
 async fn test_viewport_update() {
     let mut context = RenderContext::new().await.unwrap();
 
@@ -90,22 +49,6 @@ async fn test_viewport_update() {
     assert_eq!(updated_viewport.width, 1920);
     assert_eq!(updated_viewport.height, 1080);
     assert_eq!(updated_viewport.scale_factor, 1.5);
-}
-
-#[tokio::test]
-async fn test_multiple_renders() {
-    let mut context = RenderContext::new().await.unwrap();
-
-    let mut scatter_plot = GpuScatterPlot::new(
-        vec![(0.0, 0.0), (0.1, 0.1), (0.2, 0.2)],
-        [0.0, 0.0, 1.0, 1.0],
-    );
-
-    // Render multiple times to test resource reuse
-    for _ in 0..3 {
-        let result = scatter_plot.render(&mut context);
-        assert!(result.is_ok(), "Multiple renders should succeed");
-    }
 }
 
 #[cfg(target_arch = "wasm32")]

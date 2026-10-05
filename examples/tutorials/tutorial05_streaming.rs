@@ -3,108 +3,93 @@
 
 //! # Tutorial 5 — Streaming Data
 //!
-//! Demonstrates the `StreamingDataSource` and `StreamingScatterPlot` from
+//! Demonstrates the `DataStream` builder API from
 //! [Tutorial 5: Streaming Data](../../docs/tutorials/05_streaming_data.md).
 //!
-//! Implements a `SineWaveSource` that produces an infinite stream of sine-wave
-//! points and wires it to a `StreamingScatterPlot` capped at 1 000 visible
-//! points.  The example then consumes a few batches and prints statistics.
+//! A `SineWave` producer generates batches of sine-wave points which are
+//! pushed into a sliding-window `DataStream` capped at 1 000 points. A
+//! subscriber counts committed updates, and each batch is flushed to the GPU.
 //!
 //! Run with: `cargo run --example tutorial05_streaming`
 //!
 //! This example runs headlessly (no window) since the tutorial focuses on the
-//! data-source plumbing rather than rendering.
+//! data plumbing rather than rendering.
 
-use async_trait::async_trait;
-use gup::async_mixable::streaming::{
-    Point2D, StreamStats, StreamingDataSource, StreamingScatterPlot,
-};
+use gup::GupContext;
 use gup::error::GupResult;
+use gup::streaming::{BackpressureStrategy, DataStream, StreamMode};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
-// ---------------------------------------------------------------------------
-// SineWaveSource — from the Tutorial 5 "Full Example"
-// ---------------------------------------------------------------------------
-
-struct SineWaveSource {
+/// Produces an endless sequence of `[x, y]` points along a sine wave.
+struct SineWave {
     step: usize,
     batch_size: usize,
 }
 
-impl SineWaveSource {
-    fn new() -> Self {
+impl SineWave {
+    fn new(batch_size: usize) -> Self {
         Self {
             step: 0,
-            batch_size: 50,
+            batch_size,
         }
     }
-}
 
-#[async_trait]
-impl StreamingDataSource<Point2D> for SineWaveSource {
-    async fn next_batch(&mut self) -> Option<GupResult<Vec<Point2D>>> {
-        let batch: Vec<Point2D> = (0..self.batch_size)
+    /// Return the next batch of points.
+    fn next_batch(&mut self) -> Vec<[f32; 2]> {
+        let batch = (0..self.batch_size)
             .map(|i| {
                 let t = (self.step + i) as f32 * 0.02;
-                Point2D {
-                    x: t % 2.0 - 1.0,
-                    y: (t * 3.14).sin(),
-                    color: [0.9, 0.4, 0.1, 0.8],
-                }
+                [t % 2.0 - 1.0, (t * std::f32::consts::PI).sin()]
             })
             .collect();
         self.step += self.batch_size;
-        Some(Ok(batch))
-    }
-
-    fn has_more(&self) -> bool {
-        true // infinite stream
-    }
-
-    fn stream_stats(&self) -> StreamStats {
-        StreamStats::default()
-    }
-
-    fn set_batch_size(&mut self, size: usize) {
-        self.batch_size = size;
-    }
-
-    fn batch_size(&self) -> usize {
-        self.batch_size
+        batch
     }
 }
 
-// ---------------------------------------------------------------------------
-// main
-// ---------------------------------------------------------------------------
+const CAPACITY: usize = 1000;
+const BATCH_SIZE: usize = 300;
+const BATCHES: usize = 5;
 
 #[tokio::main]
 async fn main() -> GupResult<()> {
     println!("Tutorial 5 — Streaming Data");
     println!("===========================\n");
 
-    let source = SineWaveSource::new();
-    let chart = StreamingScatterPlot::new(source, 1000);
+    let context = GupContext::headless().await?;
+    let device = &context.device;
+    let queue = &context.queue;
 
-    println!("Streaming scatter plot ready");
-    println!("Max visible points: {}", chart.max_points());
+    let mut stream = DataStream::<[f32; 2]>::builder()
+        .capacity(CAPACITY)
+        .mode(StreamMode::SlidingWindow)
+        .backpressure(BackpressureStrategy::EvictOldest)
+        .build(device)
+        .expect("valid stream configuration");
 
-    // Consume a few batches to verify the source works
-    let mut source2 = SineWaveSource::new();
-    let mut total = 0usize;
-    for batch_num in 0..5 {
-        if let Some(Ok(batch)) = source2.next_batch().await {
-            total += batch.len();
-            println!(
-                "  Batch {}: {} points (total: {})",
-                batch_num + 1,
-                batch.len(),
-                total
-            );
-        }
+    let updates = Arc::new(AtomicUsize::new(0));
+    let counter = updates.clone();
+    stream.subscribe(move |_update| {
+        counter.fetch_add(1, Ordering::Relaxed);
+    });
+
+    let mut source = SineWave::new(BATCH_SIZE);
+    for batch_num in 1..=BATCHES {
+        let inserted = stream.push_batch(source.next_batch());
+        let bytes = stream.flush(device, queue);
+        println!(
+            "  Batch {batch_num}: inserted {inserted}, {} buffered, {bytes} bytes uploaded",
+            stream.len()
+        );
     }
 
-    println!("\nStream has_more: {}", source2.has_more());
-    println!("All done — source produced {total} points across 5 batches.");
+    println!(
+        "\nWindow holds {} of {} points pushed ({} subscriber updates).",
+        stream.len(),
+        BATCH_SIZE * BATCHES,
+        updates.load(Ordering::Relaxed)
+    );
 
     Ok(())
 }
@@ -113,32 +98,35 @@ async fn main() -> GupResult<()> {
 mod tests {
     use super::*;
 
-    #[tokio::test]
-    async fn sine_wave_source_produces_correct_batch_size() {
-        let mut source = SineWaveSource::new();
-        let batch = source.next_batch().await.unwrap().unwrap();
-        assert_eq!(batch.len(), 50);
+    #[test]
+    fn sine_wave_produces_requested_batch_size() {
+        let mut source = SineWave::new(50);
+        assert_eq!(source.next_batch().len(), 50);
+    }
+
+    #[test]
+    fn sine_wave_continues_where_previous_batch_ended() {
+        let mut whole = SineWave::new(20);
+        let mut halves = SineWave::new(10);
+        let expected = whole.next_batch();
+        let mut actual = halves.next_batch();
+        actual.extend(halves.next_batch());
+        assert_eq!(actual, expected);
     }
 
     #[tokio::test]
-    async fn sine_wave_source_always_has_more() {
-        let source = SineWaveSource::new();
-        assert!(source.has_more());
-    }
+    async fn sliding_window_caps_at_capacity() {
+        let context = GupContext::headless().await.expect("headless context");
+        let mut stream = DataStream::<[f32; 2]>::builder()
+            .capacity(CAPACITY)
+            .mode(StreamMode::SlidingWindow)
+            .build(&context.device)
+            .expect("valid stream configuration");
 
-    #[tokio::test]
-    async fn sine_wave_source_respects_set_batch_size() {
-        let mut source = SineWaveSource::new();
-        source.set_batch_size(10);
-        assert_eq!(source.batch_size(), 10);
-        let batch = source.next_batch().await.unwrap().unwrap();
-        assert_eq!(batch.len(), 10);
-    }
-
-    #[tokio::test]
-    async fn streaming_scatter_plot_has_correct_max_points() {
-        let source = SineWaveSource::new();
-        let chart = StreamingScatterPlot::new(source, 1000);
-        assert_eq!(chart.max_points(), 1000);
+        let mut source = SineWave::new(BATCH_SIZE);
+        for _ in 0..BATCHES {
+            stream.push_batch(source.next_batch());
+        }
+        assert_eq!(stream.len(), CAPACITY);
     }
 }

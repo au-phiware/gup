@@ -4,10 +4,23 @@
 //! Enhanced RenderContext with full WebGPU integration.
 
 use crate::error::{GupError, GupResult};
-use crate::mixable::BlendMode;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use wgpu::*;
+
+/// Blend modes for overlay composition.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Hash)]
+pub enum BlendMode {
+    /// No blending applied.
+    #[default]
+    None,
+    /// Alpha-based transparency blending.
+    AlphaBlending,
+    /// Additive colour blending.
+    Additive,
+    /// Multiplicative colour blending.
+    Multiply,
+}
 
 /// Context for rendering operations, containing GPU resources and state.
 pub struct RenderContext {
@@ -127,7 +140,7 @@ impl PipelineCacheStats {
 ///
 /// ```no_run
 /// # use gup::render::RenderContext;
-/// # use gup::mixable::BlendMode;
+/// # use gup::render::BlendMode;
 /// # async fn example() -> gup::error::GupResult<()> {
 /// # let mut context = RenderContext::new().await?;
 /// {
@@ -593,7 +606,7 @@ impl RenderContext {
     ///
     /// ```no_run
     /// # use gup::render::RenderContext;
-    /// # use gup::mixable::BlendMode;
+    /// # use gup::render::BlendMode;
     /// # async fn example() -> gup::error::GupResult<()> {
     /// # let mut context = RenderContext::new().await?;
     /// // RAII approach - automatic cleanup
