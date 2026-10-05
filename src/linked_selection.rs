@@ -714,6 +714,9 @@ use crate::selection::{Mark, Selection};
 use crate::selection_mask::SelectionMaskBuffer;
 use wgpu::{Device, Queue, RenderPass};
 
+/// Extracts an item's cross-chart identity key from the item and its index.
+type KeyFn<T, K> = Box<dyn Fn(&T, usize) -> K>;
+
 /// A wrapper that combines a [`Selection`] with a [`SharedSelectionState`]
 /// and a key function, providing automatic generation-based change detection
 /// and instance rebuild with dimming.
@@ -769,7 +772,7 @@ use wgpu::{Device, Queue, RenderPass};
 pub struct LinkedSelection<T, M: Mark, K: Hash + Eq + Send + Sync + 'static> {
     selection: Selection<T, M>,
     shared_state: SharedSelectionState<K>,
-    key_fn: Box<dyn Fn(&T, usize) -> K>,
+    key_fn: KeyFn<T, K>,
     dim_opacity: f32,
     last_generation: u64,
     /// Instance count threshold above which the GPU dimming path is used.
@@ -1076,6 +1079,10 @@ impl<T, M: Mark, K: Hash + Eq + Send + Sync + 'static> LinkedSelection<T, M, K> 
     /// When `timing` is `true` and a [`GpuTimer`] is available, the compute
     /// pass records GPU-side timestamps and the elapsed nanoseconds are
     /// returned as `Ok(Some(ns))`.  Otherwise returns `Ok(None)`.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "mirrors prepare_render's GPU resources plus timing; old render path"
+    )]
     fn prepare_render_gpu<I>(
         &mut self,
         device: &Device,

@@ -277,8 +277,8 @@ mod tests {
         let v = cam.view;
         // The upper-left 3×3 should be orthonormal (each column has unit length
         // and columns are perpendicular).
-        for col in 0..3 {
-            let len_sq = v[col][0] * v[col][0] + v[col][1] * v[col][1] + v[col][2] * v[col][2];
+        for (col, c) in v.iter().take(3).enumerate() {
+            let len_sq = c[0] * c[0] + c[1] * c[1] + c[2] * c[2];
             assert!(
                 (len_sq - 1.0).abs() < 1e-5,
                 "column {col} length² = {len_sq}"

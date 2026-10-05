@@ -755,6 +755,10 @@ impl SelectionMaskBuffer {
     ///
     /// When `timestamp_writes` is `Some`, the compute pass records begin/end
     /// timestamps that can be resolved and read back for profiling.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "wgpu resources plus timing writes; old render path"
+    )]
     pub fn encode_dimming_timed(
         &self,
         device: &Device,

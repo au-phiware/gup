@@ -757,7 +757,7 @@ impl DashboardGenerator {
 
         let avg_ms = aggregate.avg_cpu_time.as_secs_f64() * 1000.0;
         let n = history.len();
-        let bar_w = (chart_w / n as f64).max(1.0).min(20.0);
+        let bar_w = (chart_w / n as f64).clamp(1.0, 20.0);
 
         let mut svg = format!(
             "<svg xmlns=\"http://www.w3.org/2000/svg\" \

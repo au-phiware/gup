@@ -91,6 +91,10 @@ impl GeoJsonSource {
     ///
     /// Accepts `Feature`, `FeatureCollection`, `Polygon`, and `MultiPolygon`
     /// at the top level.
+    #[expect(
+        clippy::should_implement_trait,
+        reason = "frozen old path; RFC-001 S14 deletes it"
+    )]
     pub fn from_str(s: &str) -> GupResult<Self> {
         let value: serde_json::Value =
             serde_json::from_str(s).map_err(|e| GupError::InvalidDataFormat {
@@ -334,8 +338,8 @@ fn rdp_recurse(ring: &[[f64; 2]], start: usize, end: usize, tolerance: f64, keep
     let mut max_idx = start;
     let a = ring[start];
     let b = ring[end];
-    for i in (start + 1)..end {
-        let d = perpendicular_distance(ring[i], a, b);
+    for (i, &p) in ring.iter().enumerate().take(end).skip(start + 1) {
+        let d = perpendicular_distance(p, a, b);
         if d > max_dist {
             max_dist = d;
             max_idx = i;
@@ -465,8 +469,7 @@ fn is_ear(
     }
 
     // No other vertex inside the triangle.
-    for k in 0..count {
-        let idx = indices[k];
+    for &idx in &indices[..count] {
         if idx == prev || idx == curr || idx == next {
             continue;
         }

@@ -121,6 +121,12 @@ impl Timer {
     }
 }
 
+impl Default for Timer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Run a benchmark function and collect timing statistics.
 ///
 /// The function `f` is called `warmup + measured` times. Only the last

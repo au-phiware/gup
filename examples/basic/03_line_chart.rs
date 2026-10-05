@@ -219,7 +219,7 @@ async fn main() -> GupResult<()> {
     println!("Available interpolation modes:");
     let modes = [
         LineInterpolation::Linear,
-        LineInterpolation::Curve,
+        LineInterpolation::Monotone,
         LineInterpolation::StepBefore,
         LineInterpolation::StepAfter,
     ];

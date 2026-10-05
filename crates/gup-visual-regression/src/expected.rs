@@ -296,7 +296,7 @@ tracking = "GUP-393"
         let v = list.reconcile(
             "chart_builders/area",
             &[Check::NotBlank, Check::TextPresent, Check::MarksConfined],
-            &[text.clone()],
+            std::slice::from_ref(&text),
         );
         assert_eq!(v.expected_failures.len(), 1);
         assert!(v.unexpected_failures.is_empty());

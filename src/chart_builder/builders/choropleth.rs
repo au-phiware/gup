@@ -362,6 +362,10 @@ pub struct ChoroplethChart {
     /// tooltip text. When `None`, a default format is used
     /// (`"<name>: <value>"`).
     #[cfg(not(target_arch = "wasm32"))]
+    #[expect(
+        clippy::type_complexity,
+        reason = "frozen old path; RFC-001 S14 deletes it"
+    )]
     tooltip_formatter: Option<Box<dyn Fn(&RegionRecord) -> String + Send + Sync>>,
     /// Custom tooltip formatter closure.
     #[cfg(target_arch = "wasm32")]
@@ -548,6 +552,10 @@ pub struct ChoroplethChartBuilder {
     boundaries: Option<GeoJsonSource>,
     data: HashMap<String, f64>,
     #[cfg(not(target_arch = "wasm32"))]
+    #[expect(
+        clippy::type_complexity,
+        reason = "frozen old path; RFC-001 S14 deletes it"
+    )]
     region_id_fn: Option<Box<dyn Fn(&GeoFeature) -> Option<String> + Send + Sync>>,
     #[cfg(target_arch = "wasm32")]
     region_id_fn: Option<Box<dyn Fn(&GeoFeature) -> Option<String>>>,
@@ -564,6 +572,10 @@ pub struct ChoroplethChartBuilder {
     // -- Hover / tooltip interaction --------------------------------------
     tooltip_enabled: bool,
     #[cfg(not(target_arch = "wasm32"))]
+    #[expect(
+        clippy::type_complexity,
+        reason = "frozen old path; RFC-001 S14 deletes it"
+    )]
     tooltip_formatter: Option<Box<dyn Fn(&RegionRecord) -> String + Send + Sync>>,
     #[cfg(target_arch = "wasm32")]
     tooltip_formatter: Option<Box<dyn Fn(&RegionRecord) -> String>>,
@@ -847,6 +859,10 @@ impl ChoroplethChartBuilder {
         })?;
 
         // Default region_id accessor: look up `iso_a3` property.
+        #[expect(
+            clippy::type_complexity,
+            reason = "frozen old path; RFC-001 S14 deletes it"
+        )]
         let region_id_fn: Box<dyn Fn(&GeoFeature) -> Option<String>> =
             self.region_id_fn.unwrap_or_else(|| {
                 Box::new(|f: &GeoFeature| {
@@ -1120,8 +1136,8 @@ fn rdp_recurse(ring: &[[f64; 2]], start: usize, end: usize, tol_sq: f64, keep: &
     let (bx, by) = (ring[end][0], ring[end][1]);
     let mut max_dist = 0.0_f64;
     let mut max_idx = start;
-    for i in (start + 1)..end {
-        let d = point_line_dist_sq(ring[i][0], ring[i][1], ax, ay, bx, by);
+    for (i, p) in ring.iter().enumerate().take(end).skip(start + 1) {
+        let d = point_line_dist_sq(p[0], p[1], ax, ay, bx, by);
         if d > max_dist {
             max_dist = d;
             max_idx = i;
@@ -1194,8 +1210,7 @@ fn earclip_tessellate(ring: &[[f64; 2]]) -> Vec<[f32; 2]> {
             }
 
             let mut ear = true;
-            for j in 0..n {
-                let idx = indices[j];
+            for &idx in &indices[..n] {
                 if idx == prev || idx == curr || idx == next {
                     continue;
                 }

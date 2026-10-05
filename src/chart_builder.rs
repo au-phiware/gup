@@ -3890,6 +3890,10 @@ mod tests_multi_font {
     #[tokio::test]
     async fn test_queue_chart_text_no_axes() {
         #[derive(Debug, Clone)]
+        #[expect(
+            dead_code,
+            reason = "test fixture whose fields are never read; frozen old path; RFC-001 S14 deletes it"
+        )]
         struct D {
             x: f32,
         }
@@ -3924,6 +3928,10 @@ mod tests_multi_font {
     #[tokio::test]
     async fn test_queue_chart_text_with_default_axes() {
         #[derive(Debug, Clone)]
+        #[expect(
+            dead_code,
+            reason = "test fixture whose fields are never read; frozen old path; RFC-001 S14 deletes it"
+        )]
         struct D {
             x: f32,
         }
@@ -3960,6 +3968,10 @@ mod tests_multi_font {
     #[tokio::test]
     async fn test_queue_chart_text_with_font_family() {
         #[derive(Debug, Clone)]
+        #[expect(
+            dead_code,
+            reason = "test fixture whose fields are never read; frozen old path; RFC-001 S14 deletes it"
+        )]
         struct D {
             x: f32,
         }
@@ -3998,6 +4010,10 @@ mod tests_multi_font {
     #[tokio::test]
     async fn test_queue_chart_text_with_title() {
         #[derive(Debug, Clone)]
+        #[expect(
+            dead_code,
+            reason = "test fixture whose fields are never read; frozen old path; RFC-001 S14 deletes it"
+        )]
         struct D {
             x: f32,
         }
@@ -4037,6 +4053,10 @@ mod tests_multi_font {
     #[tokio::test]
     async fn test_queue_chart_text_resolved_with_collision_detection() {
         #[derive(Debug, Clone)]
+        #[expect(
+            dead_code,
+            reason = "test fixture whose fields are never read; frozen old path; RFC-001 S14 deletes it"
+        )]
         struct D {
             x: f32,
         }
@@ -4151,6 +4171,10 @@ mod tests_multi_font {
     #[tokio::test]
     async fn test_queue_title_text_with_subtitle() {
         #[derive(Debug, Clone)]
+        #[expect(
+            dead_code,
+            reason = "test fixture whose fields are never read; frozen old path; RFC-001 S14 deletes it"
+        )]
         struct D {
             x: f32,
         }
@@ -4204,6 +4228,10 @@ mod tests_multi_font {
     #[tokio::test]
     async fn test_queue_title_text_left_aligned() {
         #[derive(Debug, Clone)]
+        #[expect(
+            dead_code,
+            reason = "test fixture whose fields are never read; frozen old path; RFC-001 S14 deletes it"
+        )]
         struct D {
             x: f32,
         }
@@ -4237,6 +4265,10 @@ mod tests_multi_font {
     #[tokio::test]
     async fn test_queue_title_text_no_title() {
         #[derive(Debug, Clone)]
+        #[expect(
+            dead_code,
+            reason = "test fixture whose fields are never read; frozen old path; RFC-001 S14 deletes it"
+        )]
         struct D {
             x: f32,
         }
@@ -4296,6 +4328,10 @@ mod tests_multi_font {
     #[tokio::test]
     async fn test_queue_chart_text_per_axis_style() {
         #[derive(Debug, Clone)]
+        #[expect(
+            dead_code,
+            reason = "test fixture whose fields are never read; frozen old path; RFC-001 S14 deletes it"
+        )]
         struct D {
             x: f32,
         }
@@ -4352,6 +4388,10 @@ mod tests_multi_font {
     async fn test_queue_chart_text_mixed_chart_and_axis_styles() {
         // Chart-level style applies to axes without per-axis overrides
         #[derive(Debug, Clone)]
+        #[expect(
+            dead_code,
+            reason = "test fixture whose fields are never read; frozen old path; RFC-001 S14 deletes it"
+        )]
         struct D {
             x: f32,
         }
@@ -4410,6 +4450,10 @@ mod tests_multi_font {
     #[tokio::test]
     async fn test_queue_chart_text_resolved_per_axis_style() {
         #[derive(Debug, Clone)]
+        #[expect(
+            dead_code,
+            reason = "test fixture whose fields are never read; frozen old path; RFC-001 S14 deletes it"
+        )]
         struct D {
             x: f32,
         }
@@ -4472,6 +4516,10 @@ mod tests_hover_reveal {
     use crate::text::hover_reveal::TooltipConfig;
 
     #[derive(Debug, Clone)]
+    #[expect(
+        dead_code,
+        reason = "test fixture whose fields are never read; frozen old path; RFC-001 S14 deletes it"
+    )]
     struct D {
         x: f32,
     }

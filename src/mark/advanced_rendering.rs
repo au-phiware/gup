@@ -152,6 +152,10 @@ impl MultiPassRenderer {
     /// Each pass uses its own pipeline configuration. Pipelines are cached
     /// for subsequent frames. The method issues multiple draw calls but stays
     /// within the single provided render pass.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "frozen old path; RFC-001 S14 deletes it"
+    )]
     pub fn render_multi_pass<'a>(
         &'a self,
         render_pass: &mut RenderPass<'a>,

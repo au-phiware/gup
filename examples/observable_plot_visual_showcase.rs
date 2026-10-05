@@ -480,9 +480,9 @@ impl ShowcaseApp {
     }
 
     async fn initialize_context(&mut self) -> GupResult<()> {
-        if !self.context_initialized && self.window.is_some() {
-            let window = self.window.as_ref().unwrap();
-
+        if !self.context_initialized
+            && let Some(window) = self.window.as_ref()
+        {
             // Create context
             let context = GupContext::headless().await?;
             let mut ctx = Arc::try_unwrap(context).map_err(|_| {

@@ -634,8 +634,8 @@ fn sample_gradient_cpu(gradient: &ColorGradientStorage, t: f32) -> [f32; 4] {
 
     // Find the interval [stops[i], stops[i+1]] that contains t.
     let mut lo = 0usize;
-    for i in 0..stops.len() - 1 {
-        if t_clamped >= stops[i] {
+    for (i, &stop) in stops[..stops.len() - 1].iter().enumerate() {
+        if t_clamped >= stop {
             lo = i;
         }
     }
@@ -1883,8 +1883,6 @@ mod tests {
 
     #[tokio::test]
     async fn test_area_normalized_chart_has_percent_formatter() {
-        use crate::label::LabelFormatter;
-
         let data = vec![
             TimePoint {
                 time: 0.0,

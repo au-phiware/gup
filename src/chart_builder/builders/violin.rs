@@ -131,6 +131,10 @@ impl ViolinPath {
     /// * `trim` — if true, clip to the data range (no padding beyond min/max)
     /// * `data_min` — minimum observed data value (used when `trim` is true)
     /// * `data_max` — maximum observed data value (used when `trim` is true)
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "frozen old path; RFC-001 S14 deletes it"
+    )]
     pub fn build(
         grid_points: &[f32],
         densities: &[f32],

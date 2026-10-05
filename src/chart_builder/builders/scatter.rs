@@ -738,7 +738,7 @@ mod tests {
         let builder = scatter::<TestPoint>().x_tick_format(NumericFormatter::new(1));
         assert!(builder.config.x_label_formatter.is_some());
         let fmt = builder.config.x_label_formatter.as_ref().unwrap();
-        assert_eq!(fmt.format_value(3.14159), "3.1");
+        assert_eq!(fmt.format_value(1.23456), "1.2");
 
         // Y-axis: percent formatter
         let builder = scatter::<TestPoint>().y_tick_format(PercentFormatter::new());

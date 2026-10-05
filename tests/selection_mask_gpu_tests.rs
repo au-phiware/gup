@@ -195,15 +195,15 @@ async fn test_dimming_compute_shader_selected_items_keep_alpha() {
 
     // Instance 0 (selected): fill_color alpha at index 7 should be 1.0.
     assert!(
-        (output[0 * floats_per_instance + 7] - 1.0).abs() < 1e-5,
+        (output[7] - 1.0).abs() < 1e-5,
         "Selected instance 0 fill alpha should be 1.0, got {}",
-        output[0 * floats_per_instance + 7]
+        output[7]
     );
     // Instance 0 (selected): stroke_color alpha at index 15 should be 0.8.
     assert!(
-        (output[0 * floats_per_instance + 15] - 0.8).abs() < 1e-5,
+        (output[15] - 0.8).abs() < 1e-5,
         "Selected instance 0 stroke alpha should be 0.8, got {}",
-        output[0 * floats_per_instance + 15]
+        output[15]
     );
 
     // Instance 1 (unselected): fill alpha should be 1.0 * 0.2 = 0.2.
@@ -414,7 +414,7 @@ async fn test_update_and_dispatch_convenience() {
     assert!((output[3 * floats_per_instance + 7] - 1.0).abs() < 1e-5);
 
     // Unselected items: dimmed by 0.3.
-    assert!((output[0 * floats_per_instance + 7] - 0.3).abs() < 1e-5);
+    assert!((output[7] - 0.3).abs() < 1e-5);
     assert!((output[2 * floats_per_instance + 7] - 0.3).abs() < 1e-5);
     assert!((output[4 * floats_per_instance + 7] - 0.3).abs() < 1e-5);
 }
@@ -649,9 +649,9 @@ async fn test_pooled_dimming_produces_correct_output() {
 
     // Instance 0 (selected): fill alpha should be 1.0.
     assert!(
-        (output[0 * floats_per_instance + 7] - 1.0).abs() < 1e-5,
+        (output[7] - 1.0).abs() < 1e-5,
         "Pooled: selected instance 0 fill alpha should be 1.0, got {}",
-        output[0 * floats_per_instance + 7]
+        output[7]
     );
 
     // Instance 1 (unselected): fill alpha should be 0.2.

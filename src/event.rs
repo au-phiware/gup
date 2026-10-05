@@ -514,10 +514,10 @@ impl EventManager {
     /// # Arguments
     ///
     /// * `event` – The interaction event to dispatch.  Its `hit` field
-    ///    will be updated to the current hit as dispatch proceeds through
-    ///    the hit list.
+    ///   will be updated to the current hit as dispatch proceeds through
+    ///   the hit list.
     /// * `hits` – Hit results from the GPU interaction system, sorted by
-    ///    depth/distance (front-most first).
+    ///   depth/distance (front-most first).
     ///
     /// # Returns
     ///

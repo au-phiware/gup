@@ -569,8 +569,7 @@ fn is_ear_f32(
     }
 
     // No other vertex inside the triangle.
-    for k in 0..count {
-        let idx = indices[k];
+    for &idx in &indices[..count] {
         if idx == prev || idx == curr || idx == next {
             continue;
         }

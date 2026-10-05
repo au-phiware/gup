@@ -175,6 +175,10 @@ const MARCHING_SQUARES_EDGES: [&[(u8, u8)]; 16] = [
 ];
 
 /// Linearly interpolate the crossing point along an edge.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "frozen old path; RFC-001 S14 deletes it"
+)]
 fn edge_interpolation(
     x: usize,
     y: usize,
@@ -553,6 +557,10 @@ fn triangle_band_polygon(
 /// The corner's own position is emitted first (if Inside), followed by any
 /// threshold crossing points in traversal order.
 #[inline]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "frozen old path; RFC-001 S14 deletes it"
+)]
 fn emit_edge_vertices(
     si: BandState,
     sj: BandState,
@@ -1102,8 +1110,10 @@ impl DensityPlotBuilder<()> {
     /// let layer = DensityPlotBuilder::density_layer(&samples, None);
     /// ```
     pub fn density_layer(samples: &[(f32, f32)], bandwidth: Option<f32>) -> DensityLayer {
-        let mut config = DensityConfig::default();
-        config.bandwidth = bandwidth;
+        let config = DensityConfig {
+            bandwidth,
+            ..Default::default()
+        };
         let kde_result = compute_density_2d(samples, &config);
         DensityLayer {
             kde_result,

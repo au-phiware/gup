@@ -88,6 +88,10 @@ pub(crate) fn build_quadtree(positions: &[(f32, f32)], base_theta: f32) -> Vec<B
 }
 
 /// Insert a body into the quadtree rooted at `cell_idx`.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "recursive hot-path helper; the cell geometry is passed unpacked"
+)]
 fn insert(
     cells: &mut Vec<BHCell>,
     leaf_body: &mut Vec<Option<usize>>,

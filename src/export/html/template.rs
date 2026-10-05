@@ -85,10 +85,9 @@ noscript svg {{ max-width: 100vw; max-height: 100vh; }}
     html.push_str("</head>\n<body>\n");
 
     // --- Canvas (interactive target) -------------------------------------
-    let _ = write!(
+    let _ = writeln!(
         html,
-        r#"<canvas id="gup-canvas" width="{width}" height="{height}"></canvas>
-"#
+        r#"<canvas id="gup-canvas" width="{width}" height="{height}"></canvas>"#
     );
 
     // --- SVG fallback (noscript + JS runtime check) ----------------------

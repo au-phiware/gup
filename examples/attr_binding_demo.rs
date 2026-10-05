@@ -41,7 +41,7 @@ fn generate_sales_data(count: usize) -> Vec<SalesData> {
             let t = i as f32 / count as f32;
             SalesData {
                 revenue: t * 100.0,
-                profit_margin: 0.1 + 0.8 * (t * 3.14).sin().abs(),
+                profit_margin: 0.1 + 0.8 * (t * std::f32::consts::PI).sin().abs(),
                 category: (i % 3) as u32,
             }
         })

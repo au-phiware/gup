@@ -47,11 +47,15 @@ static NEXT_KEY: AtomicU64 = AtomicU64::new(1);
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct SubscriberHandle(u64);
 
+/// A subscriber's callback (native: shared across threads).
+#[cfg(not(target_arch = "wasm32"))]
+type SubscriberCallback<T> = Box<dyn Fn(&StreamUpdate<T>) + Send + Sync + 'static>;
+
 /// Internal subscriber entry pairing a handle with its callback.
 #[cfg(not(target_arch = "wasm32"))]
 struct Subscriber<T: bytemuck::Pod + bytemuck::Zeroable> {
     handle: SubscriberHandle,
-    callback: Box<dyn Fn(&StreamUpdate<T>) + Send + Sync + 'static>,
+    callback: SubscriberCallback<T>,
 }
 
 /// Internal subscriber entry pairing a handle with its callback (WASM

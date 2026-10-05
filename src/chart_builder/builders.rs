@@ -482,6 +482,10 @@ pub trait GridCapableBuilder: ConfigurableBuilder {
 pub trait AccessorToShaderFunction<T> {
     /// Convert an accessor value to a position binding closure.
     #[cfg(not(target_arch = "wasm32"))]
+    #[expect(
+        clippy::type_complexity,
+        reason = "frozen old path; RFC-001 S14 deletes it"
+    )]
     fn to_position_shader(
         &self,
         accessor: AccessorFunction<T>,
@@ -493,6 +497,10 @@ pub trait AccessorToShaderFunction<T> {
 
     /// Convert an accessor value to a colour binding closure.
     #[cfg(not(target_arch = "wasm32"))]
+    #[expect(
+        clippy::type_complexity,
+        reason = "frozen old path; RFC-001 S14 deletes it"
+    )]
     fn to_color_shader(
         &self,
         accessor: AccessorFunction<T>,
@@ -1235,9 +1243,11 @@ mod tests {
 
         // Scales that map domain [0,100] to pixel range [0,800] and
         // [600,0] (inverted y).
-        let mut cfg = crate::chart_builder::ChartConfig::default();
-        cfg.x_scale = Some(AxisScale::Linear(LinearScale::new(0.0, 100.0, 0.0, 800.0)));
-        cfg.y_scale = Some(AxisScale::Linear(LinearScale::new(0.0, 100.0, 600.0, 0.0)));
+        let cfg = crate::chart_builder::ChartConfig {
+            x_scale: Some(AxisScale::Linear(LinearScale::new(0.0, 100.0, 0.0, 800.0))),
+            y_scale: Some(AxisScale::Linear(LinearScale::new(0.0, 100.0, 600.0, 0.0))),
+            ..Default::default()
+        };
 
         let ndc = NdcBounds {
             left: -1.0,

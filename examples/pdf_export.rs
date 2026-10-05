@@ -88,6 +88,10 @@ fn sample_data() -> Vec<DataPoint> {
 }
 
 /// Convert a data point to an SVG circle element in chart pixel coordinates.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "keeps the chart-to-pixel mapping explicit for readers"
+)]
 fn data_point_to_svg(
     point: &DataPoint,
     chart_x: f32,

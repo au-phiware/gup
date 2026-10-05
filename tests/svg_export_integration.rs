@@ -16,6 +16,10 @@ use std::sync::Arc;
 
 /// Minimal data type for test selections.
 #[derive(Debug, Clone)]
+#[expect(
+    dead_code,
+    reason = "fixture: the tests only need the type, never the fields"
+)]
 struct TestData {
     x: f32,
     y: f32,

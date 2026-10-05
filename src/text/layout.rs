@@ -407,6 +407,10 @@ impl TextLayoutEngine {
     /// within the given viewport bounds. When text overflows, the configured
     /// clipping strategies are applied in order (primary first, then fallbacks)
     /// until the text fits or all strategies are exhausted.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "layout moves to gup-text (RFC-001); fix the signature there"
+    )]
     pub fn layout_text_with_clipping(
         &mut self,
         text: &str,
@@ -508,6 +512,10 @@ impl TextLayoutEngine {
     ///
     /// This wraps text to multiple lines without requiring viewport clipping
     /// infrastructure. It is useful for standalone multi-line text layout.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "layout moves to gup-text (RFC-001); fix the signature there"
+    )]
     pub fn layout_wrapped_text(
         &mut self,
         text: &str,
@@ -603,6 +611,10 @@ impl TextLayoutEngine {
     }
 
     /// Apply a single clipping strategy and return a layout result if it fits.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "layout moves to gup-text (RFC-001); fix the signature there"
+    )]
     fn apply_strategy(
         &mut self,
         text: &str,
@@ -691,6 +703,10 @@ impl TextLayoutEngine {
     }
 
     /// Truncate text with ellipsis to fit within viewport bounds.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "layout moves to gup-text (RFC-001); fix the signature there"
+    )]
     fn apply_truncation(
         &mut self,
         text: &str,
@@ -793,6 +809,10 @@ impl TextLayoutEngine {
     }
 
     /// Apply dynamic font scaling to fit text within viewport bounds.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "layout moves to gup-text (RFC-001); fix the signature there"
+    )]
     fn apply_font_scaling(
         &mut self,
         text: &str,
@@ -827,6 +847,10 @@ impl TextLayoutEngine {
     }
 
     /// Apply text repositioning to keep text within viewport bounds.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "layout moves to gup-text (RFC-001); fix the signature there"
+    )]
     fn apply_reposition(
         &mut self,
         text: &str,

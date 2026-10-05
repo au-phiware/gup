@@ -214,15 +214,15 @@ async fn gpu_dimming_produces_correct_alpha() {
 
     // Instance 0 (selected): fill_color alpha at float 7 should be 1.0.
     assert!(
-        (output[0 * floats_per_instance + 7] - 1.0).abs() < 1e-5,
+        (output[7] - 1.0).abs() < 1e-5,
         "Selected instance 0 fill alpha should be 1.0, got {}",
-        output[0 * floats_per_instance + 7]
+        output[7]
     );
     // Instance 0 (selected): stroke_color alpha at float 15 should be 0.8.
     assert!(
-        (output[0 * floats_per_instance + 15] - 0.8).abs() < 1e-5,
+        (output[15] - 0.8).abs() < 1e-5,
         "Selected instance 0 stroke alpha should be 0.8, got {}",
-        output[0 * floats_per_instance + 15]
+        output[15]
     );
 
     // Instance 1 (unselected): fill alpha dimmed to 0.2.
@@ -417,7 +417,7 @@ async fn gpu_path_survives_set_data() {
 
     // Instance 0 selected → full alpha.
     assert!(
-        (output[0 * floats_per_instance + 7] - 1.0).abs() < 1e-5,
+        (output[7] - 1.0).abs() < 1e-5,
         "Instance 0 fill alpha should be 1.0"
     );
     // Instance 5 unselected → dimmed.
@@ -588,9 +588,9 @@ async fn auto_tune_produces_correct_output() {
 
     // Instance 0 (selected): full alpha
     assert!(
-        (output[0 * floats_per_instance + 7] - 1.0).abs() < 1e-5,
+        (output[7] - 1.0).abs() < 1e-5,
         "Selected instance 0 fill alpha should be 1.0, got {}",
-        output[0 * floats_per_instance + 7]
+        output[7]
     );
 
     // Instance 1 (unselected): dimmed

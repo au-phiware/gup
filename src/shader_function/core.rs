@@ -1407,6 +1407,10 @@ where
         let mut wgsl = String::new();
 
         let first_wgsl = self.first.generate_wgsl();
+        #[expect(
+            clippy::needless_late_init,
+            reason = "frozen old path; RFC-001 S14 deletes it"
+        )]
         let first_fn_name: String;
         if A::function_name() == "composed_chain" {
             let depth = <A::Uniforms as ShaderUniform>::chain_depth();
@@ -1430,6 +1434,10 @@ where
         wgsl.push_str("\n\n");
 
         let second_wgsl = self.second.generate_wgsl();
+        #[expect(
+            clippy::needless_late_init,
+            reason = "frozen old path; RFC-001 S14 deletes it"
+        )]
         let second_fn_name: String;
         if B::function_name() == "composed_chain" {
             let depth = <B::Uniforms as ShaderUniform>::chain_depth();

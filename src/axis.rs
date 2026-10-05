@@ -2966,8 +2966,10 @@ mod tests {
     fn test_tick_instances_with_minor_ticks() {
         let renderer = AxisRenderer::new();
         let bounds = AxisBounds::new(Vec2 { x: -0.8, y: -0.8 }, Vec2 { x: 0.8, y: -0.8 }, 50.0);
-        let mut config = AxisConfiguration::default();
-        config.show_minor_ticks = true;
+        let config = AxisConfiguration {
+            show_minor_ticks: true,
+            ..Default::default()
+        };
 
         let instances = renderer.generate_tick_instances(
             &bounds,
@@ -2985,8 +2987,10 @@ mod tests {
     fn test_major_minor_separate_generation() {
         let renderer = AxisRenderer::new();
         let bounds = AxisBounds::new(Vec2 { x: -0.8, y: -0.8 }, Vec2 { x: 0.8, y: -0.8 }, 50.0);
-        let mut config = AxisConfiguration::default();
-        config.show_minor_ticks = true;
+        let config = AxisConfiguration {
+            show_minor_ticks: true,
+            ..Default::default()
+        };
 
         let viewport = (800.0, 600.0);
         let major = renderer.generate_major_tick_instances(

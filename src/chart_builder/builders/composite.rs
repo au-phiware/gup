@@ -290,6 +290,10 @@ struct CompositeLayer<T> {
 
 /// A layer entry in the composite builder — either sharing the
 /// composite's primary data type `T` or carrying its own (type-erased).
+#[expect(
+    clippy::large_enum_variant,
+    reason = "frozen old path; RFC-001 S14 deletes it"
+)]
 enum AnyCompositeLayer<T> {
     /// Layer that shares the composite's data type `T`.
     Typed(CompositeLayer<T>),
@@ -311,6 +315,10 @@ where
 
 /// A built layer in the output [`CompositeChart`] — either typed
 /// (matching the composite's `T`) or type-erased (foreign `T2`).
+#[expect(
+    clippy::large_enum_variant,
+    reason = "frozen old path; RFC-001 S14 deletes it"
+)]
 enum AnyBuiltLayer<T>
 where
     T: Clone + MaybeSend + MaybeSync + std::fmt::Debug + 'static,

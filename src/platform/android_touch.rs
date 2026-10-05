@@ -115,10 +115,8 @@ fn action_to_phase(action: u8) -> TouchPhase {
 ///
 /// # Arguments
 ///
-/// * `touches`     – Slice of raw pointer contacts from the Android
-///                   `MotionEvent`.
-/// * `view_bounds` – Optional view size in *display pixels*
-///                   (width, height).
+/// * `touches` – Slice of raw pointer contacts from the Android `MotionEvent`.
+/// * `view_bounds` – Optional view size in *display pixels* (width, height).
 pub fn translate_motion_event(
     touches: &[RawAndroidTouch],
     view_bounds: Option<(f32, f32)>,

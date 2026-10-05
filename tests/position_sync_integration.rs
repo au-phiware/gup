@@ -6,7 +6,7 @@
 // FIXME: wasm_tests module uses outdated accessibility API (NodeId::from,
 // AriaNode struct literals, WebDomOverlay constructor). Disabled until
 // GUP-237 (WASM Integration Test Suite) updates the tests.
-#[cfg(all(target_arch = "wasm32", feature = "__wasm_accessibility_tests"))]
+#[cfg(any())] // never compiled; see FIXME above
 mod wasm_tests {
     use gup::accessibility::{
         AriaNode, AriaRole, GpuPosition, NodeId, PositionManager, ScreenPosition,

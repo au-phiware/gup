@@ -428,6 +428,10 @@ impl TextRenderer {
     /// separately during [`render_queued_text_multi`](Self::render_queued_text_multi).
     ///
     /// Must be called before creating the render pass.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "old text renderer, replaced by gup-text (RFC-001)"
+    )]
     pub fn queue_text_with_fonts(
         &mut self,
         frame: &crate::RenderFrame,
@@ -475,6 +479,10 @@ impl TextRenderer {
     /// but returns the complete [`LayoutResult`] instead of just [`TextBounds`].
     /// This is useful when callers need the [`LayoutResult::original_text`]
     /// field to detect clipping (e.g. for hover reveal registration).
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "old text renderer, replaced by gup-text (RFC-001)"
+    )]
     pub fn queue_text_with_fonts_layout(
         &mut self,
         frame: &crate::RenderFrame,

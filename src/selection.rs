@@ -3053,8 +3053,8 @@ mod tests {
 
     #[test]
     fn attr_value_from_f32() {
-        let v: AttrValue = 3.14f32.into_attr_value();
-        assert_eq!(v, AttrValue::Float(3.14));
+        let v: AttrValue = 2.5f32.into_attr_value();
+        assert_eq!(v, AttrValue::Float(2.5));
     }
 
     #[test]
