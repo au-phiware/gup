@@ -48,11 +48,12 @@ survives into `gup-core`.
   the dogfood suite's local pixel measurements with GUP-388's shared
   visual-assertion module and layout metadata, without loosening any tracked
   gap. Deps: GUP-394 ✅, GUP-388 ✅.
-- [GUP-398](GUP-398_Honest_Clippy_Gate.md) 📋 — The hook runs
-  `clippy --fix -- -D warnings`, which exits 0 while printing 99 lint warnings;
-  without `--fix` the `gup` lib and its unit tests have 106 errors. Make the
-  gate strict across all workspace members (incl. `gup-culling-lod` and the
-  coming `gup-core`) and fix or narrowly allow the existing debt. From GUP-390.
+- [GUP-398](GUP-398_Honest_And_Fast_Quality_Gates.md) 📋 — Make the clippy gate
+  strict across all workspace members (the hook's `--fix` run exits 0 on 99
+  warnings; without `--fix` there are 106 errors), prove every `mask all-check`
+  check and CI job actually fails on a seeded violation, and make the local hook
+  proportional (skip/scope by changed files) while CI stays the full, unscoped
+  gate. From GUP-390.
 
 ## RFC-001 Migration
 
@@ -85,6 +86,23 @@ resolved: **go** (RFC-001 "S0a findings", GUP-395).
   proving window/PNG visual parity (ΔE < 2) and a 100K-point zoom at ≥60 fps
   with a buffer-write counter proving 0 column bytes written during zoom. Deps:
   GUP-395 ✅.
+- [GUP-399](GUP-399_RFC_001_S1_One_Context.md) 📋 — RFC-001 step S1: adds
+  `Context::shared()` and documents the pipelines→shaders lock order on
+  `gup-core`'s `Context`, then rewires the old path's `RenderContext` and
+  `GupContext` to source their device/queue from it instead of each creating
+  their own — the one explicit exception to the old-path freeze. Deps: GUP-396
+  📋.
+- [GUP-400](GUP-400_RFC_001_S2_Extract_Gup_Text.md) 📋 — RFC-001 step S2:
+  extracts a `gup-text` leaf crate (font, layout, msdf, atlas survive from
+  `src/text/`) with one `TextSystem` per `Context`, a measuring API and
+  glyph-run drawing into a pass, replacing `gup-core`'s temporary internal text
+  module; coordinates the Inter font swap with GUP-392. Deps: GUP-399 📋.
+- [GUP-401](GUP-401_RFC_001_S3_Scene_Renderer_RenderTarget.md) 📋 — RFC-001 step
+  S3: turns GUP-395's `ImageTarget`/`encode_scene` into the general
+  `RenderTarget`/`Renderer` trait family (adds `TextureTarget` and
+  draw-in-pass), adds MSAA, `Rects`/`Gradient` scene items and a guides-only
+  `SvgTarget`, and measures `gup-core`'s WASM binary-size cost against the ≤
+  +400 KB gz budget (RFC-001 §12 risk 10). Deps: GUP-399 📋, GUP-400 📋.
 
 ## GPU Rendering Pipeline
 
@@ -685,6 +703,12 @@ screen reader testing, focus elements.
   2.1 AA audit of all 50 success criteria, gap fixes, conformance statement, and
   automated accessibility checks in CI. Deps: GUP-016 ✅, GUP-111 ✅, GUP-112
   ✅, GUP-122 ✅, GUP-124 ✅, GUP-127 ✅.
+- [GUP-402](GUP-402_Accessibility_Nested_Runtime_Panic.md) 📋 —
+  `LinuxAccessibility::initialize()` builds and `block_on`s its own Tokio
+  runtime, which panics with "Cannot start a runtime from within a runtime"
+  inside any `#[tokio::main]` app (e.g. `pattern_pipeline_demo`); fix it and
+  audit every other `Runtime`/`block_on` site in `src/` for the same hazard. Not
+  parked despite the T5 accessibility redesign — it's a crash, not a design gap.
 
 ## Animation & Streaming
 
