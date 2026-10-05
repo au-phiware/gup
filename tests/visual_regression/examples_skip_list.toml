@@ -47,19 +47,19 @@ reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
 
 [[skip]]
 name = "composite_bar_trend"
-reason = "Windowed-only; panics on the first frame (tracked: expected_failures.toml examples/composite_*)"
+reason = "Windowed-only; no GUP_SCREENSHOT_PATH path. Runs since GUP-399 (one device; screenshot read 2026-10-05) but the output is wrong: bars overflow the plot rect, no text, colours sRGB-encoded twice (as chart_builders/composite; RFC-001 S3, S11)"
 
 [[skip]]
 name = "composite_layer_order"
-reason = "Windowed-only; panics on the first frame (tracked: expected_failures.toml examples/composite_*)"
+reason = "Windowed-only; no GUP_SCREENSHOT_PATH path. Runs since GUP-399 (one device; screenshot read 2026-10-05) but the output is wrong: area-chart fan explosion and full-canvas bars outside the plot rect, scatter points are black ellipses (RFC-001 S11; GUP-393 bugs)"
 
 [[skip]]
 name = "composite_mixed_data"
-reason = "Windowed-only; panics on the first frame (tracked: expected_failures.toml examples/composite_*)"
+reason = "Windowed-only; no GUP_SCREENSHOT_PATH path. Runs since GUP-399 (one device; screenshot read 2026-10-05) but the output is wrong: scatter points are black ellipses and some fall outside the plot rect, no text (RFC-001 S11)"
 
 [[skip]]
 name = "composite_scatter_regression"
-reason = "Windowed-only; panics on the first frame (tracked: expected_failures.toml examples/composite_*)"
+reason = "Windowed-only; no GUP_SCREENSHOT_PATH path. Runs since GUP-399 (one device; screenshot read 2026-10-05) but the output is wrong: the trend line zig-zags through every scatter point because one-T layers share all_data, scatter points are black ellipses (RFC-001 S11 mixed-T layers)"
 
 [[skip]]
 name = "debug_text_positioning"

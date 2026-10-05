@@ -21,6 +21,20 @@
 //! ([`Linear`], [`Log`], [`Sequential`]) and a headless PNG path. It is not
 //! re-exported by the `gup` crate until the RFC-001 S14 flip, and it never
 //! depends on `gup`.
+//!
+//! ## Contracts
+//!
+//! - **One device per process by default.** [`Context::shared`] is the
+//!   process-wide context; the old `gup` crate's `RenderContext` and
+//!   `GupContext` take their device from it too (RFC-001 S1).
+//! - **Every GPU write is counted.** All buffer and texture writes go
+//!   through [`Context`], counted by [`Upload`] kind in
+//!   [`Context::upload_stats`]. The `every_gpu_write_is_counted` test fails
+//!   if any source file writes to GPU memory another way, so claims such as
+//!   "zooming writes 0 column bytes" stay provable as the crate grows.
+//! - **Lock order.** A context's pipeline cache may be held while its
+//!   shader library is taken, never the reverse, and its text system is
+//!   never held with either. Debug builds check this on every acquisition.
 
 /// The exact wgpu version Gup is built on. Hosts passing devices to
 /// [`Context::from_wgpu`] must use the same major version.
