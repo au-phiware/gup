@@ -165,11 +165,14 @@ tasks need a display: use `xvfb-run -a mask dogfood` when headless, or set
 > Run the push-to-main CI workflows locally, on software Vulkan (GUP-403)
 
 GitHub's runners have no GPU, so every subcommand forces Mesa's lavapipe, as the
-workflows do. Each subcommand mirrors one file in `.github/workflows/`; change
-both together. Run this before pushing: the hook (`mask all-check`) is fast but
-does not render. Expect 30-60 minutes from cold; `mask ci <workflow>` runs one.
-Not covered: the Performance workflow's full Criterion run (an hour on
-lavapipe), which is checked with `--list` instead, and the Gallery deploy.
+workflows do (`WGPU_BACKEND=vulkan` also keeps `gup-core`, which accepts every
+backend, off a hardware GL adapter). Each subcommand mirrors one file in
+`.github/workflows/`; change both together. Run this before pushing: the hook
+(`mask all-check`) is fast but does not render. Expect 30-60 minutes from cold;
+`mask ci <workflow>` runs one. Not covered: the weekly Comprehensive
+Benchmarking job (316 Criterion benchmarks; `--list` checks every bench target
+accepts Criterion's flags), the Gallery deploy, and the manual-dispatch mobile
+workflows.
 
 ```bash
 set -euo pipefail
@@ -188,6 +191,7 @@ echo "mask ci: all workflows passed locally"
 ```bash
 set -euo pipefail
 export VK_ICD_FILENAMES="${GUP_LAVAPIPE_ICD:-$LIBGL_DRIVERS_PATH/../../share/vulkan/icd.d/lvp_icd.x86_64.json}"
+export WGPU_BACKEND=vulkan
 export CARGO_PROFILE_RELEASE_STRIP=true
 ./scripts/check_gallery_sync.sh
 cargo build --release --examples
@@ -214,6 +218,7 @@ grep -q run_wasm_axis_benchmarks "${CARGO_TARGET_DIR:-target}/ci-pkg/gup.js"
 ```bash
 set -euo pipefail
 export VK_ICD_FILENAMES="${GUP_LAVAPIPE_ICD:-$LIBGL_DRIVERS_PATH/../../share/vulkan/icd.d/lvp_icd.x86_64.json}"
+export WGPU_BACKEND=vulkan
 cargo test -p gup-visual-regression
 cargo test --lib visual_regression -- --test-threads=1
 cargo check -p gup-culling-lod --all-targets --all-features
@@ -236,6 +241,7 @@ Xvfb (no window manager), like the workflow.
 ```bash
 set -euo pipefail
 export VK_ICD_FILENAMES="${GUP_LAVAPIPE_ICD:-$LIBGL_DRIVERS_PATH/../../share/vulkan/icd.d/lvp_icd.x86_64.json}"
+export WGPU_BACKEND=vulkan
 unset WAYLAND_DISPLAY
 (cd dogfood && cargo fmt -- --check && cargo test --release --lib --bin dogfood_check)
 xvfb-run -a -s "-screen 0 1920x1080x24" ./dogfood/run_all.sh
@@ -248,6 +254,7 @@ xvfb-run -a -s "-screen 0 1920x1080x24" ./dogfood/run_all.sh
 ```bash
 set -euo pipefail
 export VK_ICD_FILENAMES="${GUP_LAVAPIPE_ICD:-$LIBGL_DRIVERS_PATH/../../share/vulkan/icd.d/lvp_icd.x86_64.json}"
+export WGPU_BACKEND=vulkan
 mask perf-check
 cargo test --features debug --test performance_ci_tests -- --test-threads=1
 cargo test --test cross_platform_axis_performance_tests -- --test-threads=1
