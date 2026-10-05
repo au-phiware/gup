@@ -23,14 +23,24 @@ jobs:
   build-gallery:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      # Stripped release binaries keep the ~110 examples small on the runner.
+      CARGO_PROFILE_RELEASE_STRIP: "true"
 
     steps:
       - uses: actions/checkout@v4
 
       # rust-toolchain.toml pins the toolchain (GUP-403); rustup reads it, so
-      # CI lints with the same clippy as the Nix dev shell.
+      # CI uses the same rustc and clippy as the Nix dev shell.
       - name: Install Rust toolchain (rust-toolchain.toml)
         run: rustup toolchain install
+
+      # Thumbnails are rendered headlessly; the runner has no GPU, so wgpu
+      # uses Mesa's lavapipe (software Vulkan).
+      - name: Install software Vulkan (lavapipe)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y mesa-vulkan-drivers libvulkan1
 
       - name: Cache Cargo registry and build
         uses: actions/cache@v4
@@ -73,8 +83,12 @@ jobs:
         with:
           path: docs/gallery
 
+  # GitHub Pages is not enabled for this repository yet, and deploy-pages
+  # fails without it. Enable Pages (source: GitHub Actions) and set the
+  # repository variable DEPLOY_GALLERY=true to publish the gallery.
   deploy:
     needs: build-gallery
+    if: vars.DEPLOY_GALLERY == 'true'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

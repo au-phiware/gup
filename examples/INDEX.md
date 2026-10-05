@@ -56,6 +56,7 @@ Run any example with: `cargo run --example <name>`
 | `composite_bar_trend`             | Composite bar and trend chart                     |
 | `composite_scatter_regression`    | Scatter plot with regression line                 |
 | `composite_mixed_data`            | Composite chart with per-layer data types         |
+| `composite_layer_order`           | Composite chart with explicit layer z-ordering    |
 | `geo_world_map`                   | World map geographic rendering                    |
 | `geographic_projection`           | Geographic projection demo                        |
 | `force_directed_graph`            | Force-directed graph layout                       |

@@ -102,13 +102,6 @@ category = "Charts & Marks"
 skip = false
 
 [[examples]]
-name = "observable_plot_showcase"
-source = "examples/observable_plot_showcase.rs"
-description = "Chart builder API showcase"
-category = "Charts & Marks"
-skip = false
-
-[[examples]]
 name = "observable_plot_visual_showcase"
 source = "examples/observable_plot_visual_showcase.rs"
 description = "Visual showcase of chart builder API"
@@ -230,6 +223,14 @@ description = "Composite chart with per-layer data types"
 category = "Charts & Marks"
 skip = true
 skip_reason = "Console-only (composite data demo, no GPU rendering)"
+
+[[examples]]
+name = "composite_layer_order"
+source = "examples/composite_layer_order.rs"
+description = "Composite chart with explicit layer z-ordering"
+category = "Charts & Marks"
+skip = true
+skip_reason = "Windowed-only (requires EventLoop)"
 
 [[examples]]
 name = "density_scatter_overlay"
