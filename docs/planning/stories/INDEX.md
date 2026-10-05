@@ -24,7 +24,7 @@ survives into `gup-core`.
   transpiler, Mixable ecosystem, MarkRenderer, and the broken `plot_api`/
   `FieldAccessor`/`BoundChartBuilder` path (~37k LOC), each justified by a
   caller-check grep. Prerequisite for RFC-001 step S0.
-- [GUP-390](GUP-390_Quarantine_Culling_LOD_And_Integration_Crates.md) 📋 — Move
+- [GUP-390](GUP-390_Quarantine_Culling_LOD_And_Integration_Crates.md) 🚧 — Move
   GPU culling/LOD into an experimental crate, feature-gate debug/performance
   code, and exclude the non-compiling `gup-egui`/`gup-bevy` and parked
   `gup-ios`/`gup-android`/`gup-tauri` from the default workspace and CI.
