@@ -229,7 +229,7 @@ impl PipelineCache {
         Ok(program)
     }
 
-    fn mark_pipeline(
+    pub(crate) fn mark_pipeline(
         &mut self,
         cx: &Context,
         program: &GlueProgram,

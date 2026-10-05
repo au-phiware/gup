@@ -51,7 +51,6 @@ struct Inner {
     // `WindowTarget` creates surfaces from the instance.
     #[allow(dead_code)]
     instance: Option<wgpu::Instance>,
-    #[allow(dead_code)]
     adapter: Option<wgpu::Adapter>,
     device: wgpu::Device,
     queue: wgpu::Queue,
@@ -165,6 +164,11 @@ impl Context {
     /// The queue.
     pub fn queue(&self) -> &wgpu::Queue {
         &self.inner.queue
+    }
+
+    /// The adapter, when this context created its own device.
+    pub fn adapter_info(&self) -> Option<wgpu::AdapterInfo> {
+        self.inner.adapter.as_ref().map(wgpu::Adapter::get_info)
     }
 
     /// The device's limits and features.

@@ -418,3 +418,79 @@ mod tests {
         }
     }
 }
+
+/// Wall-clock cost of the naga_oil gate (RFC-001 §12 risk 2): run with
+/// `cargo test -p gup-core --lib pipeline_timings -- --ignored --nocapture`
+/// (add `--release` for release numbers).
+#[cfg(test)]
+mod timings {
+    use super::tests::reference;
+    use crate::context::Context;
+    use crate::render::TargetDesc;
+    use std::time::{Duration, Instant};
+
+    fn summary(name: &str, mut v: Vec<Duration>) {
+        v.sort();
+        let ms = |d: Duration| d.as_secs_f64() * 1e3;
+        eprintln!(
+            "{name:<36} min {:>8.3} ms  median {:>8.3}  max {:>8.3}",
+            ms(v[0]),
+            ms(v[v.len() / 2]),
+            ms(v[v.len() - 1]),
+        );
+    }
+
+    #[test]
+    #[ignore = "measurement, not a check; see RFC-001 S0a findings"]
+    fn pipeline_timings() {
+        const RUNS: usize = 20;
+        let host = Context::new_blocking().unwrap();
+        let info = host
+            .adapter_info()
+            .map(|i| format!("{} ({:?}, {})", i.name, i.backend, i.driver_info))
+            .unwrap_or_default();
+        let sel = reference();
+        let desc = TargetDesc {
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            width: 640,
+            height: 400,
+            samples: 1,
+        };
+        let (mut preload, mut emit, mut compose, mut create, mut total) =
+            (vec![], vec![], vec![], vec![], vec![]);
+        let mut first = None;
+        for _ in 0..RUNS {
+            // A fresh composer and pipeline cache on the same device.
+            let t = Instant::now();
+            let cx = Context::from_wgpu(host.device().clone(), host.queue().clone());
+            preload.push(t.elapsed());
+            let t = Instant::now();
+            let glue = sel.glue();
+            emit.push(t.elapsed());
+            let program = cx.pipelines().program(&cx, &glue).unwrap();
+            let _pipeline = cx.pipelines().mark_pipeline(&cx, &program, &desc);
+            let stats = cx.pipelines().stats;
+            compose.push(stats.last_compose);
+            create.push(stats.last_create);
+            total.push(stats.last_compose + stats.last_create);
+            first.get_or_insert(stats.last_compose + stats.last_create);
+        }
+        eprintln!(
+            "profile: {}, runs: {RUNS}, adapter: {info}",
+            if cfg!(debug_assertions) {
+                "debug"
+            } else {
+                "release"
+            }
+        );
+        summary("context + library preload", preload);
+        summary("glue emit", emit);
+        summary("naga_oil compose (make_naga_module)", compose);
+        summary("create_shader_module + pipeline", create);
+        eprintln!(
+            "compose + create, first run          {:>8.3} ms",
+            first.unwrap().as_secs_f64() * 1e3
+        );
+        summary("compose + create", total);
+    }
+}
