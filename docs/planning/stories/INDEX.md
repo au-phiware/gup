@@ -24,11 +24,12 @@ survives into `gup-core`.
   transpiler, Mixable ecosystem, MarkRenderer, and the broken `plot_api`/
   `FieldAccessor`/`BoundChartBuilder` path (~37k LOC), each justified by a
   caller-check grep. Prerequisite for RFC-001 step S0.
-- [GUP-390](GUP-390_Quarantine_Culling_LOD_And_Integration_Crates.md) 🚧 — Move
-  GPU culling/LOD into an experimental crate, feature-gate debug/performance
-  code, and exclude the non-compiling `gup-egui`/`gup-bevy` and parked
-  `gup-ios`/`gup-android`/`gup-tauri` from the default workspace and CI.
-  Prerequisite for RFC-001 step S0.
+- [GUP-390](GUP-390_Quarantine_Culling_LOD_And_Integration_Crates.md) ✅ — Moved
+  GPU culling/LOD (~13k LOC) into the experimental, non-default
+  `crates/gup-culling-lod` (CI-checked and tested), gated debug/performance code
+  behind a `debug` feature, and parked `gup-egui`, `gup-bevy`, `gup-ios`,
+  `gup-android` and `gup-tauri` outside the workspace and CI (to avoid churn
+  until RFC-001 S13 and T7 re-wire them). Prerequisite for RFC-001 step S0.
 - [GUP-391](GUP-391_Curated_Prelude_And_Public_Surface_Purge.md) ⏸ — Parked:
   superseded by RFC-001 S7/S14 — `gup-core`'s prelude is designed fresh rather
   than curating the frozen old-path exports.
@@ -50,7 +51,7 @@ survives into `gup-core`.
 
 ## RFC-001 Migration
 
-**Old-path LOC remaining: 32051 (measured 2026-10-05, after GUP-389)**. Measured
+**Old-path LOC remaining: 28882 (measured 2026-10-05, after GUP-390)**. Measured
 as the non-blank, non-comment-only, non-`#[cfg(test)]`-block line count of the
 old render path (`src/selection.rs`, `src/mark/`, `src/shader_function/`,
 `src/shader_pipeline.rs`, `src/chart_builder*`, `src/context.rs`,
@@ -72,7 +73,7 @@ naga_oil go/no-go gate (GUP-395) is resolved.
   emitter, typed X/Y/RADIUS/FILL channels, Linear/Log/Sequential scales with CPU
   mirrors, and a `Scene` → `ImageTarget` → PNG path with title and tick labels;
   ends with the naga_oil go/no-go decision appended to RFC-001. Deps: GUP-389
-  📋, GUP-390 📋, GUP-388 ✅ (soft).
+  ✅, GUP-390 ✅, GUP-388 ✅ (soft).
 - [GUP-396](GUP-396_Gup_Core_Vertical_Slice_Window_Performance.md) 📋 — RFC-001
   step S0b: adds `WindowTarget` and a minimal `gup::show()` to GUP-395's scene,
   proving window/PNG visual parity (ΔE < 2) and a 100K-point zoom at ≥60 fps

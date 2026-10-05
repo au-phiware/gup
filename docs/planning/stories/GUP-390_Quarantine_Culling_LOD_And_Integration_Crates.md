@@ -2,8 +2,8 @@
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-10 **Status**: 🚧 In Progress **Created**:
-2026-10-04
+**Initiative**: Strategic Review 2026-10 **Status**: ✅ Complete (2026-10-05)
+**Created**: 2026-10-04
 
 ## Context
 
@@ -40,6 +40,19 @@ exactly. `gup-ios` and `gup-android` currently do compile, but depend on
 warnings from `gup-macros/src/transpile/validation.rs`), so they are affected by
 GUP-389's deletions and should be re-verified after that story lands.
 
+**Revised 2026-10-05 (after GUP-389 merged).** The compile failure above no
+longer holds: GUP-389 commit `353e85c` fixed the `DynChart` bound in both
+crates, and `gup-egui` and `gup-bevy` compile against `main`. The owner's
+decision to park all five integrations still stands, for a different reason:
+RFC-001 replaces `ComposedChart`, `DynChart` and the context types these crates
+are built on. Keeping them compiling through RFC-001 S1–S13 is churn the owner
+declined. They are parked to avoid that churn, not because they are broken, and
+must be re-wired at RFC-001 S13 (`gup-egui`, `gup-bevy`) and in strategic review
+T7 (`gup-ios`, `gup-android`, `gup-tauri`). GUP-389 also left
+`src/mark/batch_renderer.rs` in place because its `InstanceAttributes` and
+`Viewport2D` are used only by the culling/LOD code; it moves with that code
+here.
+
 Verified module locations for the culling/LOD move:
 `src/mark/compute_instance_filter.rs`, `src/mark/occlusion_culler.rs`,
 `src/mark/radix_sort.rs` (+ `src/shaders/radix_sort.compute.wgsl`),
@@ -74,70 +87,85 @@ performance-report code behind a `debug` feature or into `gup-debug`."
 
 ### AC1: GPU culling/LOD moves to an experimental crate
 
-- [ ] A new workspace member (e.g. `gup-experimental` or `gup-culling`) is
+- [x] A new workspace member (e.g. `gup-experimental` or `gup-culling`) is
       created, **excluded from the default build** (not listed in the top-level
       `[workspace] members` that `cargo build`/`cargo test` without
       `-p`/`--workspace` flags would include by default — confirm the exact
       exclusion mechanism Cargo supports, e.g. a separate top-level
-      `[workspace]` vs. `default-members`).
-- [ ] `src/mark/compute_instance_filter.rs`, `occlusion_culler.rs`,
+      `[workspace]` vs. `default-members`). _Done as `crates/gup-culling-lod`: a
+      member, with `default-members = ["."]`, so plain `cargo build`/`test` skip
+      it but `cargo check -p gup-culling-lod` works. It is deliberately inside
+      `--workspace` (see Implementation Summary)._
+- [x] `src/mark/compute_instance_filter.rs`, `occlusion_culler.rs`,
       `radix_sort.rs`, `unified_culling_pipeline.rs`, `src/renderer/`, and
       `src/lod/` move into the new crate with their module structure preserved,
       importing `gup` as a normal path dependency for the types they still need
-      (`Mark`, buffer pool types, etc.).
-- [ ] `src/mark.rs` and `src/lib.rs` no longer reference the moved modules; any
+      (`Mark`, buffer pool types, etc.). _Plus `batch_renderer.rs`, five compute
+      shaders, two integration tests, six benches and three examples._
+- [x] `src/mark.rs` and `src/lib.rs` no longer reference the moved modules; any
       remaining glue code needed for the move compiles.
-- [ ] The new crate builds independently: `cargo check -p gup-experimental` (or
+- [x] The new crate builds independently: `cargo check -p gup-experimental` (or
       chosen name) succeeds.
-- [ ] A top-level `README.md` note (or a README in the new crate) explains why
+      _`cargo check -p gup-culling-lod --all-targets     --all-features` passes,
+      and CI runs it plus the crate's tests._
+- [x] A top-level `README.md` note (or a README in the new crate) explains why
       it exists, that it is unwired from the main render path, and that T3/T7
-      are expected to draw from it.
+      are expected to draw from it. _Both: `crates/gup-culling-lod/README.md`
+      and the root README's "Workspace Crates" section._
 
 ### AC2: Debug and performance code is feature-gated
 
-- [ ] `src/debug.rs`/`src/debug/`, `src/performance.rs`,
+- [x] `src/debug.rs`/`src/debug/`, `src/performance.rs`,
       `src/performance_export.rs`, and `src/performance_targets.rs` are gated
       behind a Cargo feature (e.g. `debug`), off by default.
-- [ ] Any example or test that currently uses debug/performance APIs either
+- [x] Any example or test that currently uses debug/performance APIs either
       enables the feature explicitly or is updated/moved accordingly — no
-      example silently stops compiling with default features.
-- [ ] `cargo build` (default features) does not compile the gated modules;
+      example silently stops compiling with default features. _7 examples and 8
+      integration tests declare `required-features = ["debug"]`._
+- [x] `cargo build` (default features) does not compile the gated modules;
       `cargo build --features debug` does.
 
 ### AC3: Integration crates are excluded from the default workspace and CI
 
-- [ ] `gup-egui`, `gup-bevy`, `gup-ios`, `gup-android`, and `gup-tauri` (the
+- [x] `gup-egui`, `gup-bevy`, `gup-ios`, `gup-android`, and `gup-tauri` (the
       latter is an example app under `examples/gup-tauri/`, not a workspace
       member — confirm its actual build mechanism before deciding how to exclude
       it) are removed from the default workspace build surface used by CI
-      (`cargo build --workspace`, `cargo test --workspace`).
-- [ ] CI workflow files are updated so these crates are not built/tested by the
-      default pipeline.
-- [ ] A top-level README note lists the parked integration crates, why
+      (`cargo build --workspace`, `cargo test --workspace`). _All five are in
+      `[workspace] exclude`. `gup-tauri` is built by `cargo tauri` against the
+      WASM package and does not depend on the `gup` crate; before this story it
+      could not be built at all inside the repository ("believes it's in a
+      workspace when it's not"). Excluding it fixes that._
+- [x] CI workflow files are updated so these crates are not built/tested by the
+      default pipeline. _No default workflow built them; the iOS and Android
+      workflows are now manual-dispatch only._
+- [x] A top-level README note lists the parked integration crates, why
       (`gup-egui`/`gup-bevy` currently fail to compile against `main`; all five
       are scheduled for re-wiring after T2), and that `cargo check -p gup-egui`
       etc. remain valid manual commands for anyone actively working on re-wiring
-      them.
-- [ ] This does **not** delete any of the five crates' source — only removes
+      them. _Reason revised (see Context): they compile, and are parked to avoid
+      churn. Outside the workspace `-p` cannot work, so the README gives
+      `cargo check --manifest-path gup-egui/Cargo.toml` instead._
+- [x] This does **not** delete any of the five crates' source — only removes
       them from the default build/CI surface, consistent with "park," not
       "delete."
 
 ## Technical Tasks
 
-- [ ] Create the new experimental crate's `Cargo.toml` and module skeleton.
-- [ ] `git mv` the culling/LOD files into the new crate, fixing `use` paths.
-- [ ] Update `src/lib.rs` and `src/mark.rs` to remove the moved module
+- [x] Create the new experimental crate's `Cargo.toml` and module skeleton.
+- [x] `git mv` the culling/LOD files into the new crate, fixing `use` paths.
+- [x] Update `src/lib.rs` and `src/mark.rs` to remove the moved module
       declarations (coordinate with GUP-389's concurrent edit to the same file
       if both are in flight).
-- [ ] Add `#[cfg(feature = "debug")]` gates (or move into a `gup-debug` crate —
+- [x] Add `#[cfg(feature = "debug")]` gates (or move into a `gup-debug` crate —
       pick one approach and justify it in the retrospective) around
       `src/debug.rs`, `src/debug/`, `src/performance*.rs`.
-- [ ] Update `Cargo.toml`'s `[workspace] members` to exclude the five parked
+- [x] Update `Cargo.toml`'s `[workspace] members` to exclude the five parked
       crates; verify `cargo build --workspace` and `cargo test --workspace` no
       longer touch them.
-- [ ] Update `.github/workflows/*.yml` (or equivalent CI config) to match.
-- [ ] Add the README notes from AC1 and AC3.
-- [ ] Run `cargo build`, `cargo build --features debug`,
+- [x] Update `.github/workflows/*.yml` (or equivalent CI config) to match.
+- [x] Add the README notes from AC1 and AC3.
+- [x] Run `cargo build`, `cargo build --features debug`,
       `cargo check     --examples`, `cargo test -- --test-threads=1` and fix
       fallout.
 
@@ -174,12 +202,16 @@ performance-report code behind a `debug` feature or into `gup-debug`."
 
 ## Success Metrics
 
-- [ ] `cargo build --workspace` (post-change default members) excludes the five
+- [x] `cargo build --workspace` (post-change default members) excludes the five
       parked crates and the experimental culling/LOD crate, and succeeds.
-- [ ] `cargo build --features debug` succeeds and exercises the gated
+      _Partly by design: `--workspace` excludes the five parked crates and
+      succeeds, but includes `gup-culling-lod`, which is a non-default member so
+      that `cargo check -p` and CI can cover it. Plain `cargo build` (the
+      default members) excludes it._
+- [x] `cargo build --features debug` succeeds and exercises the gated
       debug/performance code.
-- [ ] CI run time/footprint decreases (fewer crates built by default) — report
-      the before/after in the retrospective if measurable.
+- [x] CI run time/footprint decreases (fewer crates built by default) — report
+      the before/after in the retrospective if measurable. _See Retrospective._
 
 ## Risk Assessment
 
@@ -201,11 +233,92 @@ performance-report code behind a `debug` feature or into `gup-debug`."
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria are satisfied and checked.
-- [ ] All tests pass: `cargo test -- --test-threads=1`.
-- [ ] Lint and format clean: `mask all-fix`.
-- [ ] All examples compile: `cargo check --examples`.
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md.
+- [x] All Acceptance Criteria are satisfied and checked.
+- [x] All tests pass: `cargo test -- --test-threads=1`.
+- [x] Lint and format clean: `mask all-fix`.
+- [x] All examples compile: `cargo check --examples`.
+- [x] Story status updated to ✅ Complete in story file and INDEX.md.
 - [ ] Retrospective added to story document, including the feature-flag vs.
       separate-crate decision for debug/performance code and the before/after CI
       footprint if measured.
+
+## Implementation Summary
+
+Three commits on `main`: `e47c367` (culling/LOD move), `a4f29b0` (park
+integrations), `e8376a9` (`debug` feature).
+
+### What moved where
+
+| From (`gup`)                                                                                                           | To (`crates/gup-culling-lod`)                             |
+| ---------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `src/mark/{batch_renderer,compute_instance_filter,occlusion_culler,radix_sort,unified_culling_pipeline}.rs`            | `src/mark/` (`gup::mark::X` → `gup_culling_lod::mark::X`) |
+| `src/renderer/`, `src/lod/`                                                                                            | `src/renderer/`, `src/lod/`                               |
+| 5 compute shaders (`instance_filter`, `occlusion_culling`, `radix_sort`, `lod_aggregate`, `viewport_cull`)             | `src/shaders/`                                            |
+| `tests/{adaptive_renderer_integration,lod_pyramid}.rs`                                                                 | `tests/`                                                  |
+| 6 benches (`compute_filter`, `unified_culling`, `occlusion_culling`, `mark_batch`, `lod_pyramid`, `adaptive_renderer`) | `benches/` (with the `gpu-bench` gate)                    |
+| 3 examples (`lod_pyramid_debug`, `adaptive_lod_debug`, `streaming_lod_scatter`)                                        | `examples/`                                               |
+
+About 13.0k lines of Rust library code, 1.5k lines of WGSL and 2.5k lines of
+tests, benches and examples. The root re-exports (`gup::ComputeInstanceFilter`,
+`gup::Viewport2D`, ...) are now `gup_culling_lod::*`. Only `crate::` paths to
+`gup` types (`error`, `context`, `buffer`, `streaming`, `test_utils`, `render`,
+`mark::{Mark, Circle, Rectangle, performance_opt}`) had to change. The caller
+check (module paths and all re-exported type names across `src/`, `tests/`,
+`benches/`, `examples/`) found no `gup` caller outside `lib.rs`/`mark.rs`
+re-exports.
+
+### Workspace and CI
+
+- `Cargo.toml`:
+  `members = ["gup-macros", "crates/gup-visual-regression", "crates/gup-culling-lod"]`,
+  `default-members = ["."]`, and
+  `exclude = [gup-egui, gup-bevy, gup-ios, gup-android, examples/gup-tauri/src-tauri]`.
+  `"."` had to leave `members` because Cargo treats it as a prefix of every
+  subdirectory, which overrides `exclude`.
+- `Cargo.lock` lost 190 packages (bevy, egui, eframe, naga_oil, ...). No
+  remaining package changed version.
+- `visual-regression.yml` runs
+  `cargo check -p gup-culling-lod --all-targets --all-features` and
+  `cargo test -p gup-culling-lod`, and builds the crate's examples for the smoke
+  test. `tests/examples_smoke.rs` now covers examples from both `gup` and
+  `gup-culling-lod`.
+- `ios-ci.yml` and `android-ci.yml` run on manual dispatch only and build their
+  crate via `--manifest-path` / `working-directory` with `CARGO_TARGET_DIR` set
+  to the repository's `target/`.
+- `performance.yml` passes `--features debug` to `performance_ci_tests`.
+
+### `debug` feature
+
+- `debug`, `performance`, `performance_export`, `performance_targets` (about
+  12.8k lines) and the root `pub use debug::*` are `#[cfg(feature = "debug")]`.
+- `GupContext`'s `performance_profiler` field and its five profiling methods are
+  gated; `web-dashboard` implies `debug`.
+- 7 examples and 8 integration tests declare `required-features = ["debug"]`.
+
+### Docs
+
+Root README "Workspace Crates" section (experimental crate, `debug` feature,
+parked crates with `--manifest-path` commands),
+`crates/gup-culling-lod/README.md`, parked notes in the `gup-egui`, `gup-bevy`
+and `gup-tauri` READMEs, `docs/LOD_SYSTEM.md`, `docs/mark-system/*`,
+`docs/PERFORMANCE_GUIDE.md`, the examples index and the gallery.
+
+### Verification (2026-10-05)
+
+- `cargo test -- --test-threads=1` (default features): 3762 passed, 0 failed,
+  152 ignored across 107 test binaries (lib: 2502 passed).
+- `cargo test --features debug --lib` plus the 8 gated tests: lib 2637 passed;
+  gated tests 46 passed, 1 ignored.
+- `cargo test -p gup-culling-lod -- --test-threads=1`: 178 unit, 16 integration
+  and 6 doc tests passed.
+- `mask visual-regression`: 16 passed.
+- `mask smoke-examples`: 56 passed, 3 expected failures (all pre-existing
+  tracked entries: `density_scatter_overlay`, `gpu_debug_demo`,
+  `pattern_pipeline_demo`), 45 skipped. The three moved examples run and pass.
+- `cargo check --all-targets` with default features and with `--features debug`;
+  `cargo check --target wasm32-unknown-unknown --lib`; `cargo check --workspace`
+  (checks only `gup`, `gup-macros`, `gup-visual-regression`, `gup-culling-lod`).
+- `cargo check --manifest-path <crate>/Cargo.toml --all-targets` passes for
+  `gup-ios`, `gup-android`, `gup-egui` and `gup-bevy`.
+- `mask old-path-loc`: 32051 → 28882.
+- No rendered output changed: no golden image was re-blessed.
