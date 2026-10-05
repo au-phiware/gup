@@ -1320,3 +1320,15 @@ measured by `TIMESTAMP_QUERY` (resolved once after the run).
   teardown. winit allows one event loop per process, so `show` runs once. The
   `GupApp` design should decide whether to support re-entry
   (`run_app_on_demand`).
+
+### Orchestrator review of S0b (2026-10-05)
+
+Read the fullscreen window capture (`/tmp/gup396/scatter_window_full.png`,
+1920×1052). Layout re-resolves correctly and marks/axes are crisp, but **tick
+density does not adapt to available space**: the x axis shows 31 labels
+(0–60000, step 2000) nearly touching at 1920 px, while the 720 px golden
+shows 13. The tick count must be derived from the axis length in Px and the
+measured label width (with a minimum gap), not a fixed target count. **Input for
+S7** (`Layout` resolve and guide emitters): add an AC that no two tick labels on
+an axis are closer than one em, verified at 400, 720 and 1920 px widths through
+the GUP-388 harness's text regions.
