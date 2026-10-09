@@ -1882,3 +1882,94 @@ it.
 - **S8 (wasm entry):** starts from 393 KB gz (about 218 KB with GUP-407).
 - **GUP-408 (browser CI):** keep the legend and background in the harness, so CI
   runs every pipeline kind.
+
+## GUP-410 findings (2026-10-10)
+
+GPU errors from gup-core are now `Error::Gpu { what, message }` on every target,
+not a native panic and not a silent blank image in a browser.
+
+### Design
+
+- **Where the scopes are.** `Context::scoped(what, f)` pushes validation and
+  out-of-memory scopes (and internal, natively), runs `f` and pops them. It
+  wraps glue program creation, mark and guide pipeline creation, the layer step
+  of `Plot::resolve` (column upload, uniforms, bind groups),
+  `Renderer::prepare`, `Renderer::render` (acquire, encode, present and submit),
+  `ImageTarget` and `TextureTarget` creation, and `WindowTarget` surface
+  configuration (`resize` now returns `Result`). Scopes nest: a pipeline's own
+  scope names it, and the render scope names the target.
+- **Pop timing.** wgpu-core resolves a popped scope immediately
+  (`ready(scope.error)`), so natively the error comes back from the call that
+  caused it, with no round trip. In a browser the pop is a promise. The scope is
+  spawned (`wasm_bindgen_futures::spawn_local` into a oneshot), the next
+  synchronous call on the context reports whatever has arrived, and
+  `ImageTarget::read` (so `ImageTarget::render`) and
+  `WindowTarget::take_capture` await every pending scope. So an awaited browser
+  render returns its own error. A synchronous render into a texture or window
+  reports it from the next frame.
+- **No invalid pipeline is cached.** A cache miss creates and inserts inside the
+  scope. Any scope error makes the context forget its programs and pipelines,
+  and gup-text's (`TextSystem::forget_pipelines`), so the next render recreates
+  them and reports the error again.
+- **Threads.** wgpu-core keeps one scope stack per device, shared by threads and
+  by every `Context` wrapping that device, so concurrent scopes would catch each
+  other's errors. The outermost scope on a thread holds a process-wide lock
+  until it pops. It is always taken before a context lock (debug builds check
+  this). Cache misses no longer hold the pipeline-cache lock while they create.
+- **Uncaptured errors.** On a device Gup creates in a browser, an
+  `on_uncaptured_error` handler records errors outside every scope, and the next
+  call reports them. Native devices keep wgpu's panic, and host devices
+  (`from_wgpu`) keep the host's handler. wgpu's WebGPU backend panics on a
+  `GPUInternalError` (`Error::from_js`), so browser scopes do not filter
+  `Internal`.
+
+### Cost
+
+- **An empty scope** (all filters pushed and popped): about 250 ns natively,
+  release build (`scope::tests::scope_cost`). A cached frame opens three (layer
+  resolution, render, prepare).
+- **`zoom_bench`, Mailbox uncapped, 100K points**: CPU work median 0.787, 0.794
+  and 0.798 ms before, and 0.782, 0.800 and 0.776 ms after, in alternating runs.
+  That is within noise.
+- **Pipeline creation** (`pipeline_timings`, release): create median 0.739 ms
+  before and 0.719 ms after.
+- **WASM**: the reference scatter grew from 392,954 to 404,121 B gz (+11.2 KB
+  gz, +37.7 KB raw) for the scopes, the spawned tasks and the error messages.
+  gup-core over bare wgpu is now 362.4 KB gz, under the +400 KB budget.
+
+### Proofs
+
+- **Browser**: with GUP-408's seed 2 (`dpdx` in non-uniform control flow in
+  `rect.wgsl`), `mask wasm-browser` fails with the page's own line:
+
+  ```text
+  GUP FAIL GPU error in guide pipeline `gup rects` (Rgba8Unorm, 4× MSAA):
+  Error while parsing WGSL: :43:19 error: 'dpdx' must only be called from
+  uniform control flow
+  ```
+
+  Chrome no longer logs the four "rendering" warnings, because the scopes
+  capture the errors. Without the seed the page passes with unchanged pixel
+  counts (white=30884 grey=16219 coloured=16897).
+
+- **Native**: `scope::tests` seed a pipeline layout without group 2 (an `Err`
+  from `ImageTarget::render` twice, never cached, after which the valid scene
+  renders), broken glue WGSL (an `Err` from `Renderer::prepare` with naga's
+  diagnostic) and a frame without `RENDER_ATTACHMENT` (an `Err` from
+  `Renderer::render`).
+
+### Proposed adjustments to S5 and later
+
+- **S5 (`#[wgsl_function]`):** a user function that composes at expansion but
+  fails pipeline creation (a calling-convention mismatch the macro missed, a
+  browser-only uniformity error like seed 2) is an `Error::Gpu` naming the mark
+  pipeline and its glue signature. Keep the user module's import path in the
+  glue signature, so that the message names the user's function. Item 4 above
+  (checking the calling convention at expansion) is still worth doing:
+  expansion-time errors carry spans, and `Error::Gpu` messages point into the
+  linked text. In a browser, test user WGSL through an awaited
+  `ImageTarget::render`, which returns the error itself.
+- **S8 (wasm entry):** awaited renders report their own errors. A canvas
+  (`WindowTarget`) render loop reports a frame's error from the next frame, so
+  the entry point should surface `render`'s `Err` (or await a readback once
+  after the first frame). It starts from 404 KB gz.
