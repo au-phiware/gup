@@ -211,13 +211,24 @@ pub fn validate_case_name(case: &str) -> Result<(), String> {
 }
 
 /// Resolve the directory for scratch artifacts under a Cargo target
-/// directory: `$CARGO_TARGET_DIR/visual-regression` if set, else
-/// `<workspace_root>/target/visual-regression`.
+/// directory: `<target dir>/visual-regression` (see [`target_dir`]).
 pub fn default_artifact_dir(workspace_root: &Path) -> PathBuf {
+    target_dir(workspace_root).join("visual-regression")
+}
+
+/// The Cargo target directory: `$CARGO_TARGET_DIR` (or
+/// `$CARGO_BUILD_TARGET_DIR`) if set, resolved against `workspace_root` when
+/// relative, else `<workspace_root>/target`.
+///
+/// This is where Cargo puts final artifacts under their own names (example
+/// binaries in `<profile>/examples/`). Do not derive it from a test binary's
+/// location: with a separate build directory (`CARGO_BUILD_BUILD_DIR`) test
+/// binaries and other intermediate artifacts live there instead.
+pub fn target_dir(workspace_root: &Path) -> PathBuf {
     std::env::var_os("CARGO_TARGET_DIR")
-        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("CARGO_BUILD_TARGET_DIR"))
+        .map(|dir| workspace_root.join(dir))
         .unwrap_or_else(|| workspace_root.join("target"))
-        .join("visual-regression")
 }
 
 #[cfg(test)]

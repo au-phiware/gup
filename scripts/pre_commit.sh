@@ -31,15 +31,20 @@
 #     stash and no change to the real working tree or index, so it is safe
 #     while another process edits the checkout. Git commands in the snapshot
 #     see the staged index (GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE).
-#   - Cargo in the snapshot uses the checkout's target directory, so
-#     dependencies stay warm. Cargo names a workspace member's artifacts by
+#   - Cargo in the snapshot uses the checkout's target and build directories,
+#     so dependencies stay warm. Cargo names a workspace member's artifacts by
 #     its path relative to the workspace root, so the snapshot and the
-#     checkout would otherwise share member artifacts and either could reuse
-#     the other's (stale) result. The snapshot's .cargo/config.toml gives
-#     members the opposite `incremental` setting to the checkout, which gives
-#     them their own artifacts (non-incremental) and leaves dependencies
-#     shared. A `build.incremental` set in a user cargo config would defeat
-#     this; CARGO_INCREMENTAL is handled.
+#     checkout would share member artifacts and either could reuse the
+#     other's (stale) result. The repository's .cargo/config.toml (GUP-411)
+#     separates every checkout's member artifacts, the snapshot's included,
+#     except clippy's: `cargo clippy` replaces the workspace wrapper that does
+#     the separating, and clippy instead re-lints whenever the last lint was
+#     in another checkout (CLIPPY_CONF_DIR). That is correct but would re-lint
+#     on every commit, so the snapshot's own .cargo/config.toml (next to the
+#     tree) gives members the opposite `incremental` setting to the checkout,
+#     which gives them their own clippy artifacts (non-incremental) and leaves
+#     dependencies shared. A `build.incremental` set in a user cargo config
+#     would defeat this; CARGO_INCREMENTAL is handled.
 #
 # `mask pre-commit` runs this script, so it checks the staged snapshot too.
 # `mask all-check` run by hand (or by CI) checks the tree it runs in: your

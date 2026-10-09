@@ -112,6 +112,15 @@
           shellHook = ''
             export RUST_BACKTRACE=1
 
+            # Build output (GUP-411): one build directory shared by every
+            # checkout, and a target directory of this checkout's own (see
+            # "Sharing build output between checkouts" in CLAUDE.md). Not in
+            # CI, which caches ./target, nor over an explicit CARGO_TARGET_DIR.
+            top="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+            if [[ -z ''${CI:-} && -z ''${CARGO_TARGET_DIR:-} && -x $top/scripts/cargo_env.sh ]]; then
+              eval "$("$top/scripts/cargo_env.sh")"
+            fi
+
             # Set up Mesa drivers. GUP_SOFTWARE_GPU=1 selects lavapipe
             # (software Vulkan) instead: CI runners have no GPU, and the
             # same switch reproduces CI locally.
@@ -135,6 +144,7 @@
             echo "🦀 Rust development environment loaded!"
             echo "Rust version: $(rustc --version)"
             echo "Cargo version: $(cargo --version)"
+            echo "Cargo build dir: ''${CARGO_BUILD_BUILD_DIR:-default}, target dir: ''${CARGO_TARGET_DIR:-default}"
             echo "Chromium available for WebGPU testing: $(chromium --version 2>/dev/null || echo 'Not found')"
             echo "ChromeDriver version: $(chromedriver --version 2>/dev/null || echo 'Not found')"
             echo "Node.js version: $(node --version 2>/dev/null || echo 'Not found')"

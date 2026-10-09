@@ -34,7 +34,7 @@
 //!   an example passes if it is still running (or exited zero) at the
 //!   deadline and fails if it panicked or exited non-zero first.
 
-use gup_visual_regression::golden::default_artifact_dir;
+use gup_visual_regression::golden::{default_artifact_dir, target_dir};
 use gup_visual_regression::{
     Check, CheckFailure, ExpectedFailures, GoldenStore, Harness, LayoutMetadata, PxRect, RgbaImage,
 };
@@ -246,14 +246,19 @@ fn env_secs(var: &str, default: u64) -> Duration {
     )
 }
 
-/// `target/<profile>/examples`, derived from this test binary's location
-/// (`target/<profile>/deps/examples_smoke-<hash>`).
+/// `<target dir>/<profile>/examples`, where `cargo build --examples` puts the
+/// example binaries under their own names. The profile is the one this test
+/// binary was built with (`<build dir>/<profile>/deps/examples_smoke-<hash>`);
+/// the directory is not next to this binary when the build directory is
+/// separate from the target directory (`CARGO_BUILD_BUILD_DIR`, GUP-411).
 fn examples_bin_dir() -> PathBuf {
     let exe = std::env::current_exe().expect("current_exe");
-    exe.parent()
+    let profile = exe
+        .parent()
         .and_then(Path::parent)
-        .expect("test binary lives in target/<profile>/deps")
-        .join("examples")
+        .and_then(Path::file_name)
+        .expect("test binary lives in <build dir>/<profile>/deps");
+    target_dir(root()).join(profile).join("examples")
 }
 
 enum RunEnd {

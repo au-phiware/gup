@@ -57,6 +57,8 @@ expect 'mode=full' flake.nix
 expect 'mode=full' maskfile.md
 expect 'mode=full' scripts/pre_commit.sh
 expect 'mode=full' scripts/generate_gallery.sh
+expect 'mode=full' .cargo/config.toml
+expect 'mode=full' scripts/rustc_workspace_wrapper.sh
 
 # Workflow files get actionlint, alone or on top of the other checks.
 expect 'mode=workflows' .github/workflows/tests.yml

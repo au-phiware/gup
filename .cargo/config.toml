@@ -1,0 +1,21 @@
+# Keeps checkouts that share a build directory from using each other's
+# workspace-member artifacts (GUP-411). Cargo names a member's artifacts by its
+# path relative to the workspace root and decides freshness by mtime, so two
+# checkouts sharing CARGO_TARGET_DIR (or CARGO_BUILD_BUILD_DIR) would otherwise
+# lint, test and run code that is not theirs. See "Sharing build output between
+# checkouts" in CLAUDE.md.
+
+[build]
+# Relative to this file's checkout, so the path (which cargo hashes into
+# members' artifact names) differs per checkout: check, build, test, doc and
+# bench get per-checkout member artifacts; dependencies stay shared.
+rustc-workspace-wrapper = "scripts/rustc_workspace_wrapper.sh"
+
+[env]
+# `cargo clippy` replaces the workspace wrapper with clippy-driver, so clippy's
+# member artifacts are still shared. clippy-driver records CLIPPY_CONF_DIR in
+# its dep-info, and cargo re-lints a member whose recorded value differs: a
+# checkout re-lints after another checkout linted, instead of replaying that
+# checkout's verdict. Clippy looks for clippy.toml from here upward, as it
+# would from any member without a clippy.toml of its own (none has one).
+CLIPPY_CONF_DIR = { value = "", relative = true }

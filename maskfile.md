@@ -209,7 +209,8 @@ it cannot parse, it just never starts it (GUP-409). The files are named
 explicitly because, with no arguments, actionlint looks for the workflows next
 to the nearest `.git` above it, which from the hook's snapshot is the real
 checkout. `test_pre_commit.sh` tests the pre-commit hook's scoping rules and its
-staged snapshot.
+staged snapshot, and `test_shared_build_dir.sh` that checkouts sharing a build
+directory get their own workspace-member artifacts (GUP-411).
 
 The whitespace check passes only when `git grep` finds nothing (exit 1): a
 `git grep` error must fail it, not pass it.
@@ -230,7 +231,7 @@ concurrently --group --names '\s,rs,nix,md,gha,marks,gallery,hook' \
    'actionlint .github/workflows/*.y*ml' \
    'mask validate-marks' \
    './scripts/check_gallery_sync.sh' \
-   './scripts/test_pre_commit.sh'
+   './scripts/test_pre_commit.sh && ./scripts/test_shared_build_dir.sh'
 ```
 
 ## pre-commit
@@ -362,7 +363,8 @@ mask smoke-examples
 
 The only CI job that runs the root crate's full suite. Built without debug info
 (as on CI) so the 111 integration-test binaries fit on disk; even so, check that
-`CARGO_TARGET_DIR` has about 10 GB free.
+the build directory (`CARGO_BUILD_BUILD_DIR`, else `CARGO_TARGET_DIR`) has about
+10 GB free.
 
 ```bash
 set -euo pipefail
