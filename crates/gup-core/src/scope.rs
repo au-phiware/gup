@@ -431,6 +431,33 @@ mod tests {
         assert_eq!(cx.submissions(), 0);
     }
 
+    /// CPU cost of one empty error scope (push and pop of every filter),
+    /// outermost and nested: the per-frame overhead GUP-410 adds is three
+    /// outermost-or-nested scopes (layer resolution, render, prepare). Run
+    /// with `cargo test -p gup-core --release --lib scope_cost -- --ignored
+    /// --nocapture`.
+    #[test]
+    #[ignore = "measurement, not a check; see GUP-410"]
+    fn scope_cost() {
+        const N: u32 = 100_000;
+        let cx = Context::new_blocking().unwrap();
+        let t = std::time::Instant::now();
+        for _ in 0..N {
+            cx.scoped(String::new, || Ok(())).unwrap();
+        }
+        let outer = t.elapsed() / N;
+        let t = std::time::Instant::now();
+        cx.scoped(String::new, || {
+            for _ in 0..N {
+                cx.scoped(String::new, || Ok(()))?;
+            }
+            Ok(())
+        })
+        .unwrap();
+        let nested = t.elapsed() / N;
+        eprintln!("empty error scope: outermost {outer:?}, nested {nested:?}");
+    }
+
     /// A target whose frame cannot be rendered to: the render scope
     /// (encoding and submission) turns the failure into an `Err`.
     #[test]

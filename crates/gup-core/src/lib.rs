@@ -38,6 +38,26 @@
 //!   "zooming writes 0 column bytes" stay provable as the crate grows.
 //! - **Lock order.** A context's pipeline cache and its text system are
 //!   never held together. Debug builds check this on every acquisition.
+//! - **GPU errors are `Err`, never a panic or a blank image.** Pipeline
+//!   creation, [`Plot::resolve`], [`Renderer::prepare`], every target's
+//!   render (encoding and submission) and target and surface setup run
+//!   inside WebGPU error scopes. A validation, out-of-memory or (natively)
+//!   internal error becomes [`Error::Gpu`], naming the pipeline (label and
+//!   glue signature), layer or target, with wgpu's or the browser's
+//!   message (for example a WGSL diagnostic). A failed pipeline is never
+//!   cached: the next render creates it again and reports it again.
+//!
+//!   Natively the error comes back from the call that caused it. In a
+//!   browser WebGPU reports errors asynchronously:
+//!   [`ImageTarget::render`] and [`ImageTarget::read`] wait for them, so
+//!   an awaited render returns its own error; synchronous calls
+//!   ([`Renderer::render`] into a texture or window, [`Renderer::prepare`],
+//!   [`Plot::resolve`]) return errors that arrived since the previous call,
+//!   so a failing frame is reported by the next one. Errors are per
+//!   [`Context`]: any call on it may report them. On a device Gup created
+//!   in a browser, errors outside every scope are recorded too (wgpu sets
+//!   no handler there); a host's device ([`Context::from_wgpu`]) keeps the
+//!   host's handler.
 
 /// The exact wgpu version Gup is built on. Hosts passing devices to
 /// [`Context::from_wgpu`] must use the same major version.
