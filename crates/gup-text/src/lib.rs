@@ -9,9 +9,13 @@
 //! its draws into a render pass the caller already has open, so text draws
 //! in the same pass as everything else.
 //!
-//! - **Font**: Inter Regular is bundled ([`Font::inter`], SIL Open Font
-//!   License 1.1); any TrueType or OpenType face loads with
-//!   [`Font::from_bytes`].
+//! - **Font**: a subset of Inter Regular is bundled ([`Font::inter`], SIL
+//!   Open Font License 1.1, 30 KB gzipped): Latin (Western, Central and
+//!   Eastern European), basic Greek, and the digits, currency, maths and
+//!   punctuation charts use ([`INTER_REGULAR`] lists it). The complete face
+//!   is [`Font::inter_full`], and any TrueType or OpenType face loads with
+//!   [`Font::from_bytes`]. A character a font lacks draws as its visible
+//!   missing-glyph box; [`Font::missing_glyphs`] finds them.
 //! - **Rasterisation**: glyphs are coverage bitmaps rasterised at their
 //!   physical pixel size and drawn 1:1 on whole pixels, so text is sharp at
 //!   any device pixel ratio. There is no MSDF, rotation or wrapping yet.
@@ -58,7 +62,7 @@ mod layout;
 mod system;
 
 pub use error::{Error, Result};
-pub use font::{Font, INTER_REGULAR, LineMetrics};
+pub use font::{Font, INTER_REGULAR, INTER_REGULAR_FULL, LineMetrics};
 pub use layout::{Anchor, Bounds, HAlign, Run, TextMetrics, VAlign};
 pub use system::{DrawTarget, GlyphBatch, GlyphBuffer, Glyphs, TextSystem, Uploader};
 /// The wgpu `gup-text` is built against.

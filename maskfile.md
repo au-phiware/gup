@@ -80,8 +80,8 @@ base_raw=$raw base_gz=$gz
 measure gup-core-scatter scatter gup_core_wasm_size_scatter
 printf '%-26s %10d B raw %9d B gz\n' "(gup-core over wgpu)" \
   $((raw - base_raw)) $((gz - base_gz))
-font=crates/gup-text/fonts/Inter-Regular.ttf
-printf '%-26s %10d B raw %9d B gz\n' "(Inter, bundled)" \
+font=crates/gup-text/fonts/Inter-Regular-Subset.ttf
+printf '%-26s %10d B raw %9d B gz\n' "(Inter subset, bundled)" \
   "$(stat -c %s $font)" "$(gzip -9 -c $font | wc -c)"
 rm -rf "$out"
 ```
@@ -101,6 +101,34 @@ harness's `Cargo.lock` version. See `scripts/wasm_browser.sh` and
 
 ```bash
 ./scripts/wasm_browser.sh
+```
+
+## subset-inter
+
+Regenerate `gup-text`'s bundled font (GUP-407): subset the full Inter Regular to
+the characters listed in `crates/gup-text/fonts/inter-subset.txt`. Keeps GPOS
+`kern` and GSUB `tnum` (for shaping, GUP-405) and every other OpenType feature
+is dropped, as is hinting (fontdue and resvg don't hint). The missing-glyph box
+keeps its outline, so a character outside the subset draws as a visible box, not
+as nothing. The copyright, trademark and licence names (IDs 0, 7, 13 and 14) are
+kept, so an embedded copy carries its OFL notice. The output is byte-for-byte
+reproducible with the dev shell's fonttools (pinned by `flake.lock`). Commit the
+result with the character list.
+
+```bash
+set -euo pipefail
+fonts=crates/gup-text/fonts
+pyftsubset "$fonts/Inter-Regular.ttf" \
+  --unicodes-file="$fonts/inter-subset.txt" \
+  --layout-features=kern,tnum \
+  --no-hinting \
+  --notdef-outline \
+  --name-IDs=0,1,2,3,4,5,6,7,13,14 \
+  --output-file="$fonts/Inter-Regular-Subset.ttf"
+for f in "$fonts/Inter-Regular.ttf" "$fonts/Inter-Regular-Subset.ttf"; do
+  printf '%-44s %7d B raw %6d B gz\n' "$f" "$(stat -c %s "$f")" \
+    "$(gzip -9 -c "$f" | wc -c)"
+done
 ```
 
 ## smoke-examples

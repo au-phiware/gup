@@ -55,6 +55,8 @@ gup-visual-regression = { path = "../gup-visual-regression" }
 # Rasterises `SvgTarget` output for comparison with the GPU render (the
 # dogfood crate uses the same version).
 resvg = { version = "0.45", default-features = false, features = ["text"] }
+# Decodes the font `SvgTarget` embeds, independently of its own encoder.
+base64 = "0.22"
 trybuild = "1.0"
 # Tests re-parse the linked WGSL (uniform layouts, struct checks) and
 # compose the reference glue through naga_oil directly, as an oracle for

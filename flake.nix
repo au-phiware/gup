@@ -90,6 +90,10 @@
             nixfmt
             statix
 
+            # pyftsubset for `mask subset-inter` (GUP-407): the bundled
+            # Inter subset is reproducible with this pinned fonttools.
+            python3Packages.fonttools
+
             # Workflow lint (GUP-409). nixpkgs wraps actionlint with
             # shellcheck, which it runs on every `run:` script.
             actionlint

@@ -1,0 +1,93 @@
+# The characters of gup-text's bundled Inter subset (GUP-407). One code
+# point or range per line, in hex; anything after '#' is a comment.
+# `mask subset-inter` passes this file to pyftsubset, and gup-text's tests
+# check that the subset maps exactly these characters, each to a real glyph.
+# Characters outside it draw as Inter's missing-glyph box (see `Font`).
+
+# Basic Latin: printable ASCII.
+0020-007E
+# Latin-1 Supplement: no-break space, ¢ £ ¥ § © ® ° ± ² ³ µ · ¹ ¼ ½ ¾ × ÷
+# and the Western European accented letters (Inter has no soft hyphen, AD).
+00A0-00AC
+00AE-00FF
+# Latin Extended-A: Central and Eastern European, Baltic, Turkish, Maltese
+# and Welsh letters (ą č ę ğ ı ł ő ś š ű ž, Œ œ …; Inter has no ŉ, 149).
+0100-0148
+014A-017F
+# Romanian comma-below letters (Ș ș Ț ț).
+0218-021B
+# Greek capitals and small letters, for statistics and physics labels
+# (α β γ Δ λ μ π σ Ω …).
+0391-03A1
+03A3-03A9
+03B1-03C9
+# Spaces: en quad to hair space (figure space 2007, thin space 2009).
+2000-200A
+# Dashes: hyphen, non-breaking hyphen, figure dash, en dash, em dash, bar.
+2010-2015
+# Quotation marks.
+2018-201F
+# Dagger, double dagger, bullet.
+2020-2022
+# Ellipsis.
+2026
+# Narrow no-break space (the SI digit-group and unit separator).
+202F
+# Per mille, per ten thousand.
+2030-2031
+# Prime and double prime (minutes and seconds, feet and inches).
+2032-2033
+# Single guillemets.
+2039-203A
+# Fraction slash.
+2044
+# Superscripts (10⁻³, m²) and subscripts (CO₂).
+2070
+2074-207E
+2080-208E
+# Currency: ₦ ₩ ₪ ₫ € ₭ ₱ ₴ ₸ ₹ ₺ ₼ ₽ ₾ ₿.
+20A6
+20A9-20AD
+20B1
+20B4
+20B8-20BA
+20BC-20BF
+# Letterlike: ℃ ℉ ℓ № ™ and the ohm, kelvin and angstrom signs.
+2103
+2109
+2113
+2116
+2122
+2126
+212A-212B
+# Vulgar fractions ⅐ to ⅞.
+2150-215E
+# Arrows ← ↑ → ↓ ↔ ↕ ↖ ↗ ↘ ↙.
+2190-2199
+# Mathematical operators: ∂ ∅ ∆ ∏ ∑ − (minus sign) √ ∞ ∫ ≈ ≠ ≤ ≥.
+2202
+2205-2206
+220F
+2211-2212
+221A
+221E
+222B
+2248
+2260
+2264-2265
+# Geometric shapes for legends: ■ □ ▪ ▲ △ ▶ ▼ ▽ ◀ ◆ ◇ ◊ ○ ● ◦.
+25A0-25A1
+25AA
+25B2-25B3
+25B6
+25BC-25BD
+25C0
+25C6-25C7
+25CA-25CB
+25CF
+25E6
+# Stars, warning sign, check and cross marks.
+2605-2606
+26A0
+2713
+2717

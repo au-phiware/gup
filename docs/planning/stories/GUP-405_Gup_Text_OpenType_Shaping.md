@@ -70,12 +70,20 @@ bitmap atlas and the draw path stay as they are.
       runs.
 - [ ] Measure the shaping cost of the S0b zoom (26 labels + title per frame) and
       record it.
+- [ ] In `SvgTarget`, give a run that requests `tnum` the CSS
+      `font-variant-numeric: tabular-nums`, so a browser drawing the SVG (with
+      the embedded face, GUP-407) sets the same widths the layout measured.
 
 ## Dependencies
 
 ### Prerequisite Stories
 
 - GUP-400: RFC-001 S2 — Extract `gup-text` ✅
+- GUP-407: Subset the bundled Inter ✅. The bundled subset keeps GPOS `kern` and
+  GSUB `tnum` only (Inter has no `lnum`). Shaping with rustybuzz's default
+  features finds no `calt`, `ccmp`, `locl`, `mark` or `mkmk`, which costs
+  nothing for the subset's precomposed Latin and Greek. To use Inter's `case` or
+  `zero`, add them to `--layout-features` in `mask subset-inter` and re-run it.
 
 ### Enables Stories
 
