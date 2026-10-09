@@ -142,7 +142,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   - The SVG raster matches the PNG outside text to ΔE ≤ 0.77.
   - naga_oil costs +897 KB gz, over budget (GUP-406).
   - The first browser run found and fixed two wasm-only bugs.
-- [GUP-406](GUP-406_WGSL_Only_Shader_Path_On_Wasm.md) 📋 — Move shader
+- [GUP-406](GUP-406_WGSL_Only_Shader_Path_On_Wasm.md) 🚧 — Move shader
   composition to build time on every target (owner decision 2026-10-09,
   RFC-001): naga_oil flattens library modules once at build time; at runtime,
   native and wasm both just concatenate the typed glue with the pre-flattened

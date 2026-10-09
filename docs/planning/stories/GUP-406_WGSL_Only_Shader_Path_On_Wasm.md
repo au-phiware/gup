@@ -2,8 +2,8 @@
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 📋 Planned **Created**: 2026-10-06
-(rewritten 2026-10-09)
+**Initiative**: RFC-001 Migration **Status**: 🚧 In Progress **Created**:
+2026-10-06 (rewritten 2026-10-09)
 
 ## Context
 
