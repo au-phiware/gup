@@ -28,7 +28,37 @@ fn dispatch<S: ShaderFn>(
     // The column store's representation: relative to the first value.
     let origin = origin.unwrap_or(if relative { inputs[0] } else { 0.0 });
     let column: Vec<f32> = inputs.iter().map(|v| (v - origin) as f32).collect();
+    let xs = cx
+        .device()
+        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: None,
+            contents: bytemuck::cast_slice(&column),
+            usage: wgpu::BufferUsages::STORAGE,
+        });
     let base = ShaderFn::chunk_base(func, origin);
+    dispatch_column(
+        cx,
+        func,
+        xs.as_entire_buffer_binding(),
+        inputs.len(),
+        base,
+        out_components,
+        relative,
+    )
+}
+
+/// Run `S::ENTRY` over `n` stored `f32` values bound from `xs` (a column
+/// as the column store holds it, e.g. a sub-range of an uploaded chunk),
+/// with `base` as the chunk's base for relative entry points.
+fn dispatch_column<S: ShaderFn>(
+    cx: &Context,
+    func: &S,
+    xs: wgpu::BufferBinding<'_>,
+    n: usize,
+    base: f32,
+    out_components: usize,
+    relative: bool,
+) -> Vec<f32> {
     let lut = ShaderFn::resources(func).into_iter().next();
 
     let (out_ty, call_tail) = if out_components == 4 {
@@ -90,12 +120,11 @@ fn dispatch<S: ShaderFn>(
         &DynShaderFn::params_bytes(func).unwrap(),
         wgpu::BufferUsages::UNIFORM,
     );
-    let xs = init(bytemuck::cast_slice(&column), wgpu::BufferUsages::STORAGE);
     let base = init(
         bytemuck::cast_slice(&[base, 0.0, 0.0, 0.0]),
         wgpu::BufferUsages::UNIFORM,
     );
-    let out_size = (inputs.len() * out_components * 4) as u64;
+    let out_size = (n * out_components * 4) as u64;
     let out = device.create_buffer(&wgpu::BufferDescriptor {
         label: None,
         size: out_size,
@@ -143,7 +172,7 @@ fn dispatch<S: ShaderFn>(
         },
         wgpu::BindGroupEntry {
             binding: 1,
-            resource: xs.as_entire_binding(),
+            resource: wgpu::BindingResource::Buffer(xs),
         },
         wgpu::BindGroupEntry {
             binding: 2,
@@ -178,7 +207,7 @@ fn dispatch<S: ShaderFn>(
         let mut pass = encoder.begin_compute_pass(&Default::default());
         pass.set_pipeline(&pipeline);
         pass.set_bind_group(0, &bind_group, &[]);
-        pass.dispatch_workgroups(inputs.len().div_ceil(256) as u32, 1, 1);
+        pass.dispatch_workgroups(n.div_ceil(256) as u32, 1, 1);
     }
     encoder.copy_buffer_to_buffer(&out, 0, &readback, 0, out_size);
     cx.submit([encoder.finish()]);
@@ -270,4 +299,150 @@ fn absolute_f32_timestamps_would_fail_the_tolerance() {
     let err = max_position_error(&cx, &s, &inputs, Some(0.0));
     eprintln!("absolute f32: max |gpu - cpu| = {err:.2} px");
     assert!(err > 0.25, "absolute f32 unexpectedly precise: {err} px");
+}
+
+/// RFC-001 S4a (AC4): precision at a chunk boundary. Unix-second
+/// timestamps spanning three years (a stand-in for the `Time` scale of
+/// S5), forced into 64-row chunks. Three chunks spread over the years,
+/// then two dense chunks (80 rows a second) meet at `BOUNDARY`, then a
+/// coarse tail. The x domain is a one-second window straddling the
+/// boundary.
+mod chunk_boundary {
+    use super::*;
+    use crate::column::ColumnStore;
+
+    /// Where chunk 3 ends and chunk 4 begins (2023-11-14, Unix seconds).
+    const BOUNDARY: f64 = 1.7e9;
+    const CHUNK_ROWS: u32 = 64;
+
+    fn timestamps() -> Vec<f64> {
+        let t0 = 1.6e9; // 2020-09-13
+        (0..384u32)
+            .map(|i| match i {
+                0..192 => t0 + f64::from(i) * (BOUNDARY - 10.0 - t0) / 192.0,
+                192..320 => BOUNDARY + (f64::from(i) - 256.0 + 0.5) / 80.0,
+                _ => BOUNDARY + 1.0 + f64::from(i - 320) * 1e6,
+            })
+            .collect()
+    }
+
+    /// One second over 1000 px, centred on the boundary.
+    fn window() -> Linear {
+        Linear::new()
+            .domain(BOUNDARY - 0.5, BOUNDARY + 0.5)
+            .range(Px(10.0), Px(1010.0))
+    }
+
+    /// Upload `values` as one `format` column in chunks of `chunk_rows`,
+    /// run the scale's WGSL over every chunk's uploaded column with that
+    /// chunk's base (as the glue does), and return the largest
+    /// |GPU − CPU mirror| over the values within `half_width` seconds of
+    /// the boundary (0.5: the window), with the number of chunks and of
+    /// values compared.
+    fn boundary_error(
+        cx: &Context,
+        values: &[f64],
+        format: ColumnFormat,
+        chunk_rows: u32,
+        half_width: f64,
+    ) -> (f64, usize, usize) {
+        let scale = window();
+        let mut store =
+            ColumnStore::from_columns(vec![(format, values.to_vec())], chunk_rows).unwrap();
+        store.upload(cx).unwrap();
+        let (mut worst, mut compared) = (0.0f64, 0);
+        for chunk in store.chunks() {
+            let range = chunk.column_range(0);
+            let gpu = dispatch_column(
+                cx,
+                &scale,
+                wgpu::BufferBinding {
+                    buffer: chunk.buffer(cx).unwrap(),
+                    offset: range.start,
+                    size: wgpu::BufferSize::new(range.end - range.start),
+                },
+                chunk.rows() as usize,
+                ShaderFn::chunk_base(&scale, chunk.columns()[0].origin()),
+                1,
+                true,
+            );
+            let rows = chunk.row_base() as usize..;
+            for (&x, g) in values[rows].iter().zip(gpu) {
+                if (x - BOUNDARY).abs() <= half_width {
+                    worst = worst.max((f64::from(g) - scale.eval(x)).abs());
+                    compared += 1;
+                }
+            }
+        }
+        (worst, store.chunks().len(), compared)
+    }
+
+    #[test]
+    fn relative_chunks_stay_within_a_quarter_pixel_at_the_boundary() {
+        let cx = Context::new_blocking().unwrap();
+        let values = timestamps();
+        let (err, chunks, compared) =
+            boundary_error(&cx, &values, ColumnFormat::F32Relative, CHUNK_ROWS, 0.5);
+        eprintln!(
+            "{chunks} relative chunks: max |gpu - cpu| = {err:.2e} px over {compared} points"
+        );
+        assert_eq!(chunks, 6);
+        // 40 points on each side of the boundary, in two chunks.
+        assert_eq!(compared, 80);
+        assert!(err <= 0.25, "max |gpu - cpu| = {err} px");
+    }
+
+    /// Negative control (AC4): the same values as absolute `f32` (a
+    /// 128 s ULP at 1.7e9) miss by far more than the tolerance.
+    #[test]
+    fn absolute_f32_misses_at_the_boundary() {
+        let cx = Context::new_blocking().unwrap();
+        let (err, _, compared) =
+            boundary_error(&cx, &timestamps(), ColumnFormat::F32, CHUNK_ROWS, 0.5);
+        eprintln!("absolute f32: max |gpu - cpu| = {err:.1} px over {compared} points");
+        assert!(err > 0.25, "absolute f32 unexpectedly precise: {err} px");
+    }
+
+    /// Second control: relative, but in one chunk, so the origin is the
+    /// first timestamp three years earlier (an 8 s ULP at ~1e8 s). The
+    /// per-chunk origin, not the relative format alone, keeps the boundary
+    /// inside the budget.
+    #[test]
+    fn one_relative_chunk_spanning_years_misses() {
+        let cx = Context::new_blocking().unwrap();
+        let (err, chunks, compared) = boundary_error(
+            &cx,
+            &timestamps(),
+            ColumnFormat::F32Relative,
+            ColumnStore::MAX_CHUNK_ROWS,
+            0.5,
+        );
+        eprintln!(
+            "1 relative chunk over 3 years: max |gpu - cpu| = {err:.1} px over {compared} points"
+        );
+        assert_eq!(chunks, 1);
+        assert!(err > 0.25, "one chunk unexpectedly precise: {err} px");
+    }
+
+    /// The limit S5's `Time` scale inherits: a full default chunk (2^20
+    /// rows) of one-per-second samples spans 12 days, so values near its
+    /// end are ~1e6 s from the origin (a 1/16 s ULP). At the one-second
+    /// window's 1000 px a second, the last 16 rows miss the quarter-pixel
+    /// budget. Recorded, not a goal of S4a.
+    #[test]
+    fn a_full_chunk_of_seconds_misses_a_one_second_zoom() {
+        let cx = Context::new_blocking().unwrap();
+        let n = ColumnStore::MAX_CHUNK_ROWS;
+        let values: Vec<f64> = (0..n)
+            .map(|i| BOUNDARY - f64::from(n - i) + 0.3 + 0.123 * f64::from(i % 7) / 7.0)
+            .collect();
+        let (err, chunks, compared) =
+            boundary_error(&cx, &values, ColumnFormat::F32Relative, n, 16.0);
+        eprintln!(
+            "2^20 one-second rows, one chunk: max |gpu - cpu| = {err:.1} px over {compared} points"
+        );
+        assert_eq!(chunks, 1);
+        assert_eq!(compared, 16);
+        assert!(err > 0.25, "{err} px");
+    }
 }
