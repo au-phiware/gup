@@ -2038,3 +2038,157 @@ database.
   `case` (raised hyphens and brackets between capitals) and `zero` (slashed
   zero) would each need adding to the recipe's `--layout-features`.
 - **S8 (wasm entry):** starts from 238 KB gz.
+
+## S4a findings (2026-10-10, GUP-414)
+
+[GUP-414](../stories/GUP-414_RFC_001_S4a_Column_Store_Chunking_Append.md) made
+the column store multi-chunk and added a counted tail append. Same machine as
+S0a–S3 (Intel HD Graphics 630, Mesa 26.0.0 Vulkan, rustc 1.93.1) unless noted.
+
+### Chunks
+
+- **Size.** `ColumnStore::chunk_rows_for(limits, formats)` is
+  `min(2^20, max_buffer_size / Σ stride)`, rounded down to whole 64-row blocks
+  (256 bytes of a 4-byte column), so a full chunk has no padding. With default
+  limits and the reference scatter's three columns it is 2^20. `Selection` reads
+  the limits from the `Context` it resolves on and rebuilds its store if they
+  give a different chunk size.
+- **Capacity.** Every chunk but the last is full. A chunk built from data has
+  room for its rows rounded up to a 64-row block, which is exactly the padding
+  the S0a layout already had, so a store that fits one chunk has the S0a bytes,
+  origins and stats (checked against a verbatim copy of the S0a layout for 1 to
+  4096 rows). Each chunk has its own buffer, f64 origin per relative column (its
+  first finite value; set by the first finite append if a chunk starts with
+  nulls) and stats. `ColumnStore::stats(k)` merges them for domain fitting.
+- **Test seam.** `Selection::max_chunk_rows(n)` caps the size below the
+  device's. It is `pub` and `#[doc(hidden)]`: the integration tests, the wasm
+  harness and `zoom_bench --chunk-rows` are other crates, so `#[cfg(test)]`
+  cannot reach them.
+
+### Drawing
+
+`LayerGpu` is now an `Arc`'d `Encodings` half (uniform buffer, LUTs, bind group)
+and a chunk half: one `Chunk` uniform buffer with an entry per chunk, 256 bytes
+apart and written in one `write_buffer` (trimmed to `(n − 1) × 256 + span`
+bytes), and one `ChunkDraw` per chunk (buffer, column ranges, instance count,
+dynamic offset). `Prepared::draw` sets bind group 2 at each chunk's offset,
+binds its column ranges and draws its instances. It still allocates nothing. Per
+frame a single chunk writes 88 B of uniforms in 3 writes, as in S0b; 7 chunks
+write 1,624 B, still in 3 writes.
+
+- **Equivalence.** The golden scatter in 3 and in 4 chunks matches the
+  single-chunk render. On Intel it is identical. On lavapipe (CI) 7 and 9 edge
+  pixels differ by 1/255: each chunk stores x relative to its own origin, so
+  positions round differently, by about 1e-5 px. The test allows 64 pixels at
+  1/255. With every chunk drawn at dynamic offset 0 (seeded), 10,503 pixels
+  differ. A first version compared with the golden PNG byte for byte; it passed
+  on Intel and failed on lavapipe, so multi-chunk is now compared only with
+  single-chunk, on the same device in the same run.
+- **Browser.** The `mask wasm-browser` page renders the harness scatter with the
+  device's chunk size and in 32-row chunks (7 draws) and compares them: 0 pixels
+  differ on SwiftShader. With the seeded offset bug the page fails (51,351 bytes
+  differ).
+
+### Append
+
+`ColumnStore::append(rows, columns)` writes the new rows into the last chunk's
+CPU copy, doubling its capacity when it runs out (up to `chunk_rows`), then
+opens new chunks. The next `upload` brings each chunk's buffer up to date:
+
+- **Rows, not chunks.** Each column's missing rows are written at their offset
+  through `Context::write_buffer` as `Upload::Column`. A first upload writes
+  every row the same way, so column bytes written are always rows × stride and
+  never padding. The 100K-point startup upload is now 1,200,000 B in 3 writes
+  (S0b: 1,200,384 B in 1).
+- **Growth moves rows on the GPU.** A grown chunk gets a larger buffer and
+  `copy_buffer_to_buffer` moves the uploaded rows; one submit (counted), no CPU
+  bytes. This happens in `Plot::resolve`. `Renderer::prepare` and
+  `Prepared::draw` still never submit.
+- **Evidence.** Batches of 1, 27, 36, 100, 300 and 5 rows appended to a 100-row
+  scatter in 64-row chunks wrote exactly 469 × 8 = 3,752 column bytes. The auto
+  x domain grew through the merged stats, and the final image equals a plot
+  built from all 569 rows at once. At store level, 437 rows over 5 batches wrote
+  exactly 3,496 B, with 2 growth copies, and the GPU bytes equal the CPU copy.
+  At layer level an append writes no texture (the LUT is shared) and 2 uniform
+  writes. `Selection::append` is `pub(crate)`: a handle to append to a selection
+  inside a `Plot` is S12.
+- **Fixed on the way.** A selection whose channels were all constant drew 0
+  instances, because the store took its row count from its first column. Rows
+  are now counted explicitly.
+
+### Precision at a chunk boundary
+
+Unix-second timestamps across three years (2020-09 to 2023-11) in 64-row chunks:
+three coarse chunks, two dense chunks (80 rows a second) meeting at 1.7e9, a
+coarse tail. The x domain is one second over 1000 px, straddling the boundary.
+The scale's WGSL runs over each uploaded chunk column (bound from the chunk
+buffer) with that chunk's base, against the f64 `CpuMirror`, as in S0a:
+
+| Store                                         | Points | max \|GPU − CPU\| |
+| --------------------------------------------- | -----: | ----------------: |
+| `F32Relative`, 6 chunks of 64                 |     80 |        2.67e-5 px |
+| negative control: absolute `F32`              |     80 |          993.8 px |
+| control: `F32Relative`, one chunk (3 years)   |     80 |          993.8 px |
+| S5 limit: one full chunk of 2^20 seconds rows |     16 |           39.9 px |
+
+The per-chunk origin, not the relative format alone, keeps the boundary within
+0.25 px. A chunk's precision is bounded by its value span: the last row of a
+full default chunk of one-per-second samples is 12 days (about 1e6 s, a 1/16 s
+ULP) from its origin, so a one-second zoom there misses by 40 px.
+
+### Performance
+
+`zoom_bench`, 100K points, 1920×1080, `Mailbox` uncapped, 600 frames,
+alternating runs against the pre-S4a tree (`b176400`, which has GUP-407's font):
+
+| Build                    | Frame interval median / p95 (ms) | fps median / p95 | CPU work median / p95 (ms) | GPU pass median / p95 (ms) |
+| ------------------------ | -------------------------------: | ---------------: | -------------------------: | -------------------------: |
+| before S4a, run 1        |                    4.568 / 7.494 |    218.9 / 133.4 |              0.583 / 0.842 |              3.673 / 6.711 |
+| before S4a, run 2        |                    4.840 / 7.317 |    206.6 / 136.7 |              0.626 / 0.934 |              3.820 / 6.665 |
+| S4a, 1 chunk, run 1      |                    4.510 / 7.984 |    221.7 / 125.2 |              0.598 / 0.896 |              3.548 / 7.264 |
+| S4a, 1 chunk, run 2      |                    4.867 / 7.278 |    205.4 / 137.4 |              0.690 / 0.965 |              3.857 / 6.501 |
+| S4a, 7 chunks (16384), 1 |                    4.840 / 8.279 |    206.6 / 120.8 |              0.768 / 0.969 |              3.839 / 7.085 |
+| S4a, 7 chunks (16384), 2 |                   4.829 / 7.524¹ |    207.1 / 132.9 |              0.644 / 0.949 |              3.860 / 6.933 |
+
+¹ Derived from that run's fps line (its interval line was not captured).
+
+`Fifo` gives 60.0 / 59.3 fps (one chunk) and 60.0 / 59.2 (7 chunks), with no
+missed refresh. Every run whose upload line was kept (one chunk, `Fifo` and
+`Mailbox`; 7 chunks, `Mailbox`) wrote 0 column bytes over its 600 zoomed frames.
+S4a costs nothing measurable, and seven draws instead of one cost nothing
+either. Both trees' GPU pass (about 3.7 ms median) is slower than S0b's 2.7–3.0
+ms, before and after this story alike, so that is not S4a's; GUP-407's text
+changes or the machine's state are the candidates. The window frame is still
+byte-identical to the 4× `ImageTarget` and the golden (ΔE 0 on 324,000 px).
+
+### Proposed adjustments to S4b, S5 and later
+
+- **S4b (validity bits, dictionaries, `Retain`).** The chunk code assumes 4-byte
+  strides: capacities are 64-row blocks, `chunk_rows_for` divides bytes, and
+  tail writes rely on `write_buffer`'s 4-byte alignment. A 1-bit validity column
+  needs a stride in bits, capacities that are whole 32-row words, and a tail
+  write that rewrites the last partial word (so validity bytes written are
+  slightly more than rows/8; count and document them). Dictionary codes (`U32`)
+  fit as they are; keep the dictionary per store, append-only, so appended rows
+  never renumber codes and a new key only grows the domain (a uniform write).
+  `Retain::GpuOnly` cannot keep `Chunk::bytes`: growth already moves rows on the
+  GPU, but upload to a second context and the dirty tail need the CPU copy, so
+  drop each chunk's bytes once it is full and uploaded, and make re-binding to
+  another context an error in that mode.
+- **S5 (`Time`).** A per-chunk origin is not enough for deep zoom into a large
+  chunk: one-per-second samples lose the 0.25 px budget at a one-second, 1000 px
+  zoom once a value is more than a few thousand seconds from its origin (the 40
+  px row above). Options: cap a time column's chunk by value span (split when
+  `|v − origin|` would exceed about 4,000 s at the finest zoom offered), a hi/lo
+  f32 pair (double-single) column format, or origins per sub-chunk. Decide in S5
+  with the real `Time` proof, which can reuse `conformance::chunk_boundary` (it
+  binds uploaded chunk columns).
+- **S9 (culling, picking).** Per-chunk f64 stats are there for culling, which
+  can be a filter on the chunk draws at prepare time; `Prepared::draw` needs no
+  change. `row_base` is in every chunk's uniform, so picked instance ids are
+  store rows. `row_base` is a `u32`; prepare errors past 2^32 rows.
+- **S12 (append handles, `Window`).** Build on `Selection::append` (evaluates
+  only new rows) and `ColumnStore::append`. Evicting whole chunks leaves
+  `row_base` values that do not start at 0; picking must map rows through the
+  window. A growth copy submits during resolve; hosts that resolve inside their
+  own frame graph should know.
