@@ -4,8 +4,7 @@
 //! The size baseline: instanced anti-aliased discs from a vertex buffer,
 //! positioned through a uniform, drawn into an offscreen texture and
 //! read back asynchronously, with bare wgpu. What a browser app pays for
-//! wgpu alone; with `--features naga-oil`, what it pays for wgpu plus
-//! naga_oil composition (as gup-core composes its shaders).
+//! wgpu alone.
 
 use wasm_bindgen::prelude::*;
 
@@ -37,40 +36,8 @@ struct Out { @builtin(position) clip: vec4<f32>, @location(0) local: vec2<f32>, 
 "#;
 
 /// One WGSL string, parsed by the browser.
-#[cfg(not(feature = "naga-oil"))]
 fn shader() -> Result<wgpu::ShaderSource<'static>, JsValue> {
     Ok(wgpu::ShaderSource::Wgsl(format!("{VIEW}{BODY}").into()))
-}
-
-/// `VIEW` as a naga_oil library module, imported by the top-level shader;
-/// the composed naga module goes to wgpu, which writes WGSL for the
-/// browser. Errors are reported through codespan, as gup-core does.
-#[cfg(feature = "naga-oil")]
-fn shader() -> Result<wgpu::ShaderSource<'static>, JsValue> {
-    use naga_oil::compose::{
-        ComposableModuleDescriptor, Composer, NagaModuleDescriptor, ShaderLanguage, ShaderType,
-    };
-    let mut composer = Composer::default();
-    let library = format!("#define_import_path demo::view\n{VIEW}");
-    let top = format!("#import demo::view::{{View, px_to_clip}}\n{BODY}");
-    if let Err(e) = composer.add_composable_module(ComposableModuleDescriptor {
-        source: &library,
-        file_path: "view.wgsl",
-        language: ShaderLanguage::Wgsl,
-        ..Default::default()
-    }) {
-        return Err(js(e.emit_to_string(&composer)));
-    }
-    let module = match composer.make_naga_module(NagaModuleDescriptor {
-        source: &top,
-        file_path: "discs.wgsl",
-        shader_type: ShaderType::Wgsl,
-        ..Default::default()
-    }) {
-        Ok(m) => m,
-        Err(e) => return Err(js(e.emit_to_string(&composer))),
-    };
-    Ok(wgpu::ShaderSource::Naga(std::borrow::Cow::Owned(module)))
 }
 
 fn js(e: impl std::fmt::Display) -> JsValue {

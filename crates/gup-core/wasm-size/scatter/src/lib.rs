@@ -2,13 +2,19 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! The reference scatter (linear x, log y, viridis fill, title and tick
-//! labels) drawn through gup-core into an `ImageTarget` and read back
-//! asynchronously, plus its guides as SVG: everything a browser chart
-//! needs from gup-core today.
+//! labels) on a tinted plot background with a viridis legend bar, drawn
+//! through gup-core into an `ImageTarget` and read back asynchronously,
+//! plus its guides as SVG: everything a browser chart needs from gup-core
+//! today, and every pipeline kind (marks, rules, rects, gradients, text).
 
+use gup_core::geom::Rect;
 use gup_core::prelude::*;
+use gup_core::scene::{GradientBar, GradientDirection, Item, ItemKind, RectPrim, Z_GRID, Z_TITLE};
 use gup_core::{ImageTarget, SvgTarget, VectorTarget};
 use wasm_bindgen::prelude::*;
+
+/// Room on the right for the legend bar.
+const LEGEND_WIDTH: f32 = 24.0;
 
 #[derive(Clone)]
 struct Row {
@@ -44,14 +50,42 @@ pub async fn render_scatter(width: u32, height: u32) -> Result<Vec<u8>, JsValue>
         .attr(Circle::Y, y.encode(|r: &Row| r.y))
         .attr(Circle::FILL, Sequential::viridis().encode(|r: &Row| r.t))
         .attr(Circle::RADIUS, Px(4.5));
-    let resolved = plot.resolve(&cx, width as f32, height as f32).map_err(js)?;
+    let resolved = plot
+        .resolve(&cx, width as f32 - LEGEND_WIDTH, height as f32)
+        .map_err(js)?;
+    let (mut scene, plot_rect) = (resolved.scene, resolved.layout.plot);
+    scene.width = width as f32;
+    let clip = scene.add_clip(plot_rect);
+    scene.push(Item {
+        z: Z_GRID,
+        clip: Some(clip),
+        kind: ItemKind::Rects(vec![RectPrim {
+            rect: plot_rect,
+            color: Color::hex(0xeef1f6),
+        }]),
+    });
+    let right = width as f32 - LEGEND_WIDTH;
+    scene.push(Item {
+        z: Z_TITLE,
+        clip: None,
+        kind: ItemKind::Gradient(GradientBar::sequential(
+            &Sequential::viridis().domain(50.0, 80.0),
+            Rect::from_edges(
+                right + 6.0,
+                plot_rect.top(),
+                right + 18.0,
+                plot_rect.bottom(),
+            ),
+            GradientDirection::Vertical,
+        )),
+    });
     let image = ImageTarget::new(&cx, width, height)
         .map_err(js)?
-        .render(&cx, &resolved.scene)
+        .render(&cx, &scene)
         .await
         .map_err(js)?;
     let mut svg = SvgTarget::new();
-    svg.render(&resolved.scene.guides()).map_err(js)?;
+    svg.render(&scene.guides()).map_err(js)?;
     web_log(svg.svg().len());
     Ok(image.into_raw())
 }

@@ -443,9 +443,8 @@ dependencies = [
  "encase",
  "futures-channel",
  "gup-text",
+ "gup-wgsl",
  "image",
- "naga",
- "naga_oil",
  "pollster",
  "thiserror 2.0.18",
  "web-time",
@@ -469,6 +468,14 @@ dependencies = [
  "fontdue",
  "thiserror 2.0.18",
  "wgpu",
+]
+
+[[package]]
+name = "gup-wgsl"
+version = "0.1.0"
+dependencies = [
+ "naga",
+ "naga_oil",
 ]
 
 [[package]]

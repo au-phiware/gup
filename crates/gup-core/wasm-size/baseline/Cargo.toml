@@ -1,8 +1,9 @@
 # WASM size baseline (GUP-401, RFC-001 §12 risk 10): the same kind of
 # render (instanced quads, a uniform, offscreen target, async readback)
-# with bare wgpu and a hand-written WGSL string: no naga_oil, no naga,
-# no gup-text. Same wgpu version and default features as gup-core, minus
-# `naga-ir`. Build with `mask wasm-size`.
+# with bare wgpu and a hand-written WGSL string: no naga, no gup-text.
+# Same wgpu version and default features as gup-core. Build with
+# `mask wasm-size`. (Until GUP-406 a `naga-oil` feature measured naga_oil
+# composition on top: +896.7 KB gz. gup-core now composes at build time.)
 [package]
 name = "gup-core-wasm-size-baseline"
 version = "0.0.0"
@@ -16,15 +17,8 @@ path = "src/lib.rs"
 
 [dependencies]
 wgpu = { version = "27.0", features = ["wgsl"] }
-naga_oil = { version = "0.20", default-features = false, optional = true }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 futures-channel = "0.3"
-
-[features]
-# Compose the same shader through naga_oil (a library module plus a
-# top-level shader, as gup-core does) and pass the naga module to wgpu:
-# the size difference from the default build is what naga_oil costs.
-naga-oil = ["dep:naga_oil", "wgpu/naga-ir"]
 
 [workspace]

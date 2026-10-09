@@ -47,11 +47,13 @@ cargo run -p gup-core --release --example zoom_bench -- --present mailbox --unca
 
 ## wasm-size
 
-gup-core's gzipped WASM cost (GUP-401, RFC-001 §12 risk 10). Builds three
+gup-core's gzipped WASM cost (GUP-401, RFC-001 §12 risk 10). Builds two
 `crates/gup-core/wasm-size` harnesses in release for `wasm32-unknown-unknown`:
-bare wgpu, bare wgpu plus naga_oil composition, and the reference scatter
-through gup-core. Each goes through `wasm-bindgen --target web` without name
-sections, then `gzip -9`. Needs `wasm-bindgen` 0.2.113 on the PATH. Delete
+bare wgpu, and the reference scatter through gup-core (whose shaders are
+composed at build time, GUP-406). Each goes through `wasm-bindgen --target web`
+without name sections, then `gzip -9`; the last lines are gup-core's cost over
+bare wgpu and the bundled Inter font, which the budget counts separately. Needs
+`wasm-bindgen` 0.2.113 on the PATH. Delete
 `$CARGO_TARGET_DIR/wasm32-unknown-unknown/release` afterwards if disk is tight.
 
 ```bash
@@ -67,12 +69,15 @@ measure() { # name, crate dir, crate file name, cargo flags...
   wasm-bindgen --target web --remove-name-section --remove-producers-section \
     --out-dir "$out/$name" --out-name "$name" "$release/$file.wasm"
   local wasm="$out/$name/${name}_bg.wasm"
-  printf '%-26s %10d B raw %9d B gz\n' "$name" \
-    "$(stat -c %s "$wasm")" "$(gzip -9 -c "$wasm" | wc -c)"
+  raw=$(stat -c %s "$wasm")
+  gz=$(gzip -9 -c "$wasm" | wc -c)
+  printf '%-26s %10d B raw %9d B gz\n' "$name" "$raw" "$gz"
 }
 measure wgpu baseline gup_core_wasm_size_baseline
-measure wgpu+naga_oil baseline gup_core_wasm_size_baseline --features naga-oil
+base_raw=$raw base_gz=$gz
 measure gup-core-scatter scatter gup_core_wasm_size_scatter
+printf '%-26s %10d B raw %9d B gz\n' "(gup-core over wgpu)" \
+  $((raw - base_raw)) $((gz - base_gz))
 font=crates/gup-text/fonts/Inter-Regular.ttf
 printf '%-26s %10d B raw %9d B gz\n' "(Inter, bundled)" \
   "$(stat -c %s $font)" "$(gzip -9 -c $font | wc -c)"
