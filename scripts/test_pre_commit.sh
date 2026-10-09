@@ -57,7 +57,14 @@ expect 'mode=full' flake.nix
 expect 'mode=full' maskfile.md
 expect 'mode=full' scripts/pre_commit.sh
 expect 'mode=full' scripts/generate_gallery.sh
-expect 'mode=full' .github/workflows/tests.yml
+
+# Workflow files get actionlint, alone or on top of the other checks.
+expect 'mode=workflows' .github/workflows/tests.yml
+expect 'actionlint=1' .github/workflows/tests.yml
+expect 'mode=docs' .github/workflows/README.md
+expect 'clippy=[gup-culling-lod] dogfood=0 actionlint=1' \
+  .github/workflows/lint.yml crates/gup-culling-lod/src/lib.rs
+expect 'mode=full' .github/workflows/lint.yml maskfile.md
 expect 'mode=full' gup-egui/src/lib.rs
 expect 'mode=full' examples/gup-tauri/src-tauri/src/main.rs
 expect 'mode=full' crates/gup-core/src/lib.rs Cargo.lock

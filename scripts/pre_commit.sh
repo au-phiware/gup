@@ -25,6 +25,11 @@
 #          crates plus every workspace member that depends on them, since a
 #          change can break a dependent. validate-marks runs when `gup` is in
 #          that set.
+#   workflows
+#          .github/workflows/* (except Markdown): actionlint on every workflow
+#          file, and no Rust check. Scoped rather than full (GUP-409): a
+#          workflow cannot change what the Rust checks see, and CI runs the
+#          workflow itself.
 #   docs   *.md, docs/**, COPYING, LICENSE*: no Rust check.
 #   dogfood
 #          dogfood/** (a detached crate): its rustfmt check.
@@ -138,6 +143,7 @@ is_doc() {
 declare -A touched=()
 docs=0
 dogfood=0
+workflows=0
 for p in "${paths[@]}"; do
   case $p in
   Cargo.toml | Cargo.lock | rust-toolchain.toml | flake.nix | flake.lock | \
@@ -156,6 +162,10 @@ for p in "${paths[@]}"; do
     continue
   fi
   case $p in
+  .github/workflows/*)
+    workflows=1
+    continue
+    ;;
   dogfood/*)
     dogfood=1
     continue
@@ -198,6 +208,8 @@ if [[ ${#full_reasons[@]} -gt 0 ]]; then
   mode=full
 elif [[ ${#lint[@]} -gt 0 || $dogfood -eq 1 ]]; then
   mode=scoped
+elif [[ $workflows -eq 1 ]]; then
+  mode=workflows
 elif [[ $docs -eq 1 ]]; then
   mode=docs
 else
@@ -212,7 +224,9 @@ if [[ $mode == full ]]; then
   printf 'pre-commit: full because %s\n' "${full_reasons[@]}"
 fi
 if [[ $mode == scoped ]]; then
-  echo "pre-commit: fmt=[$fmt_crates] clippy=[$lint_crates] dogfood=$dogfood"
+  echo "pre-commit: fmt=[$fmt_crates] clippy=[$lint_crates] dogfood=$dogfood actionlint=$workflows"
+elif [[ $mode == workflows ]]; then
+  echo "pre-commit: actionlint=1"
 fi
 [[ $plan_only -eq 1 ]] && exit 0
 
@@ -235,6 +249,13 @@ done
 if [[ ${#md[@]} -gt 0 ]]; then
   checks+=("prettier --log-level warn --check ${md[*]} && mdl ${md[*]}")
   names+=',md'
+fi
+
+# actionlint checks every workflow file (well under a second), not only the
+# staged ones: a workflow can break by referring to another.
+if [[ $workflows -eq 1 ]]; then
+  checks+=('actionlint')
+  names+=',gha'
 fi
 
 if [[ $mode == scoped ]]; then
