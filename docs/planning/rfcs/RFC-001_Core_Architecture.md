@@ -1833,10 +1833,13 @@ it.
 
 ### Proposed adjustments to S4 and later
 
-- **S4 (marks, scales):** a new mark or scale is a `.wgsl` file in
-  `src/shaders`; `build.rs` generates its static. Follow the authoring rules
-  above, which now fail the build rather than a test. A second mark adds one
-  generated `MARKS_<NAME>` static and needs no composer work.
+- **S4 (column store v1):** unaffected. If a new column format needs a new
+  entry-point shape (dictionary codes, validity bits), that is a glue-emitter
+  change; the linker and the build step need nothing.
+- **S5/S6 (the scale family, more marks):** a new scale, palette or mark is a
+  `.wgsl` file in `src/shaders`; `build.rs` generates its static
+  (`SCALE_<NAME>`, `MARKS_<NAME>`). Follow the authoring rules above, which now
+  fail the build rather than a test. No composer work is needed.
 - **S5 (`#[wgsl_function]`):** the proc-macro crate depends on `gup-wgsl` with
   `compose` and flattens the user module with `Library::new` at expansion,
   emitting a `WgslModule` static with the flat text. That gives the 16-byte and
