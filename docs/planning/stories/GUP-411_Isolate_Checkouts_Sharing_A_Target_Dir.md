@@ -106,7 +106,7 @@ separate N arbitrary checkouts: there are only two values.
 - [x] All Acceptance Criteria are satisfied and checked
 - [x] Lint and format clean: `mask all-check`
 - [x] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] Retrospective added to story document
 
 ## Implementation Summary
 
@@ -210,3 +210,120 @@ artifacts (1× disk) but could judge each other's code.
 (38 passed), examples_smoke filtered to `export_png` under a split build and
 target directory (PASS; the PNG renders), `cargo check --examples`,
 `mask all-check` clean.
+
+## Retrospective
+
+**Completed**: 2026-10-10
+
+### Key Technical Learnings
+
+#### Cargo hashes the workspace wrapper's path for members only
+
+- **Challenge**: separate N checkouts' member artifacts while sharing
+  dependencies. GUP-409's `incremental` flip has two values; profile settings
+  have few, except `codegen-units`.
+- **Solution**: reading cargo 1.93's `compute_metadata` showed that the
+  workspace wrapper's path is hashed for workspace members only ("primarily here
+  for clippy"). A config-relative `rustc-workspace-wrapper` is absolute and per
+  checkout, tracked, and needs no environment.
+- **Pattern**: when a tool's behaviour is the question, read the function that
+  decides it (here a 100-line hash) before designing around guesses. Confirm on
+  a toy workspace in seconds, then on the real one.
+
+#### Clippy needs a different knob
+
+- **Challenge**: `cargo-clippy` overwrites `RUSTC_WORKSPACE_WRAPPER` with
+  clippy-driver's path, so the wrapper separates everything except the verdict
+  the hook exists for.
+- **Solution**: clippy-driver records `CLIPPY_CONF_DIR` in its dep-info, and
+  cargo compares recorded env values against `[env]` config. A per-checkout
+  `CLIPPY_CONF_DIR` makes clippy re-lint after a switch: correct, not separate.
+- **Pattern**: freshness has two levers, the artifact name (separate) and the
+  fingerprint (rebuild on mismatch). The second is enough for correctness and
+  free in disk; it costs time under contention.
+
+#### Final artifacts collide too
+
+- **Challenge**: `cargo run` executes the unhashed `target/<profile>/<bin>` and
+  releases the build lock before running it (checked on a toy), so with one
+  target directory another checkout can replace the binary between build and
+  run. examples_smoke, `validate_marks`, dogfood and `.wasm` outputs are all
+  unhashed.
+- **Solution**: share `build.build-dir` (stable since cargo 1.91) and give each
+  checkout its own `CARGO_TARGET_DIR`; uplifts are hard links on the same
+  filesystem. examples_smoke had to stop locating examples next to its own
+  binary, which now lives in the build directory.
+- **Pattern**: "share the target dir" conflates two things cargo now separates.
+  Share intermediates, never final outputs.
+
+#### Nested worktrees inherit config
+
+- **Challenge**: agent worktrees live inside the main checkout, so a worktree of
+  a commit without `.cargo/config.toml` silently inherits main's, wrapper path
+  and all, and shares main's artifacts (GUP-410's benchmark case).
+- **Solution**: the wrapper walks from the member up to its own checkout and
+  fails if it meets another `.git` first. Clippy cannot be guarded this way;
+  that residual (clippy on a pre-GUP-411 commit in a nested worktree) is
+  documented.
+
+### Architectural Decisions
+
+#### Tracked config for correctness, environment only for placement
+
+- **Decision**: correctness comes from `.cargo/config.toml`, which every
+  checkout has and which follows the working directory; the environment
+  (`cargo_env.sh`) only says where outputs go.
+- **Reasoning**: agents inherit the orchestrator's environment, so anything
+  per-checkout in the environment is wrong by default in exactly the case that
+  matters. A forgotten `cargo_env.sh` now risks only final-artifact races, not a
+  wrong lint or test verdict.
+- **Trade-off**: clippy re-lints after a switch (26 s becomes ~90 s for
+  `mask all-check`) instead of keeping per-checkout clippy artifacts.
+- **Future**: GUP-413 can add per-checkout clippy artifacts via `codegen-units`
+  if the orchestrator finds the re-lints costly.
+
+#### Keep GUP-409's snapshot flip
+
+- **Decision**: kept, re-documented.
+- **Reasoning**: the snapshot is now separated anyway except for clippy, where
+  the flip saves a re-lint of the checkout after every hook run, and back.
+- **Trade-off**: two mechanisms to understand; the header comment explains how
+  they divide the work.
+
+#### Dev shell default: build dir in `~/.cache`, not `/tmp`
+
+- **Decision**: `cargo_env.sh` defaults to
+  `${XDG_CACHE_HOME:-~/.cache}/gup/build`, and respects an inherited
+  `CARGO_BUILD_BUILD_DIR`; the orchestrator passes `/tmp/gup-target`. Skipped
+  under `CI` (the workflows cache `./target`) and over an explicit
+  `CARGO_TARGET_DIR`.
+- **Reasoning**: `/tmp` is tmpfs on many systems; the cache directory is the
+  conventional home for regenerable data. This machine's `/tmp` is a separate
+  ZFS pool without snapshots, so the orchestrator should keep using it.
+
+### Development Workflow Insights
+
+- The toy workspace (two members, one registry crate, `--offline`) answered
+  every cargo question in under a second per run; the real repository was only
+  needed for the recorded proof and the measurements.
+- `touch -d '-1 hour'` on the older checkout replaces sleeps and makes the mtime
+  ordering deterministic; `scripts/test_shared_build_dir.sh` uses it.
+- Measuring in fresh worktrees under `/tmp/g411` with a fresh build directory
+  kept the numbers clean, but /tmp fell to 4 GB free at one point; deleting the
+  measurement build directory as soon as the numbers were taken was necessary.
+- The shell this session started in predated GUP-409's flake change
+  (`actionlint` missing); `nix develop -c` per command fixed it.
+- `/tmp/gup-target` still holds member artifacts under the old hashes (about 2.6
+  GB). Dependencies keep their hashes and stay useful; the old member artifacts
+  are dead weight until the directory is cleaned.
+
+### Follow-up Stories
+
+1. **GUP-412: Lint the wasm32 target in the gates** — GUP-410 found
+   `arc_with_non_send_sync` at `crates/gup-core/src/selection.rs:251` with
+   `cargo clippy --target wasm32-unknown-unknown` (confirmed here); no gate
+   lints wasm32.
+2. **GUP-413: Per-checkout clippy artifacts for concurrent agents** — optional:
+   remove the ~60 s re-lint after a checkout switch with a per-checkout member
+   `codegen-units`, if its disk cost is acceptable. Status 💡 New: a decision
+   for the orchestrator, with the measurements to make it.
