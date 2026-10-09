@@ -64,6 +64,12 @@ survives into `gup-core`.
   budget, obsolete/frozen-path, or hidden-failure, with a checked-in inventory
   and a lint rejecting any `#[ignore]` without a reason from an allowed set.
   Deps: GUP-398 ✅.
+- [GUP-409](GUP-409_Close_Gate_Gaps.md) 📋 — Lint workflow YAML with
+  `actionlint` (GUP-400 corrupted one past both the hook and CI), make the
+  pre-commit hook check the staged snapshot instead of the working tree with a
+  seeded proof in both directions, and add `concurrency` groups to the two
+  workflows missing one after "job was not acquired by Runner" CI failures.
+  Deps: GUP-398 ✅, GUP-403 ✅.
 
 ## RFC-001 Migration
 
@@ -136,9 +142,12 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   - The SVG raster matches the PNG outside text to ΔE ≤ 0.77.
   - naga_oil costs +897 KB gz, over budget (GUP-406).
   - The first browser run found and fixed two wasm-only bugs.
-- [GUP-406](GUP-406_WGSL_Only_Shader_Path_On_Wasm.md) 📋 — On wasm32, compose
-  WGSL by namespaced concatenation and drop naga and naga_oil from the browser
-  build (−897 KB gz). Deps: GUP-401 ✅.
+- [GUP-406](GUP-406_WGSL_Only_Shader_Path_On_Wasm.md) 📋 — Move shader
+  composition to build time on every target (owner decision 2026-10-09,
+  RFC-001): naga_oil flattens library modules once at build time; at runtime,
+  native and wasm both just concatenate the typed glue with the pre-flattened
+  text, dropping naga/naga_oil as runtime dependencies everywhere (−897 KB gz on
+  wasm). Also drops the wasm `GL` backend default. Deps: GUP-401 ✅.
 - [GUP-407](GUP-407_Subset_Inter_And_SVG_Font_Embedding.md) 📋 — Subset the
   bundled Inter (198 → 24 KB gz) and let `SvgTarget` embed it. Deps: GUP-401 ✅,
   GUP-405 📋 (soft).

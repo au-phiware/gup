@@ -2,11 +2,12 @@
 
 **Status**: Accepted 2026-10-04 with the amendments in "Orchestrator review"
 (owner decisions: accept; sRGB-space blending; wave 1 trimmed to surviving work)
-**Date**: 2026-10-04 **Tracks**: T2 (One Context / Scene / RenderTarget) and T3
-(Core data model), from
-[STRATEGIC_REVIEW_2026-10](../STRATEGIC_REVIEW_2026-10.md) **Supersedes on
-acceptance**: the architecture sections of `TECHNICAL_APPROACH.md` and
-`IMPLEMENTATION_STRATEGY.md` (review decision 6)
+and in "Decisions (2026-10-09)" (owner decisions: shader composition moves to
+build time on every target; wasm targets WebGPU only, for now) **Date**:
+2026-10-04 **Tracks**: T2 (One Context / Scene / RenderTarget) and T3 (Core data
+model), from [STRATEGIC_REVIEW_2026-10](../STRATEGIC_REVIEW_2026-10.md)
+**Supersedes on acceptance**: the architecture sections of
+`TECHNICAL_APPROACH.md` and `IMPLEMENTATION_STRATEGY.md` (review decision 6)
 
 ## Summary
 
@@ -108,6 +109,8 @@ struct Inner {
     pipelines: Mutex<PipelineCache>,             // keyed by (mark, encoding signature, TargetDesc, variant)
     text: Mutex<gup_text::TextSystem>,           // one glyph atlas + shaper per device
     shaders: Mutex<Composer>,                    // naga_oil composer with gup library modules preloaded
+                                                  // (superseded 2026-10-09: library modules are flattened
+                                                  // at build time; see "Decisions (2026-10-09)")
 }
 
 impl Context {
@@ -402,6 +405,11 @@ Generated shaders are built by editing hand-written WGSL as text:
 
 ### Recommendation
 
+> **Superseded 2026-10-09**: this recommendation composed library modules with
+> naga_oil at runtime, preloaded per `Context`, with import-only concatenation
+> kept only as a wasm fallback (risk 1, risk 10). The owner moved composition to
+> build time on every target instead. See "Decisions (2026-10-09)".
+
 Use **naga_oil for library modules, plus a small typed glue emitter**.
 
 - **Library modules.** Marks, scales, palettes, the view transform and colour
@@ -422,7 +430,10 @@ Use **naga_oil for library modules, plus a small typed glue emitter**.
   a runtime panic.
 - **Fallback.** Library modules use only `#define_import_path`/`#import` (no
   `#ifdef`), so a plain concatenation of namespaced modules stays possible if
-  naga_oil ever blocks a wgpu upgrade.
+  naga_oil ever blocks a wgpu upgrade. (Superseded 2026-10-09: this
+  concatenation is now the runtime mechanism on every target, fed by naga_oil's
+  output at build time, not a conditional fallback. See "Decisions
+  (2026-10-09)".)
 
 ### Generated glue: scatter with linear x, log y, sequential fill
 
@@ -787,7 +798,10 @@ follow S14 as T5 stories.
 1. **naga_oil may lag behind wgpu releases.** _Recommendation_: keep it behind
    an internal `Composer` trait and write library modules in the import-only
    subset so concatenation remains a fallback. Accept that wgpu upgrades follow
-   the Bevy cadence.
+   the Bevy cadence. (Superseded 2026-10-09: naga_oil becomes a build-time-only
+   dependency — see "Decisions (2026-10-09)" — so a lag no longer gates a wgpu
+   upgrade of the runtime crate; the build-time tooling can upgrade on its own
+   schedule.)
 2. **Too many pipeline variants and slow compiles**, since every encoding
    signature is a pipeline. _Recommendation_: keep uniforms out of the cache
    key, build pipelines asynchronously, pre-warm builder defaults, and measure
@@ -821,7 +835,10 @@ follow S14 as T5 stories.
 10. **WASM.** There is no blocking, so `save_png` and `Context::shared` don't
     exist there. naga*oil adds binary size. \_Recommendation*: async-only APIs
     on wasm, and measure binary size in S3 with a budget (≤ +400 KB gz). Fall
-    back per risk 1 if it's over.
+    back per risk 1 if it's over. (Superseded 2026-10-09: S3 found the cost was
+    +897 KB gz, 2.2× over budget — see "S3 findings". The owner's fix is not a
+    wasm-only fallback but build-time composition on every target, plus dropping
+    the wasm `GL` backend default; see "Decisions (2026-10-09)".)
 11. **Compile-error quality.** _Recommendation_: use
     `#[diagnostic::on_unimplemented]` on `IntoEncoding`/`Visual`, and check the
     `trybuild` snapshot output in review.
@@ -1356,7 +1373,11 @@ the one place the old and new paths get a device.
     the shared wgpu.
 - **Backend default: primary, with GL as an explicit fallback.**
   - `ContextOptions::default()` asks for `Backends::PRIMARY` on native and
-    `BROWSER_WEBGPU | GL` on wasm.
+    `BROWSER_WEBGPU | GL` on wasm. (Superseded 2026-10-09, wasm half only:
+    wgpu's `webgl` feature was never enabled, so `GL` here never had a working
+    adapter; the wasm default becomes `Backends::BROWSER_WEBGPU` alone. See
+    "Decisions (2026-10-09)". The native default, `Backends::PRIMARY` with GL as
+    an explicit fallback, is unaffected.)
   - GL is tried only when the requested backends have no adapter and
     `WGPU_BACKEND` is unset.
   - On machines with Vulkan, Metal or DX12, no GL/EGL instance exists, so the
@@ -1594,12 +1615,10 @@ and `SvgTarget`. It found two bugs that no native test could:
 
 ### Proposed adjustments to S4 and later
 
-- **Decision needed (GUP-406):** on wasm, skip naga entirely. Concatenate
-  namespaced library modules and the glue (§6 fallback, with the qualification
-  rewrite noted in S0a finding 8) and pass `ShaderSource::Wgsl`. Read uniform
-  offsets from encase sizes under the 16-byte rule rather than from naga's
-  layouter. Native keeps naga_oil (errors mapped to source, validation). This
-  removes ~897 KB gz.
+- **Decided (2026-10-09), superseding this proposal:** the owner chose
+  build-time composition on every target, not a wasm-only runtime fallback that
+  keeps naga_oil at runtime on native. See "Decisions (2026-10-09)" and the
+  rewritten [GUP-406](../stories/GUP-406_WGSL_Only_Shader_Path_On_Wasm.md).
 - **S5 (`ShaderFn` v2, `#[wgsl_function]`):** enforce the 16-byte `Params` rule
   at macro expansion, alongside the no-trailing-digit identifier rule.
 - **S4/S5 (`MarkBatch::vector()`):** `SvgTarget` already writes every guide
@@ -1612,3 +1631,79 @@ and `SvgTarget`. It found two bugs that no native test could:
   is the first gup-core code proven in a browser.
 - **S13 (hosts):** use `TextureTarget` for egui images and `Prepared::draw` for
   paint callbacks. Pass the host attachment's sample count in `TargetDesc`.
+
+---
+
+## Decisions (2026-10-09)
+
+Two owner decisions, made after the S3 findings above and closing §12 risk 1
+(naga_oil vs wgpu cadence) and risk 10 (WASM budget). Each supersedes specific
+RFC text, marked inline above at the point it applies.
+
+### Decision: shader composition moves to build time
+
+S3 findings measured naga_oil's wasm cost at +897 KB gz against the ≤ +400 KB gz
+budget (§12 risk 10) — 2.2× over. Three options were on the table:
+
+(a) **Concatenate on wasm only**, keeping naga_oil at runtime on native (the
+design S3 proposed and GUP-406 originally planned to build). Rejected: it is a
+second composition path living next to the first, and this project's history is
+that parallel systems never get deleted on their own (four scale systems, three
+composition systems, three pipeline caches — Orchestrator review point 1). A
+wasm-only fallback recreates exactly the pattern RFC-001 exists to end. (b)
+**Concatenate everywhere**, with naga_oil moved to build time on every target.
+One path, no parallel system. (c) **Accept the size.** Rejected outright: +897
+KB gz is 2.2× the budget, and the budget itself was already a compromise (§12
+risk 10).
+
+The owner chose **(b)**:
+
+- **Library modules are flattened at build time.** naga_oil runs in a build
+  script (or a small build-time crate gup-core depends on at build time only)
+  and flattens the library's WGSL modules (§6) — namespaced and mangled, the
+  same transform naga_oil already does at runtime today — into plain WGSL text,
+  checked into the build output, not into `gup-core`'s runtime `Context`.
+- **At runtime, only the typed glue module is built**, exactly as §6's emitter
+  already does (a ~300-line Rust emitter printing one top-level module per
+  `(mark, encoding signature)` pair). That glue text is concatenated with the
+  pre-flattened library text and handed to wgpu as `ShaderSource::Wgsl`. **One
+  path runs on every target**: naga_oil is a build-time-only dependency of
+  `gup-core`; it is never linked into a `gup-core` binary, native or wasm.
+- **`#[wgsl_function]`** (§4, §6) user modules are flattened the same way, at
+  macro-expansion time rather than at runtime, consistent with its existing
+  compile-time WGSL validation.
+- **Validation** is naga_oil's, at build time (source-mapped errors, as S0a
+  demonstrated), plus wgpu's own validation at pipeline creation — through its
+  internal naga on native, through the browser's own WGSL parser on WebGPU. No
+  separate runtime validation step is needed, and none is added.
+
+This supersedes, at the points marked above: §2's `shaders: Mutex<Composer>`
+field; §6's "Recommendation" (naga_oil preloaded per `Context` at runtime, with
+import-only concatenation as a conditional wasm fallback) and its "Fallback"
+bullet; §12 risk 1's mitigation (an internal `Composer` trait choosing naga_oil
+or concatenation at runtime) and risk 10's mitigation (concatenate on wasm only
+if the budget is missed); and the S3 findings' "Decision needed (GUP-406)"
+proposal.
+
+[GUP-406](../stories/GUP-406_WGSL_Only_Shader_Path_On_Wasm.md) is rewritten to
+this design.
+
+### Decision: WASM targets WebGPU only, for now
+
+S1 findings set `ContextOptions::default()`'s wasm backends to
+`BROWSER_WEBGPU | GL`, following §1's north star of running everywhere. But
+wgpu's `webgl` feature has never been enabled on `gup-core`, so the `GL` half of
+that default has never had a working adapter behind it on wasm32 — the default
+has always resolved to WebGPU alone in practice. Enabling `webgl` for real would
+bring naga's WGSL front end and validator back into the wasm build regardless of
+the decision above, because wgpu's GL backend lowers WGSL to GLSL through naga;
+that cost would apply to a path nothing currently exercises.
+
+The owner decided: **wasm targets WebGPU only, for now.**
+`ContextOptions::default()`'s wasm backends become `Backends::BROWSER_WEBGPU`
+alone, dropping `GL`. Revisit if a user needs a browser without WebGPU (for
+example Safari before its WebGPU release, or an older browser).
+
+This supersedes, at the point marked above, the wasm half of S1 findings'
+"Backend default: primary, with GL as an explicit fallback" bullet. The native
+default (`Backends::PRIMARY` with GL as an explicit fallback) is unaffected.
