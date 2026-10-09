@@ -207,3 +207,126 @@ RFC-001's "GUP-410 findings".
   to the uncaptured handler, which hits the same panic.
 - **`TextSystem::new`**: it creates its bind group and pipeline layouts outside
   any scope, in `Context::build`, which cannot fail. The layouts are static.
+
+## Retrospective
+
+**Completed**: 2026-10-10
+
+### Key Technical Learnings
+
+#### wgpu-core's error scopes are per device, not per thread
+
+- **Challenge**: The design assumed scopes were thread-local. In wgpu 27,
+  wgpu-core's `push_error_scope` pushes onto one `ErrorSinkRaw` stack per
+  device. Every thread and every `Context` wrapping that device share it, and
+  `Context::shared()` hands that device to everything, including the legacy
+  crate.
+- **Solution**: The outermost scope on a thread holds a process-wide mutex until
+  it pops. A thread-local depth counter lets nested scopes skip it. The scope
+  lock ranks above the context locks, and debug builds assert that no context
+  lock is held when it is taken. That ordering forced cache misses to run
+  outside the pipeline-cache lock. They now re-check and insert inside the
+  scope.
+- **Pattern**: Read the backend's implementation of a "scope" before relying on
+  its isolation (`backend/wgpu_core.rs`, `pop_error_scope` is
+  `ready(scope.error)`).
+
+#### Natively, popping is synchronous in practice
+
+- **Challenge**: `pop_error_scope` returns a future on every backend, and the
+  story worried about a round trip per frame.
+- **Solution**: wgpu-core returns `ready(...)`, so polling once with
+  `Waker::noop()` resolves it. An empty scope costs about 250 ns. Only the
+  browser needs real waiting. There the scope is spawned into a oneshot, which
+  keeps `Context` `Send + Sync` (an earlier draft stored the `!Send` futures and
+  made it lose both on wasm32). Awaited readbacks settle the pending scopes, and
+  synchronous calls report what has arrived.
+- **Pattern**: One code path that polls once, with a fallback for "not ready
+  yet". Natively the fallback is `unreachable!`, and it is never hit.
+
+#### Captured errors leave the browser console silent
+
+- **Challenge**: GUP-408's smoke test caught seed 2 through Chrome's "rendering"
+  warnings and the pixel check.
+- **Solution**: With scopes, Chrome logs no warnings, because captured errors
+  are not uncaptured. The run now fails through the page's own
+  `GUP FAIL GPU error in guide pipeline 'gup rects' …` line, which carries the
+  WGSL diagnostic. The smoke test still fails on the seed, through a better
+  channel. Its warning rule now guards only errors outside every scope.
+
+#### wgpu's WebGPU backend panics on `GPUInternalError`
+
+- **Challenge**: `crate::Error::from_js` handles validation and out-of-memory
+  errors and `panic!`s on anything else.
+- **Solution**: Browser scopes filter only `Validation` and `OutOfMemory`.
+  Natively `Internal` is scoped too. An internal error in a browser still
+  reaches the uncaptured handler and the same panic; that is upstream's to fix.
+
+### Architectural Decisions
+
+#### Scope every GPU step, and forget every pipeline on an error
+
+- **Decision**: `Context::scoped(what, f)` wraps the pipeline and program
+  creation, layer resolution, prepare, render, and target and surface setup. Any
+  reported error makes the context drop gup-core's programs and pipelines and
+  gup-text's glyph pipelines.
+- **Reasoning**: Nested scopes give precise names: the pipeline's own scope
+  catches its error before the render scope sees it. Dropping every cached
+  pipeline covers the browser case, where the failing pipeline is already cached
+  by the time its error arrives, and gup-text's cache, which gup-core cannot
+  key. Errors are rare, so recreating everything after one is cheap.
+- **Trade-off**: After an error, all of a context's pipelines are recreated, not
+  only the bad one.
+- **Future**: S5's user WGSL fails as `Error::Gpu` naming the mark pipeline and
+  glue signature, with no new machinery.
+
+#### Browser errors are reported per context, and late for synchronous calls
+
+- **Decision**: Keep `Renderer::render` and `prepare` synchronous. In a browser,
+  their errors come from the next call on the context, or from an awaited
+  `ImageTarget::read` or `WindowTarget::take_capture`.
+- **Reasoning**: Making `render` async would ripple through every host
+  integration for an error path. An awaited render already exists for the case
+  that matters most: a headless or one-shot browser chart.
+- **Trade-off**: A browser canvas loop sees a frame's error one frame late, and
+  any chart on the same context may be the one that reports it.
+
+#### Native keeps wgpu's panic for uncaptured errors
+
+- **Decision**: Install the recording handler only in a browser, and only on a
+  device Gup created.
+- **Reasoning**: Every gup-core step is scoped, so a remaining native panic
+  means a missed scope or another crate's error. The legacy crate shares the
+  device, and recording its errors silently would hide its bugs.
+
+### Development Workflow Insights
+
+- **Shared target directories**: building the pre-story commit in a
+  `git worktree` with the shared `CARGO_TARGET_DIR` overwrote the main
+  checkout's gup-core release artifacts under the same unit hash. Cargo then
+  called the main build "Fresh" and handed back the old binary, and the first
+  before/after comparison compared one binary with itself. Two things caught it:
+  `cmp` said the binaries were identical, and `strings` found none of the new
+  format strings. `cargo clean -p gup-core -p gup-text -p gup-wgsl --release`
+  fixed it. Concurrent worktrees that share a target directory (this story and
+  GUP-409) can hit the same thing.
+- **Noisy timings**: the cached-frame test's median moved between 188 and 324 µs
+  on unchanged code, because of CPU frequency. Two things were stable: a
+  micro-benchmark of the thing being added, and alternating A/B runs of
+  `zoom_bench`.
+- **Perl replacements**: `s{…}{…}` failed on Rust code with unbalanced braces in
+  the replacement. The Edit tool and whole-block file splices were reliable.
+
+### Follow-up Stories
+
+None. Noted without stories:
+
+- **wasm32 clippy**: `clippy --target wasm32-unknown-unknown` reports
+  `arc_with_non_send_sync` at `selection.rs`'s `Arc::new(LayerUniforms … )`. The
+  finding predates this story, and no gate lints wasm32. It belongs with the
+  gate work (GUP-409's area) if wasm linting is added.
+- **Late-error browser test**: the browser harness tests only the awaited path.
+  S8's wasm entry point (canvas loop) should add a seeded check that a
+  synchronous canvas render reports its error on the next frame.
+- **Upstream**: wgpu's `Error::from_js` panics on `GPUInternalError`. Report it,
+  or wrap it in a later wgpu bump.
