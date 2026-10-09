@@ -50,6 +50,9 @@ jobs:
       - name: Setup Nix development environment
         run: nix develop --command bash -c "echo 'Nix environment ready'"
 
+      # A cache is saved only on a key miss, so a key segment names what the
+      # cache must hold: `wasm32` since mask all-check lints that target too
+      # (GUP-412). The restore prefix still matches older caches.
       - name: Cache Cargo registry and build
         uses: actions/cache@v4
         with:
@@ -57,7 +60,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: lint-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
+          key: lint-${{ runner.os }}-cargo-wasm32-${{ hashFiles('**/Cargo.lock', 'rust-toolchain.toml') }}
           restore-keys: |
             lint-${{ runner.os }}-cargo-
 
