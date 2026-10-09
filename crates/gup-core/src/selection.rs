@@ -143,7 +143,7 @@ pub(crate) trait Layer: wgpu::WasmNotSendSync {
     /// How far marks may extend past their position (e.g. a constant
     /// radius), in pixels.
     fn overhang(&self) -> f32;
-    /// Generate the glue, compose (cached), write uniforms and upload.
+    /// Generate the glue, link it (cached), write uniforms and upload.
     fn prepare(&mut self, cx: &Context) -> Result<MarkBatch>;
     /// The generated glue (for tests and diagnostics).
     fn glue_source(&self) -> Glue;
@@ -193,7 +193,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         let program = cx.pipelines().program(cx, &glue)?;
 
         // The `Encodings` uniform: each channel's Params or constant at the
-        // offset naga computed for the generated struct.
+        // offset the glue emitter laid out (encase sizes, 16-byte fields).
         let mut encodings = vec![0u8; program.encodings.span as usize];
         let mut chunk = vec![0u8; program.chunk.span as usize];
         let mut luts: Vec<Vec<[u8; 4]>> = Vec::new();
@@ -305,7 +305,7 @@ fn write_field(
         return Err(Error::config(
             "generated uniform layout",
             format!(
-                "`{name}` needs {} bytes but has {} (encase vs naga layout mismatch)",
+                "`{name}` needs {} bytes but has {} (encase size vs generated layout mismatch)",
                 bytes.len(),
                 end - offset
             ),
@@ -322,7 +322,8 @@ mod tests {
     use crate::encoding::ShaderFn;
     use crate::marks::Circle;
     use crate::scale::{Linear, Log, ScaleRef, Sequential};
-    use crate::shader::{ShaderLibrary, struct_layout, to_wgsl};
+    use crate::shader::link;
+    use crate::shader::testing::{parse, struct_layout};
     use std::path::Path;
 
     pub(crate) struct Row {
@@ -373,35 +374,32 @@ mod tests {
         );
     }
 
-    /// The one path that holds two `Context` locks: a pipeline-cache miss
-    /// (`pipelines`) composes its program (`shaders`). Under the debug
-    /// lock-order check this panics if the order is ever reversed, and it
-    /// completes rather than deadlocking when two threads miss at once.
+    /// Two threads that miss the pipeline cache at once link the program
+    /// once: the cache lock is held across the link.
     #[test]
-    fn pipeline_cache_miss_composes_under_the_lock_order() {
+    fn pipeline_cache_miss_links_once() {
         let host = Context::shared().expect("shared context");
-        // A fresh composer and cache on the shared device, so this misses.
+        // A fresh cache on the shared device, so this misses.
         let cx = Context::from_wgpu(host.device().clone(), host.queue().clone());
         let glue = reference().glue();
         std::thread::scope(|s| {
             for _ in 0..2 {
                 s.spawn(|| {
                     let program = cx.pipelines().program(&cx, &glue).unwrap();
-                    // Other threads may compose guides meanwhile.
-                    drop(cx.shaders());
                     drop(cx.text());
                     program
                 });
             }
         });
         let stats = cx.pipelines().stats;
-        assert_eq!(stats.programs_composed, 1, "{stats:?}");
+        assert_eq!(stats.programs_linked, 1, "{stats:?}");
     }
 
+    /// The glue emitter's output is unchanged by build-time composition
+    /// (GUP-406), and what wgpu compiles on every target is checked in.
     #[test]
-    fn reference_glue_matches_fixture_and_composes() {
-        let sel = reference();
-        let glue = sel.glue();
+    fn reference_glue_matches_fixtures() {
+        let glue = reference().glue();
         assert_eq!(
             glue.signature,
             "Circle {x: f32rel→gup::scale::linear::map_rel, y: f32→gup::scale::log::map, \
@@ -410,89 +408,97 @@ mod tests {
         assert_eq!(glue.columns, vec![0, 1, 3]);
         assert_eq!(glue.relative, vec![0]);
         check_fixture("scatter_glue.wgsl", &glue.source);
+        let linked = link(&glue.signature, &glue.source, &glue.modules).unwrap();
+        check_fixture("scatter_linked.wgsl", &linked);
+    }
 
-        let mut lib = ShaderLibrary::new();
-        let composed = lib
-            .compose(&glue.signature, &glue.source, &glue.modules)
+    /// The run-time path (glue linked to the library flattened at build
+    /// time) against naga_oil composing the same glue directly: the same
+    /// entry points and every struct laid out the same. naga_oil is a
+    /// dev-dependency here; native tests are the only place it can check
+    /// what wasm runs.
+    #[test]
+    fn linked_glue_matches_naga_oil_composition() {
+        let glue = reference().glue();
+        let linked = parse(
+            &glue.signature,
+            &link(&glue.signature, &glue.source, &glue.modules).unwrap(),
+        );
+        let dir = gup_wgsl::compose::read_dir(
+            &Path::new(env!("CARGO_MANIFEST_DIR")).join("src/shaders"),
+            "src/shaders",
+        )
+        .unwrap();
+        let mut oracle = gup_wgsl::compose::Library::new(&dir.modules).unwrap();
+        let composed = oracle
+            .compose(&glue.signature, &glue.source)
             .unwrap_or_else(|e| panic!("{e}"));
-        assert_eq!(composed.module.entry_points.len(), 2);
-        check_fixture("scatter_composed.wgsl", &to_wgsl(&composed.module).unwrap());
+        let entry_points = |m: &naga::Module| {
+            m.entry_points
+                .iter()
+                .map(|e| (e.name.clone(), e.stage))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(entry_points(&linked), entry_points(&composed));
+        assert_eq!(entry_points(&linked).len(), 2);
+        let mut a = gup_wgsl::compose::struct_layouts(&linked);
+        let mut b = gup_wgsl::compose::struct_layouts(&composed);
+        a.sort_by(|x, y| x.0.cmp(&y.0));
+        b.sort_by(|x, y| x.0.cmp(&y.0));
+        assert_eq!(a, b);
+        assert_eq!(a.len(), 9, "{a:?}");
+    }
 
-        // Every Encodings field starts on a 16-byte boundary, and each
-        // Params struct (encase) fits naga's layout.
-        let enc = struct_layout(&composed.module, "Encodings").unwrap();
+    /// The uniform offsets gup-core writes come from encase sizes under
+    /// the 16-byte `Params` rule (no naga at run time); naga's layout of the
+    /// linked module must agree, so the two never drift silently.
+    #[test]
+    fn uniform_offsets_match_naga_layout() {
+        let glue = reference().glue();
+        let linked = parse(
+            &glue.signature,
+            &link(&glue.signature, &glue.source, &glue.modules).unwrap(),
+        );
+        assert_eq!(
+            Some(glue.encodings.clone()),
+            struct_layout(&linked, "Encodings")
+        );
+        assert_eq!(Some(glue.chunk.clone()), struct_layout(&linked, "Chunk"));
+        // Every Encodings field starts on a 16-byte boundary.
         assert!(
-            enc.members
+            glue.encodings
+                .members
                 .iter()
                 .filter(|(name, _)| !name.contains("_pad_"))
                 .all(|(_, o)| o % 16 == 0),
-            "{enc:?}"
+            "{:?}",
+            glue.encodings
         );
-        assert_eq!(enc.span, 64);
-
-        // What a browser sees: wgpu's WebGPU backend hands it naga's WGSL
-        // output, which has no layout attributes. Parsed back, that WGSL
-        // must lay the uniforms out exactly as gup-core writes them
-        // (GUP-401: `@align(16)` was dropped, so the browser read the
-        // radius from the y scale's parameters).
-        let wgsl = to_wgsl(&composed.module).unwrap();
-        let reparsed = naga::front::wgsl::parse_str(&wgsl).unwrap();
-        let structs: Vec<String> = composed
-            .module
-            .types
-            .iter()
-            .filter(|(_, t)| matches!(t.inner, naga::TypeInner::Struct { .. }))
-            .filter_map(|(_, t)| t.name.clone())
-            .collect();
-        assert!(structs.len() >= 6, "{structs:?}");
-        for name in &structs {
-            assert_eq!(
-                struct_layout(&reparsed, name),
-                struct_layout(&composed.module, name),
-                "{name}: the written WGSL lays it out differently"
-            );
-        }
+        assert_eq!(glue.encodings.span, 64);
     }
 
     #[test]
     fn rust_params_match_wgsl_params() {
+        use crate::shader::{COLOR_SEQUENTIAL, SCALE_LINEAR, SCALE_LOG};
         use encase::ShaderType;
-        let mut lib = ShaderLibrary::new();
-        for (path, size) in [
+        for (module, size) in [
+            (&SCALE_LINEAR, crate::scale::LinearParams::min_size().get()),
+            (&SCALE_LOG, crate::scale::LogParams::min_size().get()),
             (
-                "gup::scale::linear",
-                crate::scale::LinearParams::min_size().get(),
-            ),
-            ("gup::scale::log", crate::scale::LogParams::min_size().get()),
-            (
-                "gup::color::sequential",
+                &COLOR_SEQUENTIAL,
                 crate::scale::SequentialParams::min_size().get(),
             ),
         ] {
-            let src = format!(
-                "#import {path} as m\n@group(0) @binding(0) var<uniform> p: m::Params;\n\
-                 @compute @workgroup_size(1) fn main() {{ let q = p; }}\n"
-            );
-            let composed = lib.compose(path, &src, &[]).unwrap();
-            let span = composed
-                .module
-                .types
-                .iter()
-                .find_map(|(_, t)| match &t.inner {
-                    naga::TypeInner::Struct { span, .. }
-                        if t.name.as_deref().is_some_and(|n| n.starts_with("Params")) =>
-                    {
-                        Some(*span)
-                    }
-                    _ => None,
-                })
-                .unwrap();
-            assert_eq!(u64::from(span), size, "{path}");
+            let wgsl = parse(module.import_path, module.wgsl);
+            let params = gup_wgsl::flat_name(module.import_path, "Params");
+            let layout = struct_layout(&wgsl, &params).unwrap();
+            assert_eq!(u64::from(layout.span), size, "{}", module.import_path);
         }
     }
 }
 
-/// Wall-clock cost of the naga_oil gate (RFC-001 §12 risk 2): run with
+/// Wall-clock cost of creating the reference pipeline (RFC-001 §12 risk
+/// 2): run with
 /// `cargo test -p gup-core --lib pipeline_timings -- --ignored --nocapture`
 /// (add `--release` for release numbers).
 #[cfg(test)]
@@ -514,7 +520,7 @@ mod timings {
     }
 
     #[test]
-    #[ignore = "measurement, not a check; see RFC-001 S0a findings"]
+    #[ignore = "measurement, not a check; see RFC-001 S0a and GUP-406 findings"]
     fn pipeline_timings() {
         const RUNS: usize = 20;
         let host = Context::new_blocking().unwrap();
@@ -530,24 +536,24 @@ mod timings {
             dpr: 1.0,
             samples: 1,
         };
-        let (mut preload, mut emit, mut compose, mut create, mut total) =
+        let (mut context, mut emit, mut link, mut create, mut total) =
             (vec![], vec![], vec![], vec![], vec![]);
         let mut first = None;
         for _ in 0..RUNS {
-            // A fresh composer and pipeline cache on the same device.
+            // A fresh pipeline cache on the same device.
             let t = Instant::now();
             let cx = Context::from_wgpu(host.device().clone(), host.queue().clone());
-            preload.push(t.elapsed());
+            context.push(t.elapsed());
             let t = Instant::now();
             let glue = sel.glue();
             emit.push(t.elapsed());
             let program = cx.pipelines().program(&cx, &glue).unwrap();
             let _pipeline = cx.pipelines().mark_pipeline(&cx, &program, &desc);
             let stats = cx.pipelines().stats;
-            compose.push(stats.last_compose);
+            link.push(stats.last_link);
             create.push(stats.last_create);
-            total.push(stats.last_compose + stats.last_create);
-            first.get_or_insert(stats.last_compose + stats.last_create);
+            total.push(stats.last_link + stats.last_create);
+            first.get_or_insert(stats.last_link + stats.last_create);
         }
         eprintln!(
             "profile: {}, runs: {RUNS}, adapter: {info}",
@@ -557,14 +563,14 @@ mod timings {
                 "release"
             }
         );
-        summary("context + library preload", preload);
+        summary("context creation (from_wgpu)", context);
         summary("glue emit", emit);
-        summary("naga_oil compose (make_naga_module)", compose);
+        summary("link (gup_wgsl::link)", link);
         summary("create_shader_module + pipeline", create);
         eprintln!(
-            "compose + create, first run          {:>8.3} ms",
+            "link + create, first run             {:>8.3} ms",
             first.unwrap().as_secs_f64() * 1e3
         );
-        summary("compose + create", total);
+        summary("link + create", total);
     }
 }

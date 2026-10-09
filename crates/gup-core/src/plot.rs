@@ -458,7 +458,7 @@ mod tests {
     }
 
     /// Changing a domain re-resolves with new uniforms only: the glue is
-    /// not recomposed, the pipeline is a cache hit, the layer's GPU state
+    /// not relinked, the pipeline is a cache hit, the layer's GPU state
     /// (column chunk, uniform buffers, bind groups) is reused and the
     /// upload counter shows 0 column bytes and only uniform writes.
     #[test]
@@ -484,8 +484,8 @@ mod tests {
         let after = cx.pipelines().stats;
         let written = cx.upload_stats() - uploads;
 
-        assert_eq!(before.programs_composed, 1);
-        assert_eq!(after.programs_composed, 1, "glue recomposed");
+        assert_eq!(before.programs_linked, 1);
+        assert_eq!(after.programs_linked, 1, "glue relinked");
         assert_eq!(after.pipelines_created, before.pipelines_created);
         assert!(after.pipeline_hits > before.pipeline_hits);
         assert!(

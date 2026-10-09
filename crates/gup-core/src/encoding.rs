@@ -26,7 +26,8 @@ pub trait ShaderFn: Clone + Send + Sync + 'static {
     type Out: GpuType;
     /// The uniform parameters. Their std140 layout comes from `encase`, so
     /// the Rust and WGSL structs cannot drift silently (a test checks the
-    /// sizes against naga's layout of the module).
+    /// sizes against naga's layout of the module). The WGSL struct must
+    /// span a multiple of 16 bytes; the build fails otherwise (GUP-406).
     type Params: encase::ShaderType + encase::internal::WriteInto;
 
     /// The WGSL module implementing the function.

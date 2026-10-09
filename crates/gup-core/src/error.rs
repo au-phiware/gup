@@ -14,12 +14,13 @@ pub enum Error {
     #[error("GPU device request failed: {0}")]
     Device(#[from] wgpu::RequestDeviceError),
 
-    /// A WGSL library module or generated glue module failed to compose.
-    /// The message is naga_oil's codespan report, mapped back to the
-    /// authored module.
+    /// A generated top-level module (glue) failed to link against the
+    /// library modules flattened at build time. Authored WGSL is composed
+    /// at build time, so this is a bug in Gup's generator, not a user error;
+    /// the report names the generated line.
     #[error("shader composition failed for {module}:\n{report}")]
     Compose {
-        /// The module (import path or glue signature) being composed.
+        /// The module (glue signature or label) being linked.
         module: String,
         /// The formatted diagnostic.
         report: String,

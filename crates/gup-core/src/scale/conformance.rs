@@ -63,14 +63,12 @@ fn dispatch<S: ShaderFn>(
         path = S::MODULE.import_path,
         entry = S::ENTRY,
     );
-    let composed = cx
-        .shaders()
-        .compose("conformance", &source, &[S::MODULE])
-        .unwrap_or_else(|e| panic!("{e}"));
+    let linked =
+        crate::shader::link("conformance", &source, &[S::MODULE]).unwrap_or_else(|e| panic!("{e}"));
     let device = cx.device();
     let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some("conformance"),
-        source: wgpu::ShaderSource::Naga(std::borrow::Cow::Owned(composed.module)),
+        source: wgpu::ShaderSource::Wgsl(linked.into()),
     });
     let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
         label: Some("conformance"),

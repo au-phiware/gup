@@ -4,14 +4,13 @@
 //! The one GPU context (RFC-001 §2).
 //!
 //! A [`Context`] owns (or wraps) a `wgpu::Device` and `wgpu::Queue` together
-//! with every device-scoped cache: the naga_oil shader library, the pipeline
-//! cache and the text system (font and glyph atlas, from `gup-text`). It
+//! with every device-scoped cache: the pipeline cache (linked glue programs
+//! and pipelines) and the text system (font and glyph atlas, from `gup-text`). It
 //! is cheap to clone (`Arc<Inner>`), so charts, targets and hosts can all
 //! hold one.
 
 use crate::error::Result;
 use crate::render::PipelineCache;
-use crate::shader::ShaderLibrary;
 use gup_text::TextSystem;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -152,18 +151,15 @@ struct Inner {
     device: wgpu::Device,
     queue: wgpu::Queue,
     caps: Caps,
-    // Lock order (RFC-001 S1): `pipelines` may be held while `shaders` is
-    // taken (a pipeline-cache miss composes its program), never the other
-    // way round, and `text` is never held together with either. Debug
-    // builds check this on every acquisition (`LockRank::check`).
-    /// Taken first: composed programs and pipelines.
+    // Lock order (RFC-001 S1): `pipelines` and `text` are never held
+    // together. Debug builds check this on every acquisition
+    // (`LockRank::check`). (A third lock, the runtime shader composer, went
+    // when composition moved to build time in GUP-406.)
+    /// Linked glue programs and pipelines.
     pipelines: Mutex<PipelineCache>,
-    /// The naga_oil composer and library modules. Taken alone, or while
-    /// `pipelines` is held.
-    shaders: Mutex<ShaderLibrary>,
     /// The font and glyph atlas (`gup-text`). Never held together with
-    /// `pipelines` or `shaders`: runs are laid out and prepared while
-    /// holding it, and their batches draw without it.
+    /// `pipelines`: runs are laid out and prepared while holding it, and
+    /// their batches draw without it.
     text: Mutex<TextSystem>,
     uploads: UploadCounters,
     /// Command-buffer submissions made through [`Context::submit`].
@@ -197,8 +193,10 @@ impl std::fmt::Debug for Context {
 /// `power_preference`.
 #[derive(Clone, Debug)]
 pub struct ContextOptions {
-    /// Backends to look for an adapter on. If none of them has one, and
-    /// they were not chosen through `WGPU_BACKEND`, GL is tried as an
+    /// Backends to look for an adapter on: `PRIMARY` on native,
+    /// `BROWSER_WEBGPU` on wasm (WebGPU only; gup-core does not enable
+    /// wgpu's `webgl` feature). On native, if none of them has an adapter
+    /// and they were not chosen through `WGPU_BACKEND`, GL is tried as an
     /// explicit fallback. GL is not in the native default: its EGL display
     /// binds to the window system's connection as soon as any surface
     /// exists, and dropping the instance after the event loop has exited
@@ -225,7 +223,10 @@ impl Default for ContextOptions {
             #[cfg(not(target_arch = "wasm32"))]
             backends: wgpu::Backends::PRIMARY,
             #[cfg(target_arch = "wasm32")]
-            backends: wgpu::Backends::BROWSER_WEBGPU | wgpu::Backends::GL,
+            // WebGPU only (RFC-001 "Decisions (2026-10-09)"): wgpu's `webgl`
+            // feature is off, and turning it on would bring naga back into
+            // the wasm build to lower WGSL to GLSL.
+            backends: wgpu::Backends::BROWSER_WEBGPU,
             power_preference: wgpu::PowerPreference::HighPerformance,
             required_features: wgpu::Features::empty(),
             optional_features: wgpu::Features::TIMESTAMP_QUERY,
@@ -242,8 +243,8 @@ impl Context {
     /// (not the WebGPU defaults), so column chunks can be large on capable
     /// hardware (RFC-001 §2). Respects `WGPU_BACKEND` and friends.
     ///
-    /// Every context preloads the shader library. Callers that just need
-    /// a device should use [`Context::shared`] instead.
+    /// Every context has its own pipeline cache and glyph atlas. Callers
+    /// that just need a device should use [`Context::shared`] instead.
     pub async fn new() -> Result<Self> {
         Self::with_options(ContextOptions::default()).await
     }
@@ -256,11 +257,15 @@ impl Context {
             wgpu::PowerPreference::from_env().unwrap_or(options.power_preference);
         let (instance, adapter) = match request_adapter(options.backends, power_preference).await {
             Ok(found) => found,
-            Err(e) if backends_from_env || options.backends.contains(wgpu::Backends::GL) => {
+            Err(e)
+                if cfg!(target_arch = "wasm32")
+                    || backends_from_env
+                    || options.backends.contains(wgpu::Backends::GL) =>
+            {
                 return Err(e);
             }
-            // The explicit GL fallback: only when the requested backends
-            // have no adapter at all.
+            // The explicit GL fallback (native only): only when the
+            // requested backends have no adapter at all.
             Err(_) => request_adapter(wgpu::Backends::GL, power_preference).await?,
         };
         let required_limits = device_limits(&adapter.limits(), options.required_limits.as_ref());
@@ -288,12 +293,11 @@ impl Context {
     /// [`Context::new_blocking`] on first use, then cheaply cloned (native
     /// only).
     ///
-    /// Every `Context` preloads the naga_oil shader library, which costs
-    /// about 6.6 ms in a release build (RFC-001 "S0a findings") on top of
-    /// requesting an adapter and device. One-shot calls such as `save_png`
-    /// use this shared default so they don't pay that on every call, and
-    /// everything built on it shares one device, so its GPU resources can
-    /// be used together.
+    /// Requesting an adapter and device is slow, and every `Context` starts
+    /// with empty pipeline and glyph caches. One-shot calls such as
+    /// `save_png` use this shared default so they don't pay that on every
+    /// call, and everything built on it shares one device, so its GPU
+    /// resources can be used together.
     ///
     /// If creation fails, the error is returned and the next call tries
     /// again.
@@ -337,7 +341,6 @@ impl Context {
                 device,
                 queue,
                 caps,
-                shaders: Mutex::new(ShaderLibrary::new()),
                 pipelines: Mutex::new(PipelineCache::default()),
                 text: Mutex::new(text),
                 uploads: UploadCounters::default(),
@@ -387,8 +390,8 @@ impl Context {
         self.inner.uploads.snapshot()
     }
 
-    /// Pipeline-cache counters: programs composed, pipelines created and
-    /// cache hits, with the latest compose and create timings.
+    /// Pipeline-cache counters: programs linked, pipelines created and
+    /// cache hits, with the latest link and create timings.
     pub fn pipeline_stats(&self) -> crate::render::PipelineStats {
         self.pipelines().stats
     }
@@ -486,18 +489,12 @@ impl Context {
             .map_err(|e| crate::error::Error::Readback(e.to_string()))
     }
 
-    /// The pipeline cache. Take it before [`shaders`](Self::shaders).
+    /// The pipeline cache: never together with the text system.
     pub(crate) fn pipelines(&self) -> Ordered<'_, PipelineCache> {
         Ordered::new(LockRank::Pipelines, &self.inner.pipelines)
     }
 
-    /// The shader library: alone, or while holding
-    /// [`pipelines`](Self::pipelines).
-    pub(crate) fn shaders(&self) -> Ordered<'_, ShaderLibrary> {
-        Ordered::new(LockRank::Shaders, &self.inner.shaders)
-    }
-
-    /// The text system: never together with the other two.
+    /// The text system: never together with the pipeline cache.
     pub(crate) fn text(&self) -> Ordered<'_, TextSystem> {
         Ordered::new(LockRank::Text, &self.inner.text)
     }
@@ -578,8 +575,7 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum LockRank {
     Pipelines = 1 << 0,
-    Shaders = 1 << 1,
-    Text = 1 << 2,
+    Text = 1 << 1,
 }
 
 #[cfg(debug_assertions)]
@@ -590,23 +586,19 @@ thread_local! {
 
 impl LockRank {
     /// Panic if taking `self` while holding the locks in `held` breaks the
-    /// lock order. The only nesting allowed is `shaders` inside
-    /// `pipelines`. (The bits are shared by every `Context` on the thread,
-    /// so nesting one context's locks inside another's is refused too.)
+    /// lock order: no context lock nests inside another. (The bits are
+    /// shared by every `Context` on the thread, so nesting one context's
+    /// locks inside another's is refused too.)
     #[cfg_attr(not(debug_assertions), allow(dead_code))]
     fn check(self, held: u8) {
-        let allowed = match self {
-            LockRank::Pipelines | LockRank::Text => 0,
-            LockRank::Shaders => LockRank::Pipelines as u8,
-        };
-        if held & !allowed != 0 {
-            let holding: Vec<LockRank> = [LockRank::Pipelines, LockRank::Shaders, LockRank::Text]
+        if held != 0 {
+            let holding: Vec<LockRank> = [LockRank::Pipelines, LockRank::Text]
                 .into_iter()
                 .filter(|r| held & *r as u8 != 0)
                 .collect();
             panic!(
                 "gup-core Context lock order violated: taking {self:?} while holding \
-                 {holding:?} (allowed: Pipelines then Shaders; Text alone)"
+                 {holding:?} (each is taken alone)"
             );
         }
     }
@@ -709,7 +701,7 @@ mod tests {
     }
 
     /// `shared()` makes one context per process and pays the device
-    /// request and library preload once: a later call is a clone.
+    /// request once: a later call is a clone.
     #[test]
     fn shared_is_one_context_created_once() {
         let t = std::time::Instant::now();
@@ -763,27 +755,13 @@ mod tests {
         );
     }
 
-    /// The one nesting the lock order allows: a pipeline-cache miss
-    /// composes its program while holding the cache.
+    /// Released locks can be taken again, in either order.
     #[test]
-    fn lock_order_allows_shaders_inside_pipelines() {
+    fn lock_order_allows_sequential_locks() {
         let cx = Context::shared().expect("shared context");
-        let pipelines = cx.pipelines();
-        let shaders = cx.shaders();
-        drop((shaders, pipelines));
-        // Released locks can be taken again, in either order.
-        drop(cx.shaders());
+        drop(cx.pipelines());
         drop(cx.text());
         drop(cx.pipelines());
-    }
-
-    #[cfg(debug_assertions)]
-    #[test]
-    #[should_panic(expected = "lock order violated: taking Pipelines while holding [Shaders]")]
-    fn lock_order_refuses_pipelines_inside_shaders() {
-        let cx = Context::shared().expect("shared context");
-        let _shaders = cx.shaders();
-        let _pipelines = cx.pipelines();
     }
 
     #[cfg(debug_assertions)]
@@ -797,11 +775,11 @@ mod tests {
 
     #[cfg(debug_assertions)]
     #[test]
-    #[should_panic(expected = "lock order violated: taking Shaders while holding [Text]")]
-    fn lock_order_refuses_shaders_inside_text() {
+    #[should_panic(expected = "lock order violated: taking Pipelines while holding [Text]")]
+    fn lock_order_refuses_pipelines_inside_text() {
         let cx = Context::shared().expect("shared context");
         let _text = cx.text();
-        let _shaders = cx.shaders();
+        let _pipelines = cx.pipelines();
     }
 
     /// Lines of `gup-core`'s sources (outside `exempt` files) that contain

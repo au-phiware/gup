@@ -3,22 +3,23 @@ name = "gup-core"
 version = "0.1.0"
 authors = ["Corin Lawson <corin@phiware.com.au>"]
 edition = "2024"
-description = "Gup's new core (RFC-001): one Context, a GPU column store, typed channels, scales with CPU mirrors, naga_oil shader composition and a resolved Scene"
+description = "Gup's new core (RFC-001): one Context, a GPU column store, typed channels, scales with CPU mirrors, build-time shader composition and a resolved Scene"
 license = "GPL-3.0-or-later"
 repository = "https://github.com/au-phiware/gup"
 publish = false
 
 # RFC-001 §11: `gup-core` is a new crate that the old `gup` crate does not
 # re-export, and it must never depend on `gup` or reach into its modules.
-# Versions match those already resolved in Cargo.lock (RFC-001 appendix);
-# naga_oil, naga and encase are direct dependencies now that the parked
-# gup-bevy no longer brings them in (Orchestrator review point 5).
+# Versions match those already resolved in Cargo.lock (RFC-001 appendix).
+#
+# Shader composition runs at build time on every target (RFC-001 "Decisions
+# (2026-10-09)", GUP-406): `build.rs` flattens `src/shaders` with naga_oil
+# through gup-wgsl's `compose` feature, and at run time gup-wgsl's
+# dependency-free linker joins generated glue to that text. naga and
+# naga_oil are never linked into a gup-core binary.
 [dependencies]
-wgpu = { version = "27.0", features = ["wgsl", "naga-ir"] }
-naga = { version = "27.0.3", features = ["wgsl-in", "wgsl-out"] }
-# Without the default `glsl` feature: gup-core composes WGSL only, and
-# naga's GLSL front and back ends cost ~0.5 MB of wasm (GUP-401).
-naga_oil = { version = "0.20", default-features = false }
+wgpu = { version = "27.0", features = ["wgsl"] }
+gup-wgsl = { path = "../gup-wgsl" }
 encase = "0.12"
 bytemuck = { version = "1.23", features = ["derive"] }
 pollster = "0.3"
@@ -50,3 +51,11 @@ gup-visual-regression = { path = "../gup-visual-regression" }
 # dogfood crate uses the same version).
 resvg = { version = "0.45", default-features = false, features = ["text"] }
 trybuild = "1.0"
+# Tests re-parse the linked WGSL (uniform layouts, struct checks) and
+# compose the reference glue through naga_oil directly, as an oracle for
+# the run-time linker. Never linked into a gup-core binary.
+naga = { version = "27.0.3", features = ["wgsl-in"] }
+gup-wgsl = { path = "../gup-wgsl", features = ["compose"] }
+
+[build-dependencies]
+gup-wgsl = { path = "../gup-wgsl", features = ["compose"] }

@@ -33,6 +33,7 @@ use naga_oil::compose::{
 };
 use std::collections::{HashMap, HashSet};
 use std::fmt;
+use std::path::Path;
 
 /// A WGSL source file.
 #[derive(Clone, Debug)]
@@ -54,7 +55,8 @@ pub struct Error {
 }
 
 impl Error {
-    fn new(module: impl Into<String>, report: impl Into<String>) -> Self {
+    /// An error in `module` (a file or label) with `report`.
+    pub fn new(module: impl Into<String>, report: impl Into<String>) -> Self {
         Self {
             module: module.into(),
             report: report.into(),
@@ -130,6 +132,46 @@ pub fn write_wgsl(label: &str, module: &naga::Module) -> Result<String, Error> {
     .map_err(|e| Error::new(label, format!("{e:?}")))?;
     naga::back::wgsl::write_string(module, &info, naga::back::wgsl::WriterFlags::empty())
         .map_err(|e| Error::new(label, e.to_string()))
+}
+
+/// WGSL sources read from a directory.
+#[derive(Clone, Debug, Default)]
+pub struct ShaderDir {
+    /// Library modules: files with a `#define_import_path` line.
+    pub modules: Vec<Source>,
+    /// Top-level shaders: every other `.wgsl` file.
+    pub shaders: Vec<Source>,
+}
+
+/// Read the `.wgsl` files in `dir`, sorted by file name. Each [`Source`]'s
+/// `file` is `display/<file name>`, the path its errors are reported with.
+pub fn read_dir(dir: &Path, display: &str) -> Result<ShaderDir, Error> {
+    let io = |e: std::io::Error| Error::new(dir.display().to_string(), e.to_string());
+    let mut paths: Vec<_> = std::fs::read_dir(dir)
+        .map_err(io)?
+        .map(|e| e.map(|e| e.path()))
+        .collect::<Result<_, _>>()
+        .map_err(io)?;
+    paths.retain(|p| p.extension().is_some_and(|e| e == "wgsl"));
+    paths.sort();
+    let mut out = ShaderDir::default();
+    for path in paths {
+        let text = std::fs::read_to_string(&path).map_err(io)?;
+        let name = path
+            .file_name()
+            .map(|n| n.to_string_lossy())
+            .unwrap_or_default();
+        let source = Source {
+            file: format!("{display}/{name}"),
+            text,
+        };
+        if get_preprocessor_data(&source.text).0.is_some() {
+            out.modules.push(source);
+        } else {
+            out.shaders.push(source);
+        }
+    }
+    Ok(out)
 }
 
 /// Parse and validate standalone WGSL with naga, reporting errors against

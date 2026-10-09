@@ -7,11 +7,12 @@
 //! tree per channel and prints **one** top-level WGSL module: imports, the
 //! `Encodings` uniform struct (one field per channel: a shader function's
 //! `Params` or a constant), the per-chunk uniform, bindings, the vertex
-//! column inputs and the two entry points. naga_oil keeps entry points only
-//! from the top-level shader, so entry points live only here. Library
-//! modules are imported, never edited.
+//! column inputs and the two entry points. Library modules are imported
+//! (naga_oil syntax, resolved by `gup_wgsl::link` against the modules
+//! flattened at build time), never edited, and entry points live only
+//! here.
 
-use super::{VIEW, WgslModule};
+use super::{StructLayout, VIEW, WgslModule};
 use crate::column::ColumnFormat;
 use crate::encoding::{DynShaderFn, Resource};
 use std::fmt::{self, Write as _};
@@ -62,6 +63,14 @@ pub(crate) struct Glue {
     pub relative: Vec<usize>,
     /// LUT bindings in group 1.
     pub luts: Vec<LutBinding>,
+    /// Layout of the `Encodings` uniform: each field starts on a 16-byte
+    /// boundary, so offsets follow from the encase sizes alone (GUP-401,
+    /// GUP-406). A test checks them against naga's layout of the linked
+    /// module.
+    pub encodings: StructLayout,
+    /// Layout of the per-chunk `Chunk` uniform (`row_base`, then one
+    /// `<channel>_base: f32` per relative channel).
+    pub chunk: StructLayout,
 }
 
 /// A WGSL expression in the vertex entry point.
@@ -226,24 +235,43 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
     }
 
     let _ = writeln!(w, "\nstruct Encodings {{");
+    let mut encodings = StructLayout {
+        span: 0,
+        members: Vec::new(),
+    };
     for (name, ty, size) in &fields {
         // Every field starts on a 16-byte boundary by construction: `Params`
         // structs span multiples of 16 and scalar constants get `u32`
-        // padding. Not `@align(16)`: naga's WGSL writer (what wgpu hands a
-        // browser) drops layout attributes, and a browser with
-        // `uniform_buffer_standard_layout` then accepts the natural,
-        // unaligned offsets, so the shader and the uniform bytes disagree
+        // padding, so offsets follow from the sizes alone. Not
+        // `@align(16)`: library structs pass through naga's WGSL writer at
+        // build time, which drops layout attributes, and a browser with
+        // `uniform_buffer_standard_layout` accepts the natural, unaligned
+        // offsets, so the shader and the uniform bytes would disagree
         // (GUP-401).
         let _ = writeln!(w, "    {name}: {ty},");
+        encodings.members.push((name.to_string(), encodings.span));
         for (k, pad) in ["a", "b", "c"].iter().enumerate() {
-            if (*size as usize).next_multiple_of(16) > *size as usize + 4 * k {
+            let offset = *size as u32 + 4 * k as u32;
+            if size.next_multiple_of(16) > u64::from(offset) {
                 let _ = writeln!(w, "    {name}_pad_{pad}: u32,");
+                encodings
+                    .members
+                    .push((format!("{name}_pad_{pad}"), encodings.span + offset));
             }
         }
+        encodings.span += size.next_multiple_of(16) as u32;
     }
     let _ = writeln!(w, "}}\n\nstruct Chunk {{\n    row_base: u32,");
+    let mut chunk = StructLayout {
+        span: 4,
+        members: vec![("row_base".to_string(), 0)],
+    };
     for &i in &relative {
         let _ = writeln!(w, "    {}_base: f32,", spec.channels[i].name);
+        chunk
+            .members
+            .push((format!("{}_base", spec.channels[i].name), chunk.span));
+        chunk.span += 4;
     }
     let _ = writeln!(w, "}}\n");
 
@@ -308,6 +336,8 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
         columns,
         relative,
         luts,
+        encodings,
+        chunk,
     }
 }
 

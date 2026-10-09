@@ -5,7 +5,7 @@
 //! `#[derive(Mark)]` generator are RFC-001 S6.
 
 use crate::channel::{Channel, ChannelDesc, Color, ConstValue, Mark, Px, Role};
-use crate::shader::{MARK_CIRCLE, WgslModule};
+use crate::shader::{MARKS_CIRCLE, WgslModule};
 
 /// A filled disc centred on `(X, Y)`, sized in logical pixels so it stays
 /// round on any aspect ratio.
@@ -28,7 +28,7 @@ impl Circle {
 
 impl Mark for Circle {
     const NAME: &'static str = "Circle";
-    const MODULE: &'static WgslModule = &MARK_CIRCLE;
+    const MODULE: &'static WgslModule = &MARKS_CIRCLE;
     const CHANNELS: &'static [ChannelDesc] = &[
         ChannelDesc {
             name: "x",
@@ -78,30 +78,14 @@ mod tests {
     /// The WGSL `CircleIn` struct has exactly the channels, in order.
     #[test]
     fn wgsl_input_struct_matches_channels() {
-        let mut lib = crate::shader::ShaderLibrary::new();
-        let composed = lib
-            .compose(
-                "circle_in_probe",
-                "#import gup::marks::circle as circle\n\
-                 @vertex fn main() -> @builtin(position) vec4<f32> {\n\
-                 var m: circle::CircleIn; return vec4<f32>(m.x, m.y, m.radius, m.fill.a); }\n",
-                &[],
-            )
-            .unwrap();
-        let ty = composed
-            .module
-            .types
-            .iter()
-            .find_map(|(_, t)| match &t.inner {
-                naga::TypeInner::Struct { members, .. }
-                    if t.name.as_deref().is_some_and(|n| n.starts_with("CircleIn")) =>
-                {
-                    Some(members.clone())
-                }
-                _ => None,
-            })
-            .expect("CircleIn in composed module");
-        let names: Vec<_> = ty.iter().map(|m| m.name.clone().unwrap()).collect();
+        use crate::shader::testing::{parse, struct_layout};
+        let module = parse(
+            "circle",
+            &crate::shader::link("circle", "#import gup::marks::circle\n", &[&MARKS_CIRCLE])
+                .unwrap(),
+        );
+        let layout = struct_layout(&module, "gup_marks_circle_CircleIn").expect("CircleIn");
+        let names: Vec<_> = layout.members.iter().map(|(n, _)| n.clone()).collect();
         let channels: Vec<_> = Circle::CHANNELS.iter().map(|c| c.name).collect();
         assert_eq!(names, channels);
     }

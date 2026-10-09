@@ -10,7 +10,7 @@ enum Bar {}
 
 static BAR_MODULE: WgslModule = WgslModule {
     import_path: "test::bar",
-    source: "#define_import_path test::bar\n",
+    wgsl: "",
     imports: &[],
 };
 

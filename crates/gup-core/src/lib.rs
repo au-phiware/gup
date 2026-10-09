@@ -13,8 +13,10 @@
 //!   wrong value types, unknown channels and wrong marks don't compile;
 //! - one [scale](scale) family, each a [`ShaderFn`] with an f64
 //!   [`CpuMirror`] — zooming changes uniforms only;
-//! - shader composition with naga_oil library modules plus a typed glue
-//!   emitter — no find-and-replace on authored WGSL;
+//! - shader composition at build time: naga_oil flattens the WGSL library
+//!   once, in `build.rs`, and a typed glue emitter's output is linked to it
+//!   at run time, so neither naga nor naga_oil is in the binary on any
+//!   target — no find-and-replace on authored WGSL;
 //! - a resolved [`Scene`] drawn by a [`Renderer`] into any
 //!   [`RenderTarget`] ([`ImageTarget`], [`TextureTarget`], a window, or a
 //!   host's own pass), or written as SVG by [`SvgTarget`] (guides only).
@@ -34,9 +36,8 @@
 //!   [`Context::upload_stats`]. The `every_gpu_write_is_counted` test fails
 //!   if any source file writes to GPU memory another way, so claims such as
 //!   "zooming writes 0 column bytes" stay provable as the crate grows.
-//! - **Lock order.** A context's pipeline cache may be held while its
-//!   shader library is taken, never the reverse, and its text system is
-//!   never held with either. Debug builds check this on every acquisition.
+//! - **Lock order.** A context's pipeline cache and its text system are
+//!   never held together. Debug builds check this on every acquisition.
 
 /// The exact wgpu version Gup is built on. Hosts passing devices to
 /// [`Context::from_wgpu`] must use the same major version.

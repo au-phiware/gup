@@ -9,10 +9,7 @@ use crate::context::{Context, ContextId, Upload};
 use crate::error::{Error, Result};
 use crate::scene::{GradientDirection, ItemKind, Rule, Scene, TextRun};
 use crate::shader::glue::Glue;
-use crate::shader::{
-    COLOR_SEQUENTIAL, GRADIENT_SHADER, RECT_SHADER, RULE_SHADER, StructLayout, VIEW, WgslModule,
-    struct_layout,
-};
+use crate::shader::{GRADIENT_SHADER, RECT_SHADER, RULE_SHADER, StructLayout, link};
 use crate::target::RenderTarget;
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -51,13 +48,14 @@ pub struct TargetDesc {
 /// `min_uniform_buffer_offset_alignment`).
 const DYNAMIC_ALIGN: u64 = 256;
 
-/// A composed glue module and the layouts to bind it.
+/// A linked glue module and the layouts to bind it.
 pub(crate) struct GlueProgram {
     pub glue: Glue,
-    pub module: naga::Module,
-    /// naga's layout of the `Encodings` uniform struct.
+    /// The glue linked against the flattened library: what wgpu compiles.
+    pub wgsl: String,
+    /// Layout of the `Encodings` uniform struct.
     pub encodings: StructLayout,
-    /// naga's layout of the per-chunk `Chunk` uniform struct.
+    /// Layout of the per-chunk `Chunk` uniform struct.
     pub chunk: StructLayout,
     pub enc_bgl: wgpu::BindGroupLayout,
     pub chunk_bgl: wgpu::BindGroupLayout,
@@ -114,14 +112,15 @@ struct PipelineKey {
 /// Counters and the most recent timings, for tests and the RFC record.
 #[derive(Copy, Clone, Debug, Default, PartialEq)]
 pub struct PipelineStats {
-    /// Glue modules composed (cache misses).
-    pub programs_composed: u32,
+    /// Glue modules linked (cache misses).
+    pub programs_linked: u32,
     /// Render pipelines created (cache misses).
     pub pipelines_created: u32,
     /// Pipeline cache hits.
     pub pipeline_hits: u32,
-    /// naga_oil compose time of the last composed glue module.
-    pub last_compose: Duration,
+    /// Link time of the last linked glue module (concatenation with the
+    /// library flattened at build time).
+    pub last_link: Duration,
     /// `create_render_pipeline` time of the last created mark pipeline.
     pub last_create: Duration,
 }
@@ -184,21 +183,14 @@ impl PipelineCache {
             .clone()
     }
 
-    /// The composed program for `glue`, composing it on first use.
+    /// The linked program for `glue`, linking it on first use.
     pub(crate) fn program(&mut self, cx: &Context, glue: &Glue) -> Result<Arc<GlueProgram>> {
         if let Some(p) = self.programs.get(&glue.signature) {
             return Ok(Arc::clone(p));
         }
-        let composed = cx
-            .shaders()
-            .compose(&glue.signature, &glue.source, &glue.modules)?;
-        let missing = |what: &str| Error::Compose {
-            module: glue.signature.clone(),
-            report: format!("generated glue has no `{what}` struct"),
-        };
-        let encodings =
-            struct_layout(&composed.module, "Encodings").ok_or_else(|| missing("Encodings"))?;
-        let chunk = struct_layout(&composed.module, "Chunk").ok_or_else(|| missing("Chunk"))?;
+        let start = Instant::now();
+        let wgsl = link(&glue.signature, &glue.source, &glue.modules)?;
+        let link_time = start.elapsed();
 
         let device = cx.device();
         let mut enc_entries = vec![uniform_entry(0, false)];
@@ -219,13 +211,13 @@ impl PipelineCache {
             bind_group_layouts: &[&view_bgl, &enc_bgl, &chunk_bgl],
             push_constant_ranges: &[],
         });
-        self.stats.programs_composed += 1;
-        self.stats.last_compose = composed.compose_time;
+        self.stats.programs_linked += 1;
+        self.stats.last_link = link_time;
         let program = Arc::new(GlueProgram {
             glue: glue.clone(),
-            module: composed.module,
-            encodings,
-            chunk,
+            wgsl,
+            encodings: glue.encodings.clone(),
+            chunk: glue.chunk.clone(),
             enc_bgl,
             chunk_bgl,
             layout,
@@ -255,7 +247,7 @@ impl PipelineCache {
             .device()
             .create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some(&program.glue.signature),
-                source: wgpu::ShaderSource::Naga(Cow::Owned(program.module.clone())),
+                source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(&program.wgsl)),
             });
         let attributes: Vec<wgpu::VertexAttribute> = (0..program.glue.columns.len())
             .map(|loc| wgpu::VertexAttribute {
@@ -325,14 +317,15 @@ impl PipelineCache {
             PipelineKind::Mark(_) => unreachable!("mark pipelines come from glue programs"),
         };
         let lut_bgl = self.lut_bgl(device);
-        let (imports, groups): (&[&WgslModule], Vec<&wgpu::BindGroupLayout>) = match kind {
-            PipelineKind::Gradient => (&[&VIEW, &COLOR_SEQUENTIAL], vec![&view_bgl, &lut_bgl]),
-            _ => (&[&VIEW], vec![&view_bgl]),
+        let groups = match kind {
+            PipelineKind::Gradient => vec![&view_bgl, &lut_bgl],
+            _ => vec![&view_bgl],
         };
-        let composed = cx.shaders().compose(label, source, imports)?;
+        // Guide shaders are authored WGSL, flattened completely at build
+        // time.
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some(label),
-            source: wgpu::ShaderSource::Naga(Cow::Owned(composed.module)),
+            source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(source)),
         });
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some(label),
