@@ -7,7 +7,10 @@ testing and regression detection.
 
 ### Performance Testing (`performance.yml`)
 
-Runs on every PR and push to `main` to detect performance regressions.
+Runs on every PR and push to `main` to detect performance regressions. Only the
+two threshold jobs (`perf_check`, `performance`) run per push; the axis and WASM
+axis jobs run on pull requests, weekly and on manual dispatch. The workflow's
+header comment gives the reasons (GUP-409).
 
 #### Features
 
@@ -73,6 +76,21 @@ browser job alone.
 
 No workflow has a `paths:` filter, and none reads the pre-commit hook's scoping
 rules: a workflow that runs runs all of its checks, whatever changed.
+
+### Every workflow cancels its superseded runs
+
+Every workflow has a `concurrency:` group (`<workflow>-${{ github.ref }}`) with
+`cancel-in-progress: true`, so a second push to a branch cancels the first
+push's runs instead of queueing beside them (GUP-409: queued jobs piling up
+produced "job was not acquired by Runner" failures). Performance adds the event
+name to its group so that a push never cancels the weekly benchmark.
+
+### Workflow files are linted
+
+`actionlint` (with shellcheck on every `run:` script) checks every file in this
+directory. It runs in `mask all-check` (so in the Lint workflow) and in the
+pre-commit hook whenever a workflow file is staged. A malformed workflow does
+not fail a run on GitHub: the run never starts, so nothing reports it.
 
 ## Toolchain and GPU (all workflows)
 

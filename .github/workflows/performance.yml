@@ -1,3 +1,27 @@
+# Performance: timing budgets and benchmarks for the `gup` crate.
+#
+# Which jobs run on a push to main (GUP-409). Each push already starts about
+# ten jobs across the workflows, and runs on 83143d2 and 7f8ad96 failed with
+# "job was not acquired by Runner". So a job runs per push only if it is the
+# sole gate for something that can regress between pushes:
+#
+#   perf_check, performance   per push. The interaction and CI timing budgets
+#                             (test = false binaries) run nowhere else.
+#   axis_performance          pull requests, weekly and manual only. It times
+#                             the frozen axis code (old path, RFC-001 S14
+#                             deletes it); its Criterion step is informational
+#                             (continue-on-error) and noisy on lavapipe.
+#   wasm_axis_performance     pull requests, weekly and manual only. Its gating
+#                             steps repeat other workflows: WASM's wasm32 build
+#                             and export check, and Tests' `gup` lib tests
+#                             (wasm_bench_axis). Its browser steps are
+#                             informational.
+#   benchmark                 weekly and manual only (316 benchmarks).
+#   cross_platform_comparison, pattern_benchmarks_pr: manual, pull requests.
+#
+# The concurrency group includes the event, so a push cancels a superseded
+# push run but never the weekly benchmark (up to three hours) on main.
+
 name: Performance Testing
 
 on:
@@ -21,6 +45,10 @@ env:
   # The runners have no GPU. This makes the Nix dev shell point Vulkan at
   # Mesa's lavapipe (software Vulkan) so GPU tests get an adapter.
   GUP_SOFTWARE_GPU: "1"
+
+concurrency:
+  group: performance-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
 
 jobs:
   # ── Threshold-based performance regression tests (runs on every PR) ──
@@ -51,8 +79,8 @@ jobs:
           set +e
           nix develop --command bash -c "mask perf-check" 2>&1 | tee perf_check_output.txt
           rc=${PIPESTATUS[0]}
-          echo "exit_code=$rc" >> $GITHUB_OUTPUT
-          exit $rc
+          echo "exit_code=$rc" >> "$GITHUB_OUTPUT"
+          exit "$rc"
 
       - name: Upload threshold test results
         if: always()
@@ -126,7 +154,7 @@ jobs:
               --report performance_report.md \
               --json performance_report.json
           "
-          echo "exit_code=$?" >> $GITHUB_OUTPUT
+          echo "exit_code=$?" >> "$GITHUB_OUTPUT"
 
       - name: Check for regressions in CI report
         id: regression_check
@@ -134,7 +162,7 @@ jobs:
         run: |
           if [ -f performance_report.json ]; then
             status=$(python3 -c "import json; d=json.load(open('performance_report.json')); print(d.get('status','fail'))" || echo "fail")
-            echo "status=$status" >> $GITHUB_OUTPUT
+            echo "status=$status" >> "$GITHUB_OUTPUT"
             if [ "$status" = "fail" ]; then
               echo "⚠️ Performance regressions detected"
               exit 1
@@ -218,23 +246,23 @@ jobs:
 
       - name: Generate comparison report
         run: |
-          echo "# Cross-Platform Performance Comparison" > comparison_report.md
-          echo "" >> comparison_report.md
-          echo "**Timestamp**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> comparison_report.md
-          echo "" >> comparison_report.md
-
-          echo "## Platforms Tested" >> comparison_report.md
-          echo "" >> comparison_report.md
-          for dir in platform-reports/*/; do
-            if [ -f "$dir/performance_report.json" ]; then
-              platform=$(jq -r '.platform_info.vendor // "Unknown"' "$dir/performance_report.json")
-              model=$(jq -r '.platform_info.model // "Unknown"' "$dir/performance_report.json")
-              echo "- $platform: $model" >> comparison_report.md
-            fi
-          done
-
-          echo "" >> comparison_report.md
-          echo "For detailed reports, see individual platform artifacts." >> comparison_report.md
+          {
+            echo "# Cross-Platform Performance Comparison"
+            echo ""
+            echo "**Timestamp**: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+            echo ""
+            echo "## Platforms Tested"
+            echo ""
+            for dir in platform-reports/*/; do
+              if [ -f "$dir/performance_report.json" ]; then
+                platform=$(jq -r '.platform_info.vendor // "Unknown"' "$dir/performance_report.json")
+                model=$(jq -r '.platform_info.model // "Unknown"' "$dir/performance_report.json")
+                echo "- $platform: $model"
+              fi
+            done
+            echo ""
+            echo "For detailed reports, see individual platform artifacts."
+          } > comparison_report.md
 
       - name: Upload comparison report
         uses: actions/upload-artifact@v4
@@ -265,6 +293,8 @@ jobs:
     name: Axis Performance Validation (${{ matrix.platform }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 15
+    # Not per push: see the header comment.
+    if: github.event_name != 'push'
     strategy:
       fail-fast: false
       matrix:
@@ -330,6 +360,8 @@ jobs:
     name: WASM Axis Performance Validation
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Not per push: see the header comment.
+    if: github.event_name != 'push'
 
     steps:
       - name: Checkout code
@@ -353,9 +385,12 @@ jobs:
 
       - name: Verify axis benchmark export exists
         run: |
-          grep -q "run_wasm_axis_benchmarks" benches/wasm/pkg/gup.js \
-            && echo "✅ run_wasm_axis_benchmarks exported" \
-            || (echo "❌ Missing axis benchmark export" && exit 1)
+          if grep -q "run_wasm_axis_benchmarks" benches/wasm/pkg/gup.js; then
+            echo "✅ run_wasm_axis_benchmarks exported"
+          else
+            echo "❌ Missing axis benchmark export"
+            exit 1
+          fi
 
       - name: Run native axis benchmarks (WASM module unit tests)
         run: |
@@ -438,10 +473,10 @@ jobs:
           nix develop --command bash -c "cargo bench --bench pattern_performance_benchmarks -- --baseline main --save-baseline pr-${{ github.event.pull_request.number }}" > benchmark_comparison.txt 2>&1 || true
 
           if grep -q "Performance has regressed\|change:.*+[1-9][0-9]\{1,\}%" benchmark_comparison.txt; then
-            echo "regression_detected=true" >> $GITHUB_OUTPUT
+            echo "regression_detected=true" >> "$GITHUB_OUTPUT"
             echo "⚠️ Performance regression detected in pattern benchmarks"
           else
-            echo "regression_detected=false" >> $GITHUB_OUTPUT
+            echo "regression_detected=false" >> "$GITHUB_OUTPUT"
             echo "✅ No significant performance regressions detected"
           fi
 
@@ -493,11 +528,13 @@ jobs:
           EOF
           fi
 
-          echo "---" >> benchmark_summary.md
-          echo "" >> benchmark_summary.md
-          echo "**Note**: Benchmarks run on software rendering (no GPU). Results may differ on real hardware." >> benchmark_summary.md
-          echo "" >> benchmark_summary.md
-          echo "📊 Full benchmark results available in workflow artifacts." >> benchmark_summary.md
+          {
+            echo "---"
+            echo ""
+            echo "**Note**: Benchmarks run on software rendering (no GPU). Results may differ on real hardware."
+            echo ""
+            echo "📊 Full benchmark results available in workflow artifacts."
+          } >> benchmark_summary.md
 
       - name: Upload benchmark comparison
         if: always()
