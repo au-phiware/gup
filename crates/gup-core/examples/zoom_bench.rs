@@ -13,6 +13,9 @@
 //!   --warmup N                         unmeasured frames first (default 60)
 //!   --points N                         rows (default 100000)
 //!   --radius PX                        circle radius (default 3)
+//!   --chunk-rows N                     at most N rows per column chunk, so
+//!                                      the layer draws several instanced
+//!                                      draws (default: the device's size)
 //!   --size WxH                         windowed at this physical size
 //!                                      (default: borderless fullscreen)
 //!   --uncapped                         draw frames back to back instead of
@@ -48,6 +51,7 @@ struct Options {
     warmup: usize,
     points: usize,
     radius: f32,
+    chunk_rows: Option<u32>,
     size: Option<(u32, u32)>,
     uncapped: bool,
 }
@@ -59,6 +63,7 @@ fn options() -> Options {
         warmup: 60,
         points: 100_000,
         radius: 3.0,
+        chunk_rows: None,
         size: None,
         uncapped: false,
     };
@@ -79,6 +84,9 @@ fn options() -> Options {
             "--warmup" => o.warmup = value().parse().expect("--warmup N"),
             "--points" => o.points = value().parse().expect("--points N"),
             "--radius" => o.radius = value().parse().expect("--radius PX"),
+            "--chunk-rows" => {
+                o.chunk_rows = Some(value().parse().expect("--chunk-rows N"));
+            }
             "--uncapped" => o.uncapped = true,
             "--size" => {
                 let (w, h) = value().split_once('x').expect("--size WxH");
@@ -323,9 +331,12 @@ impl Bench {
         let gpu = self.gpu.as_ref().unwrap();
         let (w, h) = gpu.target.size();
         println!(
-            "run: {} points, radius {} px, {}x{} physical (dpr {}), present {:?}{}, \
+            "run: {} points{}, radius {} px, {}x{} physical (dpr {}), present {:?}{}, \
              {} warm-up + {} measured frames, {} build",
             o.points,
+            o.chunk_rows
+                .map(|n| format!(" in chunks of at most {n} rows"))
+                .unwrap_or_default(),
             o.radius,
             w,
             h,
@@ -411,7 +422,8 @@ impl Bench {
         );
         let all = self.uploads_during.unwrap();
         println!(
-            "GPU writes since start: columns {} B in {} writes (the one upload)",
+            "GPU writes since start: columns {} B in {} writes (the one upload: \
+             one write per column per chunk)",
             all.columns.bytes, all.columns.writes
         );
     }
@@ -498,7 +510,8 @@ impl ApplicationHandler for Bench {
 fn main() {
     let o = options();
     let t = Instant::now();
-    let (plot, x, y) = scatter::plot_rows(scatter::countries_n(o.points), Px(o.radius));
+    let (plot, x, y) =
+        scatter::plot_rows_chunked(scatter::countries_n(o.points), Px(o.radius), o.chunk_rows);
     println!(
         "generated {} rows in {:.1} ms",
         o.points,
