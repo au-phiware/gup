@@ -244,6 +244,10 @@ Output a brief summary:
 
 ## Important Notes
 
+- **Pinned tools**: format and lint Markdown with the dev shell's `prettier` and
+  `mdl` (pinned by the flake), never `npx prettier`, which fetches a newer
+  version that re-wraps unrelated lines. If missing from PATH, use
+  `nix develop -c`.
 - **Do not implement**: Your job is to write the planning document, not the
   code. Leave implementation to `story-worker`.
 - **Do not invent requirements**: If the intent is ambiguous, make reasonable

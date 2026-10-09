@@ -182,6 +182,16 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   around gup-core's pipeline creation, resolution and rendering: a GPU
   validation failure is `Error::Gpu` on every target, not a native panic or a
   silent blank image in a browser. Deps: GUP-406 ✅, GUP-408 ✅.
+- [GUP-414](GUP-414_RFC_001_S4a_Column_Store_Chunking_Append.md) 📋 — RFC-001
+  step S4a: generalise the column store from one chunk to many (per-chunk
+  origins and stats, a multi-draw rendering path) and add counted tail append,
+  proved at a forced multi-chunk boundary. Deps: GUP-395 ✅, GUP-401 ✅, GUP-410
+  ✅ (soft).
+- [GUP-415](GUP-415_RFC_001_S4b_Nulls_And_Dictionaries.md) 📋 — RFC-001 step
+  S4b: validity bits for nulls (degenerate quads, a reserved null colour code),
+  dictionary-encoded categorical columns with the `for<'a> Fn(&'a T) -> &'a str`
+  key-accessor fix for RFC-001 §12 risk 4, and the `Retain` policy controlling
+  CPU-side data retention. Deps: GUP-414 📋, GUP-395 ✅, GUP-410 ✅ (soft).
 
 ## GPU Rendering Pipeline
 
