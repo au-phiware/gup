@@ -233,16 +233,16 @@ must do, just run once at build time rather than conditionally at runtime.
   flattened-and-concatenated path's entry points and layout against naga_oil's
   direct composition before trusting it on wasm.
 - **Medium — how runtime glue references mangled names.** The glue emitter
-  currently emits `#import` paths and lets naga*oil resolve and mangle them.
-  Once the library is pre-flattened, the glue must reference the \_mangled*
-  names directly (or the build step must leave stable, documented item names the
-  glue can target). Getting this wrong fails at pipeline creation, not at build
-  time, since the glue itself is still built and validated at runtime by wgpu
-  only. Mitigation: prefer a flattening scheme that preserves stable,
-  predictable names (for example `gup__scale__linear__map_rel` rather than
-  naga_oil's own hash-based mangling) so the glue emitter can target them
-  directly without depending on naga_oil's internal mangling scheme, which is
-  not a public contract.
+  currently emits `#import` paths and lets `naga_oil` resolve and mangle them.
+  Once the library is pre-flattened, the glue must reference the _mangled_ names
+  directly (or the build step must leave stable, documented item names the glue
+  can target). Getting this wrong fails at pipeline creation, not at build time,
+  since the glue itself is still built and validated at runtime by wgpu only.
+  Mitigation: prefer a flattening scheme that preserves stable, predictable
+  names (for example `gup__scale__linear__map_rel` rather than naga_oil's own
+  hash-based mangling) so the glue emitter can target them directly without
+  depending on naga_oil's internal mangling scheme, which is not a public
+  contract.
 - **Low — error message quality at build time vs today's runtime errors.**
   Build-time errors from a build script are seen once, at `cargo build`, and may
   be less visible than a runtime panic during development. Mitigation: fail the
@@ -305,13 +305,13 @@ and the gup-core tests listed below).
 
 ### Mangling: stable, readable flat names
 
-- Items are renamed in the IR from naga*oil's decorated names
+- Items are renamed in the IR from `naga_oil`'s decorated names
   (`ParamsX_naga_oil_mod_XM52XAOR2ONRWC3DFHI5GY2LOMVQXEX`) to
-  `gup_wgsl::flat_name(path, item)`: `::` →
-  `*`, then the item (`gup_scale_linear_Params`, `gup_marks_circle_vertex`). These survive naga's namer unchanged (no `\_\_`,
-  no trailing digit; the build fails if one does not, or if two items share a
-  flat name). The scheme is gup-wgsl's own contract, not naga_oil's internal
-  mangling.
+  `gup_wgsl::flat_name(path, item)`, which replaces each `::` with an underscore
+  and appends the item (`gup_scale_linear_Params`, `gup_marks_circle_vertex`).
+  These survive naga's namer unchanged (no double underscore, no trailing digit;
+  the build fails if one does not, or if two items share a flat name). The
+  scheme is gup-wgsl's own contract, not naga_oil's internal mangling.
 - The run-time linker (`gup_wgsl::link`, no dependencies) reads the glue's
   naga_oil-style `#import` lines, rewrites `alias::item`, `full::path::item` and
   `{Item}` imports to flat names (comments and `.member` accesses untouched),
@@ -406,3 +406,155 @@ time gup-core links its generated glue to pre-flattened WGSL and hands wgpu
 - `mask wasm-browser`: PASS; the PNG is described in the retrospective.
 - `mask all-check` clean; `cargo check --examples` clean; `mask old-path-loc`
   28935 (unchanged).
+
+## Retrospective
+
+**Completed**: 2026-10-09
+
+### Key Technical Learnings
+
+#### naga_oil hands back IR, so "its own mangled text" does not exist
+
+- **Challenge**: The Risk Assessment hoped the build step could use naga_oil's
+  output text directly, avoiding naga's WGSL writer (which drops `@align`).
+  naga_oil only rewrites references to imported items textually; a module's own
+  items are renamed in the IR, and the composed result is a `naga::Module`.
+- **Solution**: Rename decorated items in the IR to `flat_name`s
+  (`UniqueArena::replace` for types, `iter_mut` for the rest), print with naga's
+  writer, then verify the round trip at build time: re-parse the printed text,
+  validate it standalone, and compare span, member offsets and member names of
+  every struct. A seeded `@align(16)` member fails the build.
+- **Pattern**: When a tool's output must cross a representation boundary, don't
+  argue about whether it survives: make the build re-read it and compare.
+
+#### naga_oil imports only what a shader names
+
+- **Challenge**: The first probe
+  (`#import gup::scale::linear::{Params, map_rel}` with nothing else) composed
+  to an empty module. naga_oil records an import's items from their uses in the
+  importing source.
+- **Solution**: `NagaModuleDescriptor::additional_imports` imports listed items
+  without uses. The item list comes from a lexical scan of the module's
+  module-scope declarations; a decorated name left over after renaming fails the
+  build, so a missed item cannot go unnoticed.
+- **Pattern**: Read the composer's import code before designing a probe; the
+  item-level semantics were only clear from `parse_imports.rs`.
+
+#### The trailing-digit rule is narrower and wider than recorded
+
+- **Challenge**: S0a recorded "naga_oil rejects identifiers like `r0`". A
+  function argument named `r0` composed fine.
+- **Solution**: naga_oil checks exported items and struct members only (the
+  names its headers re-parse). naga's writer renames trailing-digit function
+  arguments and locals by appending an underscore, which is harmless. But
+  top-level shaders are not composable modules, so naga_oil never checked them,
+  and naga's writer renamed `rule.wgsl`'s `RuleIn.p0`. The build's member-name
+  comparison now covers top-level shaders too.
+- **Pattern**: When a rule exists because of one tool's behaviour (naga's
+  namer), enforce it where that tool runs, not where the rule was first noticed.
+
+#### What the browser now runs
+
+- `mask wasm-browser` passed first time. The PNG (320×200) shows the title
+  "Wealth, population and life expectanc…" clipped at the right edge (the known
+  S7 layout issue), log y ticks 100k–1G, x ticks 0–60000, about 200 viridis
+  circles spread across the plot, the tinted `#eef1f6` plot background behind
+  them, and a vertical legend bar right of the plot running from purple at the
+  bottom to yellow at the top. The page reported white=30884 grey=16219
+  coloured=16897.
+- The harness gained the background and legend in this story, so Chrome now runs
+  all five pipeline kinds. That settled a question the spike raised: naga's
+  writer puts `@interpolate(flat)` on integer vertex _inputs_, and Chrome
+  accepts it.
+
+### Architectural Decisions
+
+#### One crate, split at the build boundary by a feature
+
+- **Decision**: `gup-wgsl` without features is the run-time linker (no
+  dependencies); `compose` adds naga_oil and naga for build scripts, tests and,
+  later, the `#[wgsl_function]` proc macro.
+- **Reasoning**: The naming scheme (`flat_name`) and `WgslModule` must be the
+  same at build and run time. One crate keeps them in one place. Resolver 2
+  keeps build-dependency features out of the normal build, so
+  `cargo tree -e normal` shows no naga.
+- **Trade-off**: gup-core's dev-dependency on `gup-wgsl/compose` unifies into
+  test builds, so naga_oil is linked into gup-core's test binaries (never its
+  library).
+- **Future**: S5's proc macro depends on the same `compose` feature.
+
+#### Flat names are Gup's contract, not naga_oil's mangling
+
+- **Decision**: `gup::scale::linear` + `map_rel` → `gup_scale_linear_map_rel`,
+  checked unique at build time and rejected at link time if two modules share an
+  import path.
+- **Reasoning**: Readable linked WGSL (`scatter_linked.wgsl` reads like the
+  glue) and no dependence on naga_oil's base32 decoration, which is not a public
+  API.
+- **Trade-off**: `a::b` + `c_d` and `a::b::c` + `d` collide. The build reports
+  it; renaming one item is the fix.
+
+#### The glue keeps its `#import` lines; the linker reads them
+
+- **Decision**: The glue emitter is unchanged. `link` parses its naga_oil-style
+  imports, qualifies `alias::item`, full paths and `{Item}` imports, comments
+  out the import lines (so line numbers match the glue) and appends the
+  flattened modules.
+- **Reasoning**: AC2 required the glue byte-identical, and the glue stays the
+  readable artifact. The rewrite touches only generated text; authored WGSL is
+  never edited at run time.
+- **Trade-off**: A small WGSL token scanner (`lex.rs`) lives in the run-time
+  crate. It skips comments and `.member` accesses and handles only the import
+  forms the emitter writes; anything else is a `LinkError`.
+
+#### Guide shaders are flattened completely at build time
+
+- **Decision**: Top-level authored shaders (rule, rect, gradient) become
+  complete WGSL constants, not run-time links.
+- **Reasoning**: They are fully known at build time, and linking them at run
+  time would rewrite authored WGSL.
+- **Trade-off**: Each carries its own copy of `gup_view_px_to_clip` and `View`.
+  They are separate shader modules, so the copies never meet.
+
+### Development Workflow Insights
+
+- Spiking against the real library and the checked-in glue fixture (rather than
+  a toy) found both real hazards (the empty probe, the renamed `p0`) in the
+  first hour, before any gup-core code changed. Committing the spike with its
+  findings in the story kept the later commits focused.
+- `perl -0pi -e 's|…|…|'` with `|` as the delimiter silently corrupted
+  `context.rs` twice: a `||` in the pattern became alternation and matched the
+  empty string at offset 0. A 15-line Rust literal-replace helper (`/tmp/repl`,
+  from file pairs, failing on no match) was safer for multi-line edits.
+- Disk: /tmp fell to 3.4 GB after the release timing build. 89 stale test
+  executables from 5–6 October (4.2 GB, link outputs only) were deleted, which
+  left the dependency cache warm; ZFS took about 15 s to report the space. The
+  wasm release directory was deleted after each measurement.
+- The build script runs in about 0.2 s (debug-profile naga_oil, five modules and
+  three shaders); touching a shader rebuilds gup-core in under a second.
+  `cargo::error=` gives a one-line summary in cargo's own output, with the full
+  codespan report under "--- stderr".
+- Pipeline creation moved cost around: linking is 20× cheaper than composing
+  (0.11 against 2.28 ms), while `create_shader_module` doubled (0.42 → 0.82 ms)
+  because wgpu now parses WGSL where it used to receive IR. The net is 3×
+  faster.
+
+### Follow-up Stories
+
+No new stories. The remaining work belongs to RFC-001 steps that already exist
+on the roadmap and is recorded in RFC-001 "GUP-406 findings":
+
+- **S5 (`#[wgsl_function]`)**: flatten user modules with
+  `gup_wgsl::compose::Library::new` at expansion, which also covers this story's
+  two deferred ACs; decide the import path (a proc macro cannot see
+  `module_path!()`), make gup-core's library sources available at expansion, map
+  errors to `compile_error!`, and check the entry signature against the glue's
+  calling convention.
+- **Error reporting for invalid glue**: a generator bug in the glue now surfaces
+  as wgpu's uncaptured validation error at pipeline creation (a panic on native)
+  instead of `Error::Compose`. `link` still reports unknown modules and items.
+  If S5 makes user modules able to trigger this, wrap shader creation in an
+  error scope there.
+- **GUP-407** (Inter subset) would take the scatter from 393 to about 218 KB gz;
+  **GUP-408** (browser CI) should keep the legend and background so CI runs
+  every pipeline kind.

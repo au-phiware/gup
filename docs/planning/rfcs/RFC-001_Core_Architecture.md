@@ -834,7 +834,7 @@ follow S14 as T5 stories.
    use `scale.encode(..)`. Document `attr(ch, closure)` as "pre-encoded visual
    values".
 10. **WASM.** There is no blocking, so `save_png` and `Context::shared` don't
-    exist there. naga*oil adds binary size. \_Recommendation*: async-only APIs
+    exist there. `naga_oil` adds binary size. _Recommendation_: async-only APIs
     on wasm, and measure binary size in S3 with a budget (≤ +400 KB gz). Fall
     back per risk 1 if it's over. (Superseded 2026-10-09: S3 found the cost was
     +897 KB gz, 2.2× over budget — see "S3 findings". The owner's fix is not a
@@ -1747,13 +1747,13 @@ S0a–S3 (Intel HD Graphics 630, Mesa 26.0.0 Vulkan, rustc 1.93.1).
 
 ### Flattening: naga's writer, checked at build time
 
-naga*oil returns a `naga::Module`, not text, so printing flattened WGSL needs
+`naga_oil` returns a `naga::Module`, not text, so printing flattened WGSL needs
 naga's WGSL writer. wgpu's WebGPU backend already used that writer for every
-gup-core shader in S3. Items are renamed in the IR from naga_oil's decorated
-names to `gup_wgsl::flat_name(path, item)` (`::` →
-`*`, then the item: `gup_scale_linear_map_rel`). These names are gup-wgsl's own
-contract, not naga_oil's internal mangling, and they survive naga's namer. The
-build checks, for every module and guide shader:
+gup-core shader in S3. Items are renamed in the IR from `naga_oil`'s decorated
+names to `gup_wgsl::flat_name(path, item)`, which replaces each `::` with an
+underscore and appends the item (`gup_scale_linear_map_rel`). These names are
+gup-wgsl's own contract, not naga_oil's internal mangling, and they survive
+naga's namer. The build checks, for every module and guide shader:
 
 - the flattened text, with its imports', parses and validates standalone;
 - every struct has the same span, member offsets and member names as in
