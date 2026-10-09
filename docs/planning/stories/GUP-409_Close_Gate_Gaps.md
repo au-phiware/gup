@@ -291,3 +291,162 @@ snapshot code (always in place; no clean and full rewrite; ignoring
 on a pushed seed); the first push with two overlapping runs of Performance or
 WASM showing the older one cancelled; and no "job was not acquired by Runner" on
 the next few pushes.
+
+## Retrospective
+
+**Completed**: 2026-10-10
+
+### Gate audit: seeded violation → observed failure
+
+The clippy seeds are in `crates/gup-culling-lod` (a leaf crate): `seeded_fn`
+returning `Vec::<u8>::new().len() == 0` (`clippy::len_zero`) in `src/lib.rs`, or
+the same assertion in an untracked `tests/seeded_untracked.rs`. "OLD" is the
+hook at `9aae6c7`, before the snapshot; "NEW" is `279e9f7`/`b154f2f`. Each run
+is `./scripts/pre_commit.sh` with `CARGO_TARGET_DIR=/tmp/gup-target`, or
+`git commit` where marked. Every seed was reverted afterwards.
+
+| Gate / case                                                | Seeded state                                                                                                     | Observed                                                                                                                                      |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `actionlint`                                               | `git show cf03651:…/visual-regression.yml > .github/workflows/zz-seeded.yml`                                     | exit 1: `"jobs" section is missing`, `"on" section is missing`                                                                                |
+| hook, `git commit` (in place)                              | that file staged, nothing else dirty                                                                             | `mode=workflows`, `[gha] … exited with code 1`, commit rejected                                                                               |
+| hook, `git commit` (snapshot)                              | that file staged, unrelated untracked file                                                                       | snapshot, `mode=workflows`, actionlint exit 1, commit rejected                                                                                |
+| OLD hook, direction 1                                      | staged clean `seeded_fn`; untracked test with the lint                                                           | **exit 1 on `tests/seeded_untracked.rs`: false fail**                                                                                         |
+| NEW hook, direction 1                                      | same                                                                                                             | snapshot, exit 0 (16.5 s cold, 2.1 s warm); `git commit` succeeded                                                                            |
+| OLD hook, direction 2a                                     | staged clean `seeded_fn`; unstaged lint in the same file                                                         | **exit 1 on `src/lib.rs:42`: false fail**                                                                                                     |
+| NEW hook, direction 2a                                     | same                                                                                                             | snapshot, exit 0 (2.1 s)                                                                                                                      |
+| OLD hook, direction 2b                                     | staged lint; unstaged fix in the same file                                                                       | **exit 0: false pass (the lint would have reached `main`)**                                                                                   |
+| NEW hook, direction 2b                                     | same                                                                                                             | snapshot, exit 1 on `src/lib.rs:42` (3.6 s); `git commit` rejected                                                                            |
+| NEW hook without the snapshot's `.cargo/config.toml`       | 2b, after a clean `cargo clippy -p gup-culling-lod` in the real tree (artifact newer than the snapshot's source) | **exit 0: false pass**; the snapshot reused the real tree's artifact                                                                          |
+| NEW hook with it                                           | same                                                                                                             | exit 1 on `src/lib.rs:42`                                                                                                                     |
+| NEW hook, full mode in the snapshot                        | staged `test_pre_commit.sh` comment; untracked file                                                              | `[gha]` exit 1 on the real checkout's old workflows (bug, fixed `b154f2f`)                                                                    |
+| same, after the fix                                        | staged maskfile and scripts; untracked file (`git commit` of `b154f2f`)                                          | all eight checks pass in the snapshot                                                                                                         |
+| `test_pre_commit.sh`                                       | snapshot step skipped (`worktree_differs` always false)                                                          | 4 direction cases and the config case fail                                                                                                    |
+| `test_pre_commit.sh`                                       | `read-tree` then `checkout-index -a -f` (full rewrite), no `clean`                                               | 3 cases fail (mtime, deletion, debris)                                                                                                        |
+| `test_pre_commit.sh`                                       | `index=$gitdir/index` (ignores `GIT_INDEX_FILE`)                                                                 | `GIT_INDEX_FILE is honoured` fails                                                                                                            |
+| `test_pre_commit.sh`                                       | `index=$(git rev-parse --git-path index)`                                                                        | passes: `--git-path index` already honours `GIT_INDEX_FILE` (not a bug)                                                                       |
+| AC3 before (`gh run list`), pushes `83143d2` and `7f8ad96` | 2026-10-05, pushed 19:31:46 and 19:53:26                                                                         | Lint 37363986951 and Visual regression 37363987153 (grouped) **cancelled** at 19:53:28; Performance 37363987034 (no group) ran on to 20:02:56 |
+
+AC3 "after", and AC1's CI seed, need a push; see the Implementation Summary.
+
+### Hook timing (warm, this machine, `scripts/pre_commit.sh`)
+
+| Change                                           | Before                          | After                                                   |
+| ------------------------------------------------ | ------------------------------- | ------------------------------------------------------- |
+| docs-only, clean tree (in place)                 | 1.9 s (`git commit` of 799bf7e) | 1.55–1.79 s (5 runs)                                    |
+| docs-only, dirty tree (snapshot)                 | n/a (checked the working tree)  | 1.68–1.85 s (5 runs)                                    |
+| gup-culling-lod, snapshot                        | n/a                             | 16.5 s first (members, non-incremental), 2.0–3.6 s warm |
+| full mode, snapshot (first full in the snapshot) | 49–62 s in place (GUP-398)      | 77 s                                                    |
+
+The snapshot itself is 25 MB (the tracked files). Creating it took 0.6 s; a
+re-sync takes about 0.1–0.3 s.
+
+### Key Technical Learnings
+
+#### Two checkouts that share a target directory share member artifacts
+
+- **Challenge**: The snapshot needs warm dependencies, so it should use the
+  checkout's target directory. But cargo hashes a workspace member's package ID
+  by its path _relative to the workspace root_, so two checkouts of the same
+  workspace produce the same artifact names. Freshness is by mtime, so either
+  checkout reuses the other's artifact whenever its own sources are older. A toy
+  workspace showed `Fresh a` for a second checkout with different content; the
+  seeded 2b run above showed the hook passing a staged lint.
+- **Solution**: A `.cargo/config.toml` in the snapshot's parent directory (cargo
+  reads config from every ancestor of the working directory) sets
+  `[profile.dev] incremental = false` and
+  `[profile.dev.package."*"] incremental = true`. The profile is part of the
+  artifact hash, so members get their own artifacts and dependencies keep the
+  checkout's. `codegen-units` and `debug` did not work: setting them on
+  `package."*"` also changed the dependencies' build scripts and proc macros
+  (whose defaults come from `build-override`), so everything rebuilt.
+- **Pattern**: The same reuse happens between any two checkouts that share a
+  `CARGO_TARGET_DIR`, which is how agent worktrees run today. In this story the
+  real tree reported `Fresh` for gup and gup-text using the snapshot's builds.
+  That became GUP-411.
+
+#### Tools that find their project by walking up to `.git`
+
+- **Challenge**: The snapshot lives under the git directory. `actionlint` with
+  no arguments walks up to a `.git` and lints the workflows beside it, so from
+  the snapshot it linted the real checkout's older workflows. Only a full-mode
+  run inside the snapshot showed it.
+- **Solution**: Name the files: `actionlint .github/workflows/*.y*ml`.
+  `test_pre_commit.sh` rejects a bare `actionlint`. Git itself,
+  `mdl --git-recurse`, cargo, rustfmt and prettier behave (environment
+  variables, or tracked config files that are found first).
+- **Pattern**: When checks move to another directory, run every check there
+  once, not just the ones the story is about.
+
+#### `git read-tree --reset -u` with a private index is an incremental checkout
+
+- **Challenge**: Checking out the index for every commit must not rewrite
+  unchanged files, or cargo rebuilds everything.
+- **Solution**: The snapshot keeps its own index file.
+  `read-tree --reset -u <tree>` compares stat data and rewrites only files whose
+  blob changed (or that were modified in the snapshot), and deletes files
+  dropped from the index. `git write-tree` runs on a copy of the hook's index,
+  so its cache-tree update cannot touch git's locked index.
+
+### Architectural Decisions
+
+#### In place when the trees match, snapshot otherwise
+
+- **Decision**: Check in place when `git diff --quiet` and
+  `git ls-files --others --exclude-standard` show no difference; use the
+  snapshot only otherwise.
+- **Reasoning**: In place, the hook reuses the warm, incremental artifacts of
+  the developer's own `mask all-fix`. The snapshot's members are non-incremental
+  and separate.
+- **Trade-off**: Two code paths. Ignored files are assumed not to affect the
+  checks.
+
+#### No stash, no writes to the real tree
+
+- **Decision**: A checkout of the index under the git directory, re-synced per
+  run, rather than `git stash --keep-index` or a reverse-applied patch.
+- **Reasoning**: The stash stack is shared across worktrees, and the failure
+  this story fixes happened while another agent was editing the same checkout.
+  Anything that rewrites the working tree mid-check races with that agent.
+- **Trade-off**: 25 MB per worktree (removed with it) and a second copy of the
+  workspace members' check artifacts in the target directory.
+
+#### Workflow files are scoped, not full
+
+- **Decision**: A `workflows` class that runs only actionlint.
+- **Reasoning**: A workflow cannot change what the Rust checks see, and CI runs
+  the workflow itself. Full mode cost a minute per workflow edit.
+
+#### Performance: two jobs per push, not four
+
+- **Decision**: `axis_performance` and `wasm_axis_performance` run on pull
+  requests, weekly and on manual dispatch.
+- **Reasoning**: One times frozen old-path axis code; the other's gating steps
+  repeat WASM's and Tests'. The concurrency group includes the event name so a
+  push never cancels the three-hour weekly benchmark.
+
+### Development Workflow Insights
+
+- The worktree sandbox refuses `git` commands it cannot parse (pipes, env
+  prefixes, `sed -f`, `.github` paths in loops). Helpers in `/tmp` that only
+  edit files, plus plain `git` commands, kept the seeds moving.
+- The seed matrix looked complete until full mode ran inside the snapshot.
+  Running the most expensive mode once in the new environment found the one real
+  bug.
+- One `test_pre_commit.sh` seed ("ignore `GIT_INDEX_FILE`") was not a bug at
+  all: `git rev-parse --git-path index` already honours it. When a test does not
+  catch a seed, explain the seed before assuming the test is weak.
+
+### Follow-up Stories
+
+1. **GUP-411: Keep checkouts that share a target directory from reusing each
+   other's artifacts**. Agent worktrees share `CARGO_TARGET_DIR`, so cargo
+   reuses a member artifact built from another checkout's content whenever the
+   mtimes allow, and a hook, clippy or test run can pass or fail on code that is
+   not in the checkout.
+
+Noted without stories:
+
+- AC1's CI seed and AC3's "after" observation need a push (orchestrator).
+- A `build.incremental` set in the user's cargo config overrides the snapshot's
+  profile setting, and the member separation is lost. `CARGO_INCREMENTAL` is
+  handled. The hook's header documents this.
