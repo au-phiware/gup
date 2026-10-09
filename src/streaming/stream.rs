@@ -50,20 +50,15 @@ pub struct SubscriberHandle(u64);
 /// A subscriber's callback (native: shared across threads).
 #[cfg(not(target_arch = "wasm32"))]
 type SubscriberCallback<T> = Box<dyn Fn(&StreamUpdate<T>) + Send + Sync + 'static>;
+/// A subscriber's callback (wasm32: no `Send + Sync`, since wgpu's types are
+/// neither there).
+#[cfg(target_arch = "wasm32")]
+type SubscriberCallback<T> = Box<dyn Fn(&StreamUpdate<T>) + 'static>;
 
 /// Internal subscriber entry pairing a handle with its callback.
-#[cfg(not(target_arch = "wasm32"))]
 struct Subscriber<T: bytemuck::Pod + bytemuck::Zeroable> {
     handle: SubscriberHandle,
     callback: SubscriberCallback<T>,
-}
-
-/// Internal subscriber entry pairing a handle with its callback (WASM
-/// variant — relaxed `Send + Sync` since wgpu types are `!Send` on WASM).
-#[cfg(target_arch = "wasm32")]
-struct Subscriber<T: bytemuck::Pod + bytemuck::Zeroable> {
-    handle: SubscriberHandle,
-    callback: Box<dyn Fn(&StreamUpdate<T>) + 'static>,
 }
 
 // ---------------------------------------------------------------------------

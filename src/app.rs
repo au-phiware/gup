@@ -273,7 +273,16 @@ impl GupAppRunner {
             }
         }
 
-        self.context = Some(Arc::new(ctx));
+        #[cfg_attr(
+            target_arch = "wasm32",
+            expect(
+                clippy::arc_with_non_send_sync,
+                reason = "`Send + Sync` on native, which needs the `Arc`; wgpu's handles \
+                          are neither on wasm32, so this `Arc` cannot cross a thread there"
+            )
+        )]
+        let ctx = Arc::new(ctx);
+        self.context = Some(ctx);
     }
 
     /// Resize the surface to match the new physical size.
@@ -292,7 +301,16 @@ impl GupAppRunner {
         match Arc::try_unwrap(context) {
             Ok(mut ctx) => {
                 let _ = ctx.resize_surface(surface_id, PhysicalSize::new(size.width, size.height));
-                self.context = Some(Arc::new(ctx));
+                #[cfg_attr(
+                    target_arch = "wasm32",
+                    expect(
+                        clippy::arc_with_non_send_sync,
+                        reason = "`Send + Sync` on native, which needs the `Arc`; wgpu's handles \
+                                  are neither on wasm32, so this `Arc` cannot cross a thread there"
+                    )
+                )]
+                let ctx = Arc::new(ctx);
+                self.context = Some(ctx);
             }
             Err(arc) => {
                 self.context = Some(arc);

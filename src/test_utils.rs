@@ -82,6 +82,14 @@ pub async fn create_test_context() -> GupResult<GpuContextGuard<'static>> {
     let permit = GPU_CONTEXT_SEMAPHORE.acquire().await.unwrap();
 
     // Create the GPU context
+    #[cfg_attr(
+        target_arch = "wasm32",
+        expect(
+            clippy::arc_with_non_send_sync,
+            reason = "`Send + Sync` on native, which needs the `Arc`; wgpu's handles \
+                      are neither on wasm32, so this `Arc` cannot cross a thread there"
+        )
+    )]
     let context = Arc::new(RenderContext::new().await?);
 
     Ok(GpuContextGuard { context, permit })

@@ -892,6 +892,14 @@ impl InteractionSystem {
 
         // Double-buffered staging for non-blocking queries (GUP-198).
         let async_staging_size = (max_results * std::mem::size_of::<InteractionResult>()) as u64;
+        #[cfg_attr(
+            target_arch = "wasm32",
+            expect(
+                clippy::arc_with_non_send_sync,
+                reason = "`Send + Sync` on native, which needs the `Arc`; wgpu's handles \
+                          are neither on wasm32, so this `Arc` cannot cross a thread there"
+            )
+        )]
         let async_staging_a = AsyncStagingSlot {
             buffer: Arc::new(device.create_buffer(&BufferDescriptor {
                 label: Some("async_staging_a"),
@@ -901,6 +909,14 @@ impl InteractionSystem {
             })),
             in_use: Arc::new(AtomicBool::new(false)),
         };
+        #[cfg_attr(
+            target_arch = "wasm32",
+            expect(
+                clippy::arc_with_non_send_sync,
+                reason = "`Send + Sync` on native, which needs the `Arc`; wgpu's handles \
+                          are neither on wasm32, so this `Arc` cannot cross a thread there"
+            )
+        )]
         let async_staging_b = AsyncStagingSlot {
             buffer: Arc::new(device.create_buffer(&BufferDescriptor {
                 label: Some("async_staging_b"),

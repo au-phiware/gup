@@ -478,39 +478,6 @@ pub trait GridCapableBuilder: ConfigurableBuilder {
     }
 }
 
-/// Helper trait for converting accessor values to attribute binding closures.
-pub trait AccessorToShaderFunction<T> {
-    /// Convert an accessor value to a position binding closure.
-    #[cfg(not(target_arch = "wasm32"))]
-    #[expect(
-        clippy::type_complexity,
-        reason = "frozen old path; RFC-001 S14 deletes it"
-    )]
-    fn to_position_shader(
-        &self,
-        accessor: AccessorFunction<T>,
-    ) -> Box<dyn Fn(&T) -> [f32; 2] + Send + Sync>;
-
-    /// Convert an accessor value to a position binding closure.
-    #[cfg(target_arch = "wasm32")]
-    fn to_position_shader(&self, accessor: AccessorFunction<T>) -> Box<dyn Fn(&T) -> [f32; 2]>;
-
-    /// Convert an accessor value to a colour binding closure.
-    #[cfg(not(target_arch = "wasm32"))]
-    #[expect(
-        clippy::type_complexity,
-        reason = "frozen old path; RFC-001 S14 deletes it"
-    )]
-    fn to_color_shader(
-        &self,
-        accessor: AccessorFunction<T>,
-    ) -> Box<dyn Fn(&T) -> [f32; 4] + Send + Sync>;
-
-    /// Convert an accessor value to a colour binding closure.
-    #[cfg(target_arch = "wasm32")]
-    fn to_color_shader(&self, accessor: AccessorFunction<T>) -> Box<dyn Fn(&T) -> [f32; 4]>;
-}
-
 /// Type-erased accessor function for dynamic dispatch.
 pub struct AccessorFunction<T> {
     #[cfg(not(target_arch = "wasm32"))]

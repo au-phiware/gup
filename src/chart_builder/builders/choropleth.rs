@@ -37,6 +37,22 @@ use crate::error::{GupError, GupResult};
 use crate::mark::geo_path::{GeoFeature, GeoJsonSource, Projection};
 use crate::shader_function::ColorScale;
 
+/// Extracts a region identifier from a GeoJSON feature
+/// ([`ChoroplethChartBuilder::region_id`]). `Send + Sync` except on wasm32,
+/// where the chart's wgpu handles are neither.
+#[cfg(not(target_arch = "wasm32"))]
+type RegionIdFn = Box<dyn Fn(&GeoFeature) -> Option<String> + Send + Sync>;
+#[cfg(target_arch = "wasm32")]
+type RegionIdFn = Box<dyn Fn(&GeoFeature) -> Option<String>>;
+
+/// Formats a region's tooltip text
+/// ([`ChoroplethChartBuilder::tooltip_format`]). `Send + Sync` except on
+/// wasm32, like [`RegionIdFn`].
+#[cfg(not(target_arch = "wasm32"))]
+type TooltipFormatter = Box<dyn Fn(&RegionRecord) -> String + Send + Sync>;
+#[cfg(target_arch = "wasm32")]
+type TooltipFormatter = Box<dyn Fn(&RegionRecord) -> String>;
+
 // ---------------------------------------------------------------------------
 // Legend position
 // ---------------------------------------------------------------------------
@@ -361,15 +377,7 @@ pub struct ChoroplethChart {
     /// When `Some`, called with a [`RegionRecord`] reference to produce the
     /// tooltip text. When `None`, a default format is used
     /// (`"<name>: <value>"`).
-    #[cfg(not(target_arch = "wasm32"))]
-    #[expect(
-        clippy::type_complexity,
-        reason = "frozen old path; RFC-001 S14 deletes it"
-    )]
-    tooltip_formatter: Option<Box<dyn Fn(&RegionRecord) -> String + Send + Sync>>,
-    /// Custom tooltip formatter closure.
-    #[cfg(target_arch = "wasm32")]
-    tooltip_formatter: Option<Box<dyn Fn(&RegionRecord) -> String>>,
+    tooltip_formatter: Option<TooltipFormatter>,
 }
 
 impl std::fmt::Debug for ChoroplethChart {
@@ -551,14 +559,7 @@ impl ChoroplethChart {
 pub struct ChoroplethChartBuilder {
     boundaries: Option<GeoJsonSource>,
     data: HashMap<String, f64>,
-    #[cfg(not(target_arch = "wasm32"))]
-    #[expect(
-        clippy::type_complexity,
-        reason = "frozen old path; RFC-001 S14 deletes it"
-    )]
-    region_id_fn: Option<Box<dyn Fn(&GeoFeature) -> Option<String> + Send + Sync>>,
-    #[cfg(target_arch = "wasm32")]
-    region_id_fn: Option<Box<dyn Fn(&GeoFeature) -> Option<String>>>,
+    region_id_fn: Option<RegionIdFn>,
     color_scale: Option<ColorScale>,
     projection: Projection,
     no_data_color: [f32; 4],
@@ -571,14 +572,7 @@ pub struct ChoroplethChartBuilder {
     gpu_recolor: bool,
     // -- Hover / tooltip interaction --------------------------------------
     tooltip_enabled: bool,
-    #[cfg(not(target_arch = "wasm32"))]
-    #[expect(
-        clippy::type_complexity,
-        reason = "frozen old path; RFC-001 S14 deletes it"
-    )]
-    tooltip_formatter: Option<Box<dyn Fn(&RegionRecord) -> String + Send + Sync>>,
-    #[cfg(target_arch = "wasm32")]
-    tooltip_formatter: Option<Box<dyn Fn(&RegionRecord) -> String>>,
+    tooltip_formatter: Option<TooltipFormatter>,
     highlight_style: HoverHighlight,
 }
 
@@ -859,20 +853,15 @@ impl ChoroplethChartBuilder {
         })?;
 
         // Default region_id accessor: look up `iso_a3` property.
-        #[expect(
-            clippy::type_complexity,
-            reason = "frozen old path; RFC-001 S14 deletes it"
-        )]
-        let region_id_fn: Box<dyn Fn(&GeoFeature) -> Option<String>> =
-            self.region_id_fn.unwrap_or_else(|| {
-                Box::new(|f: &GeoFeature| {
-                    f.properties
-                        .as_ref()
-                        .and_then(|p| p.get("iso_a3"))
-                        .and_then(|v| v.as_str())
-                        .map(String::from)
-                })
-            });
+        let region_id_fn: RegionIdFn = self.region_id_fn.unwrap_or_else(|| {
+            Box::new(|f: &GeoFeature| {
+                f.properties
+                    .as_ref()
+                    .and_then(|p| p.get("iso_a3"))
+                    .and_then(|v| v.as_str())
+                    .map(String::from)
+            })
+        });
 
         // -- Data join: resolve per-feature colours -------------------------
 

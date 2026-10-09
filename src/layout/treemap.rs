@@ -725,10 +725,16 @@ impl super::LayoutEngine {
             cells.retain(|c| c.depth != u32::MAX);
         }
 
-        Ok(TreemapResult {
-            cells,
-            gpu_buffer: Some(std::sync::Arc::new(cells_buffer)),
-        })
+        #[cfg_attr(
+            target_arch = "wasm32",
+            expect(
+                clippy::arc_with_non_send_sync,
+                reason = "`Send + Sync` on native, which needs the `Arc`; wgpu's handles \
+                          are neither on wasm32, so this `Arc` cannot cross a thread there"
+            )
+        )]
+        let gpu_buffer = Some(std::sync::Arc::new(cells_buffer));
+        Ok(TreemapResult { cells, gpu_buffer })
     }
 
     /// Run a multi-workgroup Blelloch exclusive prefix sum on `values`.

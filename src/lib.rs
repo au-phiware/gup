@@ -443,7 +443,7 @@ pub mod proc_macros {
     pub use gup_macros::wgsl_function;
 }
 
-#[cfg(target_arch = "wasm32")]
+#[cfg(all(target_arch = "wasm32", feature = "wasm-start"))]
 use wasm_bindgen::prelude::*;
 
 /// WebAssembly entry point (`wasm-start` feature): routes panics to the

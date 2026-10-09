@@ -344,6 +344,14 @@ pub async fn bench_batch_queries(
 /// initialises a [`RenderContext`], runs point/region/batch benchmarks, and
 /// packages the results into a [`BenchSuite`].
 pub async fn run_interaction_benchmarks(config: &BenchConfig) -> BenchSuite {
+    #[cfg_attr(
+        target_arch = "wasm32",
+        expect(
+            clippy::arc_with_non_send_sync,
+            reason = "`Send + Sync` on native, which needs the `Arc`; wgpu's handles \
+                      are neither on wasm32, so this `Arc` cannot cross a thread there"
+        )
+    )]
     let context = Arc::new(
         RenderContext::new()
             .await

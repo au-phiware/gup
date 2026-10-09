@@ -62,7 +62,6 @@ mod inner {
     /// GPU resources tied to a single canvas element.
     struct CanvasState {
         surface: wgpu::Surface<'static>,
-        surface_config: wgpu::SurfaceConfiguration,
         device: wgpu::Device,
         queue: wgpu::Queue,
         pipeline: wgpu::RenderPipeline,
@@ -347,7 +346,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
         Ok(CanvasState {
             surface,
-            surface_config,
             device,
             queue,
             pipeline,

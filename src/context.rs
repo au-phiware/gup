@@ -792,7 +792,9 @@ impl Default for GupOptions {
 impl GupOptions {
     /// Whether `cx`'s device is what these options would have requested:
     /// the default adapter preference, a backend they allow, and every
-    /// required feature and limit.
+    /// required feature and limit. Native only: wasm has no shared default
+    /// context to compare against (see [`core_context`]).
+    #[cfg(not(target_arch = "wasm32"))]
     fn is_met_by(&self, cx: &gup_core::Context) -> bool {
         let caps = cx.caps();
         self.power_preference == gup_core::ContextOptions::default().power_preference
@@ -1356,6 +1358,14 @@ impl GupContext {
     /// host application (e.g. a Bevy game engine).  No second adapter or device
     /// is requested – the supplied handles are used directly, so both Gup and
     /// the host operate on the same GPU context.
+    #[cfg_attr(
+        target_arch = "wasm32",
+        expect(
+            clippy::arc_with_non_send_sync,
+            reason = "`Send + Sync` on native, which needs the `Arc`; wgpu's handles \
+                      are neither on wasm32, so this `Arc` cannot cross a thread there"
+        )
+    )]
     pub fn from_wgpu(
         instance: Instance,
         adapter: Adapter,
@@ -1396,6 +1406,14 @@ impl GupContext {
     /// process-wide shared device when it meets `options`, otherwise a
     /// dedicated one. Either way `TIMESTAMP_QUERY` is enabled when the
     /// adapter supports it, for the auto-tune system's GPU timing.
+    #[cfg_attr(
+        target_arch = "wasm32",
+        expect(
+            clippy::arc_with_non_send_sync,
+            reason = "`Send + Sync` on native, which needs the `Arc`; wgpu's handles \
+                      are neither on wasm32, so this `Arc` cannot cross a thread there"
+        )
+    )]
     pub async fn with_options(options: GupOptions) -> GupResult<Arc<Self>> {
         let (instance, adapter, device, queue) = core_handles(&core_context(&options).await?)?;
 
