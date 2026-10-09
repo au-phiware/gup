@@ -1617,6 +1617,15 @@ and `SvgTarget`. It found two bugs that no native test could:
    `u32`s. A unit test re-parses naga's WGSL output and requires every struct to
    lay out as composed.
 
+Since GUP-408 this runs on every push, as the Visual regression workflow's
+`browser` job, in Chrome for Testing on SwiftShader (Chrome's bundled software
+Vulkan). Headless Chromium had been choosing SwiftShader locally too, so both
+bugs above were found without a GPU; the test now forces that adapter and
+records it. It fails on a console error, an uncaught exception or a WebGPU/WGSL
+diagnostic as well as a bad render. Chrome compiles WGSL with its own compiler,
+which is stricter than naga in places: a derivative in non-uniform control flow
+passes naga and every native test but fails in Chrome.
+
 ### Proposed adjustments to S4 and later
 
 - **Decided (2026-10-09), superseding this proposal:** the owner chose

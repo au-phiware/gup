@@ -158,8 +158,10 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
 - [GUP-407](GUP-407_Subset_Inter_And_SVG_Font_Embedding.md) 📋 — Subset the
   bundled Inter (198 → 24 KB gz) and let `SvgTarget` embed it. Deps: GUP-401 ✅,
   GUP-405 📋 (soft).
-- [GUP-408](GUP-408_Browser_Smoke_Test_In_CI.md) 🚧 — Run `mask wasm-browser`
-  (gup-core in headless Chromium) in CI. Deps: GUP-401 ✅.
+- [GUP-408](GUP-408_Browser_Smoke_Test_In_CI.md) ✅ — `mask wasm-browser` runs
+  on every push (Visual regression's `browser` job): Chrome for Testing 155 on
+  SwiftShader, failing on console errors and WebGPU/WGSL diagnostics. Deps:
+  GUP-401 ✅.
 
 ## GPU Rendering Pipeline
 
