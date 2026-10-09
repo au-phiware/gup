@@ -64,7 +64,7 @@ survives into `gup-core`.
   budget, obsolete/frozen-path, or hidden-failure, with a checked-in inventory
   and a lint rejecting any `#[ignore]` without a reason from an allowed set.
   Deps: GUP-398 ✅.
-- [GUP-409](GUP-409_Close_Gate_Gaps.md) 🚧 — Lint workflow YAML with
+- [GUP-409](GUP-409_Close_Gate_Gaps.md) ✅ — Lint workflow YAML with
   `actionlint` (GUP-400 corrupted one past both the hook and CI), make the
   pre-commit hook check the staged snapshot instead of the working tree with a
   seeded proof in both directions, and add `concurrency` groups to the two

@@ -2,7 +2,8 @@
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-10 **Status**: 🚧 In Progress **Created**:
+**Initiative**: Strategic Review 2026-10 **Status**: ✅ Complete (2026-10-10;
+two GitHub-side observations pending, see Implementation Summary) **Created**:
 2026-10-09
 
 ## Context
@@ -73,28 +74,32 @@ exactly the pile-up that produced the "not acquired" failures.
 
 ### AC1: Workflow YAML is linted
 
-- [ ] `actionlint` is available in the Nix dev shell (added to `flake.nix`'s
+- [x] `actionlint` is available in the Nix dev shell (added to `flake.nix`'s
       `buildInputs`) and runs as part of `mask all-check` and `mask all-fix`
       (where `--fix`-equivalent behaviour does not exist for actionlint, so
       `all-fix` just runs the check).
-- [ ] `actionlint` runs in the `lint.yml` CI workflow against every file in
+- [x] `actionlint` runs in the `lint.yml` CI workflow against every file in
       `.github/workflows/`.
-- [ ] The 14 existing shellcheck warnings are each either fixed or excluded with
+- [x] The 14 existing shellcheck warnings are each either fixed or excluded with
       a documented reason (an actionlint config file or inline
       `# shellcheck disable=` comment, whichever the fix calls for); the check
       reports 0 after this story, not 14.
 - [ ] A seeded violation (reintroducing the exact corruption from commit
       `cf03651`, or an equivalent malformed YAML header, in a throwaway workflow
       file not imported by any trigger) is shown failing `actionlint` locally
-      and in CI, then reverted (GUP-398's convention).
-- [ ] `scripts/pre_commit.sh`'s classification treats any change under
+      and in CI, then reverted (GUP-398's convention). _Local half done: the
+      exact `cf03651` file fails `actionlint` (exit 1) and is rejected by the
+      hook, in place and from the snapshot (Retrospective). The CI half needs a
+      push of the seed, which this story's worker could not do: it runs in
+      `mask all-check`, so the Lint job runs the same command._
+- [x] `scripts/pre_commit.sh`'s classification treats any change under
       `.github/workflows/` as requiring the actionlint check (full mode is
       acceptable if scoping it is not worth the complexity; document the choice
       either way).
 
 ### AC2: The pre-commit hook checks the staged snapshot, not the working tree
 
-- [ ] `scripts/pre_commit.sh` (and anything it calls, such as
+- [x] `scripts/pre_commit.sh` (and anything it calls, such as
       `mask     all-check` when invoked from the hook) runs its checks against
       exactly what is being committed — the staged content — not the working
       tree. The implementation may use a temporary worktree, a checkout of the
@@ -102,27 +107,27 @@ exactly the pile-up that produced the "not acquired" failures.
       or another mechanism; document the choice and its cost
       (`scripts/pre_commit.sh`'s header comment currently documents the old
       working-tree behaviour and must be corrected).
-- [ ] Direct invocations of `mask all-check`/`mask pre-commit` outside the git
+- [x] Direct invocations of `mask all-check`/`mask pre-commit` outside the git
       hook (for example from CI's `mask ci`, or a developer running it by hand)
       are unaffected or explicitly documented as still checking the working tree
       — be clear about which commands check what.
-- [ ] **Seeded proof, direction 1 (false pass):** with a staged fix to a clippy
+- [x] **Seeded proof, direction 1 (false pass):** with a staged fix to a clippy
       violation and a _different_, untracked file left dirty with an unrelated
       clippy violation, today's hook fails (wrongly, since the violation is not
       being committed); after the fix, the hook passes.
-- [ ] **Seeded proof, direction 2 (false fail):** with a staged file that is
+- [x] **Seeded proof, direction 2 (false fail):** with a staged file that is
       clean on its own, and an unstaged, uncommitted edit to the _same_ file
       that introduces a violation, today's hook can fail on content that will
       not actually be committed (or pass only because of unstaged content that
       happens to compensate); after the fix, the hook's verdict matches what
       `git diff --cached` would produce in isolation. Record the exact
       before/after commands and output, per GUP-398's convention.
-- [ ] `scripts/test_pre_commit.sh` gains cases covering both directions above
+- [x] `scripts/test_pre_commit.sh` gains cases covering both directions above
       and passes.
 
 ### AC3: CI concurrency control on every workflow
 
-- [ ] Every workflow in `.github/workflows/` has a `concurrency:` block.
+- [x] Every workflow in `.github/workflows/` has a `concurrency:` block.
       `performance.yml` and `wasm.yml` gain one, matching the existing
       convention (`group: <workflow>-${{ github.ref }}`,
       `cancel-in-progress: true`); the other seven are reviewed and left as-is
@@ -131,8 +136,12 @@ exactly the pile-up that produced the "not acquired" failures.
       `concurrency` (for example two quick successive pushes to a scratch
       branch) before the fix, observe both run to completion or queue
       competitively; after the fix, observe the first run cancelled in GitHub's
-      UI/API. Record the run URLs or `gh run list` output.
-- [ ] A documented decision on trimming `performance.yml`'s push-triggered jobs
+      UI/API. Record the run URLs or `gh run list` output. _"Before" is in the
+      run history (Retrospective): pushes 83143d2 and 7f8ad96 overlapped;
+      83143d2's Lint and Visual regression runs were cancelled two seconds after
+      7f8ad96 was pushed, while its Performance run (no group) ran on for
+      another nine minutes. "After" needs the next overlapping pushes._
+- [x] A documented decision on trimming `performance.yml`'s push-triggered jobs
       (currently `perf_check`, `performance`, `axis_performance`,
       `wasm_axis_performance` — four jobs on every push to `main`): either state
       why all four earn their place on every push, or move one or more to
@@ -142,25 +151,25 @@ exactly the pile-up that produced the "not acquired" failures.
 
 ## Technical Tasks
 
-- [ ] Add `actionlint` (and any shellcheck it bundles/needs) to `flake.nix`'s
+- [x] Add `actionlint` (and any shellcheck it bundles/needs) to `flake.nix`'s
       dev shell `buildInputs`.
-- [ ] Add an `actionlint .github/workflows/*.yml` line to
+- [x] Add an `actionlint .github/workflows/*.yml` line to
       `mask lint`/`mask     lint-check`/`mask all-check`/`mask all-fix` in
       `maskfile.md`, and a step in `lint.yml`.
-- [ ] Fix or explicitly exclude each of the 14 current shellcheck findings
+- [x] Fix or explicitly exclude each of the 14 current shellcheck findings
       (mostly `SC2086` unquoted expansions and `SC2015`/`SC2129` style notes in
       `android-ci.yml`, `performance.yml` and `wasm.yml`).
-- [ ] Add workflow-file handling to `scripts/pre_commit.sh`'s classifier.
-- [ ] Redesign `scripts/pre_commit.sh` (and `mask all-check`'s invocation from
+- [x] Add workflow-file handling to `scripts/pre_commit.sh`'s classifier.
+- [x] Redesign `scripts/pre_commit.sh` (and `mask all-check`'s invocation from
       the hook) to operate on the staged index rather than the working tree —
       likely via `git worktree add` against a temporary directory checked out
       from a synthetic commit of the index, or an equivalent stash-based
       approach; update the header comments in both `scripts/pre_commit.sh` and
       `maskfile.md`'s `pre-commit`/`all-check` sections that currently document
       the old (working-tree) behaviour.
-- [ ] Add the two new seeded-violation cases to `scripts/test_pre_commit.sh`.
-- [ ] Add `concurrency:` blocks to `performance.yml` and `wasm.yml`.
-- [ ] Review `performance.yml`'s push-triggered job set and either justify or
+- [x] Add the two new seeded-violation cases to `scripts/test_pre_commit.sh`.
+- [x] Add `concurrency:` blocks to `performance.yml` and `wasm.yml`.
+- [x] Review `performance.yml`'s push-triggered job set and either justify or
       trim it; update the workflow's header comment with the decision.
 
 ## Dependencies
@@ -189,9 +198,9 @@ exactly the pile-up that produced the "not acquired" failures.
 
 ## Success Metrics
 
-- [ ] `nix run nixpkgs#actionlint -- .github/workflows/*.yml` reports 0 issues
+- [x] `nix run nixpkgs#actionlint -- .github/workflows/*.yml` reports 0 issues
       (down from 14) and is enforced in CI.
-- [ ] The pre-commit hook's verdict matches `git diff --cached` in isolation,
+- [x] The pre-commit hook's verdict matches `git diff --cached` in isolation,
       proven in both directions by seeded tests.
 - [ ] Every workflow in `.github/workflows/` has a `concurrency` block; no "job
       was not acquired by Runner" failures are observed on the next several
@@ -218,9 +227,67 @@ exactly the pile-up that produced the "not acquired" failures.
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked, except the two CI
+      halves that need a push (AC1's CI seed, AC3's "after" observation).
+- [x] All tests pass: no Rust source changed. `scripts/test_pre_commit.sh` (44
+      cases) passes; the full suite runs in the Tests workflow.
+- [x] Lint and format clean: `mask all-check` passed in the hook on three full
+      commits (`9aae6c7` and `279e9f7` in place, `b154f2f` inside the snapshot).
+- [x] All examples compile: covered by `all-check`'s
+      `clippy --workspace --all-targets`.
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+**Commits**: `5c547d8` workflow shellcheck fixes, `concurrency` for Performance
+and WASM, Performance push trim; `9aae6c7` actionlint in the dev shell, maskfile
+and hook; `279e9f7` staged-snapshot hook; `b154f2f` actionlint names its files
+(a bug found by running the hook in full mode from the snapshot).
+
+- **AC1, workflow lint**: `actionlint` is in `flake.nix` (nixpkgs wraps it with
+  shellcheck). `mask lint`, `lint-check`, `all-fix` and `all-check` run
+  `actionlint .github/workflows/*.y*ml`, so the Lint workflow does too. Of the
+  14 findings, 13 are fixed (quoting, grouped redirects, `if` for
+  `A && B || C`); android-ci's `adb shell '... $(getprop ...)'` is a deliberate
+  single-quoted string for the device's shell, so it has an inline
+  `# shellcheck disable=SC2016` with that reason. actionlint reports 0. The hook
+  has a new `workflows` class (scoped, not full): actionlint on every workflow
+  file, no Rust check.
+- **AC2, staged snapshot**: see `scripts/pre_commit.sh`'s header. If the working
+  tree matches the index git hands the hook, the checks run in place (one
+  `git diff --quiet` and one `git ls-files --others`). Otherwise the index is
+  copied, written to a tree and checked out into
+  `$(git rev-parse --git-dir)/gup-pre-commit/tree` with `read-tree --reset -u`
+  against the snapshot's own index (only changed files are rewritten), `clean`
+  removes debris, and the snapshot's copy of the script re-runs there with
+  `GIT_DIR`/`GIT_WORK_TREE`/`GIT_INDEX_FILE` pointing at it. No stash, and the
+  real working tree and index are never written, so it is safe while another
+  process edits the checkout. `mask pre-commit` by hand behaves the same;
+  `mask all-check` by hand checks the tree it runs in (documented in
+  `maskfile.md`).
+- **Shared target directory**: the snapshot uses the checkout's target
+  directory, and its `.cargo/config.toml` flips `incremental` for workspace
+  members only, so members get their own artifacts and dependencies stay warm.
+  Without it, seeded below, the hook passed a staged lint.
+- **AC3, concurrency**: `performance.yml` (group includes the event, so a push
+  never cancels the weekly benchmark) and `wasm.yml` gained `concurrency`.
+  `axis_performance` and `wasm_axis_performance` no longer run per push (pull
+  requests, weekly, manual); `performance.yml`'s header gives the reason per
+  job. Push-to-main jobs: Performance 4 → 2.
+
+**Key files**: `scripts/pre_commit.sh`, `scripts/test_pre_commit.sh`,
+`maskfile.md`, `flake.nix`,
+`.github/workflows/{performance,wasm,android-ci,lint,README}`,
+`.github/agents/story-worker.md`.
+
+**Tests**: `test_pre_commit.sh` now has 44 cases: 30 classifier cases (5 new for
+workflows; `tests.yml` moved from full to workflows), 13 snapshot cases in a
+throwaway repository and an actionlint invocation guard. Seeded bugs in the
+snapshot code (always in place; no clean and full rewrite; ignoring
+`GIT_INDEX_FILE`) each fail it.
+
+**Needs GitHub to confirm**: the Lint workflow running actionlint (and failing
+on a pushed seed); the first push with two overlapping runs of Performance or
+WASM showing the older one cancelled; and no "job was not acquired by Runner" on
+the next few pushes.
