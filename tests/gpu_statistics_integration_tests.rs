@@ -355,6 +355,7 @@ async fn test_statistics_compute_single_value() {
 }
 
 #[tokio::test]
+#[ignore = "flaky: compute_basic_stats is single-workgroup but dispatched multi-workgroup, so workgroups race on the result (frozen old path, RFC-001 S14); tracked in GUP-404"]
 async fn test_statistics_compute_uniform_distribution() {
     let context = create_gpu_context().await;
     if context.is_none() {

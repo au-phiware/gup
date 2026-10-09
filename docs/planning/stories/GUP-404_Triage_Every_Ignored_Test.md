@@ -50,6 +50,19 @@ because their test mocks use `unsafe { mem::zeroed() }` on wgpu types — a
 test-authoring hazard, not a product requirement, that should be fixed with a
 real mock rather than left disabled indefinitely.
 
+**Confirmed category-(d) hidden failure (2026-10-10):**
+`tests/gpu_statistics_integration_tests.rs::test_statistics_compute_uniform_distribution`
+is flaky in CI (it failed on `e5f69ef` with `left: 1e38, right: 5.0` and passed
+on re-run). It is now ignored with a reason citing this story. The root cause,
+from `src/shaders/statistics.compute.wgsl`: `compute_basic_stats` is written for
+a single workgroup (its own comment: "single workgroup only - AC3 will add
+multi-workgroup") but is dispatched over several. Every workgroup's thread 0
+writes `result` (last writer wins), workgroups past the data write `min = 1e38`,
+and `data_size` is read from `result.count` while other workgroups overwrite it.
+The three other tests in the same file that cite "GUP-149" share this root
+cause: multi-workgroup support was never built. The shader is frozen old-path
+code (`src/shader_function/`, deleted at RFC-001 S14), so it is not to be fixed.
+
 This project has a documented history of gates that look like they enforce
 something and don't: the strategic review's root-cause table lists "quality gate
 routinely bypassed" (`--no-verify` in 63 retrospectives) as a direct contributor
