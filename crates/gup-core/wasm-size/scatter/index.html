@@ -30,7 +30,15 @@
               : "none (no WebGPU)")
         );
         await init();
-        const px = await render_scatter(w, h);
+        const px = await render_scatter(w, h, 0);
+        // The same scatter in column chunks of 32 rows (7 chunks, 7
+        // instanced draws at their own dynamic offsets, RFC-001 S4a) must
+        // give the same pixels.
+        const chunked = await render_scatter(w, h, 32);
+        let chunkDiff = chunked.length === px.length ? 0 : px.length;
+        for (let i = 0; i < Math.min(px.length, chunked.length); i++) {
+          if (px[i] !== chunked[i]) chunkDiff++;
+        }
         let white = 0,
           grey = 0,
           coloured = 0;
@@ -43,16 +51,20 @@
         const c = document.createElement("canvas");
         [c.width, c.height] = [w, h];
         c.getContext("2d").putImageData(
-          new ImageData(new Uint8ClampedArray(px), w, h),
+          new ImageData(new Uint8ClampedArray(chunked), w, h),
           0,
           0
         );
+        // The PNG is the chunked render.
         console.log("GUPPNG " + c.toDataURL("image/png"));
         // The scatter covers a fraction of the plot; a flooded plot (a
         // uniform-layout bug) or an empty one fails.
         const ok =
-          coloured > 0.05 * w * h && coloured < 0.4 * w * h && grey > 1000;
-        result = `${ok ? "PASS" : "FAIL"} white=${white} grey=${grey} coloured=${coloured}`;
+          coloured > 0.05 * w * h &&
+          coloured < 0.4 * w * h &&
+          grey > 1000 &&
+          chunkDiff === 0;
+        result = `${ok ? "PASS" : "FAIL"} white=${white} grey=${grey} coloured=${coloured} chunked-diff=${chunkDiff}`;
       } catch (e) {
         result = "FAIL " + e;
       }

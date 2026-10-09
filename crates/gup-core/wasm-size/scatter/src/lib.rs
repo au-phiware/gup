@@ -27,9 +27,17 @@ fn js(e: gup_core::Error) -> JsValue {
     JsValue::from_str(&e.to_string())
 }
 
-/// Render the scatter; returns straight-alpha RGBA pixels.
+/// Render the scatter; returns straight-alpha RGBA pixels. A non-zero
+/// `max_chunk_rows` splits its 200 rows into column chunks of at most that
+/// many rows, so the layer is drawn by one instanced draw per chunk, each
+/// at its own dynamic uniform offset (RFC-001 S4a); the page checks that
+/// the pixels do not change.
 #[wasm_bindgen]
-pub async fn render_scatter(width: u32, height: u32) -> Result<Vec<u8>, JsValue> {
+pub async fn render_scatter(
+    width: u32,
+    height: u32,
+    max_chunk_rows: u32,
+) -> Result<Vec<u8>, JsValue> {
     std::panic::set_hook(Box::new(|info| web_error(&info.to_string())));
     let cx = Context::new().await.map_err(js)?;
     let rows: Vec<Row> = (1..=200)
@@ -44,8 +52,13 @@ pub async fn render_scatter(width: u32, height: u32) -> Result<Vec<u8>, JsValue>
         .collect();
     let mut plot = Plot::new();
     let (x, y) = (plot.x(Linear::new()), plot.y(Log::new()));
-    plot.title("Wealth, population and life expectancy")
-        .add(Selection::<Row, Circle>::new(rows))
+    let layer = plot
+        .title("Wealth, population and life expectancy")
+        .add(Selection::<Row, Circle>::new(rows));
+    if max_chunk_rows > 0 {
+        layer.max_chunk_rows(max_chunk_rows);
+    }
+    layer
         .attr(Circle::X, x.encode(|r: &Row| r.x))
         .attr(Circle::Y, y.encode(|r: &Row| r.y))
         .attr(Circle::FILL, Sequential::viridis().encode(|r: &Row| r.t))
@@ -53,6 +66,18 @@ pub async fn render_scatter(width: u32, height: u32) -> Result<Vec<u8>, JsValue>
     let resolved = plot
         .resolve(&cx, width as f32 - LEGEND_WIDTH, height as f32)
         .map_err(js)?;
+    let chunks = resolved
+        .scene
+        .items
+        .iter()
+        .find_map(|i| match &i.kind {
+            ItemKind::Marks(batch) => Some(batch.chunks()),
+            _ => None,
+        })
+        .unwrap_or(0);
+    web_log_text(&format!(
+        "GUP CHUNKS {chunks} (max_chunk_rows {max_chunk_rows})"
+    ));
     let (mut scene, plot_rect) = (resolved.scene, resolved.layout.plot);
     scene.width = width as f32;
     let clip = scene.add_clip(plot_rect);
@@ -94,6 +119,8 @@ pub async fn render_scatter(width: u32, height: u32) -> Result<Vec<u8>, JsValue>
 extern "C" {
     #[wasm_bindgen(js_namespace = console, js_name = log)]
     fn web_log(n: usize);
+    #[wasm_bindgen(js_namespace = console, js_name = log)]
+    fn web_log_text(message: &str);
     #[wasm_bindgen(js_namespace = console, js_name = error)]
     fn web_error(message: &str);
 }
