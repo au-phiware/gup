@@ -88,9 +88,13 @@ Work iteratively in small, focused increments. For each increment:
   (usage limits), and uncommitted work is then at risk. If the code doesn't
   build yet, stub or `#[cfg(any())]`-gate the unfinished part so it does, then
   commit.
-- **Build output**: if the orchestrator gives you a `CARGO_TARGET_DIR`, export
-  it in every shell, including the one you commit from, so the pre-commit hook
-  uses it too.
+- **Build output**: in a worktree, start every shell, including the one you
+  commit from, with `eval "$(scripts/cargo_env.sh <BUILD_DIR>)"` run from the
+  worktree, where `<BUILD_DIR>` is the shared build directory the orchestrator
+  gives you. Your shell inherits the environment of the checkout that started
+  you, and that checkout's `CARGO_TARGET_DIR` is not yours. Never `cargo clean`
+  the shared build directory. See "Sharing build output between checkouts" in
+  `CLAUDE.md`.
 
 ### Repeat
 

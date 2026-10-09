@@ -90,6 +90,48 @@ let surface = instance.create_surface(&window)?; // Creates Surface<'window>
 - Remember to check the maskfile.md for common tasks like build, run, serve,
   etc.
 
+## Sharing build output between checkouts
+
+The main checkout, agent worktrees and the pre-commit hook's snapshot can share
+one build directory (GUP-411):
+
+- `.cargo/config.toml` gives every checkout its own workspace-member artifacts
+  and leaves dependencies shared. It needs no setup. Without it, cargo names
+  members' artifacts the same in every checkout and judges freshness by mtime,
+  so a checkout could lint, test or run another checkout's code.
+- Share the build directory, not the target directory. Run this in the checkout
+  (the dev shell runs it on entry, except in CI or over an explicit
+  `CARGO_TARGET_DIR`):
+
+  ```bash
+  eval "$(scripts/cargo_env.sh [BUILD_DIR])"
+  ```
+
+  It exports `CARGO_BUILD_BUILD_DIR=BUILD_DIR` (default `~/.cache/gup/build`),
+  shared, and `CARGO_TARGET_DIR=BUILD_DIR/checkouts/<checkout>-<hash>`, this
+  checkout's own. The target directory holds the unhashed final artifacts (the
+  binary `cargo run` executes, examples, docs, `.wasm`, visual-regression
+  output), which a shared target directory lets another checkout overwrite. On
+  the same filesystem they are hard links, so they cost almost no disk.
+
+- **Worktree agents**: a shell inherits the environment of the checkout that
+  started it. Run the line above from the worktree in every shell, with the
+  orchestrator's build directory, e.g.
+  `cd <worktree> && eval "$(scripts/cargo_env.sh /tmp/gup-target)"`.
+- **Concurrency**: safe. Cargo locks the build directory while it compiles, so
+  builds from different checkouts take turns; tests and `cargo run` programs run
+  after the lock is released. No checkout uses another's member artifacts.
+- **Cost** (measured 2026-10-10): a cold `mask all-check` fills 3.3 GB of build
+  directory in about 4.5 minutes. `mask all-check` in a second checkout added
+  2.1 GB, in a third 0.4 GB; building gup-core's tests adds 1 GB per checkout.
+  Clippy artifacts are shared, so a checkout re-lints when another checkout
+  linted last: `mask all-check` then takes about 90 s instead of 26 s.
+- Never `cargo clean` a shared build directory; delete your own
+  `CARGO_TARGET_DIR` instead.
+- A commit older than GUP-411 has no `.cargo/config.toml`. In a worktree nested
+  inside a checkout that has one, cargo uses the outer checkout's and the build
+  stops with an explanation. Elsewhere, give it its own build directory.
+
 ## Dependency Management
 
 - Do not downgrade wgpu. The project relies on features of the latest version
