@@ -2,8 +2,8 @@
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-10 (T0 guardrails) **Status**: 📋 Planned
-**Created**: 2026-10-10
+**Initiative**: Strategic Review 2026-10 (T0 guardrails) **Status**: 🚧 In
+Progress **Created**: 2026-10-10
 
 ## Context
 

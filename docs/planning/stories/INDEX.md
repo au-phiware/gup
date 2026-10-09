@@ -70,7 +70,7 @@ survives into `gup-core`.
   seeded proof in both directions, and add `concurrency` groups to the two
   workflows missing one after "job was not acquired by Runner" CI failures.
   Deps: GUP-398 ✅, GUP-403 ✅.
-- [GUP-411](GUP-411_Isolate_Checkouts_Sharing_A_Target_Dir.md) 📋 — Checkouts
+- [GUP-411](GUP-411_Isolate_Checkouts_Sharing_A_Target_Dir.md) 🚧 — Checkouts
   that share a `CARGO_TARGET_DIR` reuse each other's workspace-member artifacts
   (cargo hashes members by workspace-relative path, freshness is by mtime), so a
   build, lint or hook can judge code that is not in the checkout. Reproduce,
