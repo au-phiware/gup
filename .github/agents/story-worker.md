@@ -88,6 +88,11 @@ Work iteratively in small, focused increments. For each increment:
   (usage limits), and uncommitted work is then at risk. If the code doesn't
   build yet, stub or `#[cfg(any())]`-gate the unfinished part so it does, then
   commit.
+- **Pinned tools**: use the dev shell's formatters and linters (`prettier`,
+  `mdl`, `actionlint`, `nixfmt`), which are pinned by the flake. Never
+  `npx prettier`: it fetches the latest release, which re-wraps Markdown
+  differently from the pinned version and churns unrelated lines. If a tool is
+  missing from PATH, run it via `nix develop -c`.
 - **Build output**: in a worktree, start every shell, including the one you
   commit from, with `eval "$(scripts/cargo_env.sh <BUILD_DIR>)"` run from the
   worktree, where `<BUILD_DIR>` is the shared build directory the orchestrator
