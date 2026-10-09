@@ -369,9 +369,11 @@ if [[ ${#md[@]} -gt 0 ]]; then
 fi
 
 # actionlint checks every workflow file (well under a second), not only the
-# staged ones: a workflow can break by referring to another.
+# staged ones: a workflow can break by referring to another. The files are
+# named explicitly: with no arguments actionlint finds its project by walking
+# up to a `.git`, which from the snapshot is the real checkout's.
 if [[ $workflows -eq 1 ]]; then
-  checks+=('actionlint')
+  checks+=('actionlint .github/workflows/*.y*ml')
   names+=',gha'
 fi
 

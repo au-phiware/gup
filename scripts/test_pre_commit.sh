@@ -178,6 +178,15 @@ if ! snapshot_cases; then
   failures=$((failures + 1))
 fi
 
+# Bare `actionlint` finds the workflows next to the nearest `.git` above the
+# working directory, which from the snapshot is the real checkout's: every
+# invocation must name the files.
+if grep -nE "'actionlint'|'actionlint &&|&& actionlint'" maskfile.md \
+  scripts/pre_commit.sh >&2; then
+  echo "FAIL: actionlint runs without naming the workflow files" >&2
+  failures=$((failures + 1))
+fi
+
 if [[ $failures -gt 0 ]]; then
   echo "test_pre_commit: $failures case(s) failed" >&2
   exit 1

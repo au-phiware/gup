@@ -136,7 +136,7 @@ concurrently --group --names clippy,statix,mdl,gha \
    'cargo clippy --allow-no-vcs --fix --workspace --all-targets --all-features && cargo clippy --workspace --all-targets -- -D warnings && cargo clippy --workspace --all-targets --all-features -- -D warnings' \
    'statix fix flake.nix' \
    'mdl --git-recurse .' \
-   'actionlint'
+   'actionlint .github/workflows/*.y*ml'
 ```
 
 Neither `mdl` nor `actionlint` (workflow files) has an automatic fixer.
@@ -151,7 +151,7 @@ concurrently --group --names clippy,statix,mdl,gha \
    'cargo clippy --workspace --all-targets -- -D warnings && cargo clippy --workspace --all-targets --all-features -- -D warnings' \
    'statix check flake.nix' \
    'mdl --git-recurse .' \
-   'actionlint'
+   'actionlint .github/workflows/*.y*ml'
 ```
 
 ## fmt
@@ -192,7 +192,7 @@ concurrently --group --names rs,nix,md,gha \
    'git grep -lz --untracked "[[:space:]]\+$" -- "*.rs" | xargs -0 -r sed -i "/[[:space:]]\+$/s///" && cargo fmt --all && cargo fmt --manifest-path dogfood/Cargo.toml && cargo clippy --allow-no-vcs --fix --workspace --all-targets --all-features && cargo clippy --workspace --all-targets -- -D warnings && cargo clippy --workspace --all-targets --all-features -- -D warnings' \
    'nixfmt flake.nix && statix fix flake.nix' \
    'prettier --cache --log-level warn --write "**/*.md" && mdl --git-recurse .' \
-   'actionlint'
+   'actionlint .github/workflows/*.y*ml'
 ```
 
 ## all-check
@@ -205,8 +205,11 @@ all features, under `-D warnings`; it type-checks too, so there is no separate
 `examples/INDEX.md` in step with the Cargo examples (the Gallery workflow fails
 on drift). `actionlint` checks every workflow file in `.github/workflows/`,
 including shellcheck on their `run:` scripts: GitHub does not report a workflow
-it cannot parse, it just never starts it (GUP-409). `test_pre_commit.sh` tests
-the pre-commit hook's scoping rules and its staged snapshot.
+it cannot parse, it just never starts it (GUP-409). The files are named
+explicitly because, with no arguments, actionlint looks for the workflows next
+to the nearest `.git` above it, which from the hook's snapshot is the real
+checkout. `test_pre_commit.sh` tests the pre-commit hook's scoping rules and its
+staged snapshot.
 
 The whitespace check passes only when `git grep` finds nothing (exit 1): a
 `git grep` error must fail it, not pass it.
@@ -224,7 +227,7 @@ concurrently --group --names '\s,rs,nix,md,gha,marks,gallery,hook' \
    'cargo fmt --all -- --check && cargo fmt --manifest-path dogfood/Cargo.toml -- --check && cargo clippy --workspace --all-targets -- -D warnings && cargo clippy --workspace --all-targets --all-features -- -D warnings' \
    'nixfmt --check flake.nix && statix check flake.nix' \
    'prettier --cache --log-level warn --check "**/*.md" && mdl --git-recurse .' \
-   'actionlint' \
+   'actionlint .github/workflows/*.y*ml' \
    'mask validate-marks' \
    './scripts/check_gallery_sync.sh' \
    './scripts/test_pre_commit.sh'
