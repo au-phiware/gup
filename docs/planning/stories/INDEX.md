@@ -76,7 +76,7 @@ survives into `gup-core`.
   build, lint or hook can judge code that is not in the checkout. Reproduce,
   isolate members while sharing dependencies, and document safe sharing. Deps:
   GUP-409 ✅.
-- [GUP-412](GUP-412_Lint_Wasm32_In_The_Gates.md) 📋 — No gate lints the wasm32
+- [GUP-412](GUP-412_Lint_Wasm32_In_The_Gates.md) 🚧 — No gate lints the wasm32
   target; `cargo clippy --target wasm32-unknown-unknown` fails on
   `arc_with_non_send_sync` in gup-core's `selection.rs` (found in GUP-410). Fix
   the findings and add a wasm32 clippy pass to `mask all-check`, with a seeded
