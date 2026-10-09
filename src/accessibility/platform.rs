@@ -12,9 +12,9 @@
 //! - Linux: ATK (Accessibility Toolkit) / AT-SPI2
 //! - Web: ARIA attributes in DOM
 
-use crate::accessibility::aria::AriaUpdate;
 #[cfg(target_arch = "wasm32")]
-use crate::accessibility::aria::{AriaTree, NodeId};
+use crate::accessibility::aria::AriaTree;
+use crate::accessibility::aria::AriaUpdate;
 use std::fmt;
 
 // Import platform-specific implementations
@@ -334,6 +334,13 @@ pub struct WebAccessibility {
 }
 
 #[cfg(target_arch = "wasm32")]
+impl Default for WebAccessibility {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
 impl WebAccessibility {
     /// Create a new, uninitialised web accessibility provider.
     pub fn new() -> Self {
@@ -381,8 +388,6 @@ impl PlatformAccessibility for WebAccessibility {
         &mut self,
         updates: &[AriaUpdate],
     ) -> Result<(), AccessibilityError> {
-        use wasm_bindgen::JsCast;
-
         if !self.initialized {
             return Err(AccessibilityError::PlatformUnavailable(
                 "Web accessibility not initialized".to_string(),
@@ -390,10 +395,10 @@ impl PlatformAccessibility for WebAccessibility {
         }
 
         // Update DOM overlay if available
-        if let Some(overlay) = &mut self.dom_overlay {
-            if let Some(aria_tree) = &self.aria_tree {
-                overlay.update_from_aria_tree(updates, aria_tree)?;
-            }
+        if let Some(overlay) = &mut self.dom_overlay
+            && let Some(aria_tree) = &self.aria_tree
+        {
+            overlay.update_from_aria_tree(updates, aria_tree)?;
         }
 
         let window = web_sys::window().ok_or_else(|| {
@@ -492,8 +497,6 @@ impl PlatformAccessibility for WebAccessibility {
         message: &str,
         priority: AnnouncementPriority,
     ) -> Result<(), AccessibilityError> {
-        use wasm_bindgen::JsCast;
-
         if !self.initialized {
             return Err(AccessibilityError::PlatformUnavailable(
                 "Web accessibility not initialized".to_string(),

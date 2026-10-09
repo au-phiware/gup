@@ -71,8 +71,7 @@ let config = DomOverlayConfig {
     pointer_enabled: true,
     show_focus_indicators: true,
     z_index: 1000,
-    forward_events: true,         // Enable event forwarding
-    deduplicate_events: true,     // Prevent duplicate events
+    forward_events: true, // Enable event forwarding
 };
 
 let mut overlay = WebDomOverlay::with_config(config)?;
@@ -171,26 +170,6 @@ This mapping accounts for:
 - Scroll offsets
 - Any CSS transformations
 
-## Event Deduplication
-
-When enabled, the overlay prevents duplicate events that might occur when both
-the canvas and overlay receive the same user action:
-
-```rust
-// Deduplication logic:
-// - Events within 50ms at the same coordinates are considered duplicates
-// - Only the first event is forwarded
-// - Subsequent duplicates are logged but ignored
-```
-
-Configure deduplication:
-
-```rust
-let mut config = DomOverlayConfig::default();
-config.deduplicate_events = true;  // Enable (default)
-config.deduplicate_events = false; // Disable
-```
-
 ## Touch Target Size
 
 For accessibility, the overlay ensures touch targets meet WCAG 2.1 AAA minimum
@@ -238,8 +217,7 @@ overlay.set_event_forward_callback(move |event| {
 1. **Event Forwarding**: Minimal overhead - events are forwarded through a
    zero-cost closure
 2. **Coordinate Mapping**: Computed once per event using cached canvas bounds
-3. **Deduplication**: Simple timestamp and coordinate comparison (<1µs)
-4. **GPU Hit Testing**: Asynchronous, doesn't block event handling
+3. **GPU Hit Testing**: Asynchronous, doesn't block event handling
 
 ## Testing
 

@@ -19,10 +19,6 @@ mod wasm_tests {
             config.forward_events,
             "Event forwarding should be enabled by default"
         );
-        assert!(
-            config.deduplicate_events,
-            "Event deduplication should be enabled by default"
-        );
     }
 
     #[wasm_bindgen_test]
@@ -75,17 +71,12 @@ mod wasm_tests {
             pointer_enabled: true,
             show_focus_indicators: true,
             z_index: 500,
-            forward_events: false,     // Disable event forwarding
-            deduplicate_events: false, // Disable deduplication
+            forward_events: false, // Disable event forwarding
         };
 
         assert!(
             !config.forward_events,
             "Event forwarding should be disabled"
-        );
-        assert!(
-            !config.deduplicate_events,
-            "Event deduplication should be disabled"
         );
     }
 }
