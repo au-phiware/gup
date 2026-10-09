@@ -1,12 +1,13 @@
 # Visual regression (GUP-388): harness unit tests, chart-builder golden
 # images with structural checks, the examples smoke test, and the quarantined
-# gup-culling-lod crate (GUP-390).
+# gup-culling-lod crate (GUP-390); and gup-core rendered in headless Chrome
+# (the browser job, GUP-408). `mask ci visual-regression` mirrors both jobs.
 #
-# GitHub runners have no GPU, so wgpu runs on Mesa's lavapipe (software
-# Vulkan). Golden images were blessed on a hardware GPU; if lavapipe output
-# differs beyond the perceptual tolerance, that is backend variance to be
-# resolved deliberately (see tests/golden/README.md), never by loosening a
-# structural check.
+# GitHub runners have no GPU, so native wgpu runs on Mesa's lavapipe
+# (software Vulkan) and the browser on Chrome's SwiftShader. Golden images
+# were blessed on a hardware GPU; if lavapipe output differs beyond the
+# perceptual tolerance, that is backend variance to be resolved deliberately
+# (see tests/golden/README.md), never by loosening a structural check.
 
 name: Visual regression
 
@@ -100,4 +101,71 @@ jobs:
         with:
           name: visual-regression
           path: target/visual-regression
+          if-no-files-found: ignore
+
+  # gup-core in a real browser (GUP-408). Only a browser compiles the WGSL
+  # gup-core hands to WebGPU (with Chrome's own compiler, not naga) and runs
+  # Rust's wasm32 std; both have broken the browser path while every native
+  # test passed (GUP-401). The runners have no GPU: Chrome's bundled
+  # SwiftShader is the WebGPU adapter, the same one `mask wasm-browser` forces
+  # locally, and the step summary records which adapter ran.
+  browser:
+    name: Browser smoke test (gup-core on WebGPU)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain (rust-toolchain.toml)
+        run: rustup toolchain install
+
+      # The harness is its own workspace (and lockfile): cache its release
+      # wasm build, including gup-core's build-time shader composition.
+      - name: Cache Cargo registry and wasm build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: browser-${{ runner.os }}-cargo-${{ hashFiles('crates/gup-core/wasm-size/scatter/Cargo.lock', 'rust-toolchain.toml') }}
+          restore-keys: |
+            browser-${{ runner.os }}-cargo-
+
+      # The CLI must match the harness's wasm-bindgen crate exactly.
+      - name: Install wasm-bindgen (the harness's Cargo.lock version)
+        run: |
+          version=$(sed -n '/^name = "wasm-bindgen"$/{n;s/^version = "\(.*\)"$/\1/p;}' \
+            crates/gup-core/wasm-size/scatter/Cargo.lock)
+          name="wasm-bindgen-$version-x86_64-unknown-linux-musl"
+          curl -sSfL "https://github.com/wasm-bindgen/wasm-bindgen/releases/download/$version/$name.tar.gz" |
+            tar -xz -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/$name" >>"$GITHUB_PATH"
+
+      # Node 22+ for the DevTools-protocol driver's built-in WebSocket.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      # A pinned Chrome for Testing build (it bundles SwiftShader). Move the
+      # pin deliberately, like rust-toolchain.toml's.
+      - name: Install Chrome for Testing
+        id: chrome
+        uses: browser-actions/setup-chrome@v2
+        with:
+          chrome-version: 155.0.8059.39
+          install-dependencies: true
+
+      - name: Render the scatter in headless Chrome (mask wasm-browser)
+        env:
+          GUP_CHROMIUM: ${{ steps.chrome.outputs.chrome-path }}
+        run: ./scripts/wasm_browser.sh
+
+      - name: Upload the browser's render
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-smoke
+          path: target/visual-regression/gup_core/browser_scatter.png
           if-no-files-found: ignore

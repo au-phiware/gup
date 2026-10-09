@@ -60,7 +60,9 @@ bare wgpu and the bundled Inter font, which the budget counts separately. Needs
 set -euo pipefail
 root=$(pwd)
 out=$(mktemp -d)
-release="${CARGO_TARGET_DIR:-$root/target}/wasm32-unknown-unknown/release"
+# The harnesses are their own workspaces: point them at this target directory.
+export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$root/target}"
+release="$CARGO_TARGET_DIR/wasm32-unknown-unknown/release"
 measure() { # name, crate dir, crate file name, cargo flags...
   local name=$1 dir=$2 file=$3
   shift 3
@@ -86,38 +88,19 @@ rm -rf "$out"
 
 ## wasm-browser
 
-Run gup-core in a real browser (GUP-401): build the `wasm-size/scatter` harness,
-serve it, render the reference scatter in headless Chromium through WebGPU
-(MSAA, async readback) and fail unless the page reports `PASS`. Writes the
-browser's pixels to
-`$CARGO_TARGET_DIR/visual-regression/gup_core/browser_scatter.png`. Needs a GPU,
-`chromium`, `miniserve` and `wasm-bindgen` 0.2.113.
+Run gup-core in a real browser (GUP-401, GUP-408): build the `wasm-size/scatter`
+harness, serve it, and render the reference scatter in headless Chromium through
+WebGPU on SwiftShader, Chromium's bundled software adapter (no GPU needed, the
+same adapter as on CI). Fails unless the page reports `GUP PASS` within 90 s
+with no console error, uncaught exception, failed load or WebGPU/WGSL
+diagnostic. Prints the browser version and adapter, and writes the browser's
+pixels to `$CARGO_TARGET_DIR/visual-regression/gup_core/browser_scatter.png`.
+Needs `chromium` (or `GUP_CHROMIUM`), Node 22+ and `wasm-bindgen` at the
+harness's `Cargo.lock` version. See `scripts/wasm_browser.sh` and
+`scripts/browser_smoke.mjs`.
 
 ```bash
-set -euo pipefail
-root=$(pwd)
-target="${CARGO_TARGET_DIR:-$root/target}"
-web=$(mktemp -d)
-(cd crates/gup-core/wasm-size/scatter &&
-  cargo build --quiet --release --target wasm32-unknown-unknown)
-wasm-bindgen --target web --out-dir "$web" --out-name scatter \
-  "$target/wasm32-unknown-unknown/release/gup_core_wasm_size_scatter.wasm"
-cp crates/gup-core/wasm-size/scatter/index.html "$web/"
-miniserve --port 8401 "$web" >/dev/null 2>&1 &
-server=$!
-trap 'kill $server; rm -rf "$web"' EXIT
-sleep 1
-log=$(timeout 60 chromium --headless=new --enable-features=WebGPU,Vulkan \
-  --enable-unsafe-webgpu --disable-dawn-features=disallow_unsafe_apis \
-  --enable-logging=stderr --v=0 --remote-debugging-port=9334 \
-  http://127.0.0.1:8401/index.html 2>&1 || true)
-mkdir -p "$target/visual-regression/gup_core"
-echo "$log" | grep -o 'GUPPNG data:image/png;base64,[A-Za-z0-9+/=]*' |
-  sed 's/.*base64,//' | base64 -d \
-  >"$target/visual-regression/gup_core/browser_scatter.png" || true
-result=$(echo "$log" | grep -o 'GUP \(PASS\|FAIL\)[^"]*' || echo "GUP FAIL no result")
-echo "$result"
-[[ $result == "GUP PASS"* ]]
+./scripts/wasm_browser.sh
 ```
 
 ## smoke-examples
@@ -332,7 +315,8 @@ grep -q run_wasm_axis_benchmarks "${CARGO_TARGET_DIR:-target}/ci-pkg/gup.js"
 
 ### ci visual-regression
 
-> Visual regression workflow: goldens, gup-core, culling/LOD, examples smoke
+> Visual regression workflow: goldens, gup-core, culling/LOD, examples smoke,
+> browser
 
 ```bash
 set -euo pipefail
@@ -343,10 +327,13 @@ cargo test --lib visual_regression -- --test-threads=1
 cargo check -p gup-culling-lod --all-targets --all-features
 cargo test -p gup-culling-lod -- --test-threads=1
 cargo test -p gup-text -- --test-threads=1
-cargo test -p gup-core --lib --test scatter_png -- --test-threads=1
+cargo test -p gup-core --lib --test scatter_png --test targets \
+  --test scene_items --test msaa --test svg -- --test-threads=1
 cargo test -p gup-core --doc
 cargo test -p gup-core --test compile_fail
 mask smoke-examples
+# The browser job (GUP-408), on SwiftShader as on CI
+./scripts/wasm_browser.sh
 ```
 
 ### ci tests

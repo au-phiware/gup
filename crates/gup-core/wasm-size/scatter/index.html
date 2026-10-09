@@ -1,15 +1,34 @@
 <!doctype html>
-<!-- Browser smoke test for gup-core (GUP-401): `mask wasm-browser` serves
-     this page with the wasm-bindgen output of this crate, and headless
-     Chromium logs the result to the console. -->
+<!-- Browser smoke test for gup-core (GUP-401, GUP-408): `mask wasm-browser`
+     serves this page with the wasm-bindgen output of this crate, and
+     scripts/browser_smoke.mjs watches its console in headless Chromium.
+     The page logs, in order: `GUP ADAPTER …`, `GUPPNG <data URL>` and
+     `GUP PASS …` or `GUP FAIL …`; the result line is always last. -->
 <html>
+  <head>
+    <link rel="icon" href="data:," />
+  </head>
   <body>
     <pre id="out">pending</pre>
     <script type="module">
       import init, { render_scatter } from "./scatter.js";
       const out = document.getElementById("out");
       const [w, h] = [320, 200];
+      let result;
       try {
+        // The adapter the browser hands out for gup-core's request (wgpu
+        // reports no adapter details on the web).
+        const adapter = await navigator.gpu?.requestAdapter({
+          powerPreference: "high-performance",
+        });
+        const info = adapter?.info;
+        console.log(
+          "GUP ADAPTER " +
+            (info
+              ? `vendor=${info.vendor} architecture=${info.architecture} ` +
+                `fallback=${info.isFallbackAdapter}`
+              : "none (no WebGPU)")
+        );
         await init();
         const px = await render_scatter(w, h);
         let white = 0,
@@ -21,12 +40,6 @@
           else if (Math.abs(r - g) < 8 && Math.abs(g - b) < 8) grey++;
           else coloured++;
         }
-        // The scatter covers a fraction of the plot; a flooded plot (a
-        // uniform-layout bug) or an empty one fails.
-        const ok =
-          coloured > 0.05 * w * h && coloured < 0.4 * w * h && grey > 1000;
-        out.textContent = `${ok ? "PASS" : "FAIL"} white=${white} grey=${grey} coloured=${coloured}`;
-        console.log("GUP " + out.textContent);
         const c = document.createElement("canvas");
         [c.width, c.height] = [w, h];
         c.getContext("2d").putImageData(
@@ -35,9 +48,16 @@
           0
         );
         console.log("GUPPNG " + c.toDataURL("image/png"));
+        // The scatter covers a fraction of the plot; a flooded plot (a
+        // uniform-layout bug) or an empty one fails.
+        const ok =
+          coloured > 0.05 * w * h && coloured < 0.4 * w * h && grey > 1000;
+        result = `${ok ? "PASS" : "FAIL"} white=${white} grey=${grey} coloured=${coloured}`;
       } catch (e) {
-        console.log("GUP FAIL " + e);
+        result = "FAIL " + e;
       }
+      out.textContent = result;
+      console.log("GUP " + result);
     </script>
   </body>
 </html>

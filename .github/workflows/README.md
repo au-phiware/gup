@@ -56,6 +56,19 @@ pre-commit hook's scoping tests. The local hook (`mask pre-commit`) scopes its
 checks to the staged files; this workflow never does. `mask ci lint` runs it
 locally.
 
+### Visual regression (`visual-regression.yml`)
+
+The `visual-regression` job renders the chart-builder goldens, gup-core,
+gup-text and the quarantined culling/LOD crate on lavapipe and smoke-runs the
+examples. The `browser` job (GUP-408) builds gup-core's `wasm-size/scatter`
+harness for wasm32 and renders it in headless Chrome for Testing (a pinned
+version) through WebGPU on SwiftShader, Chrome's bundled software adapter. It
+fails on `GUP FAIL`, a timeout, a console error, an uncaught exception, a failed
+load or a WebGPU/WGSL diagnostic; the step summary records the browser and
+adapter, and the render is uploaded as the `browser-smoke` artifact.
+`mask ci visual-regression` runs both locally; `mask wasm-browser` runs the
+browser job alone.
+
 ### No workflow scopes by changed files
 
 No workflow has a `paths:` filter, and none reads the pre-commit hook's scoping
@@ -67,7 +80,8 @@ rules: a workflow that runs runs all of its checks, whatever changed.
   with `rustup toolchain install` or run in the Nix dev shell, which reads the
   same file. Never use a floating `stable` toolchain in a workflow.
 - The runners have no GPU. Workflows install Mesa's lavapipe (software Vulkan),
-  or set `GUP_SOFTWARE_GPU=1` for the Nix dev shell.
+  or set `GUP_SOFTWARE_GPU=1` for the Nix dev shell. The browser job uses
+  Chrome's SwiftShader instead (`scripts/browser_smoke.mjs` forces it).
 - `mask ci` (or `mask ci <workflow>`) runs the push-to-main workflows locally on
   lavapipe.
 
