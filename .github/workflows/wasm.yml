@@ -9,6 +9,10 @@ on:
 env:
   CARGO_TERM_COLOR: always
 
+concurrency:
+  group: wasm-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   wasm_check:
     name: WASM Target Compilation
@@ -37,14 +41,22 @@ jobs:
 
       - name: Verify package output
         run: |
-          test -f pkg/gup_bg.wasm && echo "✅ WASM binary produced" || (echo "❌ Missing WASM binary" && exit 1)
-          test -f pkg/gup.js && echo "✅ JS bindings produced" || (echo "❌ Missing JS bindings" && exit 1)
+          for f in pkg/gup_bg.wasm pkg/gup.js; do
+            if [ ! -f "$f" ]; then
+              echo "❌ Missing $f"
+              exit 1
+            fi
+            echo "✅ $f produced"
+          done
 
       - name: Verify axis benchmark export
         run: |
-          grep -q "run_wasm_axis_benchmarks" pkg/gup.js \
-            && echo "✅ Axis benchmark function exported" \
-            || (echo "❌ Missing axis benchmark export" && exit 1)
+          if grep -q "run_wasm_axis_benchmarks" pkg/gup.js; then
+            echo "✅ Axis benchmark function exported"
+          else
+            echo "❌ Missing axis benchmark export"
+            exit 1
+          fi
 
       # Known failure, tracked by GUP-285B: html_export_integration and
       # event_handling_tests do not compile for wasm32. continue-on-error keeps

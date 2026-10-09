@@ -4,8 +4,9 @@
 # files and can be bypassed, so this workflow is where formatting and lints
 # are enforced: strict clippy on every workspace member and target (default
 # and all features), rustfmt, trailing whitespace, nixfmt/statix,
-# prettier/mdl, mark validation, the gallery sync check and the hook's own
-# scoping tests. It never scopes by changed files.
+# prettier/mdl, actionlint on every workflow file (GUP-409), mark validation,
+# the gallery sync check and the hook's own tests. It never scopes by changed
+# files.
 #
 # It runs in the Nix dev shell so the tools (and rust-toolchain.toml's
 # toolchain) are the ones the hook uses locally.

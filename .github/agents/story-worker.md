@@ -273,9 +273,11 @@ State your recommendation clearly with reasoning.
   your story, stop and report it in your final output rather than bypassing it.
   The hook (`mask pre-commit`) is proportional: it skips Rust checks for
   docs-only commits and scopes them to the touched crates and their dependents
-  otherwise, so "the hook passed" does not mean the whole workspace is clean. CI
-  is the full gate: the Lint workflow runs `mask all-check` and the Tests
-  workflow runs every test, on every push, never scoped.
+  otherwise, so "the hook passed" does not mean the whole workspace is clean. It
+  checks the staged content, not your working tree: unstaged edits and untracked
+  files neither fail nor rescue a commit (GUP-409). CI is the full gate: the
+  Lint workflow runs `mask all-check` and the Tests workflow runs every test, on
+  every push, never scoped.
 - **Small commits**: Commit after each logical increment, not one big commit.
 - **wgpu version**: Do not downgrade wgpu.
 - **Breaking changes are allowed** (pre-alpha). Prefer deleting or replacing a

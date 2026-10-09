@@ -132,13 +132,14 @@ Apply clippy's automatic fixes, then lint strictly. `cargo clippy --fix` exits 0
 whatever it cannot fix, so only the strict runs after it can fail.
 
 ```bash
-concurrently --group --names clippy,statix,mdl \
+concurrently --group --names clippy,statix,mdl,gha \
    'cargo clippy --allow-no-vcs --fix --workspace --all-targets --all-features && cargo clippy --workspace --all-targets -- -D warnings && cargo clippy --workspace --all-targets --all-features -- -D warnings' \
    'statix fix flake.nix' \
-   'mdl --git-recurse .'
+   'mdl --git-recurse .' \
+   'actionlint .github/workflows/*.y*ml'
 ```
 
-The `mdl` tool has no automatic fixer.
+Neither `mdl` nor `actionlint` (workflow files) has an automatic fixer.
 
 ## lint-check
 
@@ -146,10 +147,11 @@ Lint strictly without writing fixes: every workspace member and target, with
 default features and with all features
 
 ```bash
-concurrently --group --names clippy,statix,mdl \
+concurrently --group --names clippy,statix,mdl,gha \
    'cargo clippy --workspace --all-targets -- -D warnings && cargo clippy --workspace --all-targets --all-features -- -D warnings' \
    'statix check flake.nix' \
-   'mdl --git-recurse .'
+   'mdl --git-recurse .' \
+   'actionlint .github/workflows/*.y*ml'
 ```
 
 ## fmt
@@ -181,14 +183,16 @@ concurrently --group --names '\s,rs,nix,md' \
 
 Apply every automatic fix (whitespace, rustfmt, clippy, nixfmt, statix,
 prettier), then run the strict checks. `cargo clippy --fix` exits 0 whatever it
-cannot fix, so only the strict clippy runs after it can fail.
+cannot fix, so only the strict clippy runs after it can fail. `actionlint` has
+no fixer, so it only checks.
 
 ```bash
 shopt -qs globstar
-concurrently --group --names rs,nix,md \
+concurrently --group --names rs,nix,md,gha \
    'git grep -lz --untracked "[[:space:]]\+$" -- "*.rs" | xargs -0 -r sed -i "/[[:space:]]\+$/s///" && cargo fmt --all && cargo fmt --manifest-path dogfood/Cargo.toml && cargo clippy --allow-no-vcs --fix --workspace --all-targets --all-features && cargo clippy --workspace --all-targets -- -D warnings && cargo clippy --workspace --all-targets --all-features -- -D warnings' \
    'nixfmt flake.nix && statix fix flake.nix' \
-   'prettier --cache --log-level warn --write "**/*.md" && mdl --git-recurse .'
+   'prettier --cache --log-level warn --write "**/*.md" && mdl --git-recurse .' \
+   'actionlint .github/workflows/*.y*ml'
 ```
 
 ## all-check
@@ -199,21 +203,31 @@ Clippy covers every workspace member and target, with default features and with
 all features, under `-D warnings`; it type-checks too, so there is no separate
 `cargo check`. The gallery sync check keeps `scripts/gallery_config.toml` and
 `examples/INDEX.md` in step with the Cargo examples (the Gallery workflow fails
-on drift). `test_pre_commit.sh` tests the pre-commit hook's scoping rules.
+on drift). `actionlint` checks every workflow file in `.github/workflows/`,
+including shellcheck on their `run:` scripts: GitHub does not report a workflow
+it cannot parse, it just never starts it (GUP-409). The files are named
+explicitly because, with no arguments, actionlint looks for the workflows next
+to the nearest `.git` above it, which from the hook's snapshot is the real
+checkout. `test_pre_commit.sh` tests the pre-commit hook's scoping rules and its
+staged snapshot.
 
 The whitespace check passes only when `git grep` finds nothing (exit 1): a
 `git grep` error must fail it, not pass it.
 
-The pre-commit hook runs `mask pre-commit`, which runs this task only when the
-staged change needs it. CI runs its own full checks on every push regardless.
+This task checks the tree it runs in: run by hand, your working tree, including
+unstaged edits and untracked files; in CI, the pushed commit. The pre-commit
+hook runs `mask pre-commit`, which runs this task only when the staged change
+needs it, and then inside its staged snapshot when the working tree differs from
+the index. CI runs its own full checks on every push regardless.
 
 ```bash
 shopt -qs globstar
-concurrently --group --names '\s,rs,nix,md,marks,gallery,hook' \
+concurrently --group --names '\s,rs,nix,md,gha,marks,gallery,hook' \
    'git --no-pager grep --untracked --name-only --full-name "[[:space:]]\+$" -- "*.rs"; test $? -eq 1' \
    'cargo fmt --all -- --check && cargo fmt --manifest-path dogfood/Cargo.toml -- --check && cargo clippy --workspace --all-targets -- -D warnings && cargo clippy --workspace --all-targets --all-features -- -D warnings' \
    'nixfmt --check flake.nix && statix check flake.nix' \
    'prettier --cache --log-level warn --check "**/*.md" && mdl --git-recurse .' \
+   'actionlint .github/workflows/*.y*ml' \
    'mask validate-marks' \
    './scripts/check_gallery_sync.sh' \
    './scripts/test_pre_commit.sh'
@@ -231,8 +245,14 @@ their reasons are in `scripts/pre_commit.sh`; preview them with
 `scripts/pre_commit.sh --plan [PATH...]`.
 
 The scoping is local only. CI never scopes, so anything the hook skipped is
-still checked before it merges. Like `all-check`, the hook checks the working
-tree, not the index.
+still checked before it merges.
+
+The hook checks exactly what is being committed, not the working tree (GUP-409).
+When the working tree matches the index it checks in place; otherwise it checks
+out the index into a per-worktree snapshot under the git directory and runs
+there, so unstaged edits and untracked files can neither fail a clean commit nor
+pass a broken one. Running `mask pre-commit` by hand does the same.
+`mask all-check` run by hand checks your working tree.
 
 ```bash
 ./scripts/pre_commit.sh

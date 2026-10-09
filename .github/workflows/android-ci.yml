@@ -136,10 +136,12 @@ jobs:
 
       - name: Boot emulator
         run: |
-          $ANDROID_HOME/emulator/emulator -avd gup_test \
+          "$ANDROID_HOME/emulator/emulator" -avd gup_test \
             -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect &
           adb wait-for-device
-          # Wait for boot to complete
+          # Wait for boot to complete. The single quotes are deliberate: the
+          # device's shell expands $(getprop ...), not this one.
+          # shellcheck disable=SC2016
           adb shell 'while [[ -z $(getprop sys.boot_completed) ]]; do sleep 1; done'
           echo "Emulator booted."
 

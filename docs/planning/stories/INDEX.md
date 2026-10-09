@@ -64,12 +64,18 @@ survives into `gup-core`.
   budget, obsolete/frozen-path, or hidden-failure, with a checked-in inventory
   and a lint rejecting any `#[ignore]` without a reason from an allowed set.
   Deps: GUP-398 ✅.
-- [GUP-409](GUP-409_Close_Gate_Gaps.md) 📋 — Lint workflow YAML with
+- [GUP-409](GUP-409_Close_Gate_Gaps.md) ✅ — Lint workflow YAML with
   `actionlint` (GUP-400 corrupted one past both the hook and CI), make the
   pre-commit hook check the staged snapshot instead of the working tree with a
   seeded proof in both directions, and add `concurrency` groups to the two
   workflows missing one after "job was not acquired by Runner" CI failures.
   Deps: GUP-398 ✅, GUP-403 ✅.
+- [GUP-411](GUP-411_Isolate_Checkouts_Sharing_A_Target_Dir.md) 📋 — Checkouts
+  that share a `CARGO_TARGET_DIR` reuse each other's workspace-member artifacts
+  (cargo hashes members by workspace-relative path, freshness is by mtime), so a
+  build, lint or hook can judge code that is not in the checkout. Reproduce,
+  isolate members while sharing dependencies, and document safe sharing. Deps:
+  GUP-409 ✅.
 
 ## RFC-001 Migration
 
