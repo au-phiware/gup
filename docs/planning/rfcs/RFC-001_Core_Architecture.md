@@ -1854,6 +1854,11 @@ it.
   3. **Error spans.** `compose::Error` reports point into the WGSL string. Emit
      them with `compile_error!` at the attribute's span, keeping naga_oil's
      report text.
+  4. **The calling convention.** Check the entry function's signature against
+     what the glue calls
+     (`(In, [base: f32,] Params[, texture, sampler]) -> Out`) at expansion.
+     naga_oil used to catch a mismatch when composing the glue at run time; now
+     it would surface only as a wgpu validation error at pipeline creation.
 - **S6 (`derive(Mark)`):** the generated `<NAME>In` check
   (`marks::tests::wgsl_input_struct_matches_channels`) now reads the flattened
   `gup_marks_<name>_<Name>In` struct. A derive can check channel order against

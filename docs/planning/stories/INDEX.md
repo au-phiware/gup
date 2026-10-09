@@ -142,12 +142,19 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   - The SVG raster matches the PNG outside text to ΔE ≤ 0.77.
   - naga_oil costs +897 KB gz, over budget (GUP-406).
   - The first browser run found and fixed two wasm-only bugs.
-- [GUP-406](GUP-406_WGSL_Only_Shader_Path_On_Wasm.md) 🚧 — Move shader
+- [GUP-406](GUP-406_WGSL_Only_Shader_Path_On_Wasm.md) ✅ — Move shader
   composition to build time on every target (owner decision 2026-10-09,
   RFC-001): naga_oil flattens library modules once at build time; at runtime,
   native and wasm both just concatenate the typed glue with the pre-flattened
   text, dropping naga/naga_oil as runtime dependencies everywhere (−897 KB gz on
   wasm). Also drops the wasm `GL` backend default. Deps: GUP-401 ✅.
+  - New crate `gup-wgsl`: a dependency-free run-time linker plus a build-time
+    `compose` feature that checks every flattened round trip.
+  - The reference scatter is 392.9 KB gz (was 1,241.9): +351.1 KB over bare wgpu
+    including Inter, inside the +400 KB budget.
+  - Link + create 0.93 ms median (S0a compose + create: 2.75 ms).
+  - The two `#[wgsl_function]` items are deferred to S5 (no such macro in
+    gup-core yet).
 - [GUP-407](GUP-407_Subset_Inter_And_SVG_Font_Embedding.md) 📋 — Subset the
   bundled Inter (198 → 24 KB gz) and let `SvgTarget` embed it. Deps: GUP-401 ✅,
   GUP-405 📋 (soft).

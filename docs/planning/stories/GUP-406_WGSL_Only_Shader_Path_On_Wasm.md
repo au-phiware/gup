@@ -2,8 +2,8 @@
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 🚧 In Progress **Created**:
-2026-10-06 (rewritten 2026-10-09)
+**Initiative**: RFC-001 Migration **Status**: ✅ Complete (2026-10-09)
+**Created**: 2026-10-06 (rewritten 2026-10-09)
 
 ## Context
 
@@ -55,85 +55,92 @@ must do, just run once at build time rather than conditionally at runtime.
 
 ### AC1: naga_oil and naga are build-time-only
 
-- [ ] naga_oil and naga are not runtime dependencies of `gup-core` on any
+- [x] naga_oil and naga are not runtime dependencies of `gup-core` on any
       target.
-      `cargo tree -p gup-core --target x86_64-unknown-linux-gnu -e     normal`
-      and `cargo tree -p gup-core --target wasm32-unknown-unknown -e     normal`
-      both omit `naga` and `naga_oil`.
-- [ ] naga_oil and naga are dependencies of the build-time tool only (a
+      `cargo tree -p gup-core --target x86_64-unknown-linux-gnu -e normal` and
+      `cargo tree -p gup-core --target wasm32-unknown-unknown -e normal` both
+      omit `naga` and `naga_oil`.
+- [x] naga_oil and naga are dependencies of the build-time tool only (a
       `[build-dependencies]` entry, a `build.rs`, or a separate build-time crate
       gup-core depends on at build time). wgpu's own transitive naga dependency
       (used for its internal validation at pipeline creation) is unaffected and
       out of scope.
-- [ ] naga as a `[dev-dependencies]` entry, for tests that re-parse composed
+- [x] naga as a `[dev-dependencies]` entry, for tests that re-parse composed
       WGSL (for example the S3 uniform-layout re-parse test), is permitted and
       does not count against this AC.
 
 ### AC2: library modules are flattened at build time; glue is built at runtime on every target
 
-- [ ] A build-time step (build script or build-time crate) runs naga_oil once
+- [x] A build-time step (build script or build-time crate) runs naga_oil once
       over gup-core's library WGSL modules (§6: marks, scales, palettes, the
       view transform, colour helpers) and emits namespaced, mangled, plain WGSL
       text with no remaining `#import`/`#define_import_path` directives.
 - [ ] `#[wgsl_function]` user modules (RFC-001 §4, §6) are flattened the same
-      way, at macro-expansion time, not at runtime.
-- [ ] At runtime, the existing typed glue emitter (§6) builds its one top-level
+      way, at macro-expansion time, not at runtime. **Deferred to S5:** gup-core
+      has no `#[wgsl_function]` yet (it is RFC-001 S5). The old crate's
+      `#[wgsl_function]` (gup-macros, GUP-006) is on the frozen path and has no
+      naga step, so there is no expansion-time validation to extend. The
+      flattening S5 needs is `gup_wgsl::compose::Library::new`; the RFC-001
+      "GUP-406 findings" list what S5 must settle (import path, library sources
+      at expansion, error spans, the calling convention).
+- [x] At runtime, the existing typed glue emitter (§6) builds its one top-level
       module as a Rust string, unchanged in logic from today, and that string is
       concatenated with the pre-flattened library text. The result is passed to
       wgpu as `ShaderSource::Wgsl` on every target — one code path, not one per
       target.
-- [ ] The generated glue for the reference scatter
-      (`crates/gup-core/tests/     fixtures/scatter_glue.wgsl`) is
-      byte-identical to its current checked-in fixture: the glue emitter's
-      output and behaviour are unchanged by this story.
-      `tests/golden/gup_core/scatter.png` and `window_parity` both still pass
-      unmodified.
+- [x] The generated glue for the reference scatter
+      (`crates/gup-core/tests/fixtures/scatter_glue.wgsl`) is byte-identical to
+      its current checked-in fixture: the glue emitter's output and behaviour
+      are unchanged by this story. `tests/golden/gup_core/scatter.png` and
+      `window_parity` both still pass unmodified.
 
 ### AC3: composition errors still point at source modules at build time
 
-- [ ] A deliberately broken library module (for example a wrong-arity call, as
+- [x] A deliberately broken library module (for example a wrong-arity call, as
       in RFC-001 "S0a findings") produces a build-time error (`cargo build`
       fails) naming the source module and line, not a runtime panic. The story's
       evidence includes a sample error message.
 - [ ] A deliberately broken `#[wgsl_function]` module produces a compile-time
       error at macro expansion (unchanged from today's behaviour), with a sample
-      shown in the story's evidence.
+      shown in the story's evidence. **Deferred to S5**, for the reason above.
+      The library-module case (the first bullet) shows the report S5 will
+      surface through `compile_error!`.
 
 ### AC4: authoring rules enforced at build time
 
-- [ ] The 16-byte `Params` rule (RFC-001 "S3 findings": every uniform `Params`
+- [x] The 16-byte `Params` rule (RFC-001 "S3 findings": every uniform `Params`
       struct spans a multiple of 16 bytes) is checked at build time, failing the
       build with a clear message naming the offending struct if violated.
-- [ ] The no-trailing-digit identifier rule (RFC-001 "S0a findings": naga_oil
+- [x] The no-trailing-digit identifier rule (RFC-001 "S0a findings": naga_oil
       rejects identifiers like `r0` in composable modules) is checked at build
       time (naga_oil already enforces this when flattening; confirm the error
       surfaces at build time, not swallowed).
-- [ ] Uniform offsets used at runtime (native and wasm) come from encase sizes
+- [x] Uniform offsets used at runtime (native and wasm) come from encase sizes
       under the 16-byte rule, not from naga's layout of a composed module. A
       native test checks that these offsets equal naga's own layout of the fully
       composed reference glue, so the two never silently drift.
 
 ### AC5: WASM size budget
 
-- [ ] `mask wasm-size` reports the gup-core reference scatter within the ≤ +400
+- [x] `mask wasm-size` reports the gup-core reference scatter within the ≤ +400
       KB gz budget over the bare-wgpu baseline (RFC-001 §12 risk 10), with the
       bundled Inter font reported as a separate line item (not counted against
       the +400 KB, per RFC-001 "S3 findings" precedent).
-- [ ] The number is recorded in RFC-001 (a short note near risk 10 or in a
+- [x] The number is recorded in RFC-001 (a short note near risk 10 or in a
       follow-up findings section), replacing the +897 KB gz figure.
 
 ### AC6: WASM default backends and browser behaviour
 
-- [ ] `ContextOptions::default()`'s wasm backends become
+- [x] `ContextOptions::default()`'s wasm backends become
       `wgpu::Backends::BROWSER_WEBGPU` (dropping `GL`, per RFC-001 "Decisions
       (2026-10-09)"). wgpu's `webgl` feature remains disabled.
-- [ ] `mask wasm-browser` passes: the reference scatter renders correctly in
+- [x] `mask wasm-browser` passes: the reference scatter renders correctly in
       headless Chromium over WebGPU, and the PNG is checked by eye and described
       in the retrospective.
 
 ### AC7: performance
 
-- [ ] Pipeline creation time (compose + create, release build) is no worse than
+- [x] Pipeline creation time (compose + create, release build) is no worse than
       RFC-001 "S0a findings" numbers (≤ 2.75 ms median, ≤ 13.5 ms cold) for the
       reference scatter, on native. Concatenation at runtime should be cheaper
       than today's full naga_oil composition, not more expensive; a regression
@@ -141,35 +148,36 @@ must do, just run once at build time rather than conditionally at runtime.
 
 ## Technical Tasks
 
-- [ ] Design the build-time flattening step: a build script in `gup-core`, or a
+- [x] Design the build-time flattening step: a build script in `gup-core`, or a
       small build-time-only crate it depends on via `[build-dependencies]`, that
       runs naga_oil over the library modules and writes flattened, namespaced,
       mangled WGSL (one file, or one per module) into `$OUT_DIR`, included at
       compile time via `include_str!`.
-- [ ] Implement the qualification rewrite naga_oil's mangling already does
+- [x] Implement the qualification rewrite naga_oil's mangling already does
       (prefixing/mangling item names so flattened modules don't collide) — this
       is naga_oil's existing behaviour, just invoked at build time instead of
       per-`Context` at runtime.
 - [ ] Move `#[wgsl_function]`'s existing compile-time naga validation (already
       at macro expansion) to also flatten the user's module the same way, so its
       output composes with the pre-flattened library by concatenation.
-- [ ] Replace the runtime `Composer`/`Context.shaders` naga_oil state (RFC-001
+      **Deferred to S5** (no such macro in gup-core yet; see AC2).
+- [x] Replace the runtime `Composer`/`Context.shaders` naga_oil state (RFC-001
       §2) with: the pre-flattened library text (a `&'static str` or similar,
       embedded at compile time) plus the existing glue emitter. Concatenate and
       pass `ShaderSource::Wgsl` to wgpu.
-- [ ] Add a build-time (or build-script-invoked) check for the 16-byte `Params`
+- [x] Add a build-time (or build-script-invoked) check for the 16-byte `Params`
       rule and the no-trailing-digit identifier rule, with error messages naming
       the offending module and struct/identifier.
-- [ ] Derive `Encodings`/`Chunk` uniform offsets from encase sizes on every
+- [x] Derive `Encodings`/`Chunk` uniform offsets from encase sizes on every
       target; keep the native cross-check test against naga's layout of the
       fully composed glue.
-- [ ] Remove naga_oil, naga and (if unused elsewhere) the `naga-ir` wgpu feature
+- [x] Remove naga_oil, naga and (if unused elsewhere) the `naga-ir` wgpu feature
       from `gup-core`'s runtime `[dependencies]`; add them under
       `[build-dependencies]` (or to the build-time crate) and, where needed for
       tests, `[dev-dependencies]`.
-- [ ] Change `ContextOptions::default()`'s wasm backends to
+- [x] Change `ContextOptions::default()`'s wasm backends to
       `Backends::BROWSER_WEBGPU`.
-- [ ] Re-run `mask wasm-size` and `mask wasm-browser`; update RFC-001 with the
+- [x] Re-run `mask wasm-size` and `mask wasm-browser`; update RFC-001 with the
       new number and this story's outcome.
 
 ## Dependencies
@@ -205,11 +213,11 @@ must do, just run once at build time rather than conditionally at runtime.
 
 ## Success Metrics
 
-- [ ] `cargo tree -p gup-core --target wasm32-unknown-unknown -e normal` has no
+- [x] `cargo tree -p gup-core --target wasm32-unknown-unknown -e normal` has no
       `naga`/`naga_oil` entry.
-- [ ] `mask wasm-size` for the reference scatter is within the ≤ +400 KB gz
+- [x] `mask wasm-size` for the reference scatter is within the ≤ +400 KB gz
       budget (from 896.7 KB gz over).
-- [ ] `mask wasm-browser` passes with an unchanged, correct render.
+- [x] `mask wasm-browser` passes with an unchanged, correct render.
 
 ## Risk Assessment
 
@@ -249,20 +257,22 @@ must do, just run once at build time rather than conditionally at runtime.
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] `cargo test -p gup-core -- --test-threads=1` passes
-- [ ] `mask all-fix` is clean
-- [ ] All examples compile: `cargo check --examples`
-- [ ] The browser render was looked at and is described in the retrospective
-- [ ] Story status is updated in the story file and INDEX.md
-- [ ] A retrospective is added, including the new `mask wasm-size` numbers and a
+- [x] All Acceptance Criteria are satisfied and checked, except the two
+      `#[wgsl_function]` items, which are deferred to S5 (see AC2 and AC3)
+- [x] `cargo test -p gup-core -- --test-threads=1` passes
+- [x] `mask all-fix` is clean
+- [x] All examples compile: `cargo check --examples`
+- [x] The browser render was looked at and is described in the retrospective
+- [x] Story status is updated in the story file and INDEX.md
+- [x] A retrospective is added, including the new `mask wasm-size` numbers and a
       sample build-time error message
 
 ## Spike Findings (2026-10-09)
 
 The two Risk Assessment unknowns were spiked first, in a new crate
-`crates/gup-wgsl` (`tests/spike.rs`, over gup-core's real library and the
-checked-in reference glue).
+`crates/gup-wgsl` (a throwaway `tests/spike.rs`, over gup-core's real library
+and the checked-in reference glue; it became `crates/gup-wgsl/tests/compose.rs`
+and the gup-core tests listed below).
 
 ### Round trip: works, with naga's writer and a build-time check
 
@@ -290,7 +300,8 @@ checked-in reference glue).
   fails the build).
 - naga's writer adds `@interpolate(flat)` to integer vertex _inputs_
   (`GradientIn.vertical`/`reverse`). It did so before this story too (wgpu wrote
-  the same text for browsers), but no browser test draws a gradient yet.
+  the same text for browsers), but no browser test drew a gradient. The browser
+  harness now draws one, and Chrome accepts it.
 
 ### Mangling: stable, readable flat names
 
@@ -332,3 +343,66 @@ error: failed to build a valid final module: Function [1] 'gup::broken::f' is in
 - A 4-byte `Params` fails: "struct `Params` of `gup::scale::pad` spans 4 bytes;
   uniform `Params` structs must span a multiple of 16 bytes (pad it in WGSL and
   in its encase twin)".
+
+## Implementation Summary
+
+Shader composition now runs once, at build time, on every target. naga_oil and
+naga are dependencies of `gup-wgsl`'s build-time `compose` feature only; at run
+time gup-core links its generated glue to pre-flattened WGSL and hands wgpu
+`ShaderSource::Wgsl`, on native and wasm alike. The full record is in RFC-001
+"GUP-406 findings".
+
+### Key files
+
+- `crates/gup-wgsl/` (new): `src/lib.rs` (`WgslModule`, `flat_name`, the
+  dependency-free `link`), `src/lex.rs` (token scanner and declaration
+  splitter), `src/compose.rs` (feature `compose`: `Library`, `read_dir`,
+  `flatten_shader`, the round-trip and authoring-rule checks),
+  `tests/compose.rs`.
+- `crates/gup-core/build.rs` (new): flattens `src/shaders` into
+  `$OUT_DIR/shaders.rs` and `$OUT_DIR/wgsl/*.wgsl`; fails the build with
+  naga_oil's report.
+- `crates/gup-core/src/shader/mod.rs`: the runtime `ShaderLibrary`/naga_oil
+  composer is gone; generated statics, `link`, `StructLayout`.
+- `crates/gup-core/src/shader/glue.rs`: `Glue` carries `Encodings`/`Chunk`
+  layouts computed from encase sizes; the emitted text is unchanged.
+- `crates/gup-core/src/render.rs`, `context.rs`: programs hold linked WGSL; the
+  `shaders` mutex and its lock rank are gone; `PipelineStats` reports
+  `programs_linked`/`last_link`; wasm backends default to `BROWSER_WEBGPU`.
+- `crates/gup-core/Cargo.toml`: naga, naga_oil and wgpu's `naga-ir` leave
+  `[dependencies]`; `gup-wgsl` is a normal dependency (no features), a
+  build-dependency (`compose`) and a dev-dependency (`compose`, the test
+  oracle), with naga as a dev-dependency.
+- `crates/gup-core/src/shaders/rule.wgsl`: `p0`/`p1` → `start`/`stop` (naga's
+  writer renamed them).
+- `crates/gup-core/tests/fixtures/scatter_linked.wgsl` replaces
+  `scatter_composed.wgsl`; `scatter_glue.wgsl` is unchanged.
+- `crates/gup-core/wasm-size/`: the baseline loses its `naga-oil` feature; the
+  scatter harness draws a background and legend; `maskfile.md` `wasm-size`
+  prints gup-core's cost over wgpu.
+
+### Tests and evidence
+
+- gup-wgsl: 6 unit and 11 integration tests (round trip against naga_oil, seeded
+  wrong arity, trailing-digit member, short `Params`, lost `@align`, renamed
+  top-level member, `#ifdef`, flat-name collision, unknown import, two modules
+  with one path).
+- gup-core: 53 library tests plus every integration test pass, 2 ignored by
+  design (`pipeline_timings`, `window_parity`, both run separately). New:
+  `reference_glue_matches_fixtures`, `linked_glue_matches_naga_oil_composition`,
+  `uniform_offsets_match_naga_layout`,
+  `every_library_module_is_standalone_wgsl`, `guide_shaders_are_complete_wgsl`,
+  `link_errors_name_the_generated_line`.
+- Goldens byte-identical: `cargo test -p gup-core` (scatter, MSAA 1×/4×, scene
+  items with the gradient and rect pipelines, SVG) and `-p gup-text` pass with
+  no golden changes; `window_parity --ignored` passes; `mask visual-regression`
+  (old path) passes 16/16.
+- `cargo tree -p gup-core -e normal`: no naga_oil on either target, no naga on
+  wasm32; on native naga only under wgpu-core/wgpu-hal.
+- `mask wasm-size`: 392.9 KB gz (was 1,241.9), +351.1 KB over bare wgpu with
+  Inter, +152.9 KB without.
+- `pipeline_timings` (release): link + create 0.93 ms median, 8.4 ms cold (S0a:
+  2.75 and 13.5).
+- `mask wasm-browser`: PASS; the PNG is described in the retrospective.
+- `mask all-check` clean; `cargo check --examples` clean; `mask old-path-loc`
+  28935 (unchanged).
