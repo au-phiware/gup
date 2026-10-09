@@ -801,7 +801,8 @@ follow S14 as T5 stories.
    the Bevy cadence. (Superseded 2026-10-09: naga_oil becomes a build-time-only
    dependency — see "Decisions (2026-10-09)" — so a lag no longer gates a wgpu
    upgrade of the runtime crate; the build-time tooling can upgrade on its own
-   schedule.)
+   schedule. Done in GUP-406: naga_oil is a dependency of `gup-wgsl`'s
+   build-time `compose` feature only; see "GUP-406 findings".)
 2. **Too many pipeline variants and slow compiles**, since every encoding
    signature is a pipeline. _Recommendation_: keep uniforms out of the cache
    key, build pipelines asynchronously, pre-warm builder defaults, and measure
@@ -838,7 +839,10 @@ follow S14 as T5 stories.
     back per risk 1 if it's over. (Superseded 2026-10-09: S3 found the cost was
     +897 KB gz, 2.2× over budget — see "S3 findings". The owner's fix is not a
     wasm-only fallback but build-time composition on every target, plus dropping
-    the wasm `GL` backend default; see "Decisions (2026-10-09)".)
+    the wasm `GL` backend default; see "Decisions (2026-10-09)". Resolved in
+    GUP-406: the reference scatter is 392.9 KB gz in total, +351.1 KB over bare
+    wgpu including the bundled Inter's 198.3 KB, so +152.9 KB without it; see
+    "GUP-406 findings".)
 11. **Compile-error quality.** _Recommendation_: use
     `#[diagnostic::on_unimplemented]` on `IntoEncoding`/`Visual`, and check the
     `trybuild` snapshot output in review.
@@ -1707,3 +1711,157 @@ example Safari before its WebGPU release, or an older browser).
 This supersedes, at the point marked above, the wasm half of S1 findings'
 "Backend default: primary, with GL as an explicit fallback" bullet. The native
 default (`Backends::PRIMARY` with GL as an explicit fallback) is unaffected.
+
+## GUP-406 findings (2026-10-09)
+
+[GUP-406](../stories/GUP-406_WGSL_Only_Shader_Path_On_Wasm.md) moved shader
+composition to build time on every target, as decided above. Same machine as
+S0a–S3 (Intel HD Graphics 630, Mesa 26.0.0 Vulkan, rustc 1.93.1).
+
+### What runs where
+
+- **`gup-wgsl`** is a new crate with two halves. Without features it is the
+  run-time half: `WgslModule` (an import path, flattened WGSL and its imports)
+  and `link`, plain string handling with no dependencies. Its `compose` feature
+  is the build-time half: naga_oil and naga.
+- **`gup-core/build.rs`** reads `src/shaders` through `compose`. Each library
+  module (a file with `#define_import_path`) becomes a `WgslModule` static in
+  `$OUT_DIR` (`gup::scale::linear` → `SCALE_LINEAR`). Each other file becomes a
+  completely flattened `<STEM>_SHADER` constant (the rule, rect and gradient
+  guide shaders). Adding a module is adding a file; nothing is registered by
+  hand.
+- **At run time** the glue emitter is unchanged (`scatter_glue.wgsl` is
+  byte-identical). `link` resolves its naga_oil-style `#import` lines against
+  the flattened modules and appends them. wgpu gets `ShaderSource::Wgsl` on
+  every target, and the `naga-ir` wgpu feature is gone.
+  `cargo tree -p gup-core -e normal` has no naga_oil on either target, and no
+  naga on wasm32. On native, naga appears only under wgpu-core and wgpu-hal
+  (wgpu's own validation).
+- **`Context` lost its shader-library mutex** and the lock order that guarded
+  it. `pipelines` and `text` are each taken alone.
+- **Uniform offsets come from the glue emitter.** Every `Encodings` field starts
+  on a 16-byte boundary, so offsets follow from encase sizes. A native test
+  checks them against naga's layout of the linked reference glue, and another
+  checks the linked glue against naga_oil composing it directly: same entry
+  points, all 9 struct layouts equal.
+
+### Flattening: naga's writer, checked at build time
+
+naga*oil returns a `naga::Module`, not text, so printing flattened WGSL needs
+naga's WGSL writer. wgpu's WebGPU backend already used that writer for every
+gup-core shader in S3. Items are renamed in the IR from naga_oil's decorated
+names to `gup_wgsl::flat_name(path, item)` (`::` →
+`*`, then the item: `gup_scale_linear_map_rel`). These names are gup-wgsl's own
+contract, not naga_oil's internal mangling, and they survive naga's namer. The
+build checks, for every module and guide shader:
+
+- the flattened text, with its imports', parses and validates standalone;
+- every struct has the same span, member offsets and member names as in
+  naga_oil's composed module, so a dropped `@align`/`@size` fails the build
+  (seeded test), as does a member the writer renames. naga renames identifiers
+  that end in a digit: `rule.wgsl`'s `p0`/`p1` became `start`/`stop`;
+- uniform `Params` structs span a multiple of 16 bytes;
+- library modules use only `#define_import_path`/`#import`, since they are
+  flattened once without shader defs;
+- no two items share a flat name, and no decorated name survives renaming.
+
+naga_oil itself rejects trailing-digit exported items and struct members (not
+function arguments, which the writer renames harmlessly) and wrong-arity calls,
+with source-mapped reports. A broken `circle.wgsl` fails `cargo build`:
+
+```text
+error: gup-core@0.1.0: gup-core's WGSL failed to compose at build time (src/shaders/circle.wgsl); naga_oil's report follows under stderr
+...
+  --- stderr
+  shader composition failed for src/shaders/circle.wgsl:
+  error: failed to build a valid final module: Function [2] 'gup::marks::circle::vertex' is invalid
+     ┌─ src/shaders/circle.wgsl:43:1
+  48 │ │     out.clip = gup::view::px_to_clip(vec2<f32>(m.x, m.y) + offset);
+     │ │                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ invalid function call
+     = Call to [0] is invalid
+     = Requires 2 arguments, but 1 are provided
+```
+
+naga_oil only imports items a shader names. The flattening probe passes every
+item, found by a lexical scan of the module's declarations, through
+`NagaModuleDescriptor::additional_imports`.
+
+### WASM size (§12 risk 10)
+
+`mask wasm-size` now builds two harnesses; the naga_oil row is gone, because
+nothing composes at run time any more. The scatter harness also draws a plot
+background and a legend bar (below).
+
+| Build                                                  | Raw      | gzip -9       |
+| ------------------------------------------------------ | -------- | ------------- |
+| bare wgpu (unchanged)                                  | 111.8 KB | 41.7 KB       |
+| gup-core reference scatter (S3)                        | 3,996 KB | 1,241.9 KB    |
+| **gup-core reference scatter (GUP-406)**               | 903.0 KB | **392.9 KB**  |
+| _bundled Inter, for reference_                         | 411.6 KB | 198.3 KB      |
+| **gup-core over bare wgpu**                            | 791.2 KB | **+351.1 KB** |
+| gup-core over bare wgpu, Inter excluded (budget basis) |          | **+152.9 KB** |
+
+The +400 KB gz budget holds with Inter counted, and with 247 KB to spare without
+it. GUP-407's Inter subset (23.8 KB gz) would bring the scatter to about 218 KB
+gz.
+
+### Pipeline creation (§12 risk 2)
+
+The S0a harness (`pipeline_timings`, release, 20 runs with a fresh cache):
+
+| Step (ms)                                         | S0a median | GUP-406 median | GUP-406 max |
+| ------------------------------------------------- | ---------: | -------------: | ----------: |
+| Glue emit                                         |      0.017 |          0.016 |       0.023 |
+| naga_oil compose → `gup_wgsl::link`               |       2.28 |          0.112 |       0.115 |
+| `create_shader_module` + `create_render_pipeline` |       0.42 |          0.815 |        8.28 |
+| **Compose/link + create**                         |   **2.75** |       **0.93** |    **8.39** |
+| `Context` creation (library preload in S0a)       |       6.55 |          0.031 |       0.361 |
+
+Linking is 20× cheaper than composing. Creation itself costs more (0.82 against
+0.42 ms) because wgpu now parses WGSL where it used to receive naga IR. The
+first, cold run is 8.4 ms against 13.5 ms.
+
+### In the browser
+
+`mask wasm-browser` passes. The harness now also draws a tinted plot background
+(`ItemKind::Rects`) and a viridis legend bar (`ItemKind::Gradient`), so all five
+pipeline kinds run in Chrome over WebGPU. The PNG shows the title, log y ticks,
+linear x ticks, viridis circles, the tinted background and the legend bar
+(purple at the bottom, yellow at the top). naga's writer adds
+`@interpolate(flat)` to integer vertex _inputs_ (`GradientIn`); Chrome accepts
+it.
+
+### Proposed adjustments to S4 and later
+
+- **S4 (marks, scales):** a new mark or scale is a `.wgsl` file in
+  `src/shaders`; `build.rs` generates its static. Follow the authoring rules
+  above, which now fail the build rather than a test. A second mark adds one
+  generated `MARKS_<NAME>` static and needs no composer work.
+- **S5 (`#[wgsl_function]`):** the proc-macro crate depends on `gup-wgsl` with
+  `compose` and flattens the user module with `Library::new` at expansion,
+  emitting a `WgslModule` static with the flat text. That gives the 16-byte and
+  identifier checks for free. Three things to settle:
+  1. **The import path.** A proc macro cannot evaluate `module_path!()`, and
+     flat names need the path at expansion. Default to
+     `<CARGO_CRATE_NAME>::<fn name>`, with a `path = "…"` override. `link`
+     already refuses two different modules with one import path, so a collision
+     fails at link time with a clear message, not inside wgpu.
+  2. **Library sources at expansion.** A user module that imports `gup::view`
+     needs that module's source to compose against. Move `src/shaders` (or its
+     library half) into a crate both `gup-core/build.rs` and the macro can
+     `include_str!` from: `gup-wgsl` itself, or a small `gup-shaders` data
+     crate.
+  3. **Error spans.** `compose::Error` reports point into the WGSL string. Emit
+     them with `compile_error!` at the attribute's span, keeping naga_oil's
+     report text.
+- **S6 (`derive(Mark)`):** the generated `<NAME>In` check
+  (`marks::tests::wgsl_input_struct_matches_channels`) now reads the flattened
+  `gup_marks_<name>_<Name>In` struct. A derive can check channel order against
+  the flattened text at build time instead of in a test.
+- **Run-time errors.** `link` catches unknown modules and items in generated
+  glue. Type errors in glue (a generator bug) now surface from wgpu's validation
+  at pipeline creation (naga inside wgpu on native, the browser's compiler on
+  wasm), not from naga_oil. No extra validation step was added, as decided.
+- **S8 (wasm entry):** starts from 393 KB gz (about 218 KB with GUP-407).
+- **GUP-408 (browser CI):** keep the legend and background in the harness, so CI
+  runs every pipeline kind.

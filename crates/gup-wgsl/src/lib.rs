@@ -271,6 +271,19 @@ pub fn link(
     for m in used {
         visit(m, &mut order);
     }
+    // Two distinct modules with one import path would declare the same
+    // flat names twice.
+    for (i, m) in order.iter().enumerate() {
+        if order[..i].iter().any(|o| o.import_path == m.import_path) {
+            return Err(err(
+                0,
+                format!(
+                    "two different modules are both `{}`; import paths must be unique",
+                    m.import_path
+                ),
+            ));
+        }
+    }
     for m in order {
         if !out.ends_with('\n') {
             out.push('\n');
@@ -344,6 +357,31 @@ mod tests {
         assert!(e.message.contains("no item `missing`"), "{e}");
         let e = link("g", "#ifdef X\n", &[]).unwrap_err();
         assert!(e.message.contains("unsupported directive"), "{e}");
+    }
+
+    #[test]
+    fn link_refuses_two_modules_with_one_path() {
+        static OTHER_VIEW: WgslModule = WgslModule {
+            import_path: "gup::view",
+            wgsl: "struct gup_view_View {\n    size: vec2<f32>,\n}\n",
+            imports: &[],
+        };
+        static USER: WgslModule = WgslModule {
+            import_path: "user::m",
+            wgsl: "fn user_m_f() {}\n",
+            imports: &[&OTHER_VIEW],
+        };
+        let e = link(
+            "g",
+            "#import gup::marks::dot as dot\n#import user::m as m\n",
+            &[&MARK, &USER],
+        )
+        .unwrap_err();
+        assert!(
+            e.message
+                .contains("two different modules are both `gup::view`"),
+            "{e}"
+        );
     }
 
     #[test]
