@@ -162,3 +162,109 @@ to every SVG. A 48 KB subset makes optional embedding reasonable.
   `crates/gup-core/src/scale/mod.rs`
 - `maskfile.md` (`subset-inter`, `wasm-size`), `flake.nix` (fonttools)
 - `docs/planning/rfcs/RFC-001_Core_Architecture.md`
+
+## Retrospective
+
+**Completed**: 2026-10-10
+
+### Key Technical Learnings
+
+#### What a subset may drop
+
+- **Challenge**: pyftsubset's defaults keep hinting, many layout features and an
+  empty `.notdef`. Each choice affects size, shaping or correctness. The
+  Context's estimate also assumed `lnum`, which Inter does not have.
+- **Solution**: measure each candidate (hinting on and off, default features
+  against `kern,tnum`, with and without Latin Extended-A or Greek) and keep only
+  what the pipeline uses. fontdue and resvg do not hint, so hinting was 23 KB
+  (raw) of dead weight. `--notdef-outline` keeps the missing-glyph box visible:
+  without it, an uncovered character vanishes silently.
+- **Pattern**: prove a lossy asset transform is lossless where it matters. Here
+  a test rasterises every subset character from both faces at two sizes and
+  compares the bitmaps. That is stronger than "the goldens didn't move".
+
+#### Testing that a browser uses an embedded font
+
+- **Challenge**: Chromium draws "Inter, sans-serif" the same whether the
+  `@font-face` works or a system Inter is installed, so a screenshot proves
+  nothing.
+- **Solution**: rename the family in copies of both SVGs to a name no system
+  font has (`GupEmbedProbe`, falling back to serif). The embedded copy draws
+  sans-serif Inter and the plain copy draws serif, so the difference is visible
+  at a glance.
+- **Pattern**: when a fallback looks the same as success, make the fallback look
+  different.
+
+#### resvg ignores `@font-face`
+
+- The integration test decodes the data URL itself and gives resvg the decoded
+  bytes. It checks the pixels match those from `INTER_REGULAR`, so it proves the
+  payload is the right font, not that a renderer reads it. The browser probe
+  covers the second half.
+
+### Architectural Decisions
+
+#### Keep the name "Inter"
+
+- **Decision**: the subset is still called Inter, and it keeps the copyright,
+  trademark and licence name records.
+- **Reasoning**: Inter's OFL declares no Reserved Font Name, so OFL condition 3
+  does not require a rename. Keeping the records means an embedded copy carries
+  its own licence notice.
+- **Trade-off**: none found. A font with an RFN would need a new family name in
+  `mask subset-inter`.
+- **Future**: any other bundled face needs the same check.
+
+#### `SvgOptions` replaces `SvgTarget::with_font`
+
+- **Decision**: one options struct (`font`, `embed_font`) instead of a second
+  builder method next to `with_font`.
+- **Reasoning**: one obvious way to configure the target. More SVG options
+  (precision, ids) will join the struct.
+- **Trade-off**: a breaking change for the one caller, which is acceptable
+  pre-alpha.
+
+#### A hand-written base64 encoder
+
+- **Decision**: a 20-line RFC 4648 encoder in `svg.rs`, with test vectors. The
+  `base64` crate is a dev-dependency only, for decoding in tests.
+- **Reasoning**: keeps gup-core's runtime dependency set (and wasm size)
+  unchanged for one encode call.
+
+#### Wider coverage than the estimate
+
+- **Decision**: 515 characters (Latin Extended-A, Greek, symbols) at 30.2 KB gz
+  rather than Latin-1 at 23.8 KB gz.
+- **Reasoning**: Central and Eastern European names and Greek-letter units are
+  common in chart labels. 6 KB gz is cheap next to the 166 KB saved.
+- **Future**: GUP-416 handles scripts beyond the subset without growing it.
+
+### Development Workflow Insights
+
+- **The disk ran out mid-story.** A full `cargo test` builds the root crate's
+  test and example binaries (about 270 MB each), and with the shared build
+  directory it filled the pool. The story only touched `gup-text` and
+  `gup-core`, so `cargo test -p gup-text -p gup-core`, `mask all-check` (check
+  only) and the wasm tasks were the right gate. The root crate does not depend
+  on `gup-text`, so its goldens could not change. Check the dependency graph
+  before running the whole workspace's tests, and check `df` before heavy
+  builds.
+- `mask subset-inter` needs the dev shell (`pyftsubset` is not on the host
+  PATH); `nix develop -c mask subset-inter` regenerates the committed file byte
+  for byte.
+- `mask wasm-size` varies by about 0.1 KB between builds. Record sizes to one
+  decimal place and don't read meaning into the last digit.
+
+### Follow-up Stories
+
+1. **GUP-416: gup-text font fallback** — a user-supplied fallback chain, so
+   characters outside the subset draw from another font instead of as boxes,
+   with nothing new bundled.
+2. **GUP-405 amended** (not a new story): its Dependencies record what the
+   subset keeps (`kern`, `tnum`; no `lnum` in Inter), and a task makes
+   `SvgTarget` emit `font-variant-numeric: tabular-nums` for `tnum` runs so
+   browsers match the measured widths.
+3. Not written up: per-document subsetting of the embedded face (only the glyphs
+   an SVG uses) would cut the 37 KB gz per file further. It needs a Rust
+   subsetter in gup-core, so it is not worth it until someone embeds many SVGs
+   in one page.
