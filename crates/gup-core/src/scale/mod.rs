@@ -246,4 +246,44 @@ mod tests {
         assert_eq!(format_with_step(-0.0, 0.5), "0.0");
         assert_eq!(format_with_step(2500.0, 500.0), "2500");
     }
+
+    /// GUP-407: the bundled font is a subset, so every character a tick
+    /// formatter can emit must be in it. Sweeps linear and log domains
+    /// from 1e-12 to 1e15, positive, negative and straddling zero.
+    #[test]
+    fn tick_labels_are_covered_by_the_bundled_font() {
+        let mut emitted = std::collections::BTreeSet::new();
+        let mut collect = |ticks: Ticks| {
+            assert!(!ticks.labels.is_empty());
+            emitted.extend(ticks.labels.iter().flat_map(|l| l.chars()));
+        };
+        for exp in -12..=15 {
+            let m = 10f64.powi(exp);
+            for (d0, d1) in [(0.0, m), (-m, m), (-3.7 * m, -1.2 * m), (1.5 * m, 1.75 * m)] {
+                for count in [2, 5, 10] {
+                    collect(Linear::new().domain(d0, d1).ticks(count));
+                }
+            }
+            if exp < 15 {
+                for count in [3, 10, 30] {
+                    collect(Log::new().domain(m, m * 1000.0).ticks(count));
+                    collect(Log::new().domain(m, m * 3.0).ticks(count));
+                }
+            }
+        }
+        // Digits, sign, point, exponent and every SI suffix were reached.
+        for c in "0123456789-.ekMGT".chars() {
+            assert!(
+                emitted.contains(&c),
+                "the sweep never emitted {c:?}: {emitted:?}"
+            );
+        }
+        let font = gup_text::Font::inter();
+        let missing: Vec<char> = emitted
+            .iter()
+            .copied()
+            .filter(|&c| !font.has_glyph(c))
+            .collect();
+        assert!(missing.is_empty(), "the bundled font lacks {missing:?}");
+    }
 }

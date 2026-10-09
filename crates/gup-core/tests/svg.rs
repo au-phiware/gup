@@ -8,7 +8,7 @@
 //! name must resolve) and compared with the GPU render of the same
 //! guides-only scene: the GUP-388 structural checks with gup-core's own
 //! layout, a golden of the rasterised SVG, and a perceptual diff against
-//! the PNG.
+//! the PNG. A second test embeds the font and checks the `@font-face`.
 
 mod common;
 
@@ -16,16 +16,20 @@ use common::legend::{self, legend_metadata};
 use common::scatter::{HEIGHT, WIDTH};
 use common::vr::harness;
 use gup_core::scene::{ItemKind, TextRole};
-use gup_core::{Context, ImageTarget, SvgTarget, VectorTarget};
+use gup_core::{Context, ImageTarget, SvgOptions, SvgTarget, VectorTarget};
 use gup_visual_regression::golden::default_artifact_dir;
 use gup_visual_regression::{DiffTolerance, RgbaImage, diff::perceptual_diff};
 use std::path::Path;
 
 fn rasterise(svg: &str) -> RgbaImage {
+    rasterise_with(svg, gup_text::INTER_REGULAR)
+}
+
+/// Rasterise with only `font` loaded.
+fn rasterise_with(svg: &str, font: &[u8]) -> RgbaImage {
     use resvg::{tiny_skia, usvg};
     let mut opt = usvg::Options::default();
-    opt.fontdb_mut()
-        .load_font_data(gup_text::INTER_REGULAR.to_vec());
+    opt.fontdb_mut().load_font_data(font.to_vec());
     let tree = usvg::Tree::from_str(svg, &opt).expect("SvgTarget output parses");
     let size = tree.size().to_int_size();
     assert_eq!((size.width(), size.height()), (WIDTH, HEIGHT));
@@ -173,4 +177,66 @@ fn guides_svg_matches_the_png() {
         ratios[ratios.len() - 1],
         ratios.len()
     );
+}
+
+/// GUP-407: with `embed_font`, the document declares the bundled Inter
+/// subset as an `@font-face` data URL and is otherwise the same document.
+/// resvg ignores web fonts, so the round trip decodes the embedded file,
+/// gives resvg only that, and expects the unembedded rasterisation.
+#[test]
+fn embedded_font_is_the_bundled_subset() {
+    use base64::Engine as _;
+    let cx = Context::new_blocking().unwrap();
+    let guides = legend::scene(&cx).scene.guides();
+    let mut plain = SvgTarget::new();
+    plain.render(&guides).unwrap();
+    let mut embedded = SvgTarget::with_options(SvgOptions {
+        embed_font: true,
+        ..SvgOptions::default()
+    });
+    embedded.render(&guides).unwrap();
+    let svg = embedded.svg();
+    let artifacts =
+        default_artifact_dir(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")).join("gup_core");
+    embedded
+        .save(artifacts.join("scene_guides_embedded.svg"))
+        .unwrap();
+
+    // One declaration, of the family the text names, inside <defs>.
+    let prefix = r#"<style>@font-face{font-family:"Inter";src:url(data:font/ttf;base64,"#;
+    assert_eq!(svg.matches("@font-face").count(), 1);
+    let start = svg.find(prefix).expect("an @font-face for Inter") + prefix.len();
+    let defs = (svg.find("<defs>").unwrap(), svg.find("</defs>").unwrap());
+    assert!(
+        defs.0 < start && start < defs.1,
+        "the face is outside <defs>"
+    );
+    let len = svg[start..].find(')').unwrap();
+    let data = &svg[start..start + len];
+    assert!(svg[start + len..].starts_with(r#") format("truetype")}</style>"#));
+    let font = base64::engine::general_purpose::STANDARD
+        .decode(data)
+        .expect("valid base64");
+    assert_eq!(
+        font,
+        gup_text::INTER_REGULAR,
+        "the embedded font is not the subset"
+    );
+    assert!(svg.contains(r#"font-family="Inter, sans-serif""#));
+
+    // Everything else is the unembedded document.
+    let line_start = svg[..start].rfind('\n').map_or(0, |i| i + 1);
+    let line_end = start + svg[start..].find('\n').unwrap() + 1;
+    let without = format!("{}{}", &svg[..line_start], &svg[line_end..]);
+    assert_eq!(without, plain.svg());
+    eprintln!(
+        "embedding the subset adds {} bytes (the font is {} bytes)",
+        svg.len() - plain.svg().len(),
+        gup_text::INTER_REGULAR.len()
+    );
+
+    // It parses, and the decoded font draws the same pixels.
+    let a = rasterise_with(svg, &font);
+    let b = rasterise(plain.svg());
+    assert!(a == b, "the embedded font rasterises differently");
 }

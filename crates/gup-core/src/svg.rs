@@ -15,12 +15,17 @@
 //! of RFC-001 S4/S5. Until then a scene with an `ItemKind::Marks` item is
 //! an error, never a silent drop; pass [`Scene::guides`] to write the rest.
 //!
-//! **Fonts are referenced, not embedded.** Text is set in
-//! `font-family="Inter, sans-serif"`: viewers with Inter installed match
-//! the PNG; others fall back to a sans-serif face at the same anchor
-//! points (`text-anchor` keeps centred and right-aligned labels in place).
-//! Embedding the bundled Inter would add about 550 KB of base64 to every
-//! file; embedding a subset is future work.
+//! **Fonts are referenced, and optionally embedded.** Text is set in
+//! `font-family="Inter, sans-serif"`. By default the font is not
+//! embedded: viewers with Inter installed match the PNG, and others fall
+//! back to a sans-serif face at the same anchor points (`text-anchor`
+//! keeps centred and right-aligned labels in place). With
+//! [`SvgOptions::embed_font`] the document declares the font as an
+//! `@font-face` with a base64 data URL, so browsers draw the same glyphs
+//! as the PNG everywhere. For the bundled Inter subset that adds about
+//! 82 KB to the file (37 KB gzipped). Renderers without web-font
+//! support (resvg, many editors) ignore the declaration and use their own
+//! font lookup, as without embedding.
 
 use crate::channel::Color;
 use crate::error::{Error, Result};
@@ -62,8 +67,46 @@ const GRADIENT_STOPS: usize = 64;
 /// ```
 #[derive(Debug)]
 pub struct SvgTarget {
-    font: gup_text::Font,
+    options: SvgOptions,
     svg: String,
+}
+
+/// How an [`SvgTarget`] writes text.
+///
+/// ```
+/// use gup_core::{SvgOptions, SvgTarget};
+///
+/// // Self-contained: the bundled Inter subset travels with the file.
+/// let svg = SvgTarget::with_options(SvgOptions {
+///     embed_font: true,
+///     ..SvgOptions::default()
+/// });
+/// # let _ = svg;
+/// ```
+#[derive(Clone, Debug)]
+pub struct SvgOptions {
+    /// The font text is measured with and named by in the document (its
+    /// [`name`](gup_text::Font::name) is the `font-family`). Default: the
+    /// bundled Inter subset, as every [`Context`](crate::Context)'s text
+    /// system uses.
+    pub font: gup_text::Font,
+    /// Embed `font` in the document as an `@font-face` with a base64 data
+    /// URL (only when the scene has text). Default: off; the document
+    /// then names the font and relies on the viewer having it. The
+    /// embedded file is the font's [`data`](gup_text::Font::data) as
+    /// loaded, so a large face makes a large SVG; the bundled subset adds
+    /// about 82 KB. The bundled Inter is under the SIL Open Font License,
+    /// which allows embedding it in documents.
+    pub embed_font: bool,
+}
+
+impl Default for SvgOptions {
+    fn default() -> Self {
+        Self {
+            font: gup_text::Font::inter(),
+            embed_font: false,
+        }
+    }
 }
 
 impl Default for SvgTarget {
@@ -73,17 +116,16 @@ impl Default for SvgTarget {
 }
 
 impl SvgTarget {
-    /// A target that measures text with the bundled Inter, as every
-    /// [`Context`](crate::Context)'s text system does.
+    /// A target with the default [`SvgOptions`]: the bundled Inter,
+    /// referenced but not embedded.
     pub fn new() -> Self {
-        Self::with_font(gup_text::Font::inter())
+        Self::with_options(SvgOptions::default())
     }
 
-    /// A target that measures text with `font` (named in the SVG by its
-    /// [`name`](gup_text::Font::name)).
-    pub fn with_font(font: gup_text::Font) -> Self {
+    /// A target with `options`.
+    pub fn with_options(options: SvgOptions) -> Self {
         Self {
-            font,
+            options,
             svg: String::new(),
         }
     }
@@ -128,6 +170,16 @@ impl SvgTarget {
         )?;
         // Definitions: one clip path per scene clip, one gradient per bar.
         s.push_str("<defs>\n");
+        if self.options.embed_font && scene.text_runs().next().is_some() {
+            // The family is a CSS string inside XML text: CSS-escaped,
+            // then XML-escaped. Base64 needs neither.
+            writeln!(
+                s,
+                r#"<style>@font-face{{font-family:"{}";src:url(data:font/ttf;base64,{}) format("truetype")}}</style>"#,
+                escape(&css_string(self.options.font.name())),
+                base64(self.options.font.data())
+            )?;
+        }
         for (i, c) in scene.clips.iter().enumerate() {
             writeln!(
                 s,
@@ -235,7 +287,7 @@ impl SvgTarget {
                         // the baseline from Inter's metrics. Like the GPU
                         // path, the pen start and baseline snap to whole
                         // pixels, so glyphs land on the same pixels.
-                        let [x, y] = self.font.baseline_origin(&run.layout_run());
+                        let [x, y] = self.options.font.baseline_origin(&run.layout_run());
                         let anchor_x = run.at.x + (x.round() - x);
                         let baseline = y.round();
                         let anchor = match run.anchor.h {
@@ -248,7 +300,7 @@ impl SvgTarget {
                             r#"<text x="{}" y="{}" font-family="{}, sans-serif" font-size="{}" text-anchor="{anchor}" fill="{}"{}>{}</text>"#,
                             num(anchor_x),
                             num(baseline),
-                            escape(self.font.name()),
+                            escape(self.options.font.name()),
                             num(run.style.size.0),
                             hex(run.style.color),
                             opacity("fill-opacity", run.style.color),
@@ -319,6 +371,46 @@ fn opacity(attr: &str, c: Color) -> String {
     }
 }
 
+/// The contents of a double-quoted CSS string (without the quotes).
+fn css_string(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        match c {
+            '"' | '\\' => {
+                out.push('\\');
+                out.push(c);
+            }
+            // A newline cannot appear in a CSS string; escape it as a
+            // code point.
+            '\n' => out.push_str("\\a "),
+            c => out.push(c),
+        }
+    }
+    out
+}
+
+/// Standard base64 (RFC 4648 §4) with padding.
+fn base64(data: &[u8]) -> String {
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
+    for chunk in data.chunks(3) {
+        let b = [
+            chunk[0],
+            chunk.get(1).copied().unwrap_or(0),
+            chunk.get(2).copied().unwrap_or(0),
+        ];
+        let n = u32::from(b[0]) << 16 | u32::from(b[1]) << 8 | u32::from(b[2]);
+        for i in 0..4 {
+            if i <= chunk.len() {
+                out.push(ALPHABET[(n >> (18 - 6 * i) & 63) as usize] as char);
+            } else {
+                out.push('=');
+            }
+        }
+    }
+    out
+}
+
 /// XML text and attribute escaping.
 fn escape(text: &str) -> String {
     let mut out = String::with_capacity(text.len());
@@ -350,6 +442,47 @@ mod tests {
     #[test]
     fn text_is_escaped() {
         assert_eq!(escape(r#"a<b & "c"'"#), "a&lt;b &amp; &quot;c&quot;&apos;");
+        assert_eq!(css_string(r#"My "Font"\2"#), r#"My \"Font\"\\2"#);
+        assert_eq!(css_string("a\nb"), "a\\a b");
+    }
+
+    #[test]
+    fn base64_matches_rfc_4648() {
+        for (raw, encoded) in [
+            ("", ""),
+            ("f", "Zg=="),
+            ("fo", "Zm8="),
+            ("foo", "Zm9v"),
+            ("foob", "Zm9vYg=="),
+            ("fooba", "Zm9vYmE="),
+            ("foobar", "Zm9vYmFy"),
+        ] {
+            assert_eq!(base64(raw.as_bytes()), encoded, "{raw:?}");
+        }
+        assert_eq!(base64(&[0xfb, 0xff, 0xbf]), "+/+/");
+    }
+
+    #[test]
+    fn a_scene_without_text_embeds_no_font() {
+        use crate::geom::Point;
+        use crate::scene::{Item, Rule};
+        let mut scene = Scene::new(10.0, 10.0, Color::WHITE);
+        scene.push(Item {
+            z: 0,
+            clip: None,
+            kind: ItemKind::Rules(vec![Rule {
+                p0: Point::new(0.0, 5.0),
+                p1: Point::new(10.0, 5.0),
+                width: crate::Px(1.0),
+                color: Color::BLACK,
+            }]),
+        });
+        let mut svg = SvgTarget::with_options(SvgOptions {
+            embed_font: true,
+            ..SvgOptions::default()
+        });
+        svg.render(&scene).unwrap();
+        assert!(!svg.svg().contains("@font-face"), "{}", svg.svg());
     }
 
     #[test]
