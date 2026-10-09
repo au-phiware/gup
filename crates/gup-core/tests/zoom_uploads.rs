@@ -65,3 +65,74 @@ fn zooming_100k_points_writes_no_column_bytes() {
     assert_ne!(images[0], images[1]);
     assert_ne!(images[1], images[2]);
 }
+
+/// CPU cost of one cached-pipeline zoom frame (GUP-410): `Plot::resolve`
+/// and `Renderer::render` into a `TextureTarget`, with every pipeline
+/// already cached. Measures the cost of the error scopes on the per-frame
+/// path; run with
+/// `cargo test -p gup-core --release --test zoom_uploads cached_frame_timings -- --ignored --nocapture`.
+#[test]
+#[ignore = "measurement, not a check; see GUP-410"]
+fn cached_frame_timings() {
+    use gup_core::{TargetOptions, TextureTarget};
+    use std::time::{Duration, Instant};
+    const RUNS: usize = 500;
+    let cx = Context::new_blocking().expect("headless context");
+    let (mut plot, x, _) = scatter::plot_rows(scatter::countries_n(POINTS), Px(3.0));
+    let texture = cx.device().create_texture(&wgpu::TextureDescriptor {
+        label: Some("timing target"),
+        size: wgpu::Extent3d {
+            width: 640,
+            height: 400,
+            depth_or_array_layers: 1,
+        },
+        mip_level_count: 1,
+        sample_count: 1,
+        dimension: wgpu::TextureDimension::D2,
+        format: wgpu::TextureFormat::Rgba8Unorm,
+        usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
+        view_formats: &[],
+    });
+    let mut target = TextureTarget::new(&cx, texture, TargetOptions::default()).unwrap();
+    let mut renderer = Renderer::new();
+    let (x0, x1) = {
+        let first = plot.resolve(&cx, 640.0, 400.0).unwrap();
+        renderer.render(&cx, &first.scene, &mut target).unwrap();
+        x.read().current_domain().unwrap()
+    };
+    let (mut resolve, mut render) = (Vec::new(), Vec::new());
+    for i in 0..RUNS {
+        let k = 1.0 - 0.5 * (i % 50) as f64 / 50.0;
+        x.write().set_domain(x0, x0 + (x1 - x0) * k).unwrap();
+        let t = Instant::now();
+        let resolved = plot.resolve(&cx, 640.0, 400.0).unwrap();
+        resolve.push(t.elapsed());
+        let t = Instant::now();
+        renderer.render(&cx, &resolved.scene, &mut target).unwrap();
+        render.push(t.elapsed());
+        cx.device()
+            .poll(wgpu::PollType::wait_indefinitely())
+            .unwrap();
+    }
+    let summary = |name: &str, mut v: Vec<Duration>| {
+        v.sort();
+        let us = |d: Duration| d.as_secs_f64() * 1e6;
+        eprintln!(
+            "{name:<28} min {:>8.1} µs  median {:>8.1}  p90 {:>8.1}",
+            us(v[0]),
+            us(v[v.len() / 2]),
+            us(v[v.len() * 9 / 10]),
+        );
+    };
+    eprintln!(
+        "profile: {}, frames: {RUNS}, pipelines created: {}",
+        if cfg!(debug_assertions) {
+            "debug"
+        } else {
+            "release"
+        },
+        cx.pipeline_stats().pipelines_created
+    );
+    summary("Plot::resolve", resolve);
+    summary("Renderer::render (cached)", render);
+}

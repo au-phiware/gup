@@ -11,6 +11,7 @@
 
 use crate::error::Result;
 use crate::render::PipelineCache;
+use crate::scope::GpuErrors;
 use gup_text::TextSystem;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -164,6 +165,9 @@ struct Inner {
     uploads: UploadCounters,
     /// Command-buffer submissions made through [`Context::submit`].
     submissions: AtomicU64,
+    /// GPU errors reported after the call that caused them (GUP-410).
+    #[allow(dead_code)] // Wired in the next commit.
+    gpu_errors: GpuErrors,
 }
 
 /// Gup's GPU context: a device, its queue and the device-scoped caches.
@@ -333,6 +337,14 @@ impl Context {
     ) -> Self {
         let caps = Caps::of(&device);
         let text = TextSystem::new(&device);
+        let gpu_errors = GpuErrors::default();
+        // In a browser wgpu installs no uncaptured-error handler, so an error
+        // outside every scope would only reach the console. Record it on a
+        // device Gup created; a host's device keeps the host's handler.
+        #[cfg(target_arch = "wasm32")]
+        if adapter.is_some() {
+            device.on_uncaptured_error(gpu_errors.handler());
+        }
         Self {
             inner: Arc::new(Inner {
                 id: ContextId::next(),
@@ -345,6 +357,7 @@ impl Context {
                 text: Mutex::new(text),
                 uploads: UploadCounters::default(),
                 submissions: AtomicU64::new(0),
+                gpu_errors,
             }),
         }
     }
@@ -498,6 +511,36 @@ impl Context {
     pub(crate) fn text(&self) -> Ordered<'_, TextSystem> {
         Ordered::new(LockRank::Text, &self.inner.text)
     }
+
+    /// GPU errors that arrived late (see [`crate::scope`]).
+    #[allow(dead_code)]
+    pub(crate) fn gpu_errors(&self) -> &GpuErrors {
+        &self.inner.gpu_errors
+    }
+
+    /// Drop every cached pipeline and glue program (`gup-core`'s and the
+    /// text system's) after a GPU error, so an invalid one is never
+    /// reused. Takes each lock alone.
+    #[allow(dead_code)]
+    pub(crate) fn forget_pipelines(&self) {
+        self.pipelines().forget();
+        self.text().forget_pipelines();
+    }
+}
+
+/// Panic (debug builds) if this thread holds a context lock: `step` must
+/// be taken before them.
+#[allow(dead_code)]
+#[cfg(debug_assertions)]
+pub(crate) fn assert_no_context_locks(step: &str) {
+    HELD.with(|held| {
+        assert!(
+            held.get() == 0,
+            "gup-core lock order violated: {step} opened while holding a Context lock \
+             (bits {:#b})",
+            held.get()
+        );
+    });
 }
 
 /// Routes `gup-text`'s GPU writes through a [`Context`]'s counters:

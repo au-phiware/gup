@@ -54,6 +54,7 @@ pub mod plot;
 mod render;
 pub mod scale;
 pub mod scene;
+mod scope;
 mod selection;
 mod shader;
 #[cfg(all(feature = "window", not(target_arch = "wasm32")))]

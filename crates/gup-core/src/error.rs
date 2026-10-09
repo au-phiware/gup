@@ -36,6 +36,21 @@ pub enum Error {
         detail: String,
     },
 
+    /// The GPU rejected work `gup-core` gave it: a WebGPU validation error,
+    /// an out-of-memory error or (natively) an internal error, caught by an
+    /// error scope around pipeline creation, resolution or rendering.
+    ///
+    /// `what` names the step: a pipeline by its label and glue signature,
+    /// a layer, or a target. `message` is wgpu's (natively) or the
+    /// browser's (on wasm32) message, such as a WGSL diagnostic.
+    #[error("GPU error in {what}: {message}")]
+    Gpu {
+        /// The pipeline, layer or target whose GPU work failed.
+        what: String,
+        /// The GPU's message.
+        message: String,
+    },
+
     /// Waiting for the GPU or mapping a readback buffer failed.
     #[error("GPU readback failed: {0}")]
     Readback(String),

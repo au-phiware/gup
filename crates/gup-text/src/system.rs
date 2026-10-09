@@ -290,6 +290,15 @@ impl TextSystem {
         self.atlas.len()
     }
 
+    /// Drop the cached glyph shader and pipelines, so the next
+    /// [`prepare`](Self::prepare) creates them again. A host whose error
+    /// scope caught a GPU error while this system created them calls it,
+    /// so an invalid pipeline is never reused.
+    pub fn forget_pipelines(&mut self) {
+        self.shader = None;
+        self.pipelines.clear();
+    }
+
     /// Lay out `run` in `color` (sRGB-encoded, straight alpha) and append
     /// its glyph quads to `glyphs`, rasterising new glyphs at the glyphs'
     /// scale into the atlas.

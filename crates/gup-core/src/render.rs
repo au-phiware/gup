@@ -172,6 +172,14 @@ fn lut_entries(binding: u32) -> [wgpu::BindGroupLayoutEntry; 2] {
 }
 
 impl PipelineCache {
+    /// Forget every program and pipeline (after a GPU error). Layers keep
+    /// their own `Arc`s and rebuild when their program changes.
+    #[allow(dead_code)]
+    pub(crate) fn forget(&mut self) {
+        self.programs.clear();
+        self.pipelines.clear();
+    }
+
     fn view_bgl(&mut self, device: &wgpu::Device) -> wgpu::BindGroupLayout {
         self.view_bgl
             .get_or_insert_with(|| {
