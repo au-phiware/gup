@@ -6,9 +6,45 @@
 # the git hook installed by flake.nix runs `mask pre-commit`.
 #
 # Usage:
-#   scripts/pre_commit.sh                 # classify the staged files and run
+#   scripts/pre_commit.sh                 # check the staged snapshot
 #   scripts/pre_commit.sh --plan [PATH…]  # print the plan only
-#   scripts/pre_commit.sh PATH…           # classify PATHs instead of the index
+#   scripts/pre_commit.sh PATH…           # classify PATHs and check the
+#                                         # working tree
+#   scripts/pre_commit.sh --exec CMD…     # run CMD where the checks would
+#                                         # run (for test_pre_commit.sh)
+#
+# What is checked (GUP-409). With no PATH, the checks see exactly what is being
+# committed: the index git hands the hook ($GIT_INDEX_FILE, which is a
+# temporary index for `git commit -a` or `git commit PATH…`), not the working
+# tree. Unstaged edits and untracked files can neither fail a clean commit nor
+# rescue a broken one.
+#
+#   - If the working tree matches that index (no unstaged change to a tracked
+#     file, no untracked file that is not ignored), the checks run in place.
+#     This is the common case and costs one `git diff` and one `git ls-files`.
+#   - Otherwise the index is written to a tree and checked out into a snapshot
+#     directory, `$(git rev-parse --git-dir)/gup-pre-commit/tree` (per
+#     worktree, removed with it; override with GUP_PRE_COMMIT_SNAPSHOT_DIR),
+#     and this script re-runs there, from the snapshot's copy. The snapshot
+#     has its own index file, so `git read-tree -u` rewrites only the files
+#     that changed since the last run, and untracked debris is cleaned. No
+#     stash and no change to the real working tree or index, so it is safe
+#     while another process edits the checkout. Git commands in the snapshot
+#     see the staged index (GIT_DIR, GIT_WORK_TREE, GIT_INDEX_FILE).
+#   - Cargo in the snapshot uses the checkout's target directory, so
+#     dependencies stay warm. Cargo names a workspace member's artifacts by
+#     its path relative to the workspace root, so the snapshot and the
+#     checkout would otherwise share member artifacts and either could reuse
+#     the other's (stale) result. The snapshot's .cargo/config.toml gives
+#     members the opposite `incremental` setting to the checkout, which gives
+#     them their own artifacts (non-incremental) and leaves dependencies
+#     shared. A `build.incremental` set in a user cargo config would defeat
+#     this; CARGO_INCREMENTAL is handled.
+#
+# `mask pre-commit` runs this script, so it checks the staged snapshot too.
+# `mask all-check` run by hand (or by CI) checks the tree it runs in: your
+# working tree, or CI's clean checkout. In full mode the hook runs it inside
+# the snapshot when there is one.
 #
 # Every staged path is classified, and the most demanding class wins:
 #
@@ -39,17 +75,98 @@
 # prettier and mdl on the changed Markdown files. nixfmt and statix need not:
 # a flake.nix change forces full mode.
 #
-# This is a local-hook optimisation only. CI never scopes: every workflow runs
-# its full checks on every push. Like the rest of the hook, the checks read
-# the working tree, not the index.
+# The scoping is a local-hook optimisation only. CI never scopes: every
+# workflow runs its full checks on every push.
 set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
 
 plan_only=0
+exec_cmd=()
 if [[ ${1:-} == --plan ]]; then
   plan_only=1
   shift
+elif [[ ${1:-} == --exec ]]; then
+  shift
+  exec_cmd=("$@")
+  set --
+fi
+
+# True when the working tree differs from the index being committed. An error
+# counts as a difference: the snapshot is always correct, only slower.
+worktree_differs() {
+  ! git diff --quiet --no-ext-diff 2>/dev/null && return 0
+  local untracked
+  untracked=$(git ls-files --others --exclude-standard --directory \
+    --no-empty-directory 2>/dev/null | head -n 1) || return 0
+  [[ -n $untracked ]]
+}
+
+# Check the staged snapshot rather than the working tree (see the header).
+snapshot=0
+if [[ $plan_only -eq 0 && $# -eq 0 && -z ${GUP_PRE_COMMIT_IN_SNAPSHOT:-} ]]; then
+  if worktree_differs; then
+    snapshot=1
+  else
+    echo "pre-commit: checking the working tree (it matches the index)"
+  fi
+fi
+if [[ $snapshot -eq 1 ]]; then
+  gitdir=$(git rev-parse --absolute-git-dir)
+  snap=${GUP_PRE_COMMIT_SNAPSHOT_DIR:-$gitdir/gup-pre-commit}
+  mkdir -p "$snap/tree" "$snap/.cargo"
+  snap=$(cd "$snap" && pwd -P)
+  if command -v flock >/dev/null; then
+    exec 9>"$snap/lock"
+    flock 9
+  fi
+  # Copy the index so write-tree's cache-tree update cannot touch git's own
+  # (possibly locked) index file.
+  index=${GIT_INDEX_FILE:-$(git rev-parse --git-path index)}
+  cp "$index" "$snap/staged-index"
+  tree=$(GIT_INDEX_FILE=$snap/staged-index git write-tree)
+  snapgit() {
+    GIT_DIR=$gitdir GIT_WORK_TREE=$snap/tree GIT_INDEX_FILE=$snap/index \
+      git -C "$snap/tree" "$@"
+  }
+  # Never clean anything but the snapshot.
+  if [[ $(snapgit rev-parse --show-toplevel) != "$snap/tree" ]]; then
+    echo "pre-commit: snapshot $snap/tree is not its own work tree" >&2
+    exit 1
+  fi
+  snapgit read-tree --reset -u "$tree"
+  snapgit clean -ffdq
+
+  target=${CARGO_TARGET_DIR:-$(cargo metadata --no-deps --format-version 1 \
+    2>/dev/null | jq -r .target_directory || true)}
+  [[ -n $target && $target != null ]] || target=$(pwd -P)/target
+  if [[ ${CARGO_INCREMENTAL:-1} == 0 ]]; then
+    members=true others=false
+  else
+    members=false others=true
+  fi
+  cat >"$snap/.cargo/config.toml" <<EOF
+# Written by scripts/pre_commit.sh on every run (GUP-409). Gives workspace
+# members their own artifacts in the shared target directory; dependencies
+# (package "*") keep the checkout's setting and stay shared.
+[profile.dev]
+incremental = $members
+[profile.dev.package."*"]
+incremental = $others
+EOF
+  echo "pre-commit: checking the staged snapshot in $snap/tree" \
+    "(the working tree differs from it)"
+  export GIT_DIR=$gitdir GIT_WORK_TREE=$snap/tree GIT_INDEX_FILE=$snap/index
+  export CARGO_TARGET_DIR=$target GUP_PRE_COMMIT_IN_SNAPSHOT=1
+  unset CARGO_INCREMENTAL
+  cd "$snap/tree"
+  if [[ ${#exec_cmd[@]} -gt 0 ]]; then
+    exec "${exec_cmd[@]}"
+  fi
+  exec ./scripts/pre_commit.sh
+fi
+if [[ ${#exec_cmd[@]} -gt 0 ]]; then
+  exec "${exec_cmd[@]}"
 fi
 
 if [[ $# -gt 0 ]]; then

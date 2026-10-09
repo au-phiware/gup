@@ -211,8 +211,11 @@ the pre-commit hook's scoping rules and its staged snapshot.
 The whitespace check passes only when `git grep` finds nothing (exit 1): a
 `git grep` error must fail it, not pass it.
 
-The pre-commit hook runs `mask pre-commit`, which runs this task only when the
-staged change needs it. CI runs its own full checks on every push regardless.
+This task checks the tree it runs in: run by hand, your working tree, including
+unstaged edits and untracked files; in CI, the pushed commit. The pre-commit
+hook runs `mask pre-commit`, which runs this task only when the staged change
+needs it, and then inside its staged snapshot when the working tree differs from
+the index. CI runs its own full checks on every push regardless.
 
 ```bash
 shopt -qs globstar
@@ -239,8 +242,14 @@ their reasons are in `scripts/pre_commit.sh`; preview them with
 `scripts/pre_commit.sh --plan [PATH...]`.
 
 The scoping is local only. CI never scopes, so anything the hook skipped is
-still checked before it merges. Like `all-check`, the hook checks the working
-tree, not the index.
+still checked before it merges.
+
+The hook checks exactly what is being committed, not the working tree (GUP-409).
+When the working tree matches the index it checks in place; otherwise it checks
+out the index into a per-worktree snapshot under the git directory and runs
+there, so unstaged edits and untracked files can neither fail a clean commit nor
+pass a broken one. Running `mask pre-commit` by hand does the same.
+`mask all-check` run by hand checks your working tree.
 
 ```bash
 ./scripts/pre_commit.sh
