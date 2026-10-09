@@ -171,9 +171,9 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   - Link + create 0.93 ms median (S0a compose + create: 2.75 ms).
   - The two `#[wgsl_function]` items are deferred to S5 (no such macro in
     gup-core yet).
-- [GUP-407](GUP-407_Subset_Inter_And_SVG_Font_Embedding.md) 🚧 — Subset the
-  bundled Inter (198 → 24 KB gz) and let `SvgTarget` embed it. Deps: GUP-401 ✅,
-  GUP-405 📋 (soft).
+- [GUP-407](GUP-407_Subset_Inter_And_SVG_Font_Embedding.md) ✅ — Subset the
+  bundled Inter (198 → 30 KB gz; gup-core scatter 404 → 238 KB gz) and let
+  `SvgTarget` embed it. Deps: GUP-401 ✅, GUP-405 📋 (soft).
 - [GUP-408](GUP-408_Browser_Smoke_Test_In_CI.md) ✅ — `mask wasm-browser` runs
   on every push (Visual regression's `browser` job): Chrome for Testing 155 on
   SwiftShader, failing on console errors and WebGPU/WGSL diagnostics. Deps:
