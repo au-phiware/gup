@@ -1973,3 +1973,68 @@ not a native panic and not a silent blank image in a browser.
   (`WindowTarget`) render loop reports a frame's error from the next frame, so
   the entry point should surface `render`'s `Err` (or await a readback once
   after the first frame). It starts from 404 KB gz.
+
+## GUP-407 findings (2026-10-10)
+
+[GUP-407](../stories/GUP-407_Subset_Inter_And_SVG_Font_Embedding.md) replaced
+the bundled Inter with a subset and let `SvgTarget` embed it.
+
+### The subset
+
+- **Characters** (`crates/gup-text/fonts/inter-subset.txt`, 515): printable
+  ASCII, Latin-1, Latin Extended-A and the Romanian comma-below letters, the
+  basic Greek alphabet, typographic spaces, dashes, quotes, bullets, ellipsis,
+  per mille and primes, superscript and subscript digits, 15 currency signs,
+  letterlike symbols (℃ ℉ ℓ № ™ Ω K Å), vulgar fractions, ten arrows (← ↑ → ↓
+  ↔ ↕ and the diagonals), common maths operators (U+2212 minus, ≈ ≠ ≤ ≥ √ ∞ ∑
+  ∂ ∫), and the geometric shapes, stars and marks a legend uses. That is wider
+  than the S3 estimate (Latin-1 only), for Central and Eastern European labels
+  and Greek symbols.
+- **Features**: GPOS `kern` and GSUB `tnum` only (Inter has no `lnum`). Every
+  other feature (`calt`, `case`, `ccmp`, `locl`, `mark`, `mkmk`, `frac`, `sups`,
+  `ss*`, `cv*`, `zero`, …) and all hinting are dropped. fontdue and resvg do not
+  hint, and the glyphs are the full face's: a test rasterises all 515 characters
+  at 11 and 16 px from both faces and compares the bitmaps.
+- **Out-of-subset characters** draw as Inter's `.notdef` box, kept with
+  `--notdef-outline` (pyftsubset otherwise empties it, so they would vanish).
+  `Font::missing_glyphs` lists them; `Font::inter_full` is the full face for
+  other scripts. There is no font fallback.
+- **Recipe**: `mask subset-inter`, with fonttools 4.61.1 from the dev shell
+  (pinned by `flake.lock`). The output is byte-for-byte reproducible. Inter's
+  OFL declares no Reserved Font Name, so the subset keeps the name "Inter"; it
+  keeps the copyright, trademark and licence name records.
+
+### WASM size (§12 risk 10)
+
+| Build                                   | Raw      | gzip -9       |
+| --------------------------------------- | -------- | ------------- |
+| bare wgpu (unchanged)                   | 111.8 KB | 41.8 KB       |
+| gup-core reference scatter (GUP-410)    | 941.7 KB | 404.2 KB      |
+| **gup-core reference scatter (subset)** | 594.7 KB | **238.5 KB**  |
+| bundled Inter, full face                | 411.6 KB | 198.3 KB      |
+| **bundled Inter, subset**               | 61.3 KB  | **30.2 KB**   |
+| **gup-core over bare wgpu**             | 483.0 KB | **+196.7 KB** |
+
+The scatter is 165.7 KB gz (41%) smaller. `INTER_REGULAR_FULL` is not linked
+unless a program uses it. The subset (593 glyphs, with the `tnum` figures) is 6
+KB gz larger than the S3 estimate: without Latin Extended-A it is 26.5 KB gz,
+without Greek 26.6 KB gz.
+
+### SVG
+
+`SvgOptions { font, embed_font }` replaces `SvgTarget::with_font`. With
+`embed_font`, a scene with text gets one
+`@font-face{font-family:"Inter";src:url(data:font/ttf;base64,…)}` in `<defs>`:
+82 KB more per file, 37 KB gzipped. Chromium draws the embedded face. resvg
+ignores `@font-face`, so a resvg user still loads `INTER_REGULAR` into its font
+database.
+
+### Proposed adjustments
+
+- **GUP-405 (shaping):** `kern` and `tnum` are in the subset; shaping with
+  rustybuzz's default features finds no `calt`, `ccmp`, `locl`, `mark` or
+  `mkmk`. The subset has precomposed letters and no combining marks, so only
+  contextual alternates (`calt`) and localised forms (`locl`) are lost. Inter's
+  `case` (raised hyphens and brackets between capitals) and `zero` (slashed
+  zero) would each need adding to the recipe's `--layout-features`.
+- **S8 (wasm entry):** starts from 238 KB gz.

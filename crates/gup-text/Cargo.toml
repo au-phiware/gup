@@ -7,8 +7,11 @@ description = "Gup's text system (RFC-001 S2): one font and glyph atlas per devi
 license = "GPL-3.0-or-later"
 repository = "https://github.com/au-phiware/gup"
 publish = false
-# The bundled Inter font is under the SIL Open Font License 1.1
-# (fonts/Inter-OFL.txt), not the crate's licence.
+# The bundled Inter font and its subset (`mask subset-inter`, GUP-407) are
+# under the SIL Open Font License 1.1 (fonts/Inter-OFL.txt), not the
+# crate's licence. Inter declares no Reserved Font Name, so the subset, a
+# Modified Version, may keep the name "Inter" (OFL condition 3); it keeps
+# the copyright and licence name records (condition 2).
 include = ["src/**", "fonts/**", "tests/**", "Cargo.toml"]
 
 # RFC-001 §11: a leaf crate. It must never depend on `gup` or `gup-core`;
