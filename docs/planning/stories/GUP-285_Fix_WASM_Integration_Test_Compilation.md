@@ -34,6 +34,10 @@ requires OS thread primitives that do not exist in WASM.
 - [ ] Optionally add `wasm_bindgen_test`-based equivalents for key integration
       tests.
 - [ ] Verify `wasm-pack test --headless --chrome` compiles cleanly.
+- [ ] Lint the wasm32 test targets that now compile: add them to
+      `scripts/clippy_wasm32.sh` (GUP-412 lints only the libs, because gup's
+      test targets did not build for wasm32) and fix what it finds, e.g.
+      `assert!(true)` in `tests/event_forwarding_tests.rs`.
 
 ## Dependencies
 

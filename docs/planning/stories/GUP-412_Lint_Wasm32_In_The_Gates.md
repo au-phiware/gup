@@ -208,3 +208,133 @@ dead code.
   `src/chart_builder/builders{.rs,/choropleth.rs}`, `src/streaming/stream.rs`,
   `src/{app,context,interaction,lib,test_utils,wasm_api,wasm_bench_interaction}.rs`,
   `src/layout/treemap.rs`: the findings.
+
+## Retrospective
+
+**Completed**: 2026-10-10
+
+### Key Technical Learnings
+
+#### cfg twins drift apart when only one twin is linted
+
+- **Challenge**: five of the six `type_complexity` findings were on the wasm32
+  half of a `#[cfg(not(wasm32))]`/`#[cfg(wasm32)]` pair whose native half
+  already carried an `expect`. Someone had met the lint on native and silenced
+  it there only, because the other half was never linted.
+- **Solution**: a cfg'd type alias per closure type, so the field, parameter or
+  local is declared once and the `Send + Sync` difference lives in one place.
+  Three native `expect`s went with it.
+- **Pattern**: when code forks on `target_arch`, fork the smallest thing (a type
+  alias or a bound), not the item that uses it. Then both targets' lints see the
+  same declaration.
+
+#### `arc_with_non_send_sync` on wasm32 is a property of wgpu, not the code
+
+- **Challenge**: ten `Arc`s of wgpu handles (or structs that hold them) fire on
+  wasm32 only. `Rc` would break native, where the types are `Send + Sync` and
+  the `Arc` is shared across threads; a cfg'd `Shared<T>` alias would ripple
+  through public old-path APIs (`Arc<RenderContext>`,
+  `BufferPool::new(Arc<Device>)`).
+- **Solution**: `#[cfg_attr(target_arch = "wasm32", expect(..., reason))]` at
+  each site, so native still gets the lint, and `expect` (not `allow`) fails if
+  a site stops needing it. A crate-wide allow was rejected: an `Arc<JsValue>` in
+  wasm-only code would be a real finding.
+- **Pattern**: lint attributes are stable on `let` statements but not on
+  assignment expressions (`E0658`); bind with `let` first. Where the `Arc` is a
+  tail expression, the attribute goes on the function.
+
+#### The lint fires inconsistently across wgpu types
+
+- `Arc::new(device)` (`wgpu::Device`) does not fire on wasm32 while
+  `Arc::new(device.create_buffer(..))` does, and `Arc<GlueProgram>` (layouts
+  only) does not. So which `Arc`s need an `expect` cannot be predicted from the
+  code: only the wasm32 run says. That is the case for having the gate rather
+  than a convention.
+
+#### Dead code on one target hides dead features
+
+- **Challenge**: "five methods never used" on wasm32 looked like a cleanup.
+- **Solution**: tracing who read the fields showed the methods were the only
+  implementation of `DomOverlayConfig::deduplicate_events`, so the option had
+  done nothing since the live handlers replaced them. Deleting the option (and
+  its docs) rather than only the methods removed a silent no-op.
+- **Pattern**: before deleting dead code, check which public settings only it
+  reads.
+
+### Architectural Decisions
+
+#### One script owns the wasm32 member rule
+
+- **Decision**: `scripts/clippy_wasm32.sh` holds the exclusion list with
+  reasons; `mask` tasks call it bare, the hook calls it with the crates it lints
+  and `--list` for its plan.
+- **Reasoning**: the maskfile and the hook would otherwise each need the list,
+  and the hook's tests could not see it.
+- **Trade-off**: one more script, and editing it forces the hook's full mode.
+- **Future**: a new workspace member is linted on wasm32 by default; adding it
+  to the exclusion list needs a written reason.
+
+#### Libs only, default and all features
+
+- **Decision**: no `--all-targets` on wasm32.
+- **Reasoning**: gup's and gup-core's test, example and bench targets do not
+  build for wasm32 (by design for gup-core's blocking API; GUP-285B for gup),
+  and the leaf crates' tests run on the host, so linting them on wasm32 repeats
+  the host lint.
+- **Trade-off**: wasm32-only test code (`wasm_bindgen_test` modules) is not
+  linted. GUP-285B now carries a task to add it once those targets compile.
+
+#### Re-key the Lint cache
+
+- **Decision**: add a `wasm32` segment to the Lint workflow's cache key.
+- **Reasoning**: `actions/cache` saves only on a miss, and the key hashes only
+  `Cargo.lock` and the toolchain, so the existing cache would never gain the
+  wasm32 artifacts, and every Lint run would pay about 100 s (more on a 2-core
+  runner) to lint wasm32 cold.
+- **Future**: any change to what a cached job builds needs the same treatment.
+  The other workflows' keys have the same property.
+
+#### wgpu's `fragile-send-sync-non-atomic-wasm`: not here
+
+- Making wgpu's types `Send + Sync` on wasm32 would remove the `Arc` findings
+  and many cfg twins at the source, but it changes the threading contract of the
+  browser path. It is a decision for RFC-001 S8, recorded there as an option,
+  not one to make in a lint story.
+
+### Development Workflow Insights
+
+- The survey order the story suggested (gup-core first, then crate by crate) was
+  right: the root crate's 30 findings only appeared once gup-core's one was out
+  of the way.
+- `cargo clippy --keep-going --all-targets` on wasm32 gave the whole picture of
+  which targets build there (103 do not) in one 27 s run, which settled the
+  `--all-targets` question with data.
+- Cold timing was measured in a scratch build directory under `~/.cache/gup/`
+  and then deleted, which never touches the shared directory. The shared
+  directory's 1.3 GB wasm32 tree included the exploratory `--all-targets` runs;
+  the gate itself needs about 250 MB.
+- Two slips, both caught by the hook: committing without rustfmt (the hook's
+  scoped fmt check failed the commit), and checking `actionlint`'s exit status
+  through a pipe to `tail`. Run `cargo fmt --all` (or `mask all-fix`) before
+  staging, and do not pipe a command whose exit status is the point.
+- The first hook run in the snapshot took 3 m 20 s cold; later scoped commits
+  took about 1 minute.
+
+### Follow-up Stories
+
+No new stories. Checked and placed:
+
+1. **Lint the wasm32 test targets**: added as a technical task to
+   [GUP-285B](GUP-285_Fix_WASM_Integration_Test_Compilation.md), which makes
+   them compile (strategic review: folded into T0).
+2. **gup-culling-lod's 16 wasm32 findings**: the crate is a quarantined parts
+   bin (GUP-390). It is excluded with a reason rather than given a story: code
+   ported into gup-core gets linted there.
+3. **gup-core `--no-default-features`** (no `window`): neither the host nor the
+   wasm32 pass compiles it. It lints clean on both today (5 cfg sites). Worth a
+   third configuration if RFC-001 S8's browser entry point builds without
+   `window`; noted for S8 rather than a story now.
+4. **Old-path wasm items noticed, not fixed** (frozen until RFC-001 S14):
+   `wasm_api` never reconfigures its surface when the canvas resizes; the DOM
+   overlay may forward a touch both as a pointer and as a touch event, which is
+   what the deleted `deduplicate_events` claimed to handle.
