@@ -257,3 +257,78 @@ must do, just run once at build time rather than conditionally at runtime.
 - [ ] Story status is updated in the story file and INDEX.md
 - [ ] A retrospective is added, including the new `mask wasm-size` numbers and a
       sample build-time error message
+
+## Spike Findings (2026-10-09)
+
+The two Risk Assessment unknowns were spiked first, in a new crate
+`crates/gup-wgsl` (`tests/spike.rs`, over gup-core's real library and the
+checked-in reference glue).
+
+### Round trip: works, with naga's writer and a build-time check
+
+- naga_oil produces a `naga::Module`, not text, so printing flattened WGSL needs
+  naga's WGSL writer: the same writer wgpu's WebGPU backend already used for
+  every gup-core shader in the browser (S3). It is not a new risk, but the
+  `@align` loss is real, so the build checks every round trip: each module's
+  flattened text, with its imports', must parse and validate standalone, and
+  every struct must lay out identically (span, member offsets and member names)
+  to naga_oil's composed module.
+- The reference glue, linked at run time against the flattened library, parses
+  and validates as standalone WGSL. Its entry points and all 9 struct layouts
+  (`Encodings` 64 bytes, `Chunk`, `Columns`, the three `Params`, `View`,
+  `CircleIn`, `Varyings`) equal naga_oil's direct composition of the same glue.
+- The check found one real hazard at once: naga's writer renames identifiers
+  that end in a digit, so `rule.wgsl`'s `RuleIn.p0`/`p1` came back as
+  `p0_`/`p1_`. Harmless there (vertex inputs bind by location), but a uniform
+  struct member renamed that way would silently stop matching any by-name
+  lookup. The members are now `start`/`stop` and the build rejects renamed
+  members with a message saying why.
+- naga_oil imports only items a shader names, so a probe that just `#import`s a
+  module yields an empty module. The flattening probe passes every item through
+  `NagaModuleDescriptor::additional_imports` instead (items come from a lexical
+  scan of the module's declarations; a decorated name left over after renaming
+  fails the build).
+- naga's writer adds `@interpolate(flat)` to integer vertex _inputs_
+  (`GradientIn.vertical`/`reverse`). It did so before this story too (wgpu wrote
+  the same text for browsers), but no browser test draws a gradient yet.
+
+### Mangling: stable, readable flat names
+
+- Items are renamed in the IR from naga*oil's decorated names
+  (`ParamsX_naga_oil_mod_XM52XAOR2ONRWC3DFHI5GY2LOMVQXEX`) to
+  `gup_wgsl::flat_name(path, item)`: `::` →
+  `*`, then the item (`gup_scale_linear_Params`, `gup_marks_circle_vertex`). These survive naga's namer unchanged (no `\_\_`,
+  no trailing digit; the build fails if one does not, or if two items share a
+  flat name). The scheme is gup-wgsl's own contract, not naga_oil's internal
+  mangling.
+- The run-time linker (`gup_wgsl::link`, no dependencies) reads the glue's
+  naga_oil-style `#import` lines, rewrites `alias::item`, `full::path::item` and
+  `{Item}` imports to flat names (comments and `.member` accesses untouched),
+  comments out the `#import` lines so line numbers match the glue, and appends
+  the flattened text of the imported modules and their imports once each. The
+  glue emitter is unchanged.
+
+### Errors at build time
+
+```text
+shader composition failed for src/shaders/broken.wgsl:
+error: failed to build a valid final module: Function [1] 'gup::broken::f' is invalid
+  ┌─ src/shaders/broken.wgsl:4:1
+  │
+4 │ ╭ fn f(view: gup::view::View) -> vec4<f32> {
+5 │ │     return gup::view::px_to_clip(vec2<f32>(0.0));
+  │ │            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ invalid function call
+  │ ╰──────────────────────────────────────────────────^ naga::ir::Function [1]
+  │
+  = Call to [0] is invalid
+  = Requires 2 arguments, but 1 are provided
+```
+
+- A `Params` member named `r0` fails in naga_oil ("Composable module identifiers
+  must not require substitution according to naga writeback rules: `r0`",
+  pointing at the struct). naga_oil checks only exported items and struct
+  members; a trailing-digit function argument is renamed by the writer, which is
+  harmless.
+- A 4-byte `Params` fails: "struct `Params` of `gup::scale::pad` spans 4 bytes;
+  uniform `Params` structs must span a multiple of 16 bytes (pad it in WGSL and
+  in its encase twin)".

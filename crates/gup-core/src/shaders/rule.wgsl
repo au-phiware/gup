@@ -9,8 +9,8 @@
 @group(0) @binding(0) var<uniform> u_view: View;
 
 struct RuleIn {
-    @location(0) p0: vec2<f32>,
-    @location(1) p1: vec2<f32>,
+    @location(0) start: vec2<f32>,
+    @location(1) stop: vec2<f32>,
     @location(2) width: f32,
     @location(3) color: vec4<f32>,
 }
@@ -24,12 +24,12 @@ struct RuleOut {
 fn vs_main(@builtin(vertex_index) vertex_index: u32, r: RuleIn) -> RuleOut {
     var along = array<f32, 6>(0.0, 1.0, 0.0, 0.0, 1.0, 1.0);
     var across = array<f32, 6>(-1.0, -1.0, 1.0, 1.0, -1.0, 1.0);
-    let dir = normalize(r.p1 - r.p0);
+    let dir = normalize(r.stop - r.start);
     let normal = vec2<f32>(-dir.y, dir.x) * (r.width * 0.5);
     // Extend along the segment by half the width so joins are square.
     let ext = dir * (r.width * 0.5);
-    let a = r.p0 - ext;
-    let b = r.p1 + ext;
+    let a = r.start - ext;
+    let b = r.stop + ext;
     let p = mix(a, b, along[vertex_index]) + normal * across[vertex_index];
     var out: RuleOut;
     out.clip = px_to_clip(p, u_view);

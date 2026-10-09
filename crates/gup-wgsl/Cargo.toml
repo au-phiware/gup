@@ -1,0 +1,30 @@
+[package]
+name = "gup-wgsl"
+version = "0.1.0"
+authors = ["Corin Lawson <corin@phiware.com.au>"]
+edition = "2024"
+description = "Gup's shader composition (RFC-001 §6, GUP-406): WGSL library modules flattened at build time by naga_oil, and the run-time linker that joins generated glue to them"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/au-phiware/gup"
+publish = false
+
+# One composition path on every target (RFC-001 "Decisions (2026-10-09)").
+# Without features this crate is the run-time half: plain string handling,
+# no dependencies, linked into gup-core on native and wasm alike. The
+# `compose` feature is the build-time half (naga_oil and naga): gup-core's
+# build script enables it through `[build-dependencies]`, so neither ever
+# reaches a gup-core binary.
+[dependencies]
+# Without the default `glsl` feature: Gup composes WGSL only.
+naga_oil = { version = "0.20", default-features = false, optional = true }
+naga = { version = "27.0.3", features = ["wgsl-in", "wgsl-out"], optional = true }
+
+[features]
+default = []
+# Flatten library modules and authored top-level shaders with naga_oil.
+compose = ["dep:naga_oil", "dep:naga"]
+
+[dev-dependencies]
+# Unit tests exercise the build-time half too.
+gup-wgsl = { path = ".", features = ["compose"] }
+naga = { version = "27.0.3", features = ["wgsl-in", "wgsl-out"] }
