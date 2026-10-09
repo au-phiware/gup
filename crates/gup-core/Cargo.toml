@@ -32,6 +32,11 @@ web-time = "1.1"
 # `WindowTarget` and `show` (feature `window`, on by default).
 winit = { version = "0.30", optional = true }
 
+# Drives browser error-scope promises to completion (GUP-410). Already in
+# the wasm build through wgpu's WebGPU backend.
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen-futures = "0.4"
+
 [[example]]
 name = "scatter_window"
 required-features = ["window"]

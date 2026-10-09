@@ -166,7 +166,6 @@ struct Inner {
     /// Command-buffer submissions made through [`Context::submit`].
     submissions: AtomicU64,
     /// GPU errors reported after the call that caused them (GUP-410).
-    #[allow(dead_code)] // Wired in the next commit.
     gpu_errors: GpuErrors,
 }
 
@@ -513,7 +512,6 @@ impl Context {
     }
 
     /// GPU errors that arrived late (see [`crate::scope`]).
-    #[allow(dead_code)]
     pub(crate) fn gpu_errors(&self) -> &GpuErrors {
         &self.inner.gpu_errors
     }
@@ -521,7 +519,6 @@ impl Context {
     /// Drop every cached pipeline and glue program (`gup-core`'s and the
     /// text system's) after a GPU error, so an invalid one is never
     /// reused. Takes each lock alone.
-    #[allow(dead_code)]
     pub(crate) fn forget_pipelines(&self) {
         self.pipelines().forget();
         self.text().forget_pipelines();
@@ -530,7 +527,6 @@ impl Context {
 
 /// Panic (debug builds) if this thread holds a context lock: `step` must
 /// be taken before them.
-#[allow(dead_code)]
 #[cfg(debug_assertions)]
 pub(crate) fn assert_no_context_locks(step: &str) {
     HELD.with(|held| {

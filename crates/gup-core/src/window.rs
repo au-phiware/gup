@@ -116,14 +116,30 @@ impl WindowTarget {
                 vec![view_format]
             },
         };
-        surface.configure(cx.device(), &config);
         // 4× MSAA where the device can, else analytic antialiasing only.
         let samples = if check_samples(cx, view_format, DEFAULT_SAMPLES).is_ok() {
             DEFAULT_SAMPLES
         } else {
             1
         };
-        let msaa = msaa_view(cx, view_format, config.width, config.height, samples);
+        let msaa = cx.scoped(
+            || {
+                format!(
+                    "window surface configuration ({format:?}, {}×{})",
+                    config.width, config.height
+                )
+            },
+            || {
+                surface.configure(cx.device(), &config);
+                Ok(msaa_view(
+                    cx,
+                    view_format,
+                    config.width,
+                    config.height,
+                    samples,
+                ))
+            },
+        )?;
         Ok(Self {
             window,
             surface,
@@ -158,25 +174,37 @@ impl WindowTarget {
     }
 
     /// Follow a window resize (physical pixels). Zero sizes are ignored.
-    pub fn resize(&mut self, cx: &Context, width: u32, height: u32) {
+    pub fn resize(&mut self, cx: &Context, width: u32, height: u32) -> Result<()> {
         if width == 0 || height == 0 || (width, height) == self.size() {
-            return;
+            return Ok(());
         }
         self.config.width = width;
         self.config.height = height;
-        self.configure(cx);
+        self.configure(cx)
     }
 
     /// Configure the surface and size the multisampled texture to it.
-    fn configure(&mut self, cx: &Context) {
-        self.surface.configure(cx.device(), &self.config);
-        self.msaa = msaa_view(
-            cx,
-            self.view_format(),
-            self.config.width,
-            self.config.height,
-            self.samples,
-        );
+    fn configure(&mut self, cx: &Context) -> Result<()> {
+        let (width, height) = self.size();
+        self.msaa = cx.scoped(
+            || {
+                format!(
+                    "window surface configuration ({:?}, {width}×{height})",
+                    self.config.format
+                )
+            },
+            || {
+                self.surface.configure(cx.device(), &self.config);
+                Ok(msaa_view(
+                    cx,
+                    self.view_format(),
+                    width,
+                    height,
+                    self.samples,
+                ))
+            },
+        )?;
+        Ok(())
     }
 
     /// The MSAA sample count (4 by default where the device supports it).
@@ -188,14 +216,7 @@ impl WindowTarget {
     pub fn set_samples(&mut self, cx: &Context, samples: u32) -> Result<()> {
         check_samples(cx, self.view_format(), samples)?;
         self.samples = samples;
-        self.msaa = msaa_view(
-            cx,
-            self.view_format(),
-            self.config.width,
-            self.config.height,
-            samples,
-        );
-        Ok(())
+        self.configure(cx)
     }
 
     /// The present modes the surface supports.
@@ -216,8 +237,7 @@ impl WindowTarget {
             ));
         }
         self.config.present_mode = mode;
-        self.surface.configure(cx.device(), &self.config);
-        Ok(())
+        self.configure(cx)
     }
 
     /// Copy the next presented frame back to the CPU; read it with
@@ -237,7 +257,11 @@ impl WindowTarget {
     /// with [`capture_next_frame`](Self::capture_next_frame) was presented.
     pub async fn take_capture(&mut self, cx: &Context) -> Result<Option<image::RgbaImage>> {
         match self.captured.take() {
-            Some(readback) => readback.read(cx).await.map(Some),
+            Some(readback) => {
+                let image = readback.read(cx).await?;
+                cx.settle_gpu_errors().await?;
+                Ok(Some(image))
+            }
             None => Ok(None),
         }
     }
@@ -262,7 +286,7 @@ impl RenderTarget for WindowTarget {
                 let size = self.window.inner_size();
                 self.config.width = size.width.max(1);
                 self.config.height = size.height.max(1);
-                self.configure(cx);
+                self.configure(cx)?;
                 self.surface
                     .get_current_texture()
                     .map_err(|e| Error::config("window target", format!("no frame: {e}")))?

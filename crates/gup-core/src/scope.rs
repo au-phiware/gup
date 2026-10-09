@@ -19,8 +19,6 @@
 //! is never reused: the next render creates it again and reports the same
 //! error again.
 
-#![allow(dead_code)] // Wired into the render paths in the next commit.
-
 use crate::context::Context;
 use crate::error::{Error, Result};
 use std::cell::Cell;
@@ -85,16 +83,15 @@ impl GpuFailure {
 /// A popped scope's future for one filter.
 type PopFuture = Pin<Box<dyn Future<Output = Option<wgpu::Error>>>>;
 
-/// One popped scope: a future per filter, resolving to the first error
-/// in [`FILTERS`] order.
+/// One popped scope: a future per filter, resolving to the message of
+/// the first error in [`FILTERS`] order.
 struct Popped {
-    what: String,
     futures: Vec<Option<PopFuture>>,
     errors: Vec<Option<String>>,
 }
 
 impl Future for Popped {
-    type Output = Option<GpuFailure>;
+    type Output = Option<String>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut std::task::Context<'_>) -> Poll<Self::Output> {
         let this = &mut *self;
@@ -109,22 +106,14 @@ impl Future for Popped {
         if this.futures.iter().any(Option::is_some) {
             return Poll::Pending;
         }
-        Poll::Ready(
-            this.errors
-                .iter_mut()
-                .find_map(Option::take)
-                .map(|message| GpuFailure {
-                    what: std::mem::take(&mut this.what),
-                    message,
-                }),
-        )
+        Poll::Ready(this.errors.iter_mut().find_map(Option::take))
     }
 }
 
 impl Popped {
     /// Poll once without waiting: natively always ready; in a browser,
     /// ready once the scope's promises have settled.
-    fn poll_now(&mut self) -> Poll<Option<GpuFailure>> {
+    fn poll_now(&mut self) -> Poll<Option<String>> {
         let mut cx = std::task::Context::from_waker(std::task::Waker::noop());
         Pin::new(self).poll(&mut cx)
     }
@@ -146,7 +135,7 @@ impl<'a> Scope<'a> {
             // a context's pipeline or text lock.
             #[cfg(debug_assertions)]
             crate::context::assert_no_context_locks("an outermost GPU error scope");
-            SCOPES.lock().unwrap_or_else(|p| p.into_inner())
+            lock(&SCOPES)
         });
         DEPTH.set(depth + 1);
         for filter in FILTERS {
@@ -159,7 +148,7 @@ impl<'a> Scope<'a> {
         }
     }
 
-    fn pop(mut self, what: String) -> Popped {
+    fn pop(mut self) -> Popped {
         self.open = false;
         let mut futures: Vec<_> = FILTERS
             .iter()
@@ -168,7 +157,6 @@ impl<'a> Scope<'a> {
         // Popped innermost first: the last filter pushed.
         futures.reverse();
         Popped {
-            what,
             errors: vec![None; futures.len()],
             futures,
         }
@@ -193,9 +181,11 @@ pub(crate) struct GpuErrors {
     /// Shared with the uncaptured-error handler.
     late: Arc<Mutex<Vec<GpuFailure>>>,
     /// Scopes whose errors have not arrived yet (wasm32 only; natively
-    /// every scope resolves when it is popped).
+    /// every scope resolves when it is popped). A spawned task drives
+    /// each scope's promises and sends the result, so the context stays
+    /// `Send + Sync`.
     #[cfg(target_arch = "wasm32")]
-    pending: Mutex<Vec<Popped>>,
+    pending: Mutex<Vec<futures_channel::oneshot::Receiver<Option<GpuFailure>>>>,
 }
 
 impl GpuErrors {
@@ -218,9 +208,9 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
 
 impl Context {
     /// Run `f` inside a GPU error scope. A GPU error raised by `f`'s work
-    /// becomes [`Error::Gpu`] naming `what` (called only to report one,
-    /// natively): returned from this call natively, and from a later call
-    /// in a browser. An error `f` returns itself wins.
+    /// becomes [`Error::Gpu`] naming `what`: returned from this call
+    /// natively (where `what` is only called to report an error), and
+    /// from a later call in a browser. An error `f` returns itself wins.
     pub(crate) fn scoped<T>(
         &self,
         what: impl FnOnce() -> String,
@@ -228,22 +218,18 @@ impl Context {
     ) -> Result<T> {
         let scope = Scope::push(self.device());
         let result = f();
-        #[cfg(not(target_arch = "wasm32"))]
-        let mut popped = scope.pop(String::new());
-        #[cfg(target_arch = "wasm32")]
-        let mut popped = scope.pop(what());
+        let mut popped = scope.pop();
         match popped.poll_now() {
             Poll::Ready(None) => result,
-            Poll::Ready(Some(mut failure)) => {
-                #[cfg(not(target_arch = "wasm32"))]
-                {
-                    failure.what = what();
-                }
+            Poll::Ready(Some(message)) => {
                 self.forget_pipelines();
-                result.and(Err(failure.into_error()))
+                result.and(Err(Error::Gpu {
+                    what: what(),
+                    message,
+                }))
             }
             Poll::Pending => {
-                self.defer(popped);
+                self.defer(what(), popped);
                 result
             }
         }
@@ -251,12 +237,17 @@ impl Context {
 
     /// Keep a scope whose errors have not arrived yet.
     #[cfg(target_arch = "wasm32")]
-    fn defer(&self, popped: Popped) {
-        lock(&self.gpu_errors().pending).push(popped);
+    fn defer(&self, what: String, popped: Popped) {
+        let (tx, rx) = futures_channel::oneshot::channel();
+        wasm_bindgen_futures::spawn_local(async move {
+            let failure = popped.await.map(|message| GpuFailure { what, message });
+            let _ = tx.send(failure);
+        });
+        lock(&self.gpu_errors().pending).push(rx);
     }
 
     #[cfg(not(target_arch = "wasm32"))]
-    fn defer(&self, _: Popped) {
+    fn defer(&self, _: String, _: Popped) {
         unreachable!("wgpu-core resolves error scopes when they are popped");
     }
 
@@ -267,12 +258,13 @@ impl Context {
         #[cfg(target_arch = "wasm32")]
         {
             let mut arrived = Vec::new();
-            lock(&self.gpu_errors().pending).retain_mut(|p| match p.poll_now() {
-                Poll::Ready(failure) => {
+            lock(&self.gpu_errors().pending).retain_mut(|rx| match rx.try_recv() {
+                Ok(Some(failure)) => {
                     arrived.extend(failure);
                     false
                 }
-                Poll::Pending => true,
+                Ok(None) => true,
+                Err(futures_channel::oneshot::Canceled) => false,
             });
             lock(&self.gpu_errors().late).extend(arrived);
         }
@@ -298,8 +290,8 @@ impl Context {
         #[cfg(target_arch = "wasm32")]
         {
             let pending = std::mem::take(&mut *lock(&self.gpu_errors().pending));
-            for popped in pending {
-                if let Some(failure) = popped.await {
+            for rx in pending {
+                if let Ok(Some(failure)) = rx.await {
                     lock(&self.gpu_errors().late).push(failure);
                 }
             }

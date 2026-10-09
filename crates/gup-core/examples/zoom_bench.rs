@@ -463,8 +463,11 @@ impl ApplicationHandler for Bench {
                 event_loop.exit();
             }
             WindowEvent::Resized(size) => {
-                if let Some(gpu) = &mut self.gpu {
-                    gpu.target.resize(&gpu.cx, size.width, size.height);
+                if let Some(gpu) = &mut self.gpu
+                    && let Err(e) = gpu.target.resize(&gpu.cx, size.width, size.height)
+                {
+                    self.error = Some(e.to_string());
+                    event_loop.exit();
                 }
             }
             WindowEvent::RedrawRequested if !self.o.uncapped => {

@@ -190,7 +190,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
 
     fn prepare(&mut self, cx: &Context) -> Result<MarkBatch> {
         let glue = self.glue();
-        let program = cx.pipelines().program(cx, &glue)?;
+        let program = cx.program(&glue)?;
 
         // The `Encodings` uniform: each channel's Params or constant at the
         // offset the glue emitter laid out (encase sizes, 16-byte fields).
@@ -255,7 +255,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
                 chunk,
                 luts: luts.iter().map(Vec::as_slice).collect(),
             }
-            .build(cx, buffer, ranges, rows, M::VERTICES_PER_INSTANCE),
+            .build(cx, buffer, ranges, rows, M::VERTICES_PER_INSTANCE)?,
         );
         self.gpu = Some((Arc::clone(&gpu), luts));
         Ok(MarkBatch { gpu })
@@ -385,7 +385,7 @@ mod tests {
         std::thread::scope(|s| {
             for _ in 0..2 {
                 s.spawn(|| {
-                    let program = cx.pipelines().program(&cx, &glue).unwrap();
+                    let program = cx.program(&glue).unwrap();
                     drop(cx.text());
                     program
                 });
@@ -547,8 +547,8 @@ mod timings {
             let t = Instant::now();
             let glue = sel.glue();
             emit.push(t.elapsed());
-            let program = cx.pipelines().program(&cx, &glue).unwrap();
-            let _pipeline = cx.pipelines().mark_pipeline(&cx, &program, &desc);
+            let program = cx.program(&glue).unwrap();
+            let _pipeline = cx.mark_pipeline(&program, &desc).unwrap();
             let stats = cx.pipelines().stats;
             link.push(stats.last_link);
             create.push(stats.last_create);

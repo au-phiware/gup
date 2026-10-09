@@ -211,8 +211,10 @@ impl ApplicationHandler for App {
             } => event_loop.exit(),
             WindowEvent::Resized(size) => {
                 if let Some(WindowState { cx, target }) = &mut self.state {
-                    target.resize(cx, size.width, size.height);
-                    target.window().request_redraw();
+                    match target.resize(cx, size.width, size.height) {
+                        Ok(()) => target.window().request_redraw(),
+                        Err(e) => self.fail(event_loop, e),
+                    }
                 }
             }
             WindowEvent::CursorMoved { position, .. } => {

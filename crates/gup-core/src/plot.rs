@@ -195,6 +195,8 @@ impl Plot {
     /// Resolve domains, ticks, text, the plot rect and GPU state for a
     /// `width × height` logical-pixel chart.
     pub fn resolve(&mut self, cx: &Context, width: f32, height: f32) -> Result<Resolved> {
+        // Errors that a browser reported after an earlier call returned.
+        cx.take_gpu_errors()?;
         let (x, y) = match (&self.x, &self.y) {
             (Some(x), Some(y)) => (x, y),
             _ => {
@@ -274,8 +276,11 @@ impl Plot {
         x.set_range(Px(plot.left() + inset), Px(plot.right() - inset));
         y.set_range(Px(plot.bottom() - inset), Px(plot.top() + inset));
 
-        // 6. Uniforms and columns.
-        let batch = layer.prepare(cx)?;
+        // 6. Uniforms and columns, inside a GPU error scope (GUP-410).
+        let batch = cx.scoped(
+            || "layer resolution (column upload, uniforms)".to_owned(),
+            || layer.prepare(cx),
+        )?;
 
         // 7. The scene.
         let mut scene = Scene::new(width, height, style::BACKGROUND);

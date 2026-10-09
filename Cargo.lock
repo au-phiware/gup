@@ -1779,6 +1779,7 @@ dependencies = [
  "resvg",
  "thiserror 2.0.18",
  "trybuild",
+ "wasm-bindgen-futures",
  "web-time",
  "wgpu",
  "winit",

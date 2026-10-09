@@ -350,28 +350,33 @@ impl ImageTarget {
             dpr: options.dpr,
             samples: options.samples,
         };
-        let texture = cx.device().create_texture(&wgpu::TextureDescriptor {
-            label: Some("gup image target"),
-            size: wgpu::Extent3d {
-                width,
-                height,
-                depth_or_array_layers: 1,
+        cx.scoped(
+            || format!("image target {width}×{height}"),
+            || {
+                let texture = cx.device().create_texture(&wgpu::TextureDescriptor {
+                    label: Some("gup image target"),
+                    size: wgpu::Extent3d {
+                        width,
+                        height,
+                        depth_or_array_layers: 1,
+                    },
+                    mip_level_count: 1,
+                    sample_count: 1,
+                    dimension: wgpu::TextureDimension::D2,
+                    format,
+                    usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+                    view_formats: &[],
+                });
+                let view = texture.create_view(&Default::default());
+                Ok(Self {
+                    desc,
+                    texture,
+                    view,
+                    msaa: msaa_view(cx, format, width, height, options.samples),
+                    pending: None,
+                })
             },
-            mip_level_count: 1,
-            sample_count: 1,
-            dimension: wgpu::TextureDimension::D2,
-            format,
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
-            view_formats: &[],
-        });
-        let view = texture.create_view(&Default::default());
-        Ok(Self {
-            desc,
-            texture,
-            view,
-            msaa: msaa_view(cx, format, width, height, options.samples),
-            pending: None,
-        })
+        )
     }
 
     /// Draw `scene` with a fresh [`Renderer`] and read the pixels back.
@@ -381,6 +386,10 @@ impl ImageTarget {
     }
 
     /// The pixels of the last presented frame.
+    ///
+    /// Also waits for the GPU's verdict on the work so far: if the GPU
+    /// rejected any of it (in a browser, WebGPU reports validation errors
+    /// asynchronously), this returns [`Error::Gpu`], not the pixels.
     pub async fn read(&mut self, cx: &Context) -> Result<image::RgbaImage> {
         let readback = self.pending.take().ok_or_else(|| {
             Error::config(
@@ -388,7 +397,9 @@ impl ImageTarget {
                 "nothing to read: render a scene into the target first",
             )
         })?;
-        readback.read(cx).await
+        let image = readback.read(cx).await?;
+        cx.settle_gpu_errors().await?;
+        Ok(image)
     }
 
     /// Blocking form of [`ImageTarget::render`] (native only).
@@ -481,23 +492,28 @@ impl TextureTarget {
         let format = texture.format().remove_srgb_suffix();
         options.validate(cx, format)?;
         let (width, height) = (texture.width(), texture.height());
-        let view = texture.create_view(&wgpu::TextureViewDescriptor {
-            label: Some("gup texture target"),
-            format: Some(format),
-            ..Default::default()
-        });
-        Ok(Self {
-            desc: TargetDesc {
-                format,
-                width,
-                height,
-                dpr: options.dpr,
-                samples: options.samples,
+        cx.scoped(
+            || format!("texture target ({:?} view of the host's texture)", format),
+            || {
+                let view = texture.create_view(&wgpu::TextureViewDescriptor {
+                    label: Some("gup texture target"),
+                    format: Some(format),
+                    ..Default::default()
+                });
+                Ok(Self {
+                    desc: TargetDesc {
+                        format,
+                        width,
+                        height,
+                        dpr: options.dpr,
+                        samples: options.samples,
+                    },
+                    msaa: msaa_view(cx, format, width, height, options.samples),
+                    texture,
+                    view,
+                })
             },
-            msaa: msaa_view(cx, format, width, height, options.samples),
-            texture,
-            view,
-        })
+        )
     }
 
     /// The host's texture.
