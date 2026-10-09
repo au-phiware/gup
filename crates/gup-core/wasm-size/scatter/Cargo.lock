@@ -447,6 +447,7 @@ dependencies = [
  "image",
  "pollster",
  "thiserror 2.0.18",
+ "wasm-bindgen-futures",
  "web-time",
  "wgpu",
 ]
