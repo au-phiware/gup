@@ -6,12 +6,12 @@
 //! Gup's new core, built to [RFC-001](https://github.com/au-phiware/gup/blob/main/docs/planning/rfcs/RFC-001_Core_Architecture.md):
 //!
 //! - one cloneable [`Context`] that owns or wraps a wgpu device;
-//! - a GPU [column store](column) — accessors run once, columns live on
+//! - a GPU [column store](mod@column) — accessors run once, columns live on
 //!   the GPU as instance-rate vertex buffers, relative to a per-chunk f64
 //!   origin;
 //! - typed [channels](channel): `Circle::RADIUS: Channel<Circle, Px>`, so
 //!   wrong value types, unknown channels and wrong marks don't compile;
-//! - one [scale](scale) family, each a [`ShaderFn`] with an f64
+//! - one [scale] family, each a [`ShaderFn`] with an f64
 //!   [`CpuMirror`] — zooming changes uniforms only;
 //! - shader composition at build time: naga_oil flattens the WGSL library
 //!   once, in `build.rs`, and a typed glue emitter's output is linked to it

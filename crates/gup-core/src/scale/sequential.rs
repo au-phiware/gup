@@ -42,7 +42,7 @@ impl Sequential {
     }
 
     /// A palette through evenly spaced sRGB `stops`, interpolated in OKLab
-    /// into a [`LUT_SIZE`]-entry table.
+    /// into a 256-entry (`LUT_SIZE`) table.
     pub fn from_stops(stops: &[[f32; 3]]) -> Self {
         Self {
             domain: None,
