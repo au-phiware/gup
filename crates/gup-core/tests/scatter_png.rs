@@ -59,3 +59,64 @@ fn scatter_png_passes_the_visual_regression_harness() {
         .run("gup_core/scatter", Ok((vr, metadata(&layout, &fill))))
         .assert_ok();
 }
+
+/// RFC-001 S4a (AC3): the golden scatter's 120 rows forced into 3 and 4
+/// column chunks, so the layer is drawn by one instanced draw per chunk,
+/// each with its own `Chunk` uniform entry (row base, x origin). The image
+/// must be pixel-identical to the single-chunk render and to the golden
+/// PNG. The 4-chunk render is written next to the harness's artifacts for
+/// inspection.
+#[test]
+fn multi_chunk_scatter_is_pixel_identical_to_the_golden() {
+    let cx = Context::new_blocking().expect("headless GPU context");
+    let mut single = scatter::plot();
+    let resolved = single.resolve(&cx, WIDTH as f32, HEIGHT as f32).unwrap();
+    assert_eq!(marks(&resolved).chunks(), 1);
+    let (one, _) = single.render_resolved(&cx, WIDTH, HEIGHT).unwrap();
+
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let golden = image::open(root.join("tests/golden/gup_core/scatter.png"))
+        .expect("golden scatter")
+        .to_rgba8();
+    assert!(
+        one == golden,
+        "the single-chunk render no longer matches the golden"
+    );
+
+    for (chunk_rows, chunks) in [(40, 3), (32, 4)] {
+        let mut plot = scatter::plot_chunked(chunk_rows);
+        let resolved = plot.resolve(&cx, WIDTH as f32, HEIGHT as f32).unwrap();
+        let batch = marks(&resolved);
+        assert_eq!(batch.chunks(), chunks, "{chunk_rows} rows per chunk");
+        assert_eq!(batch.instances(), 120);
+        let (image, _) = plot.render_resolved(&cx, WIDTH, HEIGHT).unwrap();
+        let out = gup_visual_regression::golden::default_artifact_dir(&root)
+            .join(format!("gup_core/scatter_{chunks}_chunks.png"));
+        std::fs::create_dir_all(out.parent().unwrap()).unwrap();
+        image.save(&out).unwrap();
+        let differing = image
+            .pixels()
+            .zip(one.pixels())
+            .filter(|(a, b)| a != b)
+            .count();
+        assert_eq!(
+            differing,
+            0,
+            "{chunks} chunks: {differing} pixels differ from one chunk ({})",
+            out.display()
+        );
+        assert!(image == golden);
+    }
+}
+
+fn marks(resolved: &gup_core::Resolved) -> &gup_core::scene::MarkBatch {
+    resolved
+        .scene
+        .items
+        .iter()
+        .find_map(|i| match &i.kind {
+            gup_core::scene::ItemKind::Marks(b) => Some(b),
+            _ => None,
+        })
+        .expect("a mark layer")
+}

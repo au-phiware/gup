@@ -10,7 +10,7 @@ use crate::column::ColumnStore;
 use crate::context::Context;
 use crate::encoding::{Encoding, IntoEncoding, Resource};
 use crate::error::{Error, Result};
-use crate::render::{LayerGpu, LayerUniforms};
+use crate::render::{ChunkDraw, LayerGpu, LayerUniforms, chunk_uniform_offset, chunk_uniforms};
 use crate::scene::MarkBatch;
 use crate::shader::glue::{self, ChannelSource, Glue, GlueChannel, GlueSpec};
 use std::any::Any;
@@ -38,6 +38,8 @@ pub struct Selection<T, M: Mark> {
     encodings: Vec<Option<Encoding<T>>>,
     /// Evaluated columns, one per column-encoded channel in channel order.
     columns: Option<ColumnStore>,
+    /// A cap on rows per chunk below the device's (a test seam).
+    max_chunk_rows: Option<u32>,
     /// GPU state from the last `prepare` and the LUTs it holds. Later
     /// prepares with the same program, context and columns only write
     /// uniforms into it.
@@ -63,9 +65,48 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             rows: rows.into(),
             encodings: M::CHANNELS.iter().map(|_| None).collect(),
             columns: None,
+            max_chunk_rows: None,
             gpu: None,
             _mark: PhantomData,
         }
+    }
+
+    /// Cap the rows per column chunk below what the device allows, so a
+    /// small selection spans several chunks (and several draws). A test
+    /// seam for the multi-chunk paths (RFC-001 S4a), not a tuning knob.
+    #[doc(hidden)]
+    pub fn max_chunk_rows(&mut self, rows: u32) -> &mut Self {
+        self.max_chunk_rows = Some(rows);
+        self.columns = None;
+        self.gpu = None;
+        self
+    }
+
+    /// Append `rows`: only they are evaluated, and the next resolve writes
+    /// only their bytes, at the tail of the last chunk (or in new chunks).
+    /// Auto domains refit to the grown stats on that resolve. (A handle to
+    /// append to a selection already in a plot is RFC-001 S12.)
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "the public append handle is RFC-001 S12")
+    )]
+    pub(crate) fn append(&mut self, rows: impl IntoIterator<Item = T>) -> Result<()> {
+        let start = self.rows.len();
+        self.rows.extend(rows);
+        if let Some(store) = &mut self.columns {
+            let new = &self.rows[start..];
+            // The same columns, in the same order, as `column_encodings`.
+            let values: Vec<Vec<f64>> = self
+                .encodings
+                .iter()
+                .filter_map(|e| match e {
+                    Some(Encoding::Column(c)) => Some(c.evaluate(new)),
+                    _ => None,
+                })
+                .collect();
+            store.append(new.len(), &values)?;
+        }
+        Ok(())
     }
 
     /// Number of rows.
@@ -102,14 +143,27 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             })
     }
 
-    /// Run the accessors (once) into a column store.
-    fn evaluate(&mut self) -> Result<&mut ColumnStore> {
-        if self.columns.is_none() {
-            let columns = self
+    /// Run the accessors (once) into a column store chunked for `cx`'s
+    /// device.
+    fn evaluate(&mut self, cx: &Context) -> Result<&mut ColumnStore> {
+        let formats: Vec<_> = self
+            .column_encodings()
+            .map(|(_, c)| c.func().input_format())
+            .collect();
+        let chunk_rows = ColumnStore::chunk_rows_for(&cx.caps().limits, &formats)
+            .min(self.max_chunk_rows.unwrap_or(u32::MAX));
+        if self
+            .columns
+            .as_ref()
+            .is_none_or(|c| c.chunk_rows() != chunk_rows)
+        {
+            let values: Vec<Vec<f64>> = self
                 .column_encodings()
-                .map(|(_, c)| (c.func().input_format(), c.evaluate(&self.rows)))
+                .map(|(_, c)| c.evaluate(&self.rows))
                 .collect();
-            self.columns = Some(ColumnStore::from_columns(columns)?);
+            let mut store = ColumnStore::new(formats, chunk_rows)?;
+            store.append(self.rows.len(), &values)?;
+            self.columns = Some(store);
         }
         Ok(self.columns.as_mut().expect("evaluated above"))
     }
@@ -133,13 +187,55 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             channels,
         })
     }
+
+    /// The `Chunk` uniform entries (laid out as `layout`) of every chunk
+    /// of the evaluated store: each chunk's first row and, for each
+    /// channel in `relative`, `(origin - d0)` from the chunk's own f64
+    /// origin.
+    fn chunk_uniform_bytes(
+        &self,
+        layout: &crate::shader::StructLayout,
+        relative: &[usize],
+    ) -> Result<Vec<u8>> {
+        let store = self.columns.as_ref().ok_or_else(|| {
+            Error::config("layer", "prepare called before the columns were evaluated")
+        })?;
+        // (`Chunk` member, column index, function) per relative channel.
+        let relative: Vec<_> = self
+            .column_encodings()
+            .enumerate()
+            .filter(|(_, (i, _))| relative.contains(i))
+            .map(|(col, (i, c))| (format!("{}_base", M::CHANNELS[i].name), col, c.func()))
+            .collect();
+        let mut bytes = chunk_uniforms(store.chunks().len(), layout.span);
+        for (k, chunk) in store.chunks().iter().enumerate() {
+            let entry = &mut bytes[chunk_uniform_offset(k)..][..layout.span as usize];
+            let row_base = u32::try_from(chunk.row_base()).map_err(|_| {
+                Error::config(
+                    "column store",
+                    format!(
+                        "{}: chunk {k} starts at row {}, past the u32 row index",
+                        M::NAME,
+                        chunk.row_base()
+                    ),
+                )
+            })?;
+            write_field(entry, layout, "row_base", &row_base.to_le_bytes())?;
+            for (member, col, func) in &relative {
+                let base = func.chunk_base(chunk.columns()[*col].origin());
+                write_field(entry, layout, member, &base.to_le_bytes())?;
+            }
+        }
+        Ok(bytes)
+    }
 }
 
 /// A plot layer: the object-safe face of a [`Selection`] (internal; the
 /// public `Layer`/`Chart` traits are RFC-001 S7).
 pub(crate) trait Layer: wgpu::WasmNotSendSync {
-    /// Evaluate accessors and fit every data-driven domain to its column.
-    fn fit_domains(&mut self) -> Result<()>;
+    /// Evaluate accessors (chunked for `cx`'s device) and fit every
+    /// data-driven domain to its column's stats across every chunk.
+    fn fit_domains(&mut self, cx: &Context) -> Result<()>;
     /// How far marks may extend past their position (e.g. a constant
     /// radius), in pixels.
     fn overhang(&self) -> f32;
@@ -151,13 +247,9 @@ pub(crate) trait Layer: wgpu::WasmNotSendSync {
 }
 
 impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
-    fn fit_domains(&mut self) -> Result<()> {
-        let stats: Vec<_> = self
-            .evaluate()?
-            .columns()
-            .iter()
-            .map(|c| c.stats())
-            .collect();
+    fn fit_domains(&mut self, cx: &Context) -> Result<()> {
+        let store = self.evaluate(cx)?;
+        let stats: Vec<_> = (0..store.formats().len()).map(|k| store.stats(k)).collect();
         let mut k = 0;
         for (i, enc) in self.encodings.iter_mut().enumerate() {
             if let Some(Encoding::Column(c)) = enc {
@@ -195,32 +287,17 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         // The `Encodings` uniform: each channel's Params or constant at the
         // offset the glue emitter laid out (encase sizes, 16-byte fields).
         let mut encodings = vec![0u8; program.encodings.span as usize];
-        let mut chunk = vec![0u8; program.chunk.span as usize];
         let mut luts: Vec<Vec<[u8; 4]>> = Vec::new();
-        let store = self.columns.as_ref().ok_or_else(|| {
-            Error::config("layer", "prepare called before the columns were evaluated")
-        })?;
-        let mut col = 0;
         for (i, desc) in M::CHANNELS.iter().enumerate() {
             let bytes = match &self.encodings[i] {
                 Some(Encoding::Column(c)) => {
                     let func = c.func();
-                    if glue.relative.contains(&i) {
-                        let origin = store.columns()[col].origin();
-                        write_field(
-                            &mut chunk,
-                            &program.chunk,
-                            &format!("{}_base", desc.name),
-                            &func.chunk_base(origin).to_le_bytes(),
-                        )?;
-                    }
                     if glue.luts.iter().any(|l| l.channel == i) {
                         for r in func.resources() {
                             let Resource::Lut(lut) = r;
                             luts.push(lut);
                         }
                     }
-                    col += 1;
                     func.params_bytes()?
                 }
                 Some(Encoding::Const(v)) => v.bytes(),
@@ -228,25 +305,60 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             };
             write_field(&mut encodings, &program.encodings, desc.name, &bytes)?;
         }
-        write_field(&mut chunk, &program.chunk, "row_base", &0u32.to_le_bytes())?;
 
-        let rows = store.rows();
-        let ranges = (0..store.columns().len())
-            .map(|k| store.column_range(k))
-            .collect();
+        let chunks = self.chunk_uniform_bytes(&program.chunk, &glue.relative)?;
+
         let store = self.columns.as_mut().expect("checked above");
-        let buffer = store.upload(cx)?.clone();
+        store.upload(cx)?;
+        let store = self.columns.as_ref().expect("checked above");
+        let uploaded = || {
+            store
+                .chunks()
+                .iter()
+                .map(|c| (c.buffer(cx).expect("uploaded above"), c.rows()))
+        };
+        let draws = || -> Vec<ChunkDraw> {
+            store
+                .chunks()
+                .iter()
+                .enumerate()
+                .map(|(k, c)| ChunkDraw {
+                    columns: c.buffer(cx).expect("uploaded above").clone(),
+                    column_ranges: (0..store.formats().len())
+                        .map(|i| c.column_range(i))
+                        .collect(),
+                    instances: c.rows(),
+                    dynamic_offset: chunk_uniform_offset(k) as u32,
+                })
+                .collect()
+        };
 
-        // Zoom, pan and resize land here every frame: write the new
-        // uniform values into the existing buffers.
         if let Some((gpu, held)) = &self.gpu
-            && gpu.reusable(cx, &program, &buffer)
+            && gpu.reusable(cx, &program)
             && *held == luts
         {
-            gpu.write_uniforms(cx, &encodings, &chunk);
-            return Ok(MarkBatch {
-                gpu: Arc::clone(gpu),
-            });
+            // Zoom, pan and resize land here every frame: write the new
+            // uniform values into the existing buffers.
+            if gpu.draws_chunks(uploaded()) {
+                gpu.write_uniforms(cx, &encodings, &chunks);
+                return Ok(MarkBatch {
+                    gpu: Arc::clone(gpu),
+                });
+            }
+            // Appended rows: new chunk draws and `Chunk` entries over the
+            // same encodings, which take their new values in place.
+            #[cfg_attr(
+                target_arch = "wasm32",
+                expect(
+                    clippy::arc_with_non_send_sync,
+                    reason = "`Arc`, not `Rc`, because `Layer` must be `Send + Sync` on \
+                              native; on wasm32 wgpu's handles are neither"
+                )
+            )]
+            let grown = Arc::new(gpu.with_chunks(cx, &chunks, draws())?);
+            grown.write_encodings(cx, &encodings);
+            self.gpu = Some((Arc::clone(&grown), luts));
+            return Ok(MarkBatch { gpu: grown });
         }
         #[cfg_attr(
             target_arch = "wasm32",
@@ -261,10 +373,10 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             LayerUniforms {
                 program,
                 encodings,
-                chunk,
+                chunks,
                 luts: luts.iter().map(Vec::as_slice).collect(),
             }
-            .build(cx, buffer, ranges, rows, M::VERTICES_PER_INSTANCE)?,
+            .build(cx, draws(), M::VERTICES_PER_INSTANCE)?,
         );
         self.gpu = Some((Arc::clone(&gpu), luts));
         Ok(MarkBatch { gpu })
@@ -363,6 +475,91 @@ mod tests {
         .attr(Circle::FILL, Sequential::viridis().encode(|r: &Row| r.v))
         .attr(Circle::RADIUS, Px(4.0));
         sel
+    }
+
+    /// AC2: one `Chunk` entry per chunk, 256 bytes apart, holding the
+    /// chunk's first row and the x base from the chunk's own origin; one
+    /// draw per chunk at that entry's dynamic offset.
+    #[test]
+    fn chunk_uniforms_hold_each_chunks_row_base_and_base() {
+        let cx = Context::new_blocking().unwrap();
+        let mut sel = reference();
+        sel.max_chunk_rows(8);
+        sel.fit_domains(&cx).unwrap();
+        let glue = sel.glue();
+        let program = cx.program(&glue).unwrap();
+        let bytes = sel
+            .chunk_uniform_bytes(&program.chunk, &glue.relative)
+            .unwrap();
+        let store = sel.columns.as_ref().unwrap();
+        assert_eq!(
+            store.chunks().iter().map(|c| c.rows()).collect::<Vec<_>>(),
+            [8, 8, 4]
+        );
+        assert_eq!(bytes.len(), 2 * 256 + program.chunk.span as usize);
+        let Some(Encoding::Column(x)) = &sel.encodings[0] else {
+            panic!()
+        };
+        let x_base = program.chunk.offset("x_base").unwrap() as usize;
+        let mut bases = Vec::new();
+        for (k, chunk) in store.chunks().iter().enumerate() {
+            let entry = &bytes[k * 256..];
+            let row_base = u32::from_le_bytes(entry[..4].try_into().unwrap());
+            assert_eq!(u64::from(row_base), chunk.row_base());
+            assert_eq!(row_base, 8 * k as u32);
+            let origin = chunk.columns()[0].origin();
+            assert_eq!(origin, 1.7e9 + f64::from(8 * k as u32 + 1) * 60.0);
+            let base = f32::from_le_bytes(entry[x_base..x_base + 4].try_into().unwrap());
+            assert_eq!(base, x.func().chunk_base(origin));
+            bases.push(base);
+        }
+        assert!(bases[0] < bases[1] && bases[1] < bases[2], "{bases:?}");
+
+        let batch = sel.prepare(&cx).unwrap();
+        let offsets: Vec<_> = batch.gpu.chunks.iter().map(|c| c.dynamic_offset).collect();
+        assert_eq!(offsets, [0, 256, 512]);
+        assert_eq!(batch.instances(), 20);
+    }
+
+    /// AC5 at the layer level: an append evaluates only the new rows,
+    /// writes only their bytes and reuses the encodings' GPU state (no
+    /// LUT upload); the next zoom-like prepare writes uniforms only.
+    #[test]
+    fn append_reuses_the_encodings_and_writes_new_rows_only() {
+        let cx = Context::new_blocking().unwrap();
+        let mut sel = reference();
+        sel.max_chunk_rows(16);
+        sel.fit_domains(&cx).unwrap();
+        let first = sel.prepare(&cx).unwrap();
+        let start = cx.upload_stats();
+        sel.append((21..=40).map(|i| {
+            let i = f64::from(i);
+            Row {
+                x: 1.7e9 + i * 60.0,
+                y: i * i,
+                v: i,
+            }
+        }))
+        .unwrap();
+        sel.fit_domains(&cx).unwrap();
+        let grown = sel.prepare(&cx).unwrap();
+        let written = cx.upload_stats() - start;
+        // Three columns of 20 rows.
+        assert_eq!(written.columns.bytes, 20 * 3 * 4, "{written:?}");
+        assert_eq!(written.textures.writes, 0, "{written:?}");
+        // The new chunk uniform buffer, then the encodings in place.
+        assert_eq!(written.uniforms.writes, 2, "{written:?}");
+        assert_eq!(grown.instances(), 40);
+        assert_eq!(grown.gpu.chunks.len(), 3);
+        assert!(!Arc::ptr_eq(&first.gpu, &grown.gpu));
+        assert!(Arc::ptr_eq(first.gpu.encodings(), grown.gpu.encodings()));
+
+        let start = cx.upload_stats();
+        let again = sel.prepare(&cx).unwrap();
+        let written = cx.upload_stats() - start;
+        assert!(Arc::ptr_eq(&grown.gpu, &again.gpu));
+        assert_eq!(written.columns, Default::default());
+        assert_eq!(written.uniforms.writes, 2, "{written:?}");
     }
 
     /// Compare `actual` with a checked-in fixture; `GUP_BLESS=1` rewrites

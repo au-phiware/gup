@@ -219,7 +219,7 @@ impl Plot {
         };
 
         // 1–2. Domains from column stats, then nice.
-        layer.fit_domains()?;
+        layer.fit_domains(cx)?;
         for s in [x, y] {
             if s.is_auto() {
                 s.nice();
@@ -447,7 +447,7 @@ mod tests {
     use super::*;
     use crate::encoding::ShaderFn;
     use crate::marks::Circle;
-    use crate::scale::{Linear, Log};
+    use crate::scale::{Linear, Log, ScaleRef};
     use crate::scene::ItemKind;
     use std::sync::Arc;
 
@@ -545,6 +545,70 @@ mod tests {
         plot.resolve(&cx, 400.0, 300.0).unwrap();
         assert_eq!(x.read().current_domain().unwrap(), zx);
         assert!(plot.zoom(at, 0.0).is_err());
+    }
+
+    type Pt = (f64, f64);
+
+    /// A scatter of `rows` (linear x, log y) in chunks of at most 64 rows.
+    fn chunked(rows: Vec<Pt>) -> (Plot, ScaleRef<Linear>) {
+        let mut plot = Plot::new();
+        let (x, y) = (plot.x(Linear::new()), plot.y(Log::new()));
+        plot.add(Selection::<Pt, Circle>::new(rows))
+            .attr(Circle::X, x.encode(|r: &Pt| r.0))
+            .attr(Circle::Y, y.encode(|r: &Pt| r.1))
+            .max_chunk_rows(64);
+        (plot, x)
+    }
+
+    fn points(range: std::ops::Range<u32>) -> Vec<Pt> {
+        range
+            .map(|i| {
+                let i = f64::from(i);
+                (1.7e9 + i * 3.5, 1.0 + (i * 0.37) % 9.0 * 100.0)
+            })
+            .collect()
+    }
+
+    /// RFC-001 S4a (AC5): appending rows in batches writes exactly their
+    /// column bytes (no chunk is uploaded again), grows the auto x domain
+    /// through the merged stats, and renders exactly what a plot built
+    /// from every row at once renders.
+    #[test]
+    fn appended_rows_upload_only_their_bytes() {
+        let cx = Context::new_blocking().unwrap();
+        let (mut plot, x) = chunked(points(0..100));
+        let mut target = ImageTarget::new(&cx, 400, 300).unwrap();
+        let first = plot.resolve(&cx, 400.0, 300.0).unwrap();
+        let before = target.render_blocking(&cx, &first.scene).unwrap();
+        let domain = x.read().current_domain().unwrap();
+        let start = cx.upload_stats();
+
+        let mut appended = 0;
+        let mut end = 100;
+        for n in [1, 27, 36, 100, 300, 5] {
+            let layer: &mut Selection<Pt, Circle> =
+                plot.layers[0].as_any_mut().downcast_mut().unwrap();
+            layer.append(points(end..end + n)).unwrap();
+            end += n;
+            appended += u64::from(n);
+            let resolved = plot.resolve(&cx, 400.0, 300.0).unwrap();
+            assert_eq!(batch(&resolved).instances(), u64::from(end));
+            target.render_blocking(&cx, &resolved.scene).unwrap();
+        }
+        let written = cx.upload_stats() - start;
+        // Two f32 columns: exactly the appended rows' bytes.
+        assert_eq!(written.columns.bytes, appended * 8, "{written:?}");
+        let grown = x.read().current_domain().unwrap();
+        assert_eq!(grown.0, domain.0);
+        assert!(grown.1 > domain.1 + 1000.0, "{domain:?} → {grown:?}");
+
+        let resolved = plot.resolve(&cx, 400.0, 300.0).unwrap();
+        assert_eq!(batch(&resolved).chunks.len(), (end as usize).div_ceil(64));
+        let after = target.render_blocking(&cx, &resolved.scene).unwrap();
+        assert_ne!(before, after);
+        let (mut fresh, _) = chunked(points(0..end));
+        let expected = fresh.render(&cx, 400, 300).unwrap();
+        assert!(after == expected, "appending differs from building at once");
     }
 
     #[test]

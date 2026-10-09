@@ -56,21 +56,41 @@ pub fn countries() -> Vec<Country> {
 
 /// The reference plot over `rows`, with its x and y scale handles.
 pub fn plot_rows(rows: Vec<Country>, radius: Px) -> (Plot, ScaleRef<Linear>, ScaleRef<Log>) {
+    plot_rows_chunked(rows, radius, None)
+}
+
+/// [`plot_rows`] with at most `max_chunk_rows` rows per column chunk, so
+/// the layer is drawn by several instanced draws (RFC-001 S4a).
+pub fn plot_rows_chunked(
+    rows: Vec<Country>,
+    radius: Px,
+    max_chunk_rows: Option<u32>,
+) -> (Plot, ScaleRef<Linear>, ScaleRef<Log>) {
     let mut plot = Plot::new();
     let (x, y) = (plot.x(Linear::new()), plot.y(Log::new()));
     let heat = Sequential::viridis();
-    plot.title(TITLE)
-        .add(Selection::<Country, Circle>::new(rows))
+    let layer = plot
+        .title(TITLE)
+        .add(Selection::<Country, Circle>::new(rows));
+    layer
         .attr(Circle::X, x.encode(|c: &Country| c.gdp_per_capita))
         .attr(Circle::Y, y.encode(|c: &Country| c.population))
         .attr(Circle::FILL, heat.encode(|c: &Country| c.life_expectancy))
         .attr(Circle::RADIUS, radius);
+    if let Some(rows) = max_chunk_rows {
+        layer.max_chunk_rows(rows);
+    }
     (plot, x, y)
 }
 
 /// The golden scatter.
 pub fn plot() -> Plot {
     plot_rows(countries(), Px(4.5)).0
+}
+
+/// The golden scatter's rows in column chunks of `max_chunk_rows` rows.
+pub fn plot_chunked(max_chunk_rows: u32) -> Plot {
+    plot_rows_chunked(countries(), Px(4.5), Some(max_chunk_rows)).0
 }
 
 /// The fill scale with the domain the plot fits, for colour checks.

@@ -6,7 +6,9 @@
 //! `Renderer::render` into an `ImageTarget` (the headless twin of the
 //! window loop in `examples/zoom_bench.rs`). The upload counters on the
 //! `Context` must show no column writes at all after the first frame, and
-//! exactly three uniform writes per frame (encodings, chunk bases, view).
+//! exactly three uniform writes per frame (encodings, chunk bases, view),
+//! whether the layer is one column chunk or several (RFC-001 S4a: every
+//! chunk's entry goes in one write).
 
 mod common;
 
@@ -19,17 +21,41 @@ const FRAMES: usize = 300;
 
 #[test]
 fn zooming_100k_points_writes_no_column_bytes() {
+    zoom(None, 1);
+}
+
+/// The same 100K points in 7 chunks of at most 16384 rows: 7 instanced
+/// draws per frame, still 0 column bytes and 3 uniform writes per frame.
+#[test]
+fn zooming_100k_points_in_chunks_writes_no_column_bytes() {
+    zoom(Some(16_384), 7);
+}
+
+fn zoom(max_chunk_rows: Option<u32>, chunks: usize) {
     let cx = Context::new_blocking().expect("headless context");
-    let (mut plot, x, y) = scatter::plot_rows(scatter::countries_n(POINTS), Px(3.0));
+    let (mut plot, x, y) =
+        scatter::plot_rows_chunked(scatter::countries_n(POINTS), Px(3.0), max_chunk_rows);
     let mut target = ImageTarget::new(&cx, 640, 400).unwrap();
     let mut renderer = Renderer::new();
 
-    // Frame 0 evaluates the accessors and uploads the column chunk once.
+    // Frame 0 evaluates the accessors and uploads each chunk once: exactly
+    // the rows' bytes, one write per column per chunk.
     let first = plot.resolve(&cx, 640.0, 400.0).unwrap();
+    let batch = first
+        .scene
+        .items
+        .iter()
+        .find_map(|i| match &i.kind {
+            gup_core::scene::ItemKind::Marks(b) => Some(b.clone()),
+            _ => None,
+        })
+        .unwrap();
+    assert_eq!(batch.chunks(), chunks);
+    assert_eq!(batch.instances(), POINTS as u64);
     renderer.render(&cx, &first.scene, &mut target).unwrap();
     let after_upload = cx.upload_stats();
-    assert_eq!(after_upload.columns.writes, 1);
-    assert!(after_upload.columns.bytes >= (POINTS * 4 * 3) as u64);
+    assert_eq!(after_upload.columns.writes, 3 * chunks as u64);
+    assert_eq!(after_upload.columns.bytes, (POINTS * 4 * 3) as u64);
     let (x0, x1) = x.read().current_domain().unwrap();
     let (y0, y1) = y.read().current_domain().unwrap();
 

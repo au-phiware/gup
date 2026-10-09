@@ -122,16 +122,21 @@ pub enum ItemKind {
     Text(Vec<TextRun>),
 }
 
-/// A prepared data layer: its pipeline key, column chunk and uniforms.
+/// A prepared data layer: its pipeline key, column chunks and uniforms.
 #[derive(Clone, Debug)]
 pub struct MarkBatch {
     pub(crate) gpu: Arc<LayerGpu>,
 }
 
 impl MarkBatch {
-    /// Number of mark instances.
-    pub fn instances(&self) -> u32 {
-        self.gpu.instances
+    /// Number of mark instances, across every chunk.
+    pub fn instances(&self) -> u64 {
+        self.gpu.instances()
+    }
+
+    /// Number of column chunks, each drawn by one instanced draw.
+    pub fn chunks(&self) -> usize {
+        self.gpu.chunks.len()
     }
 
     /// The encoding signature (the pipeline cache key).

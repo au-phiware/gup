@@ -70,18 +70,35 @@ impl std::fmt::Debug for GlueProgram {
     }
 }
 
-/// A data layer's GPU state, ready to draw.
-pub(crate) struct LayerGpu {
-    pub context: ContextId,
-    pub program: Arc<GlueProgram>,
-    enc_buffer: wgpu::Buffer,
-    chunk_buffer: wgpu::Buffer,
-    pub enc_bind_group: wgpu::BindGroup,
-    pub chunk_bind_group: wgpu::BindGroup,
-    /// The column chunk and each vertex column's byte range in it.
+/// One column chunk's instanced draw.
+#[derive(Clone, Debug)]
+pub(crate) struct ChunkDraw {
+    /// The chunk's buffer and each vertex column's byte range in it.
     pub columns: wgpu::Buffer,
     pub column_ranges: Vec<std::ops::Range<u64>>,
     pub instances: u32,
+    /// Offset of the chunk's entry in the `Chunk` uniform buffer.
+    pub dynamic_offset: u32,
+}
+
+/// The `Encodings` uniform and LUTs (group 1): shared by every
+/// [`LayerGpu`] built for one program, so appending rows (new chunks)
+/// rebuilds only the chunk half.
+pub(crate) struct EncodingsGpu {
+    buffer: wgpu::Buffer,
+    bind_group: wgpu::BindGroup,
+}
+
+/// A data layer's GPU state, ready to draw: one instanced draw per column
+/// chunk (RFC-001 §3).
+pub(crate) struct LayerGpu {
+    pub context: ContextId,
+    pub program: Arc<GlueProgram>,
+    encodings: Arc<EncodingsGpu>,
+    /// One `Chunk` entry per chunk, [`DYNAMIC_ALIGN`] apart.
+    chunk_buffer: wgpu::Buffer,
+    pub chunk_bind_group: wgpu::BindGroup,
+    pub chunks: Vec<ChunkDraw>,
     pub vertices_per_instance: u32,
 }
 
@@ -89,7 +106,8 @@ impl std::fmt::Debug for LayerGpu {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("LayerGpu")
             .field("signature", &self.program.glue.signature)
-            .field("instances", &self.instances)
+            .field("chunks", &self.chunks.len())
+            .field("instances", &self.instances())
             .finish_non_exhaustive()
     }
 }
@@ -464,10 +482,24 @@ pub(crate) struct LayerUniforms<'a> {
     pub program: Arc<GlueProgram>,
     /// Bytes of the `Encodings` struct.
     pub encodings: Vec<u8>,
-    /// Bytes of the `Chunk` struct.
-    pub chunk: Vec<u8>,
+    /// One `Chunk` struct per chunk, [`DYNAMIC_ALIGN`] apart (see
+    /// [`chunk_uniforms`]).
+    pub chunks: Vec<u8>,
     /// One LUT per `program.glue.luts` entry.
     pub luts: Vec<&'a [[u8; 4]]>,
+}
+
+/// Bytes of one `Chunk` uniform entry of `span` bytes per chunk, each at
+/// a multiple of the 256-byte dynamic-offset alignment, with nothing past
+/// the last entry (so one chunk writes only its `span` bytes). At least
+/// one entry, so the binding is valid with no chunks.
+pub(crate) fn chunk_uniforms(chunks: usize, span: u32) -> Vec<u8> {
+    vec![0; chunk_uniform_offset(chunks.max(1) - 1) + span as usize]
+}
+
+/// The dynamic offset of chunk `index`'s `Chunk` uniform entry.
+pub(crate) fn chunk_uniform_offset(index: usize) -> usize {
+    index * DYNAMIC_ALIGN as usize
 }
 
 impl LayerUniforms<'_> {
@@ -476,32 +508,20 @@ impl LayerUniforms<'_> {
     pub(crate) fn build(
         self,
         cx: &Context,
-        columns: wgpu::Buffer,
-        column_ranges: Vec<std::ops::Range<u64>>,
-        instances: u32,
+        chunks: Vec<ChunkDraw>,
         vertices_per_instance: u32,
     ) -> Result<LayerGpu> {
         let signature = self.program.glue.signature.clone();
         cx.scoped(
             || format!("layer `{signature}` (uniforms and bind groups)"),
-            || {
-                Ok(self.build_unscoped(
-                    cx,
-                    columns,
-                    column_ranges,
-                    instances,
-                    vertices_per_instance,
-                ))
-            },
+            || Ok(self.build_unscoped(cx, chunks, vertices_per_instance)),
         )
     }
 
     fn build_unscoped(
         self,
         cx: &Context,
-        columns: wgpu::Buffer,
-        column_ranges: Vec<std::ops::Range<u64>>,
-        instances: u32,
+        chunks: Vec<ChunkDraw>,
         vertices_per_instance: u32,
     ) -> LayerGpu {
         let device = cx.device();
@@ -510,14 +530,6 @@ impl LayerUniforms<'_> {
             "gup encodings",
             wgpu::BufferUsages::UNIFORM,
             &self.encodings,
-        );
-        let mut chunk_bytes = self.chunk;
-        chunk_bytes.resize(DYNAMIC_ALIGN as usize, 0);
-        let chunk = cx.buffer_with_data(
-            Upload::Uniform,
-            "gup chunk uniforms",
-            wgpu::BufferUsages::UNIFORM,
-            &chunk_bytes,
         );
         let sampler = lut_sampler(device);
         let lut_views: Vec<wgpu::TextureView> =
@@ -536,35 +548,31 @@ impl LayerUniforms<'_> {
                 resource: wgpu::BindingResource::Sampler(&sampler),
             });
         }
-        let enc_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("gup encodings"),
             layout: &self.program.enc_bgl,
             entries: &entries,
         });
-        let chunk_bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("gup chunk"),
-            layout: &self.program.chunk_bgl,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                    buffer: &chunk,
-                    offset: 0,
-                    size: wgpu::BufferSize::new(u64::from(self.program.chunk.span)),
-                }),
-            }],
+        #[cfg_attr(
+            target_arch = "wasm32",
+            expect(
+                clippy::arc_with_non_send_sync,
+                reason = "`Arc` so native layers stay `Send + Sync`; wgpu's wasm handles \
+                          are neither, so this `Arc` never crosses a thread there"
+            )
+        )]
+        let encodings = Arc::new(EncodingsGpu {
+            buffer: enc,
+            bind_group,
         });
-        LayerGpu {
-            context: cx.id(),
-            program: self.program,
-            enc_buffer: enc,
-            chunk_buffer: chunk,
-            enc_bind_group,
-            chunk_bind_group,
-            columns,
-            column_ranges,
-            instances,
+        LayerGpu::new(
+            cx,
+            self.program,
+            encodings,
+            &self.chunks,
+            chunks,
             vertices_per_instance,
-        }
+        )
     }
 }
 
@@ -610,23 +618,112 @@ fn lut_view(cx: &Context, lut: &[[u8; 4]]) -> wgpu::TextureView {
     texture.create_view(&Default::default())
 }
 impl LayerGpu {
-    /// Whether this GPU state can take new uniform values from `program`
-    /// without being rebuilt: same context, program and column chunk.
-    pub(crate) fn reusable(
-        &self,
+    /// The chunk half of a layer: the `Chunk` uniform buffer (written
+    /// with `chunk_bytes`), its bind group and the chunk draws.
+    fn new(
         cx: &Context,
-        program: &Arc<GlueProgram>,
-        columns: &wgpu::Buffer,
-    ) -> bool {
-        self.context == cx.id() && Arc::ptr_eq(&self.program, program) && &self.columns == columns
+        program: Arc<GlueProgram>,
+        encodings: Arc<EncodingsGpu>,
+        chunk_bytes: &[u8],
+        chunks: Vec<ChunkDraw>,
+        vertices_per_instance: u32,
+    ) -> Self {
+        let chunk_buffer = cx.buffer_with_data(
+            Upload::Uniform,
+            "gup chunk uniforms",
+            wgpu::BufferUsages::UNIFORM,
+            chunk_bytes,
+        );
+        let chunk_bind_group = cx.device().create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("gup chunk"),
+            layout: &program.chunk_bgl,
+            entries: &[wgpu::BindGroupEntry {
+                binding: 0,
+                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                    buffer: &chunk_buffer,
+                    offset: 0,
+                    size: wgpu::BufferSize::new(u64::from(program.chunk.span)),
+                }),
+            }],
+        });
+        Self {
+            context: cx.id(),
+            program,
+            encodings,
+            chunk_buffer,
+            chunk_bind_group,
+            chunks,
+            vertices_per_instance,
+        }
     }
 
-    /// Write new `Encodings` and `Chunk` uniform values into the existing
-    /// buffers: the per-frame path of a zoom or pan. Writes no column
-    /// bytes and creates no GPU objects.
-    pub(crate) fn write_uniforms(&self, cx: &Context, encodings: &[u8], chunk: &[u8]) {
-        cx.write_buffer(Upload::Uniform, &self.enc_buffer, 0, encodings);
-        cx.write_buffer(Upload::Uniform, &self.chunk_buffer, 0, chunk);
+    /// Instances across every chunk.
+    pub(crate) fn instances(&self) -> u64 {
+        self.chunks.iter().map(|c| u64::from(c.instances)).sum()
+    }
+
+    /// The `Encodings` bind group (group 1).
+    pub(crate) fn enc_bind_group(&self) -> &wgpu::BindGroup {
+        &self.encodings.bind_group
+    }
+
+    /// Whether this GPU state's `Encodings` half can take new uniform
+    /// values from `program`: same context and program.
+    pub(crate) fn reusable(&self, cx: &Context, program: &Arc<GlueProgram>) -> bool {
+        self.context == cx.id() && Arc::ptr_eq(&self.program, program)
+    }
+
+    /// Whether the chunk draws are exactly `chunks` (same buffers and
+    /// instance counts), so a frame needs only uniform writes.
+    pub(crate) fn draws_chunks<'a>(
+        &self,
+        mut chunks: impl ExactSizeIterator<Item = (&'a wgpu::Buffer, u32)>,
+    ) -> bool {
+        chunks.len() == self.chunks.len()
+            && self
+                .chunks
+                .iter()
+                .zip(&mut chunks)
+                .all(|(d, (buffer, rows))| &d.columns == buffer && d.instances == rows)
+    }
+
+    /// The same encodings drawn over new chunks (after an append): a new
+    /// `Chunk` uniform buffer and draws; the `Encodings` uniform and LUTs
+    /// are shared, not uploaded again.
+    pub(crate) fn with_chunks(
+        &self,
+        cx: &Context,
+        chunk_bytes: &[u8],
+        chunks: Vec<ChunkDraw>,
+    ) -> Result<Self> {
+        let signature = &self.program.glue.signature;
+        cx.scoped(
+            || format!("layer `{signature}` (chunk uniforms)"),
+            || {
+                Ok(Self::new(
+                    cx,
+                    Arc::clone(&self.program),
+                    Arc::clone(&self.encodings),
+                    chunk_bytes,
+                    chunks,
+                    self.vertices_per_instance,
+                ))
+            },
+        )
+    }
+
+    /// Write new `Encodings` and `Chunk` uniform values (every chunk's
+    /// entry, in one write) into the existing buffers: the per-frame path
+    /// of a zoom or pan. Writes no column bytes and creates no GPU
+    /// objects.
+    pub(crate) fn write_uniforms(&self, cx: &Context, encodings: &[u8], chunks: &[u8]) {
+        self.write_encodings(cx, encodings);
+        cx.write_buffer(Upload::Uniform, &self.chunk_buffer, 0, chunks);
+    }
+
+    /// Write new `Encodings` uniform values into the existing buffer.
+    pub(crate) fn write_encodings(&self, cx: &Context, encodings: &[u8]) {
+        cx.write_buffer(Upload::Uniform, &self.encodings.buffer, 0, encodings);
     }
 }
 
@@ -1089,12 +1186,16 @@ impl Prepared {
                 Draw::Marks { pipeline, layer } => {
                     pass.set_pipeline(pipeline);
                     pass.set_bind_group(0, &self.view_bind_group, &[]);
-                    pass.set_bind_group(1, &layer.enc_bind_group, &[]);
-                    pass.set_bind_group(2, &layer.chunk_bind_group, &[0]);
-                    for (slot, range) in layer.column_ranges.iter().enumerate() {
-                        pass.set_vertex_buffer(slot as u32, layer.columns.slice(range.clone()));
+                    pass.set_bind_group(1, layer.enc_bind_group(), &[]);
+                    // One instanced draw per column chunk, with its own
+                    // `Chunk` entry (row base, relative bases).
+                    for chunk in &layer.chunks {
+                        pass.set_bind_group(2, &layer.chunk_bind_group, &[chunk.dynamic_offset]);
+                        for (slot, range) in chunk.column_ranges.iter().enumerate() {
+                            pass.set_vertex_buffer(slot as u32, chunk.columns.slice(range.clone()));
+                        }
+                        pass.draw(0..layer.vertices_per_instance, 0..chunk.instances);
                     }
-                    pass.draw(0..layer.vertices_per_instance, 0..layer.instances);
                 }
                 Draw::Instanced {
                     pipeline,
@@ -1149,15 +1250,17 @@ impl LayerGpu {
         Self {
             context: self.context,
             program,
-            enc_buffer: self.enc_buffer.clone(),
+            encodings: Arc::clone(&self.encodings),
             chunk_buffer: self.chunk_buffer.clone(),
-            enc_bind_group: self.enc_bind_group.clone(),
             chunk_bind_group: self.chunk_bind_group.clone(),
-            columns: self.columns.clone(),
-            column_ranges: self.column_ranges.clone(),
-            instances: self.instances,
+            chunks: self.chunks.clone(),
             vertices_per_instance: self.vertices_per_instance,
         }
+    }
+
+    /// The shared `Encodings` half.
+    pub(crate) fn encodings(&self) -> &Arc<EncodingsGpu> {
+        &self.encodings
     }
 }
 
