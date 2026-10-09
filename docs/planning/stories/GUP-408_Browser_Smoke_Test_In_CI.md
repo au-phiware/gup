@@ -176,3 +176,132 @@ as GUP-406's run.
 - Wall-clock time under 10 minutes cold, and the cache saved and restored.
 - The `browser-smoke` artifact contains `browser_scatter.png`.
 - Optionally, a branch with seed 1 or 2 fails the job.
+
+## Retrospective
+
+**Completed**: 2026-10-09
+
+### Key Technical Learnings
+
+#### Headless Chromium was on SwiftShader all along
+
+- **Challenge**: The story treated "software WebGPU on a GPU-less runner" as the
+  main unknown, and `mask wasm-browser` said it needed a GPU.
+- **Solution**: A five-line page logging `adapter.info` showed that headless
+  Chromium with `--enable-unsafe-webgpu --enable-features=Vulkan` hands out
+  `vendor=google architecture=swiftshader fallback=true` even on a machine with
+  an Intel GPU. The real GPU appears only with
+  `--ignore-gpu-blocklist --use-angle=vulkan`. So GUP-401's two browser bugs
+  were found on SwiftShader, and the GPU was never needed. The script now forces
+  SwiftShader (`--use-vulkan=swiftshader --use-webgpu-adapter=swiftshader`) and
+  logs it. Local runs and CI therefore test the same adapter. The run also
+  passed with `/dev/dri` hidden (bwrap) and no Vulkan ICDs, on Chromium 154 and
+  on the pinned Chrome for Testing 155.
+- **Pattern**: Before solving "how do we get X in CI", check what local runs
+  were actually using.
+
+#### Chrome's stderr log loses console levels, and WGSL errors are warnings
+
+- **Challenge**: With `--enable-logging=stderr`, every console message prints as
+  `INFO:CONSOLE`, whatever its level. WebGPU diagnostics do not appear there at
+  all.
+- **Solution**: Drive Chrome over the DevTools protocol (Node's built-in
+  `WebSocket`, no npm packages). Use `Runtime.consoleAPICalled` for levels,
+  `Runtime.exceptionThrown` for uncaught errors, and `Log.entryAdded` for
+  browser messages. Chrome reports a WGSL compilation error, and every
+  uncaptured WebGPU validation error, as a `warning` from source `rendering`, so
+  those fail the run too. Failing on `error` alone would have missed seed 2's
+  root cause. The pixel check still caught that seed, because the whole command
+  buffer was invalid.
+- **Pattern**: Probe how the failure you want to catch is actually reported
+  before writing the rule that catches it.
+
+#### wgpu on the web has no default uncaptured-error handler
+
+- **Challenge**: With seed 2, `ImageTarget::render` returned `Ok` and a blank
+  image. Natively, wgpu-core would have panicked.
+- **Solution**: Here the browser smoke test catches it through Chrome's console.
+  A user's page cannot, so this became GUP-410 (error scopes in gup-core).
+- **Pattern**: The same wgpu call can fail loudly natively and silently on the
+  web. A browser test should watch the browser's own diagnostics, not only the
+  return values.
+
+#### A panic in a spawned future never settles the page's promise
+
+- **Challenge**: Seed 1 (`std::time::Instant`) panicked inside a
+  wasm-bindgen-futures task. `render_scatter`'s promise never settled, so the
+  page's `try/catch` never ran and the run waited out the timeout.
+- **Solution**: The driver stops one second after the first page error. Seed 1
+  now fails in 2 s, naming the panic and the `unreachable` trap.
+
+#### Naga and Chrome's WGSL compiler disagree on uniformity
+
+- **Challenge**: Finding a "WGSL error only the browser rejects" for the seeded
+  proof.
+- **Solution**: A small naga 27 probe (parse and validate with all flags)
+  against candidate snippets. naga rejects reserved words, division by zero in
+  constants, redefinitions and duplicate switch cases, as Chrome does. It
+  accepts `textureSample` or `dpdx` in non-uniform control flow, which Chrome
+  rejects. A derivative times zero in `rect.wgsl`'s fragment shader changes no
+  pixels natively, so the native suite passes, and it fails in Chrome.
+
+### Architectural Decisions
+
+#### A shell script plus a dependency-free Node driver, not Nix in CI
+
+- **Decision**: `scripts/wasm_browser.sh` (build, bind, run) and
+  `scripts/browser_smoke.mjs` (serve, drive, judge). `mask wasm-browser` and the
+  workflow both call the script. The CI job installs the pinned toolchain,
+  wasm-bindgen from its release tarball at the `Cargo.lock` version, Node 24 and
+  Chrome for Testing 155.0.8059.39.
+- **Reasoning**: The locked nixpkgs has neither wasm-bindgen 0.2.113 (newest
+  0.2.108) nor a Chromium on the dev shell's PATH (the flake's `chromium-webgpu`
+  calls the system's). Putting nixpkgs' Chromium 145 in the dev shell would have
+  replaced the developer's newer system Chromium. The driver also replaces
+  miniserve, the fixed port and `sleep 1`.
+- **Trade-off**: Two Chrome versions in play: the developer's Chromium locally,
+  and CfT 155 in CI. Both run SwiftShader, and the summary line names the
+  version.
+- **Future**: The Chrome pin moves by hand, like `rust-toolchain.toml`. Bump it
+  when the Chrome that users run changes enough to matter.
+
+#### `--no-sandbox`
+
+- **Decision**: Always pass it.
+- **Reasoning**: The page is our own build, served from localhost. Ubuntu
+  24.04's AppArmor userns restriction, and Nix's Chromium outside NixOS (no
+  setuid helper), cannot start the sandbox.
+
+### Development Workflow Insights
+
+- `builtins.getFlake (toString ./.)` in a dirty checkout copied the working tree
+  into the store and ran the pool out of space. Two tool calls failed with
+  ENOSPC before the process was found and killed. Read the locked nixpkgs path
+  from `nix flake archive --json` instead.
+- `pkill -f gup-browser-smoke-` killed the tool's own shell again, as GUP-401's
+  retrospective warned. The driver now starts Chromium in its own process group
+  and kills the group, so it leaves nothing behind. That also fixed a hang when
+  Chromium ran under a wrapper (bwrap) that `kill` on the wrapper's PID did not
+  stop.
+- Chrome for Testing runs on NixOS under `steam-run` with `LD_LIBRARY_PATH`
+  built from the Nix Chromium's runtime closure (`nix-store -qR`). It needs a
+  working directory outside `/tmp`. That made it possible to test the exact CI
+  browser build locally.
+- The orchestrator's actionlint check (`nix run nixpkgs#actionlint`) passed on
+  the edited workflow.
+
+### Follow-up Stories
+
+1. **GUP-410: Surface WebGPU errors from gup-core on every target**. Error
+   scopes around pipeline creation and rendering, so a validation failure is an
+   `Err`, not a native panic or a silent blank image on wasm.
+
+Noted without stories:
+
+- `wasm.yml`'s best-effort `wasm-pack test --headless --chrome` steps say "GPU
+  tiers gracefully degrade". With these flags, SwiftShader could run them for
+  real. They test the legacy `gup` crate, so this waits for the strategic
+  review's T2 replacement rather than reviving them.
+- A hardware-GPU browser run (`--ignore-gpu-blocklist --use-angle=vulkan`) would
+  catch driver-specific browser bugs. Only a self-hosted runner could run it in
+  CI.

@@ -162,6 +162,10 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   on every push (Visual regression's `browser` job): Chrome for Testing 155 on
   SwiftShader, failing on console errors and WebGPU/WGSL diagnostics. Deps:
   GUP-401 ✅.
+- [GUP-410](GUP-410_Surface_WebGPU_Errors_From_Gup_Core.md) 📋 — Error scopes
+  around gup-core's pipeline creation and rendering, so a GPU validation failure
+  is an `Err` on every target (on wasm it is a silent blank image today). Deps:
+  GUP-406 ✅, GUP-408 ✅.
 
 ## GPU Rendering Pipeline
 
