@@ -33,11 +33,20 @@
         const px = await render_scatter(w, h, 0);
         // The same scatter in column chunks of 32 rows (7 chunks, 7
         // instanced draws at their own dynamic offsets, RFC-001 S4a) must
-        // give the same pixels.
+        // give the same pixels, give or take 1/255 on a few edge pixels:
+        // each chunk stores x relative to its own origin, so positions
+        // round differently by about 1e-5 px. A wrong offset changes
+        // thousands of pixels.
         const chunked = await render_scatter(w, h, 32);
-        let chunkDiff = chunked.length === px.length ? 0 : px.length;
-        for (let i = 0; i < Math.min(px.length, chunked.length); i++) {
-          if (px[i] !== chunked[i]) chunkDiff++;
+        let chunkDiff = chunked.length === px.length ? 0 : w * h;
+        let chunkWorst = 0;
+        for (let i = 0; i < Math.min(px.length, chunked.length); i += 4) {
+          let d = 0;
+          for (let c = 0; c < 4; c++) {
+            d = Math.max(d, Math.abs(px[i + c] - chunked[i + c]));
+          }
+          if (d > 0) chunkDiff++;
+          chunkWorst = Math.max(chunkWorst, d);
         }
         let white = 0,
           grey = 0,
@@ -63,8 +72,9 @@
           coloured > 0.05 * w * h &&
           coloured < 0.4 * w * h &&
           grey > 1000 &&
-          chunkDiff === 0;
-        result = `${ok ? "PASS" : "FAIL"} white=${white} grey=${grey} coloured=${coloured} chunked-diff=${chunkDiff}`;
+          chunkDiff <= 64 &&
+          chunkWorst <= 1;
+        result = `${ok ? "PASS" : "FAIL"} white=${white} grey=${grey} coloured=${coloured} chunked-diff=${chunkDiff}px/${chunkWorst}`;
       } catch (e) {
         result = "FAIL " + e;
       }
