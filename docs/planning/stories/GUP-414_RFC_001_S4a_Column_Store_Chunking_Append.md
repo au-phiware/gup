@@ -339,3 +339,129 @@ passes on Intel/Mesa and on lavapipe (`VK_ICD_FILENAMES=…lvp_icd…`,
 - `crates/gup-core/tests/common/scatter.rs`
 - `crates/gup-core/examples/zoom_bench.rs`
 - `crates/gup-core/wasm-size/scatter/{src/lib.rs,index.html}`
+
+## Retrospective
+
+**Completed**: 2026-10-10
+
+### Key Technical Learnings
+
+#### Exact-size chunks without breaking "never re-upload"
+
+- **Challenge**: RFC-001 §3 sketches fixed-capacity chunks of `chunk_rows` rows.
+  For a 120-row plot that is a 12 MiB buffer, and it changes the S0a byte layout
+  that AC1 must preserve. Exact-size chunks, on the other hand, leave no room to
+  append without re-uploading.
+- **Solution**: a built chunk's capacity is its rows rounded up to a 64-row
+  block. That is exactly the padding S0a's 256-byte column alignment already
+  had, so the bytes are identical. When an append runs out of room, capacity
+  doubles and the uploaded rows move on the GPU (`copy_buffer_to_buffer`), so no
+  CPU bytes are written.
+- **Pattern**: let padding the format already pays for double as growth room,
+  and grow on the GPU when it runs out.
+
+#### Count rows, not buffers
+
+- **Challenge**: S0b's initial upload wrote the whole chunk, padding included,
+  in one write, so "bytes written = appended rows' bytes" could only hold with
+  "padding aside".
+- **Solution**: every upload, first or tail, writes each column's missing rows.
+  Column bytes written are always rows × stride, which makes the append
+  assertions exact. It costs one write per column instead of one per chunk.
+- **Pattern**: make counted quantities match the domain unit (rows), so tests
+  can assert equality instead of bounds.
+
+#### A golden that is byte-exact on one rasteriser is not an invariant
+
+- **Challenge**: the first AC3 test compared multi-chunk renders with the golden
+  PNG byte for byte. It passed on Intel and failed on lavapipe in CI. Even
+  multi-chunk against single-chunk on the same device was not byte-exact on
+  lavapipe: 7 and 9 pixels differed by 1/255.
+- **Solution**: compare multi-chunk with single-chunk on the same device in the
+  same run, with a bound justified by the measured cause. Per-chunk origins
+  round positions differently by about 1e-5 px (AC4's measurement), so the bound
+  is at most 64 pixels at 1/255. Leave golden checks to the harness's ΔE
+  tolerance. Running the gup-core suite locally on lavapipe
+  (`VK_ICD_FILENAMES=…/lvp_icd.x86_64.json WGPU_BACKEND=vulkan`) reproduces CI
+  in seconds.
+- **Pattern**: before asserting byte equality between two GPU renders, check
+  whether they do the same arithmetic. If they do not, bound the difference and
+  prove the bound tight with a seeded bug (10,503 pixels, against 9).
+
+#### Per-chunk origins are necessary, not sufficient
+
+- **Challenge**: proving AC4 needs data that is dense at a boundary yet spans
+  years.
+- **Solution**: coarse chunks across the years, then two dense chunks at the
+  boundary. Two controls show what does the work. Absolute f32 misses by 994 px,
+  and so does one relative chunk whose origin is three years back. A third
+  measurement shows the limit: a full default chunk of one-second samples misses
+  a one-second zoom by 40 px.
+- **Pattern**: alongside the negative control a story asks for, add a control
+  that measures the limit of the mechanism. That limit is input for the next
+  story (S5).
+
+### Architectural Decisions
+
+#### Split `LayerGpu` into a shared `Encodings` half and a per-chunk half
+
+- **Decision**: the `Encodings` uniform and LUT bind group are an `Arc` shared
+  across rebuilds. After an append, only the `Chunk` uniform buffer and the
+  draws are rebuilt.
+- **Reasoning**: without the split, every append re-uploads palette LUTs and
+  recreates their bind groups.
+- **Trade-off**: one more type and an `Arc`. The zoom path is unchanged: 3
+  uniform writes, and 88 B per frame for one chunk.
+- **Future**: S9 culling can filter chunk draws at prepare time without touching
+  encodings.
+
+#### Growth submits during resolve
+
+- **Decision**: a grown chunk's GPU copy is submitted from `ColumnStore::upload`
+  (within `Plot::resolve`), counted by `Context::submit`.
+- **Reasoning**: `write_buffer` cannot copy between buffers, and re-uploading
+  from the CPU would break the byte-count claim.
+- **Trade-off**: a host that resolves inside its own frame graph sees an extra
+  submission on growth (log2 times per chunk). `Renderer::prepare` and
+  `Prepared::draw` still never submit.
+- **Future**: S12/S13 may want to defer the copy to the host's encoder.
+
+#### A `#[doc(hidden)] pub` test seam
+
+- **Decision**: `Selection::max_chunk_rows` is public but hidden from the docs.
+- **Reasoning**: the integration tests, the wasm harness and `zoom_bench` are
+  separate crates, so a `#[cfg(test)]` seam cannot reach them.
+- **Trade-off**: it is a visible method that is not a supported knob.
+- **Future**: if culling granularity ever becomes a user setting, this method is
+  where it would go.
+
+### Development Workflow Insights
+
+- **Seeded bugs.** Setting every chunk's dynamic offset to 0 tested both the
+  native and the browser comparisons (10,503 pixels and 51,351 bytes differ). It
+  showed that the tests would see a broken offset, not merely that the code
+  looks right.
+- **Reading the page.** `MarkBatch::chunks()` and the page's `GUP CHUNKS` log
+  line make "the browser really drew 7 chunks" checkable from the console.
+- **Lost context.** The session was cut off mid-story (disk exhaustion). The
+  checkpoint commit (`ad48b3b`) kept the main work safe, and the remaining items
+  were resumed from a list.
+- **Benchmarks need a baseline from the same session.** `zoom_bench`'s GPU pass
+  measured about 3.7 ms where S0b measured 2.7–3.0 ms. Building the pre-S4a tree
+  in a temporary worktree and alternating runs showed that both trees are equal,
+  so the drift is not S4a's.
+
+### Follow-up Stories
+
+None written. The work S4a uncovered belongs to stories that already exist or
+are planned:
+
+- **S4b (GUP-415):** the bit-stride, dictionary and `Retain` notes were added to
+  its Context.
+- **S5 (`Time` precision limit), S9 (culling and picking) and S12 (append
+  handles, eviction):** recorded in RFC-001's S4a findings for whoever writes
+  those stories.
+- **The GPU pass drift since S0b** (both trees about 3.7 ms against S0b's
+  2.7–3.0 ms): not investigated. It predates this story; a candidate is
+  GUP-407's text changes, which a before-and-after `zoom_bench` around GUP-407
+  would settle.

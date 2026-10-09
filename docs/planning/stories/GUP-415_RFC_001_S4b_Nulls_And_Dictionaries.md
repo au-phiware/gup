@@ -44,6 +44,17 @@ small Okabe-Ito uniform array to `Color`); S5 is expected to replace or extend
 it with the full scale (data-driven domain growth, ticks, legend) once the scale
 family lands.
 
+**Input from S4a (GUP-414, 2026-10-10).** RFC-001's "S4a findings" section lists
+what this story inherits. The chunk code assumes 4-byte strides: capacities are
+64-row blocks, `ColumnStore::chunk_rows_for` divides bytes, and tail writes rely
+on `write_buffer`'s 4-byte alignment. A 1-bit validity column therefore needs a
+stride in bits, capacities in whole 32-row words, and a tail write that rewrites
+the last partial word. Keep the dictionary per store and append-only, so
+appended rows never renumber codes. `Retain::GpuOnly` cannot keep `Chunk::bytes`
+(the CPU copy that uploads to a second context and the dirty tail use). Drop a
+chunk's bytes once it is full and uploaded, and make re-binding to another
+context an error in that mode.
+
 ## User Story
 
 > "As a visualization developer, I want to encode a categorical column (such as
