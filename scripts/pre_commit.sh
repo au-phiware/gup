@@ -64,8 +64,9 @@
 #          rustfmt runs on the touched crates. Clippy (default features and
 #          --all-features, every target, -D warnings) runs on the touched
 #          crates plus every workspace member that depends on them, since a
-#          change can break a dependent. validate-marks runs when `gup` is in
-#          that set.
+#          change can break a dependent. Those of them that build for
+#          wasm32 are linted on that target too (scripts/clippy_wasm32.sh,
+#          GUP-412). validate-marks runs when `gup` is in that set.
 #   workflows
 #          .github/workflows/* (except Markdown): actionlint on every workflow
 #          file, and no Rust check. Scoped rather than full (GUP-409): a
@@ -341,12 +342,17 @@ fi
 sorted() { printf '%s\n' "$@" | sort | tr '\n' ' ' | sed 's/ $//'; }
 fmt_crates=$(sorted "${!touched[@]}")
 lint_crates=$(sorted "${!lint[@]}")
+wasm_crates=""
+if [[ -n $lint_crates ]]; then
+  # shellcheck disable=SC2086 # one argument per crate
+  wasm_crates=$(./scripts/clippy_wasm32.sh --list $lint_crates)
+fi
 echo "pre-commit: mode=$mode"
 if [[ $mode == full ]]; then
   printf 'pre-commit: full because %s\n' "${full_reasons[@]}"
 fi
 if [[ $mode == scoped ]]; then
-  echo "pre-commit: fmt=[$fmt_crates] clippy=[$lint_crates] dogfood=$dogfood actionlint=$workflows"
+  echo "pre-commit: fmt=[$fmt_crates] clippy=[$lint_crates] wasm32=[$wasm_crates] dogfood=$dogfood actionlint=$workflows"
 elif [[ $mode == workflows ]]; then
   echo "pre-commit: actionlint=1"
 fi
@@ -397,6 +403,9 @@ if [[ $mode == scoped ]]; then
   if [[ ${#pkgs[@]} -gt 0 ]]; then
     rust+=("cargo clippy ${pkgs[*]} --all-targets -- -D warnings")
     rust+=("cargo clippy ${pkgs[*]} --all-targets --all-features -- -D warnings")
+    if [[ -n $wasm_crates ]]; then
+      rust+=("./scripts/clippy_wasm32.sh $wasm_crates")
+    fi
   fi
   if [[ ${#rust[@]} -gt 0 ]]; then
     joined=$(printf ' && %s' "${rust[@]}")

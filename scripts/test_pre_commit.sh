@@ -46,8 +46,20 @@ expect 'clippy=[gup gup-core gup-culling-lod gup-visual-regression]' \
 expect 'clippy=[gup gup-culling-lod]' src/lib.rs tests/kde_tests.rs
 expect 'clippy=[gup gup-culling-lod]' src/lib.rs README.md
 
+# The crates that build for wasm32 are linted on that target too (GUP-412);
+# the proc-macro and the quarantined parts bin are not.
+expect 'clippy=[gup gup-core gup-culling-lod] wasm32=[gup gup-core]' \
+  crates/gup-core/src/lib.rs
+expect 'clippy=[gup gup-culling-lod gup-macros] wasm32=[gup]' \
+  gup-macros/src/lib.rs
+expect 'wasm32=[gup gup-core gup-text]' crates/gup-text/src/lib.rs
+expect 'wasm32=[gup gup-core gup-visual-regression]' \
+  crates/gup-visual-regression/src/lib.rs
+expect 'clippy=[gup-culling-lod] wasm32=[] ' crates/gup-culling-lod/src/lib.rs
+expect 'mode=full' scripts/clippy_wasm32.sh
+
 # The detached dogfood crate gets its own rustfmt check.
-expect 'clippy=[] dogfood=1' dogfood/src/lib.rs
+expect 'clippy=[] wasm32=[] dogfood=1' dogfood/src/lib.rs
 
 # Workspace-level and unrecognised files force the full check.
 expect 'mode=full' Cargo.toml
@@ -64,7 +76,7 @@ expect 'mode=full' scripts/rustc_workspace_wrapper.sh
 expect 'mode=workflows' .github/workflows/tests.yml
 expect 'actionlint=1' .github/workflows/tests.yml
 expect 'mode=docs' .github/workflows/README.md
-expect 'clippy=[gup-culling-lod] dogfood=0 actionlint=1' \
+expect 'clippy=[gup-culling-lod] wasm32=[] dogfood=0 actionlint=1' \
   .github/workflows/lint.yml crates/gup-culling-lod/src/lib.rs
 expect 'mode=full' .github/workflows/lint.yml maskfile.md
 expect 'mode=full' gup-egui/src/lib.rs

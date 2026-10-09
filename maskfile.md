@@ -133,7 +133,7 @@ whatever it cannot fix, so only the strict runs after it can fail.
 
 ```bash
 concurrently --group --names clippy,statix,mdl,gha \
-   'cargo clippy --allow-no-vcs --fix --workspace --all-targets --all-features && cargo clippy --workspace --all-targets -- -D warnings && cargo clippy --workspace --all-targets --all-features -- -D warnings' \
+   'cargo clippy --allow-no-vcs --fix --workspace --all-targets --all-features && cargo clippy --workspace --all-targets -- -D warnings && cargo clippy --workspace --all-targets --all-features -- -D warnings && ./scripts/clippy_wasm32.sh' \
    'statix fix flake.nix' \
    'mdl --git-recurse .' \
    'actionlint .github/workflows/*.y*ml'
@@ -144,11 +144,12 @@ Neither `mdl` nor `actionlint` (workflow files) has an automatic fixer.
 ## lint-check
 
 Lint strictly without writing fixes: every workspace member and target, with
-default features and with all features
+default features and with all features, then the wasm32 libs
+(`scripts/clippy_wasm32.sh`)
 
 ```bash
 concurrently --group --names clippy,statix,mdl,gha \
-   'cargo clippy --workspace --all-targets -- -D warnings && cargo clippy --workspace --all-targets --all-features -- -D warnings' \
+   'cargo clippy --workspace --all-targets -- -D warnings && cargo clippy --workspace --all-targets --all-features -- -D warnings && ./scripts/clippy_wasm32.sh' \
    'statix check flake.nix' \
    'mdl --git-recurse .' \
    'actionlint .github/workflows/*.y*ml'
@@ -189,7 +190,7 @@ no fixer, so it only checks.
 ```bash
 shopt -qs globstar
 concurrently --group --names rs,nix,md,gha \
-   'git grep -lz --untracked "[[:space:]]\+$" -- "*.rs" | xargs -0 -r sed -i "/[[:space:]]\+$/s///" && cargo fmt --all && cargo fmt --manifest-path dogfood/Cargo.toml && cargo clippy --allow-no-vcs --fix --workspace --all-targets --all-features && cargo clippy --workspace --all-targets -- -D warnings && cargo clippy --workspace --all-targets --all-features -- -D warnings' \
+   'git grep -lz --untracked "[[:space:]]\+$" -- "*.rs" | xargs -0 -r sed -i "/[[:space:]]\+$/s///" && cargo fmt --all && cargo fmt --manifest-path dogfood/Cargo.toml && cargo clippy --allow-no-vcs --fix --workspace --all-targets --all-features && cargo clippy --workspace --all-targets -- -D warnings && cargo clippy --workspace --all-targets --all-features -- -D warnings && ./scripts/clippy_wasm32.sh' \
    'nixfmt flake.nix && statix fix flake.nix' \
    'prettier --cache --log-level warn --write "**/*.md" && mdl --git-recurse .' \
    'actionlint .github/workflows/*.y*ml'
@@ -201,16 +202,20 @@ The full, unscoped local gate (GUP-398). It never modifies files, and each of
 its checks has been seen to fail on a seeded violation (GUP-398 retrospective).
 Clippy covers every workspace member and target, with default features and with
 all features, under `-D warnings`; it type-checks too, so there is no separate
-`cargo check`. The gallery sync check keeps `scripts/gallery_config.toml` and
-`examples/INDEX.md` in step with the Cargo examples (the Gallery workflow fails
-on drift). `actionlint` checks every workflow file in `.github/workflows/`,
-including shellcheck on their `run:` scripts: GitHub does not report a workflow
-it cannot parse, it just never starts it (GUP-409). The files are named
-explicitly because, with no arguments, actionlint looks for the workflows next
-to the nearest `.git` above it, which from the hook's snapshot is the real
-checkout. `test_pre_commit.sh` tests the pre-commit hook's scoping rules and its
-staged snapshot, and `test_shared_build_dir.sh` that checkouts sharing a build
-directory get their own workspace-member artifacts (GUP-411).
+`cargo check`. `scripts/clippy_wasm32.sh` then lints the libs of the members
+that build for wasm32 on that target, where `#[cfg(target_arch = "wasm32")]`
+code compiles and wgpu's handles are not `Send`/`Sync` (GUP-412; the script says
+which members and why). The gallery sync check keeps
+`scripts/gallery_config.toml` and `examples/INDEX.md` in step with the Cargo
+examples (the Gallery workflow fails on drift). `actionlint` checks every
+workflow file in `.github/workflows/`, including shellcheck on their `run:`
+scripts: GitHub does not report a workflow it cannot parse, it just never starts
+it (GUP-409). The files are named explicitly because, with no arguments,
+actionlint looks for the workflows next to the nearest `.git` above it, which
+from the hook's snapshot is the real checkout. `test_pre_commit.sh` tests the
+pre-commit hook's scoping rules and its staged snapshot, and
+`test_shared_build_dir.sh` that checkouts sharing a build directory get their
+own workspace-member artifacts (GUP-411).
 
 The whitespace check passes only when `git grep` finds nothing (exit 1): a
 `git grep` error must fail it, not pass it.
@@ -225,7 +230,7 @@ the index. CI runs its own full checks on every push regardless.
 shopt -qs globstar
 concurrently --group --names '\s,rs,nix,md,gha,marks,gallery,hook' \
    'git --no-pager grep --untracked --name-only --full-name "[[:space:]]\+$" -- "*.rs"; test $? -eq 1' \
-   'cargo fmt --all -- --check && cargo fmt --manifest-path dogfood/Cargo.toml -- --check && cargo clippy --workspace --all-targets -- -D warnings && cargo clippy --workspace --all-targets --all-features -- -D warnings' \
+   'cargo fmt --all -- --check && cargo fmt --manifest-path dogfood/Cargo.toml -- --check && cargo clippy --workspace --all-targets -- -D warnings && cargo clippy --workspace --all-targets --all-features -- -D warnings && ./scripts/clippy_wasm32.sh' \
    'nixfmt --check flake.nix && statix check flake.nix' \
    'prettier --cache --log-level warn --check "**/*.md" && mdl --git-recurse .' \
    'actionlint .github/workflows/*.y*ml' \
