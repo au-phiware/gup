@@ -88,13 +88,16 @@ pub use channel::{Channel, ChannelDesc, Color, ConstValue, GpuType, Mark, Px, Ro
 pub use context::{Caps, Context, ContextId, ContextOptions, Upload, UploadStats, WriteCount};
 pub use encoding::{
     ColumnMarker, ColumnValue, ConstMarker, CpuMirror, DynColumnEncoding, DynShaderFn, Encoded,
-    Encoding, IntoEncoding, Resource, ShaderFn,
+    Encoding, IntoEncoding, Key, KeyAccessor, KeyEncoded, KeyMarker, NullableKey, Resource,
+    ShaderFn,
 };
 pub use error::{Error, Result};
 pub use marks::Circle;
 pub use plot::{Layout, PlacedText, Plot, Resolved};
 pub use render::{PipelineStats, Prepared, Renderer, TargetDesc};
-pub use scale::{Linear, Log, PositionScale, ScaleRef, Sequential, Ticks};
+pub use scale::{
+    Categorical, Linear, Log, NULL_COLOR, OKABE_ITO, PositionScale, ScaleRef, Sequential, Ticks,
+};
 pub use scene::Scene;
 pub use selection::Selection;
 pub use shader::WgslModule;
@@ -108,7 +111,7 @@ pub use window::WindowTarget;
 /// The names most programs need.
 pub mod prelude {
     pub use crate::{
-        Circle, Color, Context, CpuMirror, Linear, Log, Plot, PositionScale, Px, Selection,
-        Sequential, ShaderFn,
+        Categorical, Circle, Color, Context, CpuMirror, Linear, Log, Plot, PositionScale, Px,
+        Selection, Sequential, ShaderFn,
     };
 }

@@ -79,6 +79,8 @@ pub(crate) struct ChunkDraw {
     pub instances: u32,
     /// Offset of the chunk's entry in the `Chunk` uniform buffer.
     pub dynamic_offset: u32,
+    /// The chunk's validity bits, if the program reads them.
+    pub validity: Option<wgpu::Buffer>,
 }
 
 /// The `Encodings` uniform and LUTs (group 1): shared by every
@@ -97,7 +99,9 @@ pub(crate) struct LayerGpu {
     encodings: Arc<EncodingsGpu>,
     /// One `Chunk` entry per chunk, [`DYNAMIC_ALIGN`] apart.
     chunk_buffer: wgpu::Buffer,
-    pub chunk_bind_group: wgpu::BindGroup,
+    /// Group 2: one bind group shared by every chunk, or one per chunk
+    /// when the program reads validity bits (each chunk binds its own).
+    chunk_bind_groups: Vec<wgpu::BindGroup>,
     pub chunks: Vec<ChunkDraw>,
     pub vertices_per_instance: u32,
 }
@@ -161,6 +165,20 @@ fn uniform_entry(binding: u32, dynamic: bool) -> wgpu::BindGroupLayoutEntry {
         ty: wgpu::BindingType::Buffer {
             ty: wgpu::BufferBindingType::Uniform,
             has_dynamic_offset: dynamic,
+            min_binding_size: None,
+        },
+        count: None,
+    }
+}
+
+/// A chunk's validity bits: read-only storage in the vertex stage.
+fn validity_entry(binding: u32) -> wgpu::BindGroupLayoutEntry {
+    wgpu::BindGroupLayoutEntry {
+        binding,
+        visibility: wgpu::ShaderStages::VERTEX,
+        ty: wgpu::BindingType::Buffer {
+            ty: wgpu::BufferBindingType::Storage { read_only: true },
+            has_dynamic_offset: false,
             min_binding_size: None,
         },
         count: None,
@@ -251,9 +269,13 @@ impl Context {
                     label: Some("gup encodings"),
                     entries: &enc_entries,
                 });
+                let mut chunk_entries = vec![uniform_entry(0, true)];
+                if glue.validity {
+                    chunk_entries.push(validity_entry(1));
+                }
                 let chunk_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                     label: Some("gup chunk"),
-                    entries: &[uniform_entry(0, true)],
+                    entries: &chunk_entries,
                 });
                 let view_bgl = self.pipelines().view_bgl(device);
                 let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
@@ -314,9 +336,13 @@ impl Context {
                         label: Some(signature),
                         source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(&program.wgsl)),
                     });
-                let attributes: Vec<wgpu::VertexAttribute> = (0..program.glue.columns.len())
-                    .map(|loc| wgpu::VertexAttribute {
-                        format: wgpu::VertexFormat::Float32,
+                let attributes: Vec<wgpu::VertexAttribute> = program
+                    .glue
+                    .columns
+                    .iter()
+                    .enumerate()
+                    .map(|(loc, (_, f))| wgpu::VertexAttribute {
+                        format: f.vertex_format(),
                         offset: 0,
                         shader_location: loc as u32,
                     })
@@ -324,7 +350,7 @@ impl Context {
                 let buffers: Vec<wgpu::VertexBufferLayout> = attributes
                     .iter()
                     .map(|a| wgpu::VertexBufferLayout {
-                        array_stride: 4,
+                        array_stride: a.format.size(),
                         step_mode: wgpu::VertexStepMode::Instance,
                         attributes: std::slice::from_ref(a),
                     })
@@ -634,24 +660,40 @@ impl LayerGpu {
             wgpu::BufferUsages::UNIFORM,
             chunk_bytes,
         );
-        let chunk_bind_group = cx.device().create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("gup chunk"),
-            layout: &program.chunk_bgl,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
-                    buffer: &chunk_buffer,
-                    offset: 0,
-                    size: wgpu::BufferSize::new(u64::from(program.chunk.span)),
-                }),
-            }],
-        });
+        let uniform = wgpu::BindGroupEntry {
+            binding: 0,
+            resource: wgpu::BindingResource::Buffer(wgpu::BufferBinding {
+                buffer: &chunk_buffer,
+                offset: 0,
+                size: wgpu::BufferSize::new(u64::from(program.chunk.span)),
+            }),
+        };
+        let bind_group = |validity: Option<&wgpu::Buffer>| {
+            let mut entries = vec![uniform.clone()];
+            entries.extend(validity.map(|v| wgpu::BindGroupEntry {
+                binding: 1,
+                resource: v.as_entire_binding(),
+            }));
+            cx.device().create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("gup chunk"),
+                layout: &program.chunk_bgl,
+                entries: &entries,
+            })
+        };
+        let chunk_bind_groups = if program.glue.validity {
+            chunks
+                .iter()
+                .map(|c| bind_group(c.validity.as_ref()))
+                .collect()
+        } else {
+            vec![bind_group(None)]
+        };
         Self {
             context: cx.id(),
             program,
             encodings,
             chunk_buffer,
-            chunk_bind_group,
+            chunk_bind_groups,
             chunks,
             vertices_per_instance,
         }
@@ -673,18 +715,29 @@ impl LayerGpu {
         self.context == cx.id() && Arc::ptr_eq(&self.program, program)
     }
 
-    /// Whether the chunk draws are exactly `chunks` (same buffers and
-    /// instance counts), so a frame needs only uniform writes.
+    /// Whether the chunk draws are exactly `chunks` (same column and
+    /// validity buffers and instance counts), so a frame needs only
+    /// uniform writes.
     pub(crate) fn draws_chunks<'a>(
         &self,
-        mut chunks: impl ExactSizeIterator<Item = (&'a wgpu::Buffer, u32)>,
+        mut chunks: impl ExactSizeIterator<Item = (&'a wgpu::Buffer, Option<&'a wgpu::Buffer>, u32)>,
     ) -> bool {
         chunks.len() == self.chunks.len()
             && self
                 .chunks
                 .iter()
                 .zip(&mut chunks)
-                .all(|(d, (buffer, rows))| &d.columns == buffer && d.instances == rows)
+                .all(|(d, (buffer, validity, rows))| {
+                    &d.columns == buffer && d.validity.as_ref() == validity && d.instances == rows
+                })
+    }
+
+    /// Group 2 for chunk `index`: its own when the program reads validity
+    /// bits, the shared one otherwise.
+    pub(crate) fn chunk_bind_group(&self, index: usize) -> &wgpu::BindGroup {
+        self.chunk_bind_groups
+            .get(index)
+            .unwrap_or(&self.chunk_bind_groups[0])
     }
 
     /// The same encodings drawn over new chunks (after an append): a new
@@ -1189,8 +1242,8 @@ impl Prepared {
                     pass.set_bind_group(1, layer.enc_bind_group(), &[]);
                     // One instanced draw per column chunk, with its own
                     // `Chunk` entry (row base, relative bases).
-                    for chunk in &layer.chunks {
-                        pass.set_bind_group(2, &layer.chunk_bind_group, &[chunk.dynamic_offset]);
+                    for (k, chunk) in layer.chunks.iter().enumerate() {
+                        pass.set_bind_group(2, layer.chunk_bind_group(k), &[chunk.dynamic_offset]);
                         for (slot, range) in chunk.column_ranges.iter().enumerate() {
                             pass.set_vertex_buffer(slot as u32, chunk.columns.slice(range.clone()));
                         }
@@ -1252,7 +1305,7 @@ impl LayerGpu {
             program,
             encodings: Arc::clone(&self.encodings),
             chunk_buffer: self.chunk_buffer.clone(),
-            chunk_bind_group: self.chunk_bind_group.clone(),
+            chunk_bind_groups: self.chunk_bind_groups.clone(),
             chunks: self.chunks.clone(),
             vertices_per_instance: self.vertices_per_instance,
         }

@@ -70,6 +70,12 @@ impl GpuType for f32 {
     type Cpu = f64;
 }
 
+/// Dictionary codes ([`ColumnFormat::U32`](crate::column::ColumnFormat::U32)).
+impl GpuType for u32 {
+    const WGSL: &'static str = "u32";
+    type Cpu = u32;
+}
+
 /// A post-encoding value that a mark consumes. Constants of a visual type
 /// become uniform fields rather than columns.
 pub trait Visual: GpuType + Copy + Send + Sync {
@@ -213,8 +219,11 @@ pub struct ChannelDesc {
 /// `<NAME>In` with one field per channel, `Varyings`, a
 /// `vertex(m: <NAME>In, vertex_index: u32, row: u32, view: View) -> Varyings`
 /// function and a `shade(v: Varyings) -> vec4<f32>` function returning
-/// premultiplied sRGB colour. Hand-written for now; RFC-001 S6 generates
-/// this impl with `#[derive(Mark)]`.
+/// premultiplied sRGB colour. `Varyings`' `@builtin(position)` member is
+/// named `clip`: for a row with a null position or size, the glue moves
+/// every vertex to one point outside the clip volume, a degenerate quad
+/// (RFC-001 S4b). Hand-written for now; RFC-001 S6 generates this impl
+/// with `#[derive(Mark)]`, which can check the member.
 pub trait Mark: Send + Sync + 'static {
     /// Mark name, also the prefix of its WGSL input struct (`CircleIn`).
     const NAME: &'static str;

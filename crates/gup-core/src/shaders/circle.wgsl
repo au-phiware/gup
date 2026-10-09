@@ -17,6 +17,8 @@ struct CircleIn {
 }
 
 struct Varyings {
+    // The mark contract names the position `clip`: the glue overrides it to
+    // hide rows with a null position or size (RFC-001 S4b).
     @builtin(position) clip: vec4<f32>,
     // Offset from the centre, in physical pixels.
     @location(0) local: vec2<f32>,

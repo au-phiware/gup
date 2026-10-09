@@ -4,10 +4,12 @@
 //! One scale family (RFC-001 §5): every scale is a [`ShaderFn`] with an
 //! exact f64 [`CpuMirror`], so axes, ticks and the GPU always agree.
 //!
-//! S0a implements [`Linear`], [`Log`] and [`Sequential`]; the rest of the
-//! family (Pow/Sqrt, Symlog, Time, Band, Point, Diverging, Categorical) and
-//! `then` composition are RFC-001 S5.
+//! S0a implements [`Linear`], [`Log`] and [`Sequential`], and S4b a minimal
+//! [`Categorical`] colour scale over dictionary codes; the rest of the
+//! family (Pow/Sqrt, Symlog, Time, Band, Point, Diverging, the full
+//! Categorical) and `then` composition are RFC-001 S5.
 
+mod categorical;
 mod linear;
 mod log;
 pub(crate) mod sequential;
@@ -15,6 +17,7 @@ pub(crate) mod sequential;
 #[cfg(test)]
 mod conformance;
 
+pub use categorical::{Categorical, CategoricalParams, NULL_COLOR, OKABE_ITO};
 pub use linear::{Linear, LinearParams};
 pub use log::{Log, LogParams};
 pub use sequential::{Sequential, SequentialParams};

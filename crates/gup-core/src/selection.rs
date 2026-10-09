@@ -6,7 +6,7 @@
 //! append are later S-stories.
 
 use crate::channel::{Channel, Mark, Role, Visual};
-use crate::column::ColumnStore;
+use crate::column::{ColumnData, ColumnStore};
 use crate::context::Context;
 use crate::encoding::{Encoding, IntoEncoding, Resource};
 use crate::error::{Error, Result};
@@ -96,7 +96,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         if let Some(store) = &mut self.columns {
             let new = &self.rows[start..];
             // The same columns, in the same order, as `column_encodings`.
-            let values: Vec<Vec<f64>> = self
+            let values: Vec<ColumnData<'_>> = self
                 .encodings
                 .iter()
                 .filter_map(|e| match e {
@@ -157,7 +157,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             .as_ref()
             .is_none_or(|c| c.chunk_rows() != chunk_rows)
         {
-            let values: Vec<Vec<f64>> = self
+            let values: Vec<ColumnData<'_>> = self
                 .column_encodings()
                 .map(|(_, c)| c.evaluate(&self.rows))
                 .collect();
@@ -175,6 +175,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             .map(|(desc, enc)| GlueChannel {
                 name: desc.name,
                 wgsl_type: desc.wgsl_type,
+                role: desc.role,
                 source: match enc {
                     Some(Encoding::Column(c)) => ChannelSource::Column(c.func()),
                     _ => ChannelSource::Const,
@@ -185,6 +186,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             mark_name: M::NAME,
             mark_module: M::MODULE,
             channels,
+            validity: self.columns.as_ref().is_some_and(ColumnStore::has_nulls),
         })
     }
 
@@ -308,14 +310,28 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
 
         let chunks = self.chunk_uniform_bytes(&program.chunk, &glue.relative)?;
 
+        if glue.validity && cx.caps().limits.max_storage_buffers_per_shader_stage == 0 {
+            return Err(Error::config(
+                "layer",
+                format!(
+                    "{}: its columns have nulls, whose validity bits are read from a storage \
+                     buffer in the vertex stage, and this device allows none",
+                    M::NAME
+                ),
+            ));
+        }
         let store = self.columns.as_mut().expect("checked above");
         store.upload(cx)?;
         let store = self.columns.as_ref().expect("checked above");
+        // Validity buffers exist (and are bound) only when the glue reads
+        // them, which is exactly when the store has a null.
+        let reads_validity = glue.validity;
+        let validity = |c| chunk_validity(reads_validity, c, cx);
         let uploaded = || {
             store
                 .chunks()
                 .iter()
-                .map(|c| (c.buffer(cx).expect("uploaded above"), c.rows()))
+                .map(|c| (c.buffer(cx).expect("uploaded above"), validity(c), c.rows()))
         };
         let draws = || -> Vec<ChunkDraw> {
             store
@@ -329,6 +345,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
                         .collect(),
                     instances: c.rows(),
                     dynamic_offset: chunk_uniform_offset(k) as u32,
+                    validity: validity(c).cloned(),
                 })
                 .collect()
         };
@@ -391,6 +408,17 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
     }
 }
 
+/// A chunk's uploaded validity buffer, if the program reads one. (A
+/// function, not a closure: a closure cannot return a borrow of its
+/// argument, RFC-001 §12 risk 4.)
+fn chunk_validity<'c>(
+    reads: bool,
+    chunk: &'c crate::column::Chunk,
+    cx: &Context,
+) -> Option<&'c wgpu::Buffer> {
+    reads.then(|| chunk.validity_buffer(cx).expect("uploaded above"))
+}
+
 fn context(e: Error, mark: &str, channel: &str) -> Error {
     match e {
         Error::Configuration { what, detail } => Error::Configuration {
@@ -440,9 +468,10 @@ fn write_field(
 mod tests {
     use super::*;
     use crate::channel::Px;
+    use crate::column::ColumnFormat;
     use crate::encoding::ShaderFn;
     use crate::marks::Circle;
-    use crate::scale::{Linear, Log, ScaleRef, Sequential};
+    use crate::scale::{Categorical, Linear, Log, ScaleRef, Sequential};
     use crate::shader::link;
     use crate::shader::testing::{parse, struct_layout};
     use std::path::Path;
@@ -611,7 +640,14 @@ mod tests {
             "Circle {x: f32rel→gup::scale::linear::map_rel, y: f32→gup::scale::log::map, \
              radius: const f32, fill: f32→gup::color::sequential::map(lut)}"
         );
-        assert_eq!(glue.columns, vec![0, 1, 3]);
+        assert_eq!(
+            glue.columns,
+            vec![
+                (0, ColumnFormat::F32Relative),
+                (1, ColumnFormat::F32),
+                (3, ColumnFormat::F32)
+            ]
+        );
         assert_eq!(glue.relative, vec![0]);
         check_fixture("scatter_glue.wgsl", &glue.source);
         let linked = link(&glue.signature, &glue.source, &glue.modules).unwrap();
@@ -685,9 +721,13 @@ mod tests {
 
     #[test]
     fn rust_params_match_wgsl_params() {
-        use crate::shader::{COLOR_SEQUENTIAL, SCALE_LINEAR, SCALE_LOG};
+        use crate::shader::{COLOR_CATEGORICAL, COLOR_SEQUENTIAL, SCALE_LINEAR, SCALE_LOG};
         use encase::ShaderType;
         for (module, size) in [
+            (
+                &COLOR_CATEGORICAL,
+                crate::scale::CategoricalParams::min_size().get(),
+            ),
             (&SCALE_LINEAR, crate::scale::LinearParams::min_size().get()),
             (&SCALE_LOG, crate::scale::LogParams::min_size().get()),
             (
@@ -700,6 +740,138 @@ mod tests {
             let layout = struct_layout(&wgsl, &params).unwrap();
             assert_eq!(u64::from(layout.span), size, "{}", module.import_path);
         }
+    }
+
+    /// A row whose fields may be missing.
+    pub(crate) struct Place {
+        x: f64,
+        y: f64,
+        v: f64,
+        continent: Option<String>,
+    }
+
+    /// 40 places: x is NaN at row 3, y is +∞ at row 7, v is NaN at row 9
+    /// and the continent is missing at row 5. Fill by continent (a
+    /// dictionary column) or by `v` (a numeric column).
+    pub(crate) fn places(fill_by_key: bool) -> Selection<Place, Circle> {
+        let rows = (0..40)
+            .map(|i| Place {
+                x: if i == 3 { f64::NAN } else { f64::from(i) },
+                y: if i == 7 {
+                    f64::INFINITY
+                } else {
+                    f64::from(i + 1)
+                },
+                v: if i == 9 { f64::NAN } else { f64::from(i % 4) },
+                continent: (i != 5).then(|| ["Asia", "Europe", "Africa"][i as usize % 3].into()),
+            })
+            .collect::<Vec<_>>();
+        let mut sel = Selection::<Place, Circle>::new(rows);
+        sel.attr(Circle::X, Linear::new().encode(|p: &Place| p.x))
+            .attr(Circle::Y, Log::new().encode(|p: &Place| p.y))
+            .attr(Circle::RADIUS, Px(3.0));
+        if fill_by_key {
+            sel.attr(
+                Circle::FILL,
+                Categorical::okabe_ito().encode_nullable_key(|p: &Place| p.continent.as_deref()),
+            );
+        } else {
+            sel.attr(Circle::FILL, Sequential::viridis().encode(|p: &Place| p.v));
+        }
+        sel
+    }
+
+    /// S4b: once the columns have a null, the glue binds the validity bits,
+    /// hides rows with a null position (a degenerate quad), and reads the
+    /// fill from a `u32` dictionary column whose null code the categorical
+    /// function resolves. The linked module validates and its uniform
+    /// layouts match naga's.
+    #[test]
+    fn null_glue_matches_fixture_and_validates() {
+        let cx = Context::new_blocking().unwrap();
+        let mut sel = places(true);
+        assert!(!sel.glue().validity, "no columns evaluated yet");
+        sel.fit_domains(&cx).unwrap();
+        let glue = sel.glue();
+        assert!(glue.validity);
+        assert_eq!(
+            glue.signature,
+            "Circle {x: f32rel→gup::scale::linear::map_rel, y: f32→gup::scale::log::map, \
+             radius: const f32, fill: u32→gup::color::categorical::map} with nulls"
+        );
+        assert_eq!(
+            glue.columns,
+            vec![
+                (0, ColumnFormat::F32Relative),
+                (1, ColumnFormat::F32),
+                (3, ColumnFormat::U32)
+            ]
+        );
+        check_fixture("nulls_glue.wgsl", &glue.source);
+        let linked = parse(
+            &glue.signature,
+            &link(&glue.signature, &glue.source, &glue.modules).unwrap(),
+        );
+        assert_eq!(
+            Some(glue.encodings.clone()),
+            struct_layout(&linked, "Encodings")
+        );
+        assert_eq!(Some(glue.chunk.clone()), struct_layout(&linked, "Chunk"));
+        // Two planes (x, y); the dictionary column has none.
+        assert!(glue.source.contains("(instance_index / 32u) * 2u"));
+        let batch = sel.prepare(&cx).unwrap();
+        assert_eq!(batch.instances(), 40);
+        assert!(batch.gpu.chunks.iter().all(|c| c.validity.is_some()));
+    }
+
+    /// S4b: a null in a numeric colour column draws in the null colour
+    /// (a `select` on its validity bit) rather than hiding the row.
+    #[test]
+    fn numeric_colour_nulls_select_the_null_colour() {
+        let cx = Context::new_blocking().unwrap();
+        let mut sel = places(false);
+        sel.fit_domains(&cx).unwrap();
+        let glue = sel.glue();
+        assert!(glue.source.contains(
+            "m.fill = select(vec4<f32>(0.6, 0.6, 0.6, 1.0), sequential::map(col.fill, enc.fill, \
+             fill_lut, fill_smp), ((validity[valid_group + 2u] >> valid_bit) & 1u) == 1u);"
+        ));
+        assert!(glue.source.contains(
+            "let drawn = ((validity[valid_group + 0u] & validity[valid_group + 1u]) >> valid_bit) & 1u;"
+        ));
+        parse(
+            &glue.signature,
+            &link(&glue.signature, &glue.source, &glue.modules).unwrap(),
+        );
+        sel.prepare(&cx).unwrap();
+    }
+
+    /// The categorical palette and null colour land at naga's offsets.
+    #[test]
+    fn categorical_params_match_the_wgsl_layout() {
+        use crate::encoding::DynShaderFn;
+        use crate::scale::{NULL_COLOR, OKABE_ITO};
+        use crate::shader::COLOR_CATEGORICAL;
+        let module = parse(COLOR_CATEGORICAL.import_path, COLOR_CATEGORICAL.wgsl);
+        let layout = struct_layout(
+            &module,
+            &gup_wgsl::flat_name(COLOR_CATEGORICAL.import_path, "Params"),
+        )
+        .unwrap();
+        let bytes = DynShaderFn::params_bytes(&Categorical::okabe_ito()).unwrap();
+        let vec4 = |at: u32| -> [f32; 4] {
+            bytemuck::pod_read_unaligned(&bytes[at as usize..at as usize + 16])
+        };
+        let colors = layout.offset("colors").unwrap();
+        for (i, c) in OKABE_ITO.iter().enumerate() {
+            assert_eq!(vec4(colors + 16 * i as u32), c.to_array());
+        }
+        assert_eq!(
+            vec4(layout.offset("null_color").unwrap()),
+            NULL_COLOR.to_array()
+        );
+        let count = layout.offset("count").unwrap() as usize;
+        assert_eq!(bytes[count..count + 4], 8u32.to_le_bytes());
     }
 }
 

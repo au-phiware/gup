@@ -54,6 +54,12 @@ impl Caps {
 pub enum Upload {
     /// Column chunks: the data, written once per chunk and context.
     Column,
+    /// Validity bits of numeric columns with nulls (RFC-001 S4b): one bit
+    /// per row and numeric column, in 32-row words, written only for
+    /// stores that have a null. A tail write rewrites the last partial
+    /// word, so an append writes up to 4 bytes per column more than its
+    /// rows' bits.
+    Validity,
     /// Uniform buffers: encodings, per-chunk bases, the view.
     Uniform,
     /// Per-frame guide instances: rules and glyph quads.
@@ -63,8 +69,9 @@ pub enum Upload {
 }
 
 impl Upload {
-    const ALL: [Upload; 4] = [
+    const ALL: [Upload; 5] = [
         Upload::Column,
+        Upload::Validity,
         Upload::Uniform,
         Upload::Instances,
         Upload::Texture,
@@ -96,6 +103,8 @@ impl std::ops::Sub for WriteCount {
 pub struct UploadStats {
     /// Column chunk bytes.
     pub columns: WriteCount,
+    /// Validity bytes (null bits).
+    pub validity: WriteCount,
     /// Uniform bytes.
     pub uniforms: WriteCount,
     /// Guide instance bytes.
@@ -109,6 +118,7 @@ impl std::ops::Sub for UploadStats {
     fn sub(self, rhs: Self) -> Self {
         Self {
             columns: self.columns - rhs.columns,
+            validity: self.validity - rhs.validity,
             uniforms: self.uniforms - rhs.uniforms,
             instances: self.instances - rhs.instances,
             textures: self.textures - rhs.textures,
@@ -119,8 +129,8 @@ impl std::ops::Sub for UploadStats {
 /// Lock-free per-kind counters.
 #[derive(Default)]
 struct UploadCounters {
-    bytes: [AtomicU64; 4],
-    writes: [AtomicU64; 4],
+    bytes: [AtomicU64; 5],
+    writes: [AtomicU64; 5],
 }
 
 impl UploadCounters {
@@ -134,9 +144,10 @@ impl UploadCounters {
             bytes: self.bytes[kind as usize].load(Ordering::Relaxed),
             writes: self.writes[kind as usize].load(Ordering::Relaxed),
         };
-        let [columns, uniforms, instances, textures] = Upload::ALL.map(get);
+        let [columns, validity, uniforms, instances, textures] = Upload::ALL.map(get);
         UploadStats {
             columns,
+            validity,
             uniforms,
             instances,
             textures,

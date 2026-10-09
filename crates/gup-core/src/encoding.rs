@@ -5,7 +5,7 @@
 //! `IntoEncoding` conversion that type-checks `Selection::attr` (§4).
 
 use crate::channel::{ConstValue, GpuType, Visual};
-use crate::column::ColumnFormat;
+use crate::column::{ColumnData, ColumnFormat};
 use crate::error::{Error, Result};
 use crate::shader::WgslModule;
 use std::marker::PhantomData;
@@ -77,6 +77,41 @@ pub trait ShaderFn: Clone + Send + Sync + 'static {
             func: self.clone(),
         }
     }
+
+    /// Encode a string key of each row through a dictionary (RFC-001 S4b):
+    /// `categorical.encode_key(|r: &Row| r.continent.as_str())`. Each
+    /// distinct key gets the next `u32` code in first-seen order, and that
+    /// order is the domain.
+    ///
+    /// The accessor may return a borrow of its row: its bound is
+    /// `for<'a> Fn(&'a T) -> &'a str`, which [`encode`](Self::encode)'s
+    /// `Fn(&T) -> D` cannot express (RFC-001 §12 risk 4). Rows whose key
+    /// can be missing use [`encode_nullable_key`](Self::encode_nullable_key).
+    fn encode_key<T, A>(&self, accessor: A) -> KeyEncoded<Key<A>, Self>
+    where
+        Self: ShaderFn<In = u32>,
+        A: for<'a> Fn(&'a T) -> &'a str,
+    {
+        KeyEncoded {
+            key: Key(accessor),
+            func: self.clone(),
+        }
+    }
+
+    /// Like [`encode_key`](Self::encode_key), for keys that may be
+    /// missing: `None` is a null, stored as
+    /// [`NULL_CODE`](crate::column::NULL_CODE), which a colour function
+    /// draws in its null colour.
+    fn encode_nullable_key<T, A>(&self, accessor: A) -> KeyEncoded<NullableKey<A>, Self>
+    where
+        Self: ShaderFn<In = u32>,
+        A: for<'a> Fn(&'a T) -> Option<&'a str>,
+    {
+        KeyEncoded {
+            key: NullableKey(accessor),
+            func: self.clone(),
+        }
+    }
 }
 
 /// The exact f64 CPU twin of a [`ShaderFn`], used for axes, ticks, legends,
@@ -94,7 +129,14 @@ pub enum Resource {
     Lut(Vec<[u8; 4]>),
 }
 
-/// A value an accessor may return for a column.
+/// A value an accessor may return for a column. Non-finite values (NaN,
+/// ±∞) are nulls: a null position or size is not drawn, and a null
+/// colour input draws in the null colour (RFC-001 S4b).
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` is not a column value; `encode` takes accessors returning numbers",
+    label = "`encode`'s accessor returns `{Self}`",
+    note = "for string keys (categories), use `encode_key(|row| row.field.as_str())` on a dictionary function such as `Categorical`: its accessor may return a borrow of the row"
+)]
 pub trait ColumnValue: Copy + 'static {
     /// The GPU type the column holds.
     type Gpu: GpuType;
@@ -124,11 +166,57 @@ pub struct Encoded<A, S> {
     func: S,
 }
 
+/// A key accessor composed with a shader function over dictionary codes,
+/// made by [`ShaderFn::encode_key`] or [`ShaderFn::encode_nullable_key`].
+#[derive(Clone)]
+pub struct KeyEncoded<K, S> {
+    key: K,
+    func: S,
+}
+
+/// Reads a dictionary key from a row (see [`ShaderFn::encode_key`]).
+/// Implemented by [`Key`] and [`NullableKey`], which those methods make.
+pub trait KeyAccessor<T>: Send + Sync + 'static {
+    /// The key of `row`, borrowed from it; `None` is a null.
+    fn key<'a>(&self, row: &'a T) -> Option<&'a str>;
+}
+
+/// A key accessor whose rows always have a key (made by
+/// [`ShaderFn::encode_key`]).
+#[derive(Clone)]
+pub struct Key<A>(A);
+
+/// A key accessor whose rows may lack a key (made by
+/// [`ShaderFn::encode_nullable_key`]).
+#[derive(Clone)]
+pub struct NullableKey<A>(A);
+
+impl<T, A> KeyAccessor<T> for Key<A>
+where
+    A: for<'a> Fn(&'a T) -> &'a str + Send + Sync + 'static,
+{
+    fn key<'a>(&self, row: &'a T) -> Option<&'a str> {
+        Some((self.0)(row))
+    }
+}
+
+impl<T, A> KeyAccessor<T> for NullableKey<A>
+where
+    A: for<'a> Fn(&'a T) -> Option<&'a str> + Send + Sync + 'static,
+{
+    fn key<'a>(&self, row: &'a T) -> Option<&'a str> {
+        (self.0)(row)
+    }
+}
+
 /// Marker for constant visual values (see [`IntoEncoding`]).
 pub enum ConstMarker {}
 
 /// Marker for column encodings producing `D` (see [`IntoEncoding`]).
 pub struct ColumnMarker<D>(PhantomData<fn() -> D>);
+
+/// Marker for dictionary-key encodings (see [`IntoEncoding`]).
+pub enum KeyMarker {}
 
 /// Anything that can drive a channel of visual type `V` for rows of type
 /// `T`: a constant `V`, or `shader_fn.encode(accessor)` whose function
@@ -137,7 +225,7 @@ pub struct ColumnMarker<D>(PhantomData<fn() -> D>);
 #[diagnostic::on_unimplemented(
     message = "`{Self}` cannot drive a channel of visual type `{V}`",
     label = "this encoding does not produce `{V}` for rows of type `{T}`",
-    note = "a `{V}` channel accepts a constant of type `{V}` (such as `Px(3.0)`) or `f.encode(|row: &{T}| …)` where `f: ShaderFn<Out = {V}>`"
+    note = "a `{V}` channel accepts a constant of type `{V}` (such as `Px(3.0)`) or `f.encode(|row: &{T}| …)` (or `f.encode_key(..)` for string keys) where `f: ShaderFn<Out = {V}>`"
 )]
 pub trait IntoEncoding<T, V: Visual, K> {
     /// Convert into a type-erased encoding.
@@ -167,6 +255,18 @@ where
     }
 }
 
+impl<T, V, K, S> IntoEncoding<T, V, KeyMarker> for KeyEncoded<K, S>
+where
+    T: 'static,
+    V: Visual,
+    K: KeyAccessor<T>,
+    S: ShaderFn<In = u32, Out = V>,
+{
+    fn into_encoding(self) -> Encoding<T> {
+        Encoding::Column(Box::new(self))
+    }
+}
+
 /// A type-erased channel encoding.
 pub enum Encoding<T> {
     /// A constant (a uniform field, no column).
@@ -186,8 +286,9 @@ impl<T> std::fmt::Debug for Encoding<T> {
 
 /// Object-safe view of an accessor + shader function.
 pub trait DynColumnEncoding<T>: Send + Sync {
-    /// Run the accessor over every row.
-    fn evaluate(&self, rows: &[T]) -> Vec<f64>;
+    /// Run the accessor over every row: numbers, or keys borrowed from
+    /// the rows.
+    fn evaluate<'r>(&self, rows: &'r [T]) -> ColumnData<'r>;
     /// The shader function.
     fn func(&self) -> &dyn DynShaderFn;
     /// The shader function, mutably.
@@ -206,8 +307,26 @@ where
     D: ColumnValue,
     S: ShaderFn,
 {
-    fn evaluate(&self, rows: &[T]) -> Vec<f64> {
-        rows.iter().map(|r| (self.accessor)(r).to_f64()).collect()
+    fn evaluate<'r>(&self, rows: &'r [T]) -> ColumnData<'r> {
+        ColumnData::Values(rows.iter().map(|r| (self.accessor)(r).to_f64()).collect())
+    }
+
+    fn func(&self) -> &dyn DynShaderFn {
+        &self.func
+    }
+
+    fn func_mut(&mut self) -> &mut dyn DynShaderFn {
+        &mut self.func
+    }
+}
+
+impl<T, K, S> DynColumnEncoding<T> for KeyEncoded<K, S>
+where
+    K: KeyAccessor<T>,
+    S: ShaderFn,
+{
+    fn evaluate<'r>(&self, rows: &'r [T]) -> ColumnData<'r> {
+        ColumnData::Keys(rows.iter().map(|r| self.key.key(r)).collect())
     }
 
     fn func(&self) -> &dyn DynShaderFn {
@@ -293,6 +412,7 @@ impl<S: ShaderFn> DynShaderFn for S {
         let format = match ShaderFn::input_format(self) {
             ColumnFormat::F32 => "f32",
             ColumnFormat::F32Relative => "f32rel",
+            ColumnFormat::U32 => "u32",
         };
         let resources = ShaderFn::resources(self)
             .iter()

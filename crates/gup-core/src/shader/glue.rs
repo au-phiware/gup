@@ -13,8 +13,10 @@
 //! here.
 
 use super::{StructLayout, VIEW, WgslModule};
+use crate::channel::Role;
 use crate::column::ColumnFormat;
 use crate::encoding::{DynShaderFn, Resource};
+use crate::scale::NULL_COLOR;
 use std::fmt::{self, Write as _};
 
 /// Where a channel's value comes from.
@@ -29,6 +31,7 @@ pub(crate) enum ChannelSource<'a> {
 pub(crate) struct GlueChannel<'a> {
     pub name: &'static str,
     pub wgsl_type: &'static str,
+    pub role: Option<Role>,
     pub source: ChannelSource<'a>,
 }
 
@@ -37,6 +40,10 @@ pub(crate) struct GlueSpec<'a> {
     pub mark_name: &'static str,
     pub mark_module: &'static WgslModule,
     pub channels: Vec<GlueChannel<'a>>,
+    /// Whether the columns have nulls, so the vertex stage reads validity
+    /// bits (one plane per numeric column, in column order; see
+    /// [`crate::column`]).
+    pub validity: bool,
 }
 
 /// A texture + sampler pair bound for one channel's LUT.
@@ -57,8 +64,11 @@ pub(crate) struct Glue {
     pub signature: String,
     /// Library modules the source imports.
     pub modules: Vec<&'static WgslModule>,
-    /// Channel index of each vertex column, by `@location`.
-    pub columns: Vec<usize>,
+    /// Channel index and storage format of each vertex column, by
+    /// `@location`.
+    pub columns: Vec<(usize, ColumnFormat)>,
+    /// Whether group 2 binds the chunk's validity bits at binding 1.
+    pub validity: bool,
     /// Channels that take a per-chunk base (relative columns).
     pub relative: Vec<usize>,
     /// LUT bindings in group 1.
@@ -92,6 +102,8 @@ enum Expr {
         function: &'static str,
         args: Vec<Expr>,
     },
+    /// `expr`, or the null colour where validity plane `plane` is unset.
+    OrNull { expr: Box<Expr>, plane: usize },
 }
 
 impl fmt::Display for Expr {
@@ -116,12 +128,37 @@ impl fmt::Display for Expr {
                 }
                 f.write_str(")")
             }
+            Expr::OrNull { expr, plane } => {
+                let [r, g, b, a] = NULL_COLOR.to_array();
+                write!(
+                    f,
+                    "select(vec4<f32>({r:?}, {g:?}, {b:?}, {a:?}), {expr}, {})",
+                    valid(*plane)
+                )
+            }
         }
     }
 }
 
+/// Whether validity plane `plane` is set for this row.
+fn valid(plane: usize) -> String {
+    format!("((validity[valid_group + {plane}u] >> valid_bit) & 1u) == 1u")
+}
+
 /// Names the glue itself declares; module aliases must avoid them.
-const RESERVED: &[&str] = &["col", "chunk", "enc", "m", "v", "u_view", "View"];
+const RESERVED: &[&str] = &[
+    "col",
+    "chunk",
+    "enc",
+    "m",
+    "v",
+    "u_view",
+    "View",
+    "validity",
+    "valid_group",
+    "valid_bit",
+    "out",
+];
 
 /// Import aliases: the last path segment, de-duplicated.
 struct Aliases(Vec<(&'static str, String)>);
@@ -165,6 +202,10 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
     // Per-channel expressions and bookkeeping.
     let mut exprs = Vec::new();
     let mut columns = Vec::new();
+    // Validity planes (numeric columns, in column order) of channels that
+    // position or size the mark: a null in any of them hides the row.
+    let mut geometry_planes = Vec::new();
+    let mut planes = 0;
     let mut relative = Vec::new();
     let mut luts = Vec::new();
     let mut fields = Vec::new();
@@ -190,7 +231,11 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
                     func.module().import_path
                 );
                 fields.push((ch.name, format!("{alias}::Params"), size));
-                columns.push(i);
+                columns.push((i, func.input_format()));
+                let plane = func.input_format().has_validity().then(|| {
+                    planes += 1;
+                    planes - 1
+                });
                 let mut args = vec![Expr::Column(ch.name)];
                 if func.input_format() == ColumnFormat::F32Relative {
                     relative.push(i);
@@ -210,19 +255,35 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
                         }
                     }
                 }
-                exprs.push((
-                    ch.name,
-                    Expr::Call {
-                        alias,
-                        function: func.entry(),
-                        args,
-                    },
-                ));
+                let mut expr = Expr::Call {
+                    alias,
+                    function: func.entry(),
+                    args,
+                };
+                match plane {
+                    // A null colour input draws in the null colour; a
+                    // null position or size hides the row.
+                    Some(plane) if spec.validity && ch.role == Some(Role::Color) => {
+                        expr = Expr::OrNull {
+                            expr: Box::new(expr),
+                            plane,
+                        };
+                    }
+                    Some(plane) => geometry_planes.push(plane),
+                    None => {}
+                }
+                exprs.push((ch.name, expr));
                 signature_parts.push(format!("{}: {}", ch.name, func.signature()));
             }
         }
     }
-    let signature = format!("{} {{{}}}", spec.mark_name, signature_parts.join(", "));
+    // Validity bits only when the columns have a null (and only numeric
+    // columns have bits).
+    let validity = spec.validity && planes > 0;
+    let mut signature = format!("{} {{{}}}", spec.mark_name, signature_parts.join(", "));
+    if validity {
+        signature.push_str(" with nulls");
+    }
 
     // Print the module.
     let mut s = String::new();
@@ -291,13 +352,24 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
         );
     }
     let _ = writeln!(w, "@group(2) @binding(0) var<uniform> chunk: Chunk;");
+    if validity {
+        let _ = writeln!(
+            w,
+            "@group(2) @binding(1) var<storage, read> validity: array<u32>;"
+        );
+    }
 
     let col_param = if columns.is_empty() {
         ""
     } else {
         let _ = writeln!(w, "\nstruct Columns {{");
-        for (loc, &i) in columns.iter().enumerate() {
-            let _ = writeln!(w, "    @location({loc}) {}: f32,", spec.channels[i].name);
+        for (loc, (i, format)) in columns.iter().enumerate() {
+            let _ = writeln!(
+                w,
+                "    @location({loc}) {}: {},",
+                spec.channels[*i].name,
+                format.wgsl_type()
+            );
         }
         let _ = writeln!(w, "}}");
         ", col: Columns"
@@ -308,14 +380,39 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
         "\n@vertex\nfn vs_main(@builtin(vertex_index) vertex_index: u32, \
          @builtin(instance_index) instance_index: u32{col_param}) -> {mark_alias}::Varyings {{"
     );
+    if validity {
+        // This row's bits: its 32-row group of `planes` words, then its bit.
+        let _ = writeln!(
+            w,
+            "    let valid_group = (instance_index / 32u) * {planes}u;\n    \
+             let valid_bit = instance_index % 32u;"
+        );
+    }
     let _ = writeln!(w, "    var m: {mark_alias}::{}In;", spec.mark_name);
     for (name, expr) in &exprs {
         let _ = writeln!(w, "    m.{name} = {expr};");
     }
-    let _ = writeln!(
-        w,
-        "    return {mark_alias}::vertex(m, vertex_index, chunk.row_base + instance_index, u_view);\n}}"
-    );
+    let vertex =
+        format!("{mark_alias}::vertex(m, vertex_index, chunk.row_base + instance_index, u_view)");
+    if validity && !geometry_planes.is_empty() {
+        // A null position or size: every corner at one point outside the
+        // clip volume, a degenerate quad that is never rasterised. The mark
+        // contract names the position member `clip`.
+        let words = geometry_planes
+            .iter()
+            .map(|p| format!("validity[valid_group + {p}u]"))
+            .collect::<Vec<_>>()
+            .join(" & ");
+        let _ = writeln!(
+            w,
+            "    var out = {vertex};\n    \
+             let drawn = (({words}) >> valid_bit) & 1u;\n    \
+             out.clip = select(vec4<f32>(2.0, 2.0, 2.0, 1.0), out.clip, drawn == 1u);\n    \
+             return out;\n}}"
+        );
+    } else {
+        let _ = writeln!(w, "    return {vertex};\n}}");
+    }
     let _ = writeln!(
         w,
         "\n@fragment\nfn fs_main(v: {mark_alias}::Varyings) -> @location(0) vec4<f32> {{\n    \
@@ -334,6 +431,7 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
         signature,
         modules,
         columns,
+        validity,
         relative,
         luts,
         encodings,
