@@ -248,6 +248,15 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
                 gpu: Arc::clone(gpu),
             });
         }
+        #[cfg_attr(
+            target_arch = "wasm32",
+            expect(
+                clippy::arc_with_non_send_sync,
+                reason = "`Arc`, not `Rc`, because `Layer` must be `Send + Sync` on native; \
+                          on wasm32 wgpu's handles are not `Send`/`Sync`, so the `Arc` is \
+                          neither and cannot cross a thread"
+            )
+        )]
         let gpu = Arc::new(
             LayerUniforms {
                 program,
