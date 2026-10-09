@@ -299,3 +299,191 @@ impl Context {
         self.take_gpu_errors()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::render::GlueProgram;
+    use crate::scene::{ItemKind, MarkBatch, Scene};
+    use crate::{
+        Circle, Context, Error, ImageTarget, Linear, Log, Plot, Renderer, Selection, ShaderFn,
+        TargetDesc,
+    };
+    use std::sync::Arc;
+
+    /// The two-point reference scene, resolved on `cx` (no pipelines yet).
+    fn scene(cx: &Context) -> Scene {
+        let mut plot = Plot::new();
+        let (x, y) = (plot.x(Linear::new()), plot.y(Log::new()));
+        plot.add(Selection::<(f64, f64), Circle>::new(vec![
+            (1.0, 1.0),
+            (5.0, 100.0),
+        ]))
+        .attr(Circle::X, x.encode(|r: &(f64, f64)| r.0))
+        .attr(Circle::Y, y.encode(|r: &(f64, f64)| r.1));
+        plot.resolve(cx, 300.0, 200.0).unwrap().scene
+    }
+
+    /// `scene` with its mark layer drawn by `seed(program)`.
+    fn seeded(
+        cx: &Context,
+        mut scene: Scene,
+        seed: impl Fn(&Context, &GlueProgram) -> GlueProgram,
+    ) -> Scene {
+        for item in &mut scene.items {
+            if let ItemKind::Marks(batch) = &mut item.kind {
+                let bad = Arc::new(seed(cx, &batch.gpu.program));
+                *batch = MarkBatch {
+                    gpu: Arc::new(batch.gpu.with_program(bad)),
+                };
+            }
+        }
+        scene
+    }
+
+    fn copy(p: &GlueProgram, wgsl: String, layout: wgpu::PipelineLayout) -> GlueProgram {
+        GlueProgram {
+            glue: p.glue.clone(),
+            wgsl,
+            encodings: p.encodings.clone(),
+            chunk: p.chunk.clone(),
+            enc_bgl: p.enc_bgl.clone(),
+            chunk_bgl: p.chunk_bgl.clone(),
+            layout,
+        }
+    }
+
+    /// A pipeline layout without group 2 (the per-chunk uniforms the glue
+    /// binds): a bind group layout mismatch only pipeline creation sees.
+    fn missing_group(cx: &Context, p: &GlueProgram) -> GlueProgram {
+        let view = cx.pipelines().view_layout(cx.device());
+        let layout = cx
+            .device()
+            .create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                label: Some("seeded: no chunk group"),
+                bind_group_layouts: &[&view, &p.enc_bgl],
+                push_constant_ranges: &[],
+            });
+        copy(p, p.wgsl.clone(), layout)
+    }
+
+    /// WGSL that does not parse.
+    fn broken_wgsl(_: &Context, p: &GlueProgram) -> GlueProgram {
+        copy(p, format!("{}\nfn seeded( {{", p.wgsl), p.layout.clone())
+    }
+
+    fn gpu_error(e: Error) -> (String, String) {
+        match e {
+            Error::Gpu { what, message } => (what, message),
+            other => panic!("expected Error::Gpu, got {other:?}"),
+        }
+    }
+
+    /// GUP-410 seeded proof (native): an invalid mark pipeline is an
+    /// `Err` from `render`, naming the pipeline and carrying wgpu's
+    /// message, not a panic; it is not cached, so the next render
+    /// reports it again; and the context renders the valid scene after.
+    #[test]
+    fn an_invalid_mark_pipeline_is_an_err_every_time_and_never_cached() {
+        let cx = Context::new_blocking().unwrap();
+        let good = scene(&cx);
+        let bad = seeded(&cx, good.clone(), missing_group);
+        let signature = bad
+            .items
+            .iter()
+            .find_map(|i| match &i.kind {
+                ItemKind::Marks(b) => Some(b.gpu.program.glue.signature.clone()),
+                _ => None,
+            })
+            .expect("a mark layer");
+        let mut target = ImageTarget::new(&cx, 300, 200).unwrap();
+        for attempt in 0..2 {
+            let (what, message) = gpu_error(target.render_blocking(&cx, &bad).unwrap_err());
+            eprintln!("attempt {attempt}: GPU error in {what}: {message}");
+            assert!(
+                what.contains(&format!("mark pipeline `{signature}`")),
+                "{what}"
+            );
+            assert!(message.contains("create_render_pipeline"), "{message}");
+            assert!(cx.pipelines().mark_pipelines().is_empty());
+        }
+        let image = target.render_blocking(&cx, &good).unwrap();
+        assert_eq!(image.dimensions(), (300, 200));
+        assert_eq!(cx.pipelines().mark_pipelines(), vec![signature]);
+    }
+
+    /// A WGSL error is an `Err` carrying the WGSL diagnostic, from
+    /// `Renderer::prepare` for hosts that own the pass.
+    #[test]
+    fn a_wgsl_error_is_an_err_from_prepare() {
+        let cx = Context::new_blocking().unwrap();
+        let bad = seeded(&cx, scene(&cx), broken_wgsl);
+        let desc = TargetDesc {
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            width: 300,
+            height: 200,
+            dpr: 1.0,
+            samples: 1,
+        };
+        let (what, message) = gpu_error(Renderer::new().prepare(&cx, &bad, &desc).unwrap_err());
+        eprintln!("GPU error in {what}: {message}");
+        assert!(what.starts_with("mark pipeline `Circle {"), "{what}");
+        assert!(message.contains("seeded"), "{message}");
+        assert_eq!(cx.submissions(), 0);
+    }
+
+    /// A target whose frame cannot be rendered to: the render scope
+    /// (encoding and submission) turns the failure into an `Err`.
+    #[test]
+    fn a_failed_submission_is_an_err_from_render() {
+        use crate::target::{Frame, RenderTarget};
+        struct NotAttachable(wgpu::Texture);
+        impl RenderTarget for NotAttachable {
+            fn desc(&self) -> TargetDesc {
+                TargetDesc {
+                    format: wgpu::TextureFormat::Rgba8Unorm,
+                    width: 300,
+                    height: 200,
+                    dpr: 1.0,
+                    samples: 1,
+                }
+            }
+            fn acquire(&mut self, _: &Context) -> crate::Result<Frame> {
+                let view = self.0.create_view(&Default::default());
+                Ok(Frame::new(self.0.clone(), view, None, None))
+            }
+            fn present(
+                &mut self,
+                cx: &Context,
+                _: Frame,
+                commands: wgpu::CommandBuffer,
+            ) -> crate::Result<()> {
+                cx.submit([commands]);
+                Ok(())
+            }
+        }
+        let cx = Context::new_blocking().unwrap();
+        let texture = cx.device().create_texture(&wgpu::TextureDescriptor {
+            label: Some("seeded: no RENDER_ATTACHMENT"),
+            size: wgpu::Extent3d {
+                width: 300,
+                height: 200,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+        let mut target = NotAttachable(texture);
+        let (what, message) = gpu_error(
+            Renderer::new()
+                .render(&cx, &scene(&cx), &mut target)
+                .unwrap_err(),
+        );
+        eprintln!("GPU error in {what}: {message}");
+        assert!(what.starts_with("drawing a scene into a 300×200"), "{what}");
+        assert!(message.contains("RENDER_ATTACHMENT"), "{message}");
+    }
+}

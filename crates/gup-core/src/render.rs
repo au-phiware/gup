@@ -1140,3 +1140,42 @@ fn premultiplied_clear(c: Color) -> wgpu::Color {
     let [r, g, b, a] = c.premultiplied().map(f64::from);
     wgpu::Color { r, g, b, a }
 }
+
+#[cfg(test)]
+impl LayerGpu {
+    /// This layer's GPU state drawn with `program` instead: seeds an
+    /// invalid pipeline for the error-scope tests (GUP-410).
+    pub(crate) fn with_program(&self, program: Arc<GlueProgram>) -> Self {
+        Self {
+            context: self.context,
+            program,
+            enc_buffer: self.enc_buffer.clone(),
+            chunk_buffer: self.chunk_buffer.clone(),
+            enc_bind_group: self.enc_bind_group.clone(),
+            chunk_bind_group: self.chunk_bind_group.clone(),
+            columns: self.columns.clone(),
+            column_ranges: self.column_ranges.clone(),
+            instances: self.instances,
+            vertices_per_instance: self.vertices_per_instance,
+        }
+    }
+}
+
+#[cfg(test)]
+impl PipelineCache {
+    /// Cached mark pipelines (by glue signature).
+    pub(crate) fn mark_pipelines(&self) -> Vec<String> {
+        self.pipelines
+            .keys()
+            .filter_map(|k| match &k.kind {
+                PipelineKind::Mark(signature) => Some(signature.clone()),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// The view bind group layout (group 0 of every pipeline).
+    pub(crate) fn view_layout(&mut self, device: &wgpu::Device) -> wgpu::BindGroupLayout {
+        self.view_bgl(device)
+    }
+}
