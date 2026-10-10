@@ -64,6 +64,25 @@ See `scripts/wasm_size.sh` and `crates/gup-core/PERF_BUDGETS.md`.
 ./scripts/wasm_size.sh
 ```
 
+## perf-budget
+
+gup-core's performance budgets (GUP-417): run `zoom_bench` (100K points,
+`Mailbox` uncapped, release, fullscreen), `pipeline_timings` (release) and
+`scripts/wasm_size.sh`, and compare each `metric` they print with the table in
+`crates/gup-core/PERF_BUDGETS.md` (±20–25% for GPU/CPU timings, exact for upload
+counts, +2% and the 400,000 B ceiling for WASM size). Prints a pass/fail table
+and exits non-zero on any failure. **Needs a display and a real GPU** (it opens
+a fullscreen window, like `mask gup-core-window`) and `wasm-bindgen` like
+`mask wasm-size`, so it is a local, pre-merge check, not a CI job: run it for
+any story that touches gup-core rendering, uploads, pipeline creation or WASM
+size. The timing budgets hold only on the machine `PERF_BUDGETS.md` names; a
+failure on timing alone warrants a second run. Run `scripts/perf_budget.sh`
+directly for its options (`--skip-wasm`, `--budgets FILE`, `--metrics FILE`).
+
+```bash
+./scripts/perf_budget.sh
+```
+
 ## wasm-browser
 
 Run gup-core in a real browser (GUP-401, GUP-408): build the `wasm-size/scatter`
