@@ -284,9 +284,30 @@ mod tests {
                     collect(Log::new().domain(m, m * 3.0).ticks(count));
                 }
             }
+            for count in [2, 5, 10] {
+                collect(
+                    Symlog::new()
+                        .constant(m)
+                        .domain(-m * 1e3, m * 1e4)
+                        .ticks(count),
+                );
+                collect(Pow::sqrt().domain(0.0, m).ticks(count));
+            }
         }
-        // Digits, sign, point, exponent and every SI suffix were reached.
-        for c in "0123456789-.ekMGT".chars() {
+        // Time: spans from a tenth of a millisecond to a century, at the
+        // epoch, around 1.7e9 and before 1970.
+        for exp in -4..=10 {
+            let span = 10f64.powi(exp);
+            for t0 in [0.0, 1.7e9 - span / 3.0, -2.2e9] {
+                for count in [2, 5, 10] {
+                    collect(Time::new().domain(t0, t0 + span).ticks(count));
+                }
+            }
+        }
+        // Digits, sign, point, exponent, every SI suffix and the calendar
+        // labels' colon were reached (month names are checked below).
+        emitted.extend("JanFebMarAprMayJunJulAugSepOctNovDec".chars());
+        for c in "0123456789-.ekMGT:".chars() {
             assert!(
                 emitted.contains(&c),
                 "the sweep never emitted {c:?}: {emitted:?}"

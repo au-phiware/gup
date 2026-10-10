@@ -52,6 +52,12 @@ impl Linear {
         self.domain.unwrap_or((0.0, 1.0))
     }
 
+    /// Replace the domain, keeping whether it is automatic: for scales
+    /// that wrap a linear one and make it nice their own way.
+    pub(super) fn replace_domain(&mut self, d: (f64, f64)) {
+        self.domain = Some(d);
+    }
+
     /// Pixels per domain unit (0 for an empty domain).
     fn k(&self) -> f64 {
         let (d0, d1) = self.resolved_domain();
