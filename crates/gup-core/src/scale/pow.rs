@@ -119,6 +119,10 @@ impl ShaderFn for Pow {
     const MODULE: &'static WgslModule = &SCALE_POW;
     const ENTRY: &'static str = "map";
 
+    fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)> {
+        super::monotonic_image(|x| self.eval(x), extent)
+    }
+
     fn params(&self) -> PowParams {
         let (lo, k) = self.parts();
         PowParams {

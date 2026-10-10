@@ -119,6 +119,10 @@ impl ShaderFn for Symlog {
     const MODULE: &'static WgslModule = &SCALE_SYMLOG;
     const ENTRY: &'static str = "map";
 
+    fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)> {
+        super::monotonic_image(|x| self.eval(x), extent)
+    }
+
     fn params(&self) -> SymlogParams {
         let (lo, k) = self.parts();
         SymlogParams {
@@ -239,8 +243,10 @@ impl PositionScale for Symlog {
             let labels = values.iter().map(|&v| format_with_step(v, step)).collect();
             return Ticks { values, labels };
         }
-        // Decades from the one holding the constant to the largest |end|.
-        let k0 = self.constant.log10().floor() as i32;
+        // Decades from the first power of ten past about 3c (so the ticks
+        // nearest zero sit at least two transformed units from it, as far
+        // as later decades sit from each other) to the largest |end|.
+        let k0 = (self.constant.log10() + 0.5).ceil() as i32;
         let k1 = (lo.abs().max(hi.abs()).log10() + 1e-9).floor() as i32;
         let signed = |mults: &[f64]| {
             let mut v: Vec<f64> = (k0..=k1)
@@ -326,9 +332,7 @@ mod tests {
         let t = s.ticks(10);
         assert_eq!(
             t.labels,
-            vec![
-                "-10k", "-1k", "-100", "-10", "-1", "0", "1", "10", "100", "1k", "10k"
-            ]
+            vec!["-10k", "-1k", "-100", "-10", "0", "10", "100", "1k", "10k"]
         );
         // Few decades get 2× and 5×; a wide domain thins to every other.
         let few = Symlog::new().constant(1.0).domain(-50.0, 50.0).ticks(10);

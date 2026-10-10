@@ -401,20 +401,36 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         Ok(())
     }
 
+    /// The largest size: a constant's, or an encoded channel's image of
+    /// its column's extent (GUP-418: a `Sqrt` radius reaches its range's
+    /// far end).
     fn overhang(&self) -> f32 {
-        M::CHANNELS
-            .iter()
-            .zip(&self.encodings)
-            .filter(|(d, _)| d.role == Some(Role::Size))
-            .map(|(d, e)| match e {
-                Some(Encoding::Const(v)) => v,
-                _ => &d.default,
-            })
-            .map(|v| match v {
-                crate::ConstValue::F32(r) => *r,
-                crate::ConstValue::Vec4(_) => 0.0,
-            })
-            .fold(0.0, f32::max)
+        let size = |v: &crate::ConstValue| match v {
+            crate::ConstValue::F32(r) => *r,
+            crate::ConstValue::Vec4(_) => 0.0,
+        };
+        let mut column = 0;
+        let mut overhang = 0.0f32;
+        for (d, e) in M::CHANNELS.iter().zip(&self.encodings) {
+            let r = match e {
+                Some(Encoding::Column(c)) => {
+                    column += 1;
+                    if d.role != Some(Role::Size) {
+                        continue;
+                    }
+                    self.columns
+                        .as_ref()
+                        .and_then(|s| s.stats(column - 1))
+                        .and_then(|s| c.image(s.extent()))
+                        .map_or(0.0, |(lo, hi)| lo.abs().max(hi.abs()) as f32)
+                }
+                _ if d.role != Some(Role::Size) => continue,
+                Some(Encoding::Const(v)) => size(v),
+                None => size(&d.default),
+            };
+            overhang = overhang.max(r);
+        }
+        overhang
     }
 
     fn prepare(&mut self, cx: &Context) -> Result<MarkBatch> {
@@ -1061,6 +1077,9 @@ mod tests {
         let lo = f32::from_le_bytes(p[4..8].try_into().unwrap());
         let k = f32::from_le_bytes(p[8..12].try_into().unwrap());
         assert_eq!((lo, k), (0.0, 1.0), "sqrt fitted to [0, 1]");
+        // The radius chain ends in `Sqrt` onto 2..12 px: marks overhang
+        // their positions by up to 12 px.
+        assert!((sel.overhang() - 12.0).abs() < 1e-4, "{}", sel.overhang());
         let batch = sel.prepare(&cx).unwrap();
         assert_eq!(batch.instances(), 20);
     }

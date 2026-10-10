@@ -121,6 +121,10 @@ impl<S: ShaderFn> ShaderFn for ScaleRef<S> {
     fn fit_domain(&mut self, extent: (f64, f64)) -> Result<()> {
         self.write().fit_domain(extent)
     }
+
+    fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)> {
+        self.read().image(extent)
+    }
 }
 
 impl<S> CpuMirror for ScaleRef<S>
@@ -190,6 +194,13 @@ impl<S: PositionScale> DynPositionScale for ScaleRef<S> {
     fn invert(&self, px: f64) -> f64 {
         self.read().invert(px)
     }
+}
+
+/// The image of `extent` under the monotonic `f`, ordered; `None` if
+/// either end maps to a non-finite value.
+pub(crate) fn monotonic_image(f: impl Fn(f64) -> f64, extent: (f64, f64)) -> Option<(f64, f64)> {
+    let (a, b) = (f(extent.0), f(extent.1));
+    (a.is_finite() && b.is_finite()).then(|| (a.min(b), a.max(b)))
 }
 
 /// A 1–2–5 step close to `(hi - lo) / count`.

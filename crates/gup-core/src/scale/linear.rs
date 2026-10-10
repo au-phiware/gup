@@ -87,6 +87,10 @@ impl ShaderFn for Linear {
     const MODULE: &'static WgslModule = &SCALE_LINEAR;
     const ENTRY: &'static str = "map_rel";
 
+    fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)> {
+        super::monotonic_image(|x| self.eval(x), extent)
+    }
+
     fn params(&self) -> LinearParams {
         LinearParams {
             k: self.k() as f32,

@@ -82,6 +82,16 @@ pub trait ShaderFn: Clone + Send + Sync + 'static {
         let _ = extent;
         Ok(())
     }
+
+    /// The extent of this function's numeric output over inputs in
+    /// `extent`, if it has one (`None`, the default, for colours and
+    /// functions without a CPU mirror). Scales are monotonic, so theirs is
+    /// the end points' images. A plot uses it to keep marks sized by an
+    /// encoded channel inside the plot rect.
+    fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)> {
+        let _ = extent;
+        None
+    }
 }
 
 /// What a channel is encoded through: one [`ShaderFn`], or a chain of
@@ -101,6 +111,10 @@ pub trait EncodeFn: Clone + Send + Sync + 'static {
     /// column's data `extent`, each later link's to the image of that
     /// extent through the links before it.
     fn fit(&mut self, extent: (f64, f64)) -> Result<()>;
+
+    /// The extent of the chain's numeric output over column values in
+    /// `extent`: each link's [`ShaderFn::image`] in turn.
+    fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)>;
 
     /// Encode a field of each row through (a clone of) this function:
     /// `scale.encode(|r: &Row| r.value)`. Taking `&self` keeps shared
@@ -236,6 +250,10 @@ impl<S: ShaderFn> EncodeFn for S {
     fn fit(&mut self, extent: (f64, f64)) -> Result<()> {
         self.fit_domain(extent)
     }
+
+    fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)> {
+        ShaderFn::image(self, extent)
+    }
 }
 
 /// The exact f64 CPU twin of an [`EncodeFn`], used for axes, ticks,
@@ -300,6 +318,10 @@ where
         self.first.fit(extent)?;
         let (a, b) = (self.first.eval(extent.0), self.first.eval(extent.1));
         self.next.fit((a.min(b), a.max(b)))
+    }
+
+    fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)> {
+        self.next.image(self.first.image(extent)?)
     }
 }
 
@@ -490,6 +512,8 @@ pub trait DynColumnEncoding<T>: Send + Sync {
     fn links(&self) -> Vec<&dyn DynShaderFn>;
     /// See [`EncodeFn::fit`].
     fn fit(&mut self, extent: (f64, f64)) -> Result<()>;
+    /// See [`EncodeFn::image`].
+    fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)>;
 }
 
 struct ColumnEncoding<A, S, D> {
@@ -515,6 +539,10 @@ where
     fn fit(&mut self, extent: (f64, f64)) -> Result<()> {
         self.func.fit(extent)
     }
+
+    fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)> {
+        self.func.image(extent)
+    }
 }
 
 impl<T, K, S> DynColumnEncoding<T> for KeyEncoded<K, S>
@@ -532,6 +560,10 @@ where
 
     fn fit(&mut self, extent: (f64, f64)) -> Result<()> {
         self.func.fit(extent)
+    }
+
+    fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)> {
+        self.func.image(extent)
     }
 }
 

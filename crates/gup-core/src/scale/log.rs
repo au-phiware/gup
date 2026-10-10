@@ -78,6 +78,10 @@ impl ShaderFn for Log {
     const MODULE: &'static WgslModule = &SCALE_LOG;
     const ENTRY: &'static str = "map";
 
+    fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)> {
+        super::monotonic_image(|x| self.eval(x), extent)
+    }
+
     fn params(&self) -> LogParams {
         let (log_d0, inv_log_span) = self.log_parts();
         LogParams {
