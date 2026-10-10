@@ -212,11 +212,14 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   vs a hi/lo f32 format by a measured spike, proved against
   `conformance::chunk_boundary`. Deps: GUP-395 ✅, GUP-414 ✅, GUP-410 ✅
   (soft).
-- [GUP-419](GUP-419_RFC_001_S5b_Colour_Scales_And_Dictionary_Hook.md) 🚧 —
+- [GUP-419](GUP-419_RFC_001_S5b_Colour_Scales_And_Dictionary_Hook.md) ✅ —
   RFC-001 step S5b: a dictionary hook (keys and `len()` for scale domains), the
   full `Categorical` (palette sized to the dictionary, with a legend), new
   `Diverging`, and `Band`/`Point` position scales with a hidden null key. Deps:
-  GUP-415 ✅, GUP-414 ✅, GUP-401 ✅, GUP-418 📋 (soft).
+  GUP-415 ✅, GUP-414 ✅, GUP-401 ✅, GUP-418 ✅ (soft). Result: `fit_keys` hook
+  with per-channel generic `Dictionary<K>` (`encode_owned_key`, `domain`); LUT
+  `Categorical` with legends; symmetric `Diverging`; `Band`/`Point` with a
+  `NULL_CODE` compare in the glue; three goldens; U+2212 tick labels.
 - [GUP-420](GUP-420_RFC_001_S5c_Wgsl_Function_Macro_V2.md) 📋 — RFC-001 step
   S5c: `#[wgsl_function]` v2 for build-time composition (GUP-406's deferred
   items) — default/overridable import path, shared library sources at expansion,
