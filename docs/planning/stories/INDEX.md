@@ -220,11 +220,11 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   with per-channel generic `Dictionary<K>` (`encode_owned_key`, `domain`); LUT
   `Categorical` with legends; symmetric `Diverging`; `Band`/`Point` with a
   `NULL_CODE` compare in the glue; three goldens; U+2212 tick labels.
-- [GUP-420](GUP-420_RFC_001_S5c_Wgsl_Function_Macro_V2.md) 📋 — RFC-001 step
+- [GUP-420](GUP-420_RFC_001_S5c_Wgsl_Function_Macro_V2.md) 🚧 — RFC-001 step
   S5c: `#[wgsl_function]` v2 for build-time composition (GUP-406's deferred
   items) — default/overridable import path, shared library sources at expansion,
   `compile_error!`-reported naga_oil failures, a calling-convention check, and
-  `Error::Gpu` naming the user's function. Deps: GUP-418 📋, GUP-406 ✅, GUP-410
+  `Error::Gpu` naming the user's function. Deps: GUP-418 ✅, GUP-406 ✅, GUP-410
   ✅.
 - [GUP-421](GUP-421_Analytic_AA_Rules_Rects_1x_MSAA.md) 📋 — Give rules and
   rects the same analytic edge coverage circles already have, then flip
