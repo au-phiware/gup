@@ -197,7 +197,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   dictionary-encoded categorical columns with the `for<'a> Fn(&'a T) -> &'a str`
   key-accessor fix for RFC-001 §12 risk 4, and the `Retain` policy controlling
   CPU-side data retention. Deps: GUP-414 ✅, GUP-395 ✅, GUP-410 ✅ (soft).
-- [GUP-417](GUP-417_Track_Gup_Core_Performance_Budgets.md) 📋 — Measure whether
+- [GUP-417](GUP-417_Track_Gup_Core_Performance_Budgets.md) 🚧 — Measure whether
   S3's 4× MSAA default explains the GPU-pass regression S4a found unexplained,
   record `gup-core`'s performance budgets (GPU pass, CPU/frame, uploads/frame,
   pipeline create time, WASM size) in a checked-in file, and add a local
