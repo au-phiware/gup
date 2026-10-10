@@ -20,6 +20,8 @@ publish = false
 [dependencies]
 wgpu = { version = "27.0", features = ["wgsl"] }
 gup-wgsl = { path = "../gup-wgsl" }
+# `#[wgsl_function]` (GUP-420): user WGSL composed at compile time.
+gup-core-macros = { path = "../gup-core-macros" }
 encase = "0.12"
 bytemuck = { version = "1.23", features = ["derive"] }
 pollster = "0.3"

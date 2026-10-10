@@ -177,15 +177,42 @@ pub fn read_dir(dir: &Path, display: &str) -> Result<ShaderDir, Error> {
 /// Parse and validate standalone WGSL with naga, reporting errors against
 /// `source`.
 pub fn parse_wgsl(label: &str, source: &str) -> Result<naga::Module, Error> {
+    validate_wgsl(label, source).map(|(module, _)| module)
+}
+
+/// [`parse_wgsl`], also returning naga's analysis of the module (for
+/// example each function's [`available_stages`]).
+///
+/// [`available_stages`]: naga::valid::FunctionInfo::available_stages
+pub fn validate_wgsl(
+    label: &str,
+    source: &str,
+) -> Result<(naga::Module, naga::valid::ModuleInfo), Error> {
     let module = naga::front::wgsl::parse_str(source)
         .map_err(|e| Error::new(label, e.emit_to_string_with_path(source, label)))?;
-    naga::valid::Validator::new(
+    let info = naga::valid::Validator::new(
         naga::valid::ValidationFlags::all(),
         naga::valid::Capabilities::default(),
     )
     .validate(&module)
     .map_err(|e| Error::new(label, e.emit_to_string_with_path(source, label)))?;
-    Ok(module)
+    Ok((module, info))
+}
+
+/// Gup's WGSL library: every module in `gup-wgsl/library` (the view
+/// transform, marks, scales and palettes), compiled into this crate so
+/// that gup-core's build script and the `#[wgsl_function]` macro compose
+/// against the same text (GUP-420). Each [`Source`]'s `file` is
+/// `gup-wgsl/library/<file>`.
+pub fn library() -> Vec<Source> {
+    const FILES: &[(&str, &str)] = include!(concat!(env!("OUT_DIR"), "/library.rs"));
+    FILES
+        .iter()
+        .map(|&(file, text)| Source {
+            file: file.to_string(),
+            text: text.to_string(),
+        })
+        .collect()
 }
 
 /// The naga_oil composer with the library loaded, and each module's
@@ -339,6 +366,114 @@ impl Library {
         Ok(lib)
     }
 
+    /// Compose and flatten a module from outside the library (a user's
+    /// `#[wgsl_function]`), as [`new`](Self::new) does for library modules
+    /// and with the same checks. Its import path is `import_path`, so its
+    /// source has no `#define_import_path` line, and it may import only
+    /// modules already in the library.
+    pub fn add_module(&mut self, src: &Source, import_path: &str) -> Result<FlatModule, Error> {
+        let at_line = |n: usize| format!("{}:{}", src.file, n + 1);
+        for (n, line) in src.text.lines().enumerate() {
+            let t = line.trim_start();
+            if t.starts_with("#define_import_path") {
+                return Err(Error::new(
+                    at_line(n),
+                    format!(
+                        "`{}`: this module's import path is `{import_path}`, set by its \
+                         Rust attribute; remove the line",
+                        t.trim_end()
+                    ),
+                ));
+            }
+        }
+        check_directives(src)?;
+        if let Some(other) = self.module(import_path) {
+            return Err(Error::new(
+                &src.file,
+                format!(
+                    "`{import_path}` is already a module ({}); import paths must be unique",
+                    other.file
+                ),
+            ));
+        }
+        let (_, imports, _) = get_preprocessor_data(&src.text);
+        let imports: Vec<String> = imports.into_iter().map(|i| i.import).collect();
+        for import in &imports {
+            if self.module(import).is_none() {
+                let known: Vec<&str> = self
+                    .modules
+                    .iter()
+                    .map(|m| m.import_path.as_str())
+                    .collect();
+                return Err(Error::new(
+                    &src.file,
+                    format!(
+                        "`{import}` is not a module this one can import; the library has: {}",
+                        known.join(", ")
+                    ),
+                ));
+            }
+        }
+        let items: Vec<String> = lex::declarations(&src.text)
+            .iter()
+            .filter_map(|d| d.name.map(str::to_string))
+            .collect();
+        let added = self
+            .composer
+            .add_composable_module(ComposableModuleDescriptor {
+                source: &src.text,
+                file_path: &src.file,
+                language: ShaderLanguage::Wgsl,
+                as_name: Some(import_path.to_string()),
+                ..Default::default()
+            })
+            .map(|_| ());
+        added.map_err(|e| Error::new(&src.file, e.emit_to_string(&self.composer)))?;
+        let added: Vec<String> = items
+            .iter()
+            .map(|item| Composer::decorated_name(Some(import_path), item))
+            .collect();
+        let result = (|| {
+            let owners: HashSet<&String> = self.rename.values().collect();
+            for item in &items {
+                let flat = flat_name(import_path, item);
+                if owners.contains(&flat) {
+                    return Err(Error::new(
+                        &src.file,
+                        format!(
+                            "`{import_path}::{item}` flattens to `{flat}`, a library item's name"
+                        ),
+                    ));
+                }
+            }
+            for (item, decorated) in items.iter().zip(&added) {
+                self.rename
+                    .insert(decorated.clone(), flat_name(import_path, item));
+            }
+            self.flatten_module(&Parsed {
+                src,
+                path: import_path.to_string(),
+                imports,
+                items: items.clone(),
+            })
+        })();
+        match result {
+            Ok(flat) => {
+                self.modules.push(flat.clone());
+                Ok(flat)
+            }
+            Err(e) => {
+                // Leave the library as it was, so it can compose the next
+                // module.
+                self.composer.remove_composable_module(import_path);
+                for decorated in &added {
+                    self.rename.remove(decorated);
+                }
+                Err(e)
+            }
+        }
+    }
+
     /// The flattened modules, dependencies first.
     pub fn modules(&self) -> &[FlatModule] {
         &self.modules
@@ -489,12 +624,23 @@ impl Library {
         let params = flat_name(path, "Params");
         for (name, layout) in struct_layouts(&composed) {
             if name == params && layout.span % 16 != 0 {
+                let missing = (layout.span.next_multiple_of(16) - layout.span) / 4;
+                let pads: Vec<String> = ["pad_a", "pad_b", "pad_c"]
+                    .iter()
+                    .copied()
+                    .filter(|p| !layout.members.iter().any(|(m, _)| m == p))
+                    .take(missing as usize)
+                    .map(|p| format!("{p}: u32,"))
+                    .collect();
                 return Err(Error::new(
                     &src.file,
                     format!(
-                        "struct `Params` of `{path}` spans {} bytes; uniform `Params` structs \
-                         must span a multiple of 16 bytes (pad it in WGSL and in its encase twin)",
-                        layout.span
+                        "struct `Params` of `{path}` spans {} bytes, but uniform `Params` structs \
+                         must span a multiple of 16 bytes, so that they pack into the glue's \
+                         uniform: add {missing} `u32` member{} at its end (`{}`)",
+                        layout.span,
+                        if missing == 1 { "" } else { "s" },
+                        pads.join(" "),
                     ),
                 ));
             }

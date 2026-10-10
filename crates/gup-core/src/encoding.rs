@@ -355,6 +355,11 @@ impl<S: ShaderFn> EncodeFn for S {
 /// The exact f64 CPU twin of an [`EncodeFn`], used for axes, ticks,
 /// legends, picking and vector output. A chain's mirror evaluates its
 /// links' mirrors in order.
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` has no CPU mirror",
+    label = "`{Self}` needs `impl CpuMirror for {Self}`",
+    note = "a function needs a CPU mirror to start a chain (`a.then(b)` fits `b` to the image of the data through `a`), to be `monotonic`, or to place axes and legends: implement `CpuMirror` with `fn eval(&self, x: f64) -> f64` (or `-> Color`), the f64 twin of its WGSL"
+)]
 pub trait CpuMirror: EncodeFn {
     /// Evaluate the function on the CPU.
     fn eval(&self, x: f64) -> <Self::Output as GpuType>::Cpu;

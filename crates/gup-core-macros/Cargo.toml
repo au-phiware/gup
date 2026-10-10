@@ -1,0 +1,28 @@
+[package]
+name = "gup-core-macros"
+version = "0.1.0"
+authors = ["Corin Lawson <corin@phiware.com.au>"]
+edition = "2024"
+description = "gup-core's `#[wgsl_function]` (RFC-001 §6, GUP-420): a user's WGSL function composed and checked at compile time, with its `ShaderFn` impl generated"
+license = "GPL-3.0-or-later"
+repository = "https://github.com/au-phiware/gup"
+publish = false
+
+# Not the frozen old path's `gup-macros` (which transpiles Rust-syntax
+# bodies to WGSL for the old render path). This macro takes authored WGSL,
+# composes it with naga_oil against Gup's library at expansion through
+# gup-wgsl's `compose` feature, and emits Rust only. Use it through
+# `gup_core::wgsl_function`: the generated code names `::gup_core`.
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1.0"
+quote = "1.0"
+syn = { version = "2.0", features = ["full"] }
+gup-wgsl = { path = "../gup-wgsl", features = ["compose"] }
+# Reads the composed module's entry point and `Params` layout.
+naga = { version = "27.0.3", features = ["wgsl-in"] }
+# The `Params` twin's `encase::ShaderType` impl, rooted at gup-core's
+# re-export so user crates need no `encase` dependency.
+encase_derive_impl = "0.12"

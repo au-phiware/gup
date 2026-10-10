@@ -117,11 +117,50 @@ pub use target::{DEFAULT_SAMPLES, Frame, ImageTarget, RenderTarget, TargetOption
 #[cfg(feature = "window")]
 pub use window::WindowTarget;
 
+// `#[wgsl_function]` names `::gup_core`, in this crate's own tests too.
+extern crate self as gup_core;
+
+#[doc(inline)]
+pub use gup_core_macros::wgsl_function;
+
 /// The names most programs need.
 pub mod prelude {
     pub use crate::{
         Band, Categorical, Circle, Color, ColorScale, Context, CpuMirror, Diverging, EncodeFn,
         Linear, Log, Plot, Point, PositionScale, Pow, Px, Retain, ScaleRef, Selection, Sequential,
-        ShaderFn, Symlog, Time,
+        ShaderFn, Symlog, Time, wgsl_function,
     };
+}
+
+/// What `#[wgsl_function]`'s expansion names. Not public API.
+#[doc(hidden)]
+pub mod __private {
+    pub use encase;
+
+    /// The library's flattened modules (`VIEW`, `SCALE_LINEAR`, …), which a
+    /// user module imports.
+    pub mod wgsl {
+        pub use crate::shader::*;
+    }
+
+    /// See `scale::monotonic_image`.
+    pub fn monotonic_image(f: impl Fn(f64) -> f64, extent: (f64, f64)) -> Option<(f64, f64)> {
+        crate::scale::monotonic_image(f, extent)
+    }
+
+    /// `a == b`, in a constant.
+    pub const fn str_eq(a: &str, b: &str) -> bool {
+        let (a, b) = (a.as_bytes(), b.as_bytes());
+        if a.len() != b.len() {
+            return false;
+        }
+        let mut i = 0;
+        while i < a.len() {
+            if a[i] != b[i] {
+                return false;
+            }
+            i += 1;
+        }
+        true
+    }
 }

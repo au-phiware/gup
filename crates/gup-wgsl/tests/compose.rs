@@ -196,8 +196,9 @@ fn params_must_span_a_multiple_of_16_bytes() {
     )]);
     assert!(
         text.contains(
-            "struct `Params` of `gup::scale::pad` spans 4 bytes; uniform `Params` structs must \
-             span a multiple of 16 bytes"
+            "struct `Params` of `gup::scale::pad` spans 4 bytes, but uniform `Params` structs \
+             must span a multiple of 16 bytes, so that they pack into the glue's uniform: add 3 \
+             `u32` members at its end (`pad_a: u32, pad_b: u32, pad_c: u32,`)"
         ),
         "{text}"
     );
@@ -263,4 +264,63 @@ fn unknown_imports_fail() {
         text.contains("imports `gup::nowhere`, which is not a library module"),
         "{text}"
     );
+}
+
+/// GUP-420: a module from outside the library (a user's
+/// `#[wgsl_function]`) composes against it with the library's checks, and
+/// a failure leaves the library able to compose the next one.
+#[test]
+fn user_modules_compose_against_the_library() {
+    let mut lib = library();
+    let user = |text: &str| source("src/lib.rs", text);
+    let ok = "#import gup::scale::linear as linear\n\
+              struct Params {\n    k: f32,\n    pad_a: u32,\n    pad_b: u32,\n    pad_c: u32,\n}\n\
+              fn twice(v: f32, p: Params, q: linear::Params) -> f32 {\n    \
+              return linear::map(v, q) * 2.0 * p.k;\n}\n";
+
+    let e = lib
+        .add_module(&user(&format!("#define_import_path my::f\n{ok}")), "my::f")
+        .unwrap_err();
+    assert!(e.report.contains("set by its Rust attribute"), "{e}");
+    let e = lib
+        .add_module(
+            &user("#import gup::nope as n\nfn f() -> f32 {\n    return n::x();\n}\n"),
+            "my::f",
+        )
+        .unwrap_err();
+    assert!(e.report.contains("`gup::nope` is not a module"), "{e}");
+    // A failure after naga_oil accepted the module (a short `Params`).
+    let e = lib
+        .add_module(
+            &user(
+                "struct Params {\n    k: f32,\n}\nfn f(p: Params) -> f32 {\n    return p.k;\n}\n",
+            ),
+            "my::f",
+        )
+        .unwrap_err();
+    assert!(e.report.contains("add 3 `u32` members"), "{e}");
+
+    let flat = lib
+        .add_module(&user(ok), "my::f")
+        .unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(flat.imports, ["gup::scale::linear"]);
+    assert!(flat.wgsl.contains("fn my_f_twice("), "{}", flat.wgsl);
+    assert!(flat.wgsl.contains("gup_scale_linear_map("), "{}", flat.wgsl);
+    parse_wgsl("my::f", &lib.closure_wgsl("my::f")).unwrap_or_else(|e| panic!("{e}"));
+    let e = lib.add_module(&user(ok), "my::f").unwrap_err();
+    assert!(e.report.contains("already a module"), "{e}");
+}
+
+/// Gup's own library, as gup-core's build script and `#[wgsl_function]`
+/// see it, composes.
+#[test]
+fn the_library_composes() {
+    let sources = gup_wgsl::compose::library();
+    assert!(
+        sources
+            .iter()
+            .any(|s| s.file == "gup-wgsl/library/view.wgsl")
+    );
+    let lib = Library::new(&sources).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(lib.modules().len(), sources.len());
 }

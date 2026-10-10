@@ -1771,6 +1771,7 @@ dependencies = [
  "bytemuck",
  "encase",
  "futures-channel",
+ "gup-core-macros",
  "gup-text",
  "gup-visual-regression",
  "gup-wgsl",
@@ -1784,6 +1785,18 @@ dependencies = [
  "web-time",
  "wgpu",
  "winit",
+]
+
+[[package]]
+name = "gup-core-macros"
+version = "0.1.0"
+dependencies = [
+ "encase_derive_impl",
+ "gup-wgsl",
+ "naga",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
 ]
 
 [[package]]

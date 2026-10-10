@@ -855,12 +855,7 @@ mod tests {
             &glue.signature,
             &link(&glue.signature, &glue.source, &glue.modules).unwrap(),
         );
-        let dir = gup_wgsl::compose::read_dir(
-            &Path::new(env!("CARGO_MANIFEST_DIR")).join("src/shaders"),
-            "src/shaders",
-        )
-        .unwrap();
-        let mut oracle = gup_wgsl::compose::Library::new(&dir.modules).unwrap();
+        let mut oracle = gup_wgsl::compose::Library::new(&gup_wgsl::compose::library()).unwrap();
         let composed = oracle
             .compose(&glue.signature, &glue.source)
             .unwrap_or_else(|e| panic!("{e}"));
