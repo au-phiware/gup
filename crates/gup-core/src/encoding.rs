@@ -507,6 +507,48 @@ impl<K: KeySource, S> KeyEncoded<K, S> {
             dictionary: Dictionary::new(),
         }
     }
+
+    /// Fix the domain's order: `keys` take codes `0..` in the order given,
+    /// before any row is read, so a band axis shows them in that order
+    /// (months in calendar order, say) and a categorical scale gives each
+    /// the same colour in every chart with the same domain. Listed keys
+    /// that no row has still have their slot (an empty band) and colour;
+    /// a key in the rows that is not listed gets the next code, in
+    /// first-seen order, after them.
+    ///
+    /// ```
+    /// use gup_core::prelude::*;
+    ///
+    /// let rows = vec![("Wed", 3.0), ("Mon", 1.0)];
+    /// let cx = Context::new_blocking()?;
+    /// let mut plot = Plot::new();
+    /// let (x, y) = (plot.x(Band::new()), plot.y(Linear::new()));
+    /// plot.add(Selection::<(&str, f64), Circle>::new(rows))
+    ///     .attr(Circle::X, x.encode_key(|r: &(&str, f64)| r.0).domain(["Mon", "Tue", "Wed"]))
+    ///     .attr(Circle::Y, y.encode(|r: &(&str, f64)| r.1));
+    /// plot.resolve(&cx, 300.0, 200.0)?;
+    /// let band = x.read();
+    /// let keys: Vec<&str> = band.keys().iter().map(AsRef::as_ref).collect();
+    /// assert_eq!(keys, ["Mon", "Tue", "Wed"]);
+    /// # Ok::<(), gup_core::Error>(())
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// With more keys than codes (`u32::MAX`, the last of which is
+    /// reserved for null).
+    pub fn domain<I>(mut self, keys: I) -> Self
+    where
+        I: IntoIterator,
+        I::Item: Into<K::Key>,
+    {
+        for key in keys {
+            self.dictionary
+                .encode(key.into())
+                .expect("a domain within u32::MAX - 1 keys");
+        }
+        self
+    }
 }
 
 /// The type of key a key accessor reads (see [`KeyAccessor`]).

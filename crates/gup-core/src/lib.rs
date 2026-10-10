@@ -8,10 +8,11 @@
 //! - one cloneable [`Context`] that owns or wraps a wgpu device;
 //! - a GPU [column store](mod@column) — accessors run once, columns live on
 //!   the GPU as instance-rate vertex buffers, relative to a per-chunk f64
-//!   origin; string keys are dictionary-encoded ([`ShaderFn::encode_key`]),
-//!   nulls are validity bits or a reserved code (a null position is not
-//!   drawn, a null colour is [`NULL_COLOR`]), and [`Retain`] says how much
-//!   CPU data to keep after upload;
+//!   origin; keys (strings, integers, enums) are dictionary-encoded
+//!   ([`EncodeFn::encode_key`], [`EncodeFn::encode_owned_key`]), nulls are
+//!   validity bits or a reserved code (a null position is not drawn, a
+//!   null colour is [`NULL_COLOR`]), and [`Retain`] says how much CPU data
+//!   to keep after upload;
 //! - typed [channels](channel): `Circle::RADIUS: Channel<Circle, Px>`, so
 //!   wrong value types, unknown channels and wrong marks don't compile;
 //! - one [scale] family, each a [`ShaderFn`] with an f64
@@ -24,10 +25,13 @@
 //!   [`RenderTarget`] ([`ImageTarget`], [`TextureTarget`], a window, or a
 //!   host's own pass), or written as SVG by [`SvgTarget`] (guides only).
 //!
-//! The data side is still the S0 vertical slice: one mark ([`Circle`]), four
-//! scales ([`Linear`], [`Log`], [`Sequential`] and a minimal [`Categorical`])
-//! and a headless PNG path. It is not re-exported by the `gup` crate until
-//! the RFC-001 S14 flip, and it never depends on `gup`.
+//! The scale family is complete (RFC-001 S5a, S5b): [`Linear`], [`Pow`],
+//! [`Log`], [`Symlog`] and [`Time`] for numbers; [`Band`] and [`Point`]
+//! for keys; [`Sequential`], [`Diverging`] and [`Categorical`] for colour,
+//! each with a [`Legend`]. There is still one mark ([`Circle`]) and one
+//! layer per plot, and guides are axes only (legends are placed by hand
+//! until RFC-001 S7). It is not re-exported by the `gup` crate until the
+//! RFC-001 S14 flip, and it never depends on `gup`.
 //!
 //! ## Contracts
 //!

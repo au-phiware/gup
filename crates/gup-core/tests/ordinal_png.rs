@@ -333,7 +333,11 @@ fn band_axis_labelled_by_enum_keys() {
     let (x, y) = (plot.x(Band::new().padding(0.15)), plot.y(Linear::new()));
     plot.title("Daily highs by month (°C)")
         .add(Selection::<Day, Circle>::new(rows.clone()))
-        .attr(Circle::X, x.encode_nullable_owned_key(|d: &Day| d.month))
+        .attr(
+            Circle::X,
+            x.encode_nullable_owned_key(|d: &Day| d.month)
+                .domain(MONTHS),
+        )
         .attr(Circle::Y, y.encode(|d: &Day| d.high_c))
         .attr(Circle::RADIUS, Px(4.0))
         .attr(
