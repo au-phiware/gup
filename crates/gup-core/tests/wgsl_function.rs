@@ -16,8 +16,6 @@ struct Energy;
     struct Params {
         slope: f32,
         offset: f32,
-        pad_a: u32,
-        pad_b: u32,
     }
 
     fn energy(magnitude: f32, p: Params) -> f32 {
@@ -30,7 +28,6 @@ impl ShaderFn for Energy {
         EnergyParams {
             slope: 1.5,
             offset: 4.8,
-            ..Default::default()
         }
     }
 }

@@ -829,6 +829,8 @@ pub trait DynShaderFn: Send + Sync {
     /// A stable description used in the pipeline cache key: everything
     /// that changes the generated WGSL, nothing that only changes uniforms.
     fn signature(&self) -> String;
+    /// The implementing Rust type, for error messages.
+    fn type_name(&self) -> &'static str;
 }
 
 impl<S: ShaderFn> DynShaderFn for S {
@@ -868,6 +870,10 @@ impl<S: ShaderFn> DynShaderFn for S {
 
     fn resources(&self) -> Vec<Resource> {
         ShaderFn::resources(self)
+    }
+
+    fn type_name(&self) -> &'static str {
+        std::any::type_name::<S>()
     }
 
     fn signature(&self) -> String {

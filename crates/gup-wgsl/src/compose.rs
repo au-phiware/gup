@@ -281,6 +281,7 @@ impl Library {
                     .iter()
                     .filter_map(|d| d.name.map(str::to_string))
                     .collect(),
+                pad_params: false,
             });
         }
 
@@ -371,6 +372,10 @@ impl Library {
     /// and with the same checks. Its import path is `import_path`, so its
     /// source has no `#define_import_path` line, and it may import only
     /// modules already in the library.
+    ///
+    /// One check is relaxed: a `Params` struct whose span is not a multiple
+    /// of 16 bytes is padded in the flattened text, with [`PAD_PREFIX`]
+    /// members, rather than rejected, so user WGSL needs no padding.
     pub fn add_module(&mut self, src: &Source, import_path: &str) -> Result<FlatModule, Error> {
         let at_line = |n: usize| format!("{}:{}", src.file, n + 1);
         for (n, line) in src.text.lines().enumerate() {
@@ -455,6 +460,7 @@ impl Library {
                 path: import_path.to_string(),
                 imports,
                 items: items.clone(),
+                pad_params: true,
             })
         })();
         match result {
@@ -564,6 +570,7 @@ impl Library {
             path,
             imports,
             items,
+            pad_params,
         } = parsed;
         let mut flat = FlatModule {
             import_path: path.clone(),
@@ -581,7 +588,10 @@ impl Library {
             import: path.clone(),
             items: items.clone(),
         }];
-        let composed = self.compose_with(&src.file, "", &all)?;
+        let mut composed = self.compose_with(&src.file, "", &all)?;
+        if *pad_params {
+            pad_struct(&mut composed, &flat_name(path, "Params"));
+        }
         let text = write_wgsl(&src.file, &composed)?;
 
         let own: Vec<String> = items.iter().map(|i| flat_name(path, i)).collect();
@@ -727,6 +737,78 @@ struct Parsed<'a> {
     path: String,
     imports: Vec<String>,
     items: Vec<String>,
+    /// Pad `Params` to a multiple of 16 bytes (user modules) rather than
+    /// reject it (the library).
+    pad_params: bool,
+}
+
+/// The names of the members [`Library::add_module`] appends to a short
+/// `Params` (`gup_pad_a`, `gup_pad_b`, `gup_pad_c`).
+pub const PAD_PREFIX: &str = "gup_pad_";
+
+/// Append `u32`-sized members to struct `name` until it spans a multiple
+/// of 16 bytes, so that it packs into the glue's uniform. The members
+/// reuse a 4-byte scalar type that precedes the struct in the type arena
+/// (naga requires a struct's members to): a struct without one is left
+/// alone, and the 16-byte check reports it.
+fn pad_struct(module: &mut naga::Module, name: &str) {
+    use naga::{Scalar, StructMember, Type, TypeInner};
+    let Some((handle, ty)) = module
+        .types
+        .iter()
+        .find(|(_, t)| t.name.as_deref() == Some(name))
+        .map(|(h, t)| (h, t.clone()))
+    else {
+        return;
+    };
+    let TypeInner::Struct { mut members, span } = ty.inner else {
+        return;
+    };
+    if span % 16 == 0 {
+        return;
+    }
+    let Some(pad_ty) = module
+        .types
+        .iter()
+        .take_while(|(h, _)| *h != handle)
+        .find(|(_, t)| {
+            matches!(
+                t.inner,
+                TypeInner::Scalar(Scalar::F32 | Scalar::U32 | Scalar::I32)
+            )
+        })
+        .map(|(h, _)| h)
+    else {
+        return;
+    };
+    let ctx = module.to_ctx();
+    let end = members
+        .last()
+        .map_or(0, |m| m.offset + module.types[m.ty].inner.size(ctx));
+    let target = span.next_multiple_of(16);
+    let mut offset = end;
+    for suffix in ['a', 'b', 'c'] {
+        if offset >= target {
+            break;
+        }
+        members.push(StructMember {
+            name: Some(format!("{PAD_PREFIX}{suffix}")),
+            ty: pad_ty,
+            binding: None,
+            offset,
+        });
+        offset += 4;
+    }
+    module.types.replace(
+        handle,
+        Type {
+            name: ty.name,
+            inner: TypeInner::Struct {
+                members,
+                span: target,
+            },
+        },
+    );
 }
 
 /// Every struct of `composed` must lay out the same in `reparsed`.

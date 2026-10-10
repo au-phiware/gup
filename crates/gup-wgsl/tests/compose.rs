@@ -289,16 +289,35 @@ fn user_modules_compose_against_the_library() {
         )
         .unwrap_err();
     assert!(e.report.contains("`gup::nope` is not a module"), "{e}");
-    // A failure after naga_oil accepted the module (a short `Params`).
+    // A failure after naga_oil accepted the module: a short `Params` with
+    // no scalar type before it to pad with.
     let e = lib
         .add_module(
             &user(
-                "struct Params {\n    k: f32,\n}\nfn f(p: Params) -> f32 {\n    return p.k;\n}\n",
+                "struct Params {\n    v: vec2<f32>,\n}\n\
+                 fn f(p: Params) -> f32 {\n    return p.v.x;\n}\n",
             ),
             "my::f",
         )
         .unwrap_err();
-    assert!(e.report.contains("add 3 `u32` members"), "{e}");
+    assert!(e.report.contains("add 2 `u32` members"), "{e}");
+    // A short `Params` of scalars is padded instead.
+    let padded = lib
+        .add_module(
+            &user(
+                "struct Params {\n    k: f32,\n}\nfn f(p: Params) -> f32 {\n    return p.k;\n}\n",
+            ),
+            "my::short",
+        )
+        .unwrap_or_else(|e| panic!("{e}"));
+    let module = parse_wgsl("my::short", &padded.wgsl).unwrap();
+    let (_, layout) = struct_layouts(&module)
+        .into_iter()
+        .find(|(n, _)| n == "my_short_Params")
+        .unwrap();
+    assert_eq!(layout.span, 16);
+    let names: Vec<&str> = layout.members.iter().map(|(n, _)| n.as_str()).collect();
+    assert_eq!(names, ["k", "gup_pad_a", "gup_pad_b", "gup_pad_c"]);
 
     let flat = lib
         .add_module(&user(ok), "my::f")

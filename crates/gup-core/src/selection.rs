@@ -289,6 +289,37 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         Ok(self.columns.as_mut().expect("evaluated above"))
     }
 
+    /// Two different shader functions with one WGSL import path (two
+    /// `#[wgsl_function(path = "…")]`s, say) would share the glue's import
+    /// alias, so one would silently call the other's WGSL. Refuse them,
+    /// naming both.
+    fn check_module_paths(&self) -> Result<()> {
+        let mut seen: Vec<&dyn crate::encoding::DynShaderFn> = Vec::new();
+        for enc in self.encodings.iter().flatten() {
+            let Encoding::Column(c) = enc else { continue };
+            for func in c.links() {
+                let path = func.module().import_path;
+                let clash = seen.iter().find(|s| {
+                    s.module().import_path == path && !std::ptr::eq(s.module(), func.module())
+                });
+                if let Some(other) = clash {
+                    return Err(Error::Compose {
+                        module: format!("{} layer", M::NAME),
+                        report: format!(
+                            "`{}` and `{}` are different WGSL modules with one import path, \
+                             `{path}`; import paths must be unique, so give one of them its \
+                             own `#[wgsl_function(path = \"…\")]`",
+                            other.type_name(),
+                            func.type_name()
+                        ),
+                    });
+                }
+                seen.push(func);
+            }
+        }
+        Ok(())
+    }
+
     fn glue(&self) -> Glue {
         let channels = M::CHANNELS
             .iter()
@@ -437,6 +468,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
     }
 
     fn prepare(&mut self, cx: &Context) -> Result<MarkBatch> {
+        self.check_module_paths()?;
         let glue = self.glue();
         let program = cx.program(&glue)?;
 

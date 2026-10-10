@@ -120,6 +120,129 @@ pub use window::WindowTarget;
 // `#[wgsl_function]` names `::gup_core`, in this crate's own tests too.
 extern crate self as gup_core;
 
+/// Write a shader function (a scale, transfer function or palette) as WGSL
+/// in your own crate: `#[wgsl_function]` completes its [`ShaderFn`] impl,
+/// and checks the WGSL when your crate compiles.
+///
+/// Put it on an `impl ShaderFn for YourType` block holding the WGSL:
+///
+/// ```
+/// use gup_core::prelude::*;
+///
+/// /// The energy an earthquake releases, in joules, from its magnitude:
+/// /// log10 E = 1.5 M + 4.8.
+/// #[derive(Clone)]
+/// struct Energy;
+///
+/// #[wgsl_function(monotonic, wgsl = r#"
+///     struct Params { slope: f32, offset: f32 }
+///
+///     fn energy(magnitude: f32, p: Params) -> f32 {
+///         return pow(10.0, p.slope * magnitude + p.offset);
+///     }
+/// "#)]
+/// impl ShaderFn for Energy {
+///     fn params(&self) -> EnergyParams {
+///         EnergyParams { slope: 1.5, offset: 4.8 }
+///     }
+/// }
+///
+/// // Its f64 twin, for axes and legends, and to start a chain.
+/// impl CpuMirror for Energy {
+///     fn eval(&self, magnitude: f64) -> f64 {
+///         10f64.powf(1.5 * magnitude + 4.8)
+///     }
+/// }
+///
+/// // Size each quake by the energy it released: its area grows with the
+/// // energy, through a square-root radius.
+/// struct Quake { lon: f64, lat: f64, magnitude: f64 }
+/// let quakes = vec![
+///     Quake { lon: 142.4, lat: 38.3, magnitude: 7.8 },
+///     Quake { lon: 142.9, lat: 38.0, magnitude: 6.1 },
+///     Quake { lon: 141.8, lat: 37.6, magnitude: 5.2 },
+///     Quake { lon: 142.1, lat: 38.9, magnitude: 4.4 },
+/// ];
+/// let area = Energy.then(Pow::sqrt().domain(0.0, Energy.eval(7.8)).range(Px(0.0), Px(30.0)));
+///
+/// let cx = Context::new_blocking()?;
+/// let mut plot = Plot::new();
+/// let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
+/// plot.add(Selection::<Quake, Circle>::new(quakes))
+///     .attr(Circle::X, x.encode(|q: &Quake| q.lon))
+///     .attr(Circle::Y, y.encode(|q: &Quake| q.lat))
+///     .attr(Circle::RADIUS, area.encode(|q: &Quake| q.magnitude));
+/// let (image, _) = plot.render_resolved(&cx, 480, 320)?;
+///
+/// // The main shock's disc is 30 px in radius; one 1.7 magnitudes
+/// // smaller released 1/355 of its energy, so its radius is 30/√355.
+/// assert_eq!(area.eval(7.8), 30.0);
+/// assert!((area.eval(6.1) - 30.0 / 10f64.powf(1.5 * 1.7).sqrt()).abs() < 1e-9);
+/// let (px, py) = (x.read().eval(142.4), y.read().eval(38.3));
+/// let inside = image.get_pixel(px as u32, (py - 27.0) as u32).0;
+/// let outside = image.get_pixel(px as u32, (py - 33.0) as u32).0;
+/// assert_ne!(inside, outside, "the main shock's disc ends at 30 px");
+/// # Ok::<(), gup_core::Error>(())
+/// ```
+///
+/// # What you write
+///
+/// - **The WGSL** (`wgsl = r#"…"#`, or `file = "src/energy.wgsl"`
+///   relative to your crate's manifest): a `struct Params` of uniform
+///   values and the function the glue calls, in one of these shapes:
+///
+///   | Signature | Input |
+///   | --- | --- |
+///   | `fn f(v: f32, p: Params) -> T` | a number |
+///   | `fn f(v: f32, base: f32, p: Params) -> T` | a number stored relative to its chunk; `base` comes from [`ShaderFn::chunk_base`] |
+///   | `fn f(v: vec2<f32>, base: vec2<f32>, p: Params) -> T` | a hi/lo pair relative to its chunk, for deep zoom |
+///   | `fn f(code: u32, p: Params) -> T` | a dictionary code ([`EncodeFn::encode_key`]) |
+///
+///   `T` is `f32` (a number) or `vec4<f32>` (a [`Color`]). A palette adds
+///   `lut: texture_2d<f32>, smp: sampler` after `p`, read with
+///   `textureSampleLevel` or `textureLoad` (the glue calls the function
+///   from the vertex stage). It may `#import` Gup's library
+///   (`#import gup::scale::linear as linear`) and declare helper
+///   functions; with more than one function, `entry = "f"` names the one
+///   the glue calls. `Params` members are `f32`, `u32`, `i32` or
+///   `vec4<f32>`. Uniform `Params` structs span a multiple of 16 bytes, and
+///   the macro pads yours in the flattened WGSL, so you need not.
+/// - **The impl's dynamic half**: `fn params(&self) -> <Type>Params`,
+///   returning the generated twin of `Params` (named after your type, with
+///   one public field per member),
+///   and any of [`fit_domain`](ShaderFn::fit_domain),
+///   [`fit_keys`](ShaderFn::fit_keys) (for functions over codes),
+///   [`chunk_base`](ShaderFn::chunk_base),
+///   [`resources`](ShaderFn::resources) (the LUT) and
+///   [`image`](ShaderFn::image). Write `type Out = Px;` for a function
+///   whose `f32` result is pixels (a position or size); otherwise an `f32`
+///   result is a plain number, which can feed another function.
+/// - **A [`CpuMirror`]**, to start a chain ([`EncodeFn::then`]) or place
+///   axes and legends. With `monotonic`, the macro derives
+///   [`ShaderFn::image`] from it, so a plot sizing marks through your
+///   function keeps them inside the plot.
+///
+/// The macro derives the rest: `In`, `Out`, `Params`, `MODULE`, `ENTRY`
+/// and `input_format`, from the WGSL.
+///
+/// # Checked when your crate compiles
+///
+/// The WGSL is composed with naga_oil against Gup's library at expansion,
+/// so these are compile errors at your code, with naga_oil's report
+/// pointing at the WGSL line: syntax and type errors, a wrong number of
+/// arguments, an unknown import, identifiers that end in a digit (naga
+/// renames them), a `Params` member with no Rust twin, a signature the
+/// glue cannot call, operations the vertex stage lacks (`textureSample`,
+/// derivatives), resource bindings, and impl items that contradict the
+/// WGSL. Anything only the GPU sees fails at pipeline
+/// creation as [`Error::Gpu`], whose message names your module.
+///
+/// # Import path
+///
+/// The module's WGSL import path is `<crate>::<type in snake_case>`
+/// (`my_crate::energy`), or `path = "my_crate::seismic::energy"`. Two
+/// functions with one path in a plot fail with [`Error::Compose`] naming
+/// both types; the `gup::` namespace is Gup's own.
 #[doc(inline)]
 pub use gup_core_macros::wgsl_function;
 

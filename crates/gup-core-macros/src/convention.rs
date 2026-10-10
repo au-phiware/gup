@@ -66,8 +66,9 @@ pub struct Convention {
     pub lut: bool,
     /// `Params`' span in bytes.
     pub params_span: u32,
-    /// `Params`' members, in order.
-    pub params: Vec<(String, Member)>,
+    /// `Params`' members and their offsets, in order, including any
+    /// padding `gup_wgsl::compose::Library::add_module` appended.
+    pub params: Vec<(String, Member, u32)>,
 }
 
 /// The shapes the glue calls, for error messages.
@@ -302,6 +303,19 @@ pub fn check(
         }
     }
 
+    // Overrides would need values at pipeline creation, which gup never
+    // gives.
+    if let Some(name) = module
+        .overrides
+        .iter()
+        .find_map(|(_, o)| o.name.as_deref().and_then(|n| n.strip_prefix(&prefix)))
+    {
+        return Err(format!(
+            "the WGSL declares `override {name}`, which gup never sets at pipeline \
+             creation; make it a `Params` member or a `const`"
+        ));
+    }
+
     let TypeInner::Struct { members, span } = ty(params) else {
         unreachable!("checked above")
     };
@@ -324,7 +338,7 @@ pub fn check(
                 ));
             }
         };
-        fields.push((name, member));
+        fields.push((name, member, m.offset));
     }
 
     Ok(Convention {
