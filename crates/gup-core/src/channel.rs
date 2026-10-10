@@ -101,10 +101,10 @@ impl Visual for Px {
 /// An sRGB-encoded colour with straight (non-premultiplied) alpha, each
 /// component in `0.0..=1.0`. Gup blends in sRGB space (RFC-001 §7).
 ///
-/// In a uniform it lays out as a WGSL `vec4<f32>` (a struct of four `f32`s
-/// is 16-byte aligned there, like the vector), so a shader function's
-/// `Params` may hold colours.
-#[derive(Copy, Clone, Debug, PartialEq, Default, encase::ShaderType)]
+/// In a uniform it is a WGSL `vec4<f32>` (`[r, g, b, a]`), so a shader
+/// function's `Params` may hold colours.
+#[repr(C)]
+#[derive(Copy, Clone, Debug, PartialEq, Default, bytemuck::Pod, bytemuck::Zeroable)]
 pub struct Color {
     /// Red.
     pub r: f32,
@@ -238,3 +238,24 @@ pub trait Mark: Send + Sync + 'static {
     /// Vertices drawn per instance.
     const VERTICES_PER_INSTANCE: u32;
 }
+
+/// `[r, g, b, a]`: a WGSL `vec4<f32>` in a uniform.
+impl AsRef<[f32; 4]> for Color {
+    fn as_ref(&self) -> &[f32; 4] {
+        bytemuck::cast_ref(self)
+    }
+}
+
+impl AsMut<[f32; 4]> for Color {
+    fn as_mut(&mut self) -> &mut [f32; 4] {
+        bytemuck::cast_mut(self)
+    }
+}
+
+impl From<[f32; 4]> for Color {
+    fn from([r, g, b, a]: [f32; 4]) -> Self {
+        Self { r, g, b, a }
+    }
+}
+
+encase::impl_vector!(4, Color, f32; using AsRef AsMut From);

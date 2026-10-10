@@ -223,31 +223,10 @@ fn in_gamut([l, a, b]: [f32; 3]) -> bool {
     rgb.iter().all(|c| (-1e-4..=1.0 + 1e-4).contains(c))
 }
 
-/// One WGSL `vec4<f32>` colour (as a std140 struct of four `f32`s, which
-/// lays out like the vector at a 16-byte offset).
-#[derive(Copy, Clone, Debug, PartialEq, encase::ShaderType)]
-pub(crate) struct Rgba {
-    r: f32,
-    g: f32,
-    b: f32,
-    a: f32,
-}
-
-impl From<Color> for Rgba {
-    fn from(c: Color) -> Self {
-        Self {
-            r: c.r,
-            g: c.g,
-            b: c.b,
-            a: c.a,
-        }
-    }
-}
-
 /// WGSL `gup::color::categorical::Params`.
 #[derive(Copy, Clone, Debug, PartialEq, encase::ShaderType)]
 pub struct CategoricalParams {
-    null_color: Rgba,
+    null_color: Color,
     count: u32,
     // To 16 bytes, as every uniform `Params` (see the WGSL module).
     pad_a: u32,
@@ -264,7 +243,7 @@ impl ShaderFn for Categorical {
 
     fn params(&self) -> CategoricalParams {
         CategoricalParams {
-            null_color: NULL_COLOR.into(),
+            null_color: NULL_COLOR,
             count: u32::try_from(self.keys.len()).unwrap_or(NULL_CODE),
             pad_a: 0,
             pad_b: 0,
