@@ -85,7 +85,14 @@ survives into `gup-core`.
   still shared between checkouts (GUP-411 made them re-lint on a switch, ~90 s
   instead of 26 s for `mask all-check`). Decide with measurements whether a
   per-checkout member `codegen-units` is worth its disk, and if so add it to
-  `scripts/cargo_env.sh`. Deps: GUP-411 ✅.
+  `scripts/cargo_env.sh`. Deps: GUP-411 ✅. Related to GUP-427 (disk growth),
+  not superseded by it.
+- [GUP-427](GUP-427_Bound_Build_Directory_Disk_Growth_Per_Commit.md) 📋 —
+  Measure and bound the shared build directory's per-commit growth (GUP-419
+  measured ~3.8 GB of incremental cache left per Rust-touching pre-commit hook
+  run on a ~19 GB filesystem), with an automatic prune of superseded artifacts
+  and idle incremental caches, never `cargo clean`, proved by a seeded
+  multi-commit check. Deps: GUP-411 ✅, GUP-409 ✅.
 
 ## RFC-001 Migration
 
@@ -234,6 +241,34 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   `DEFAULT_SAMPLES` to 1 with MSAA opt-in and auto-enabled for area/polygon
   marks (owner decision 2026-10-10, RFC-001), reusing the line-coverage math for
   RFC-001 S6's future `Line`/`Segment` mark. Deps: GUP-417 ✅, GUP-401 ✅.
+- [GUP-422](GUP-422_RFC_001_S6a_Derive_Mark_Circle_And_Rect.md) 📋 — RFC-001
+  step S6a: `#[derive(Mark)]` v2 generating a mark's channel constants, `Mark`
+  impl and a naga-checked WGSL-matches-channels proof; rewrites `Circle` onto it
+  and adds `Rect` with a `Band::band_width()`-derived width, plus fill opacity,
+  a stroke channel and size-descending draw order on both marks. Deps: GUP-419
+  ✅, GUP-401 ✅; soft: GUP-420 📋, GUP-421 📋.
+- [GUP-423](GUP-423_RFC_001_S6b_Line_Segment_And_Rule_Marks.md) 📋 — RFC-001
+  step S6b: `Rule`, `Segment` and `Line` marks (quad-expanded, real widths,
+  joins and caps) sharing GUP-421's line-coverage WGSL module; `Line` binds its
+  position column twice, offset by one row, for the previous/next pair, and
+  breaks at a null row. Deps: GUP-421 📋, GUP-422 📋.
+- [GUP-424](GUP-424_RFC_001_S7a_Multi_Layer_Plot_And_Shared_Scales.md) 📋 —
+  RFC-001 step S7a: lift `Plot::resolve`'s one-layer limit, union domains across
+  layers, add the object-safe `Chart`/`ChartExt` trait, and fix the bug where
+  two layers sharing one `ScaleRef<Categorical>` give the same key different
+  codes (one dictionary per shared scale, the union of its layers' keys). Deps:
+  GUP-419 ✅, GUP-414 ✅, GUP-401 ✅.
+- [GUP-425](GUP-425_RFC_001_S7b_Axes_Theme_And_Tick_Quality.md) 📋 — RFC-001
+  step S7b: axis titles, a `Theme` type (`null_color` replacing the `NULL_COLOR`
+  literal), a heavier font weight for `Time` year ticks over month ticks,
+  collision-aware `Band`/`Point` labels, and a tighter log-domain `nice()` step
+  so `categorical_species`-style domains stop wasting two decades. Deps: GUP-424
+  📋, GUP-419 ✅, GUP-418 ✅, GUP-407 ✅.
+- [GUP-426](GUP-426_RFC_001_S7c_Legend_Placement.md) 📋 — RFC-001 step S7c:
+  automatic legend placement and titles in `Plot::resolve` for
+  `Legend::Swatches`/`Ramp`, replacing the hand-built scene items
+  `tests/common/legend.rs` constructs today, with an overflow strategy for long
+  domains. Deps: GUP-424 📋, GUP-419 ✅; soft: GUP-425 📋.
 
 ## GPU Rendering Pipeline
 
