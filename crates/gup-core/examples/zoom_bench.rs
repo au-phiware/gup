@@ -13,7 +13,10 @@
 //!   --warmup N                         unmeasured frames first (default 60)
 //!   --points N                         rows (default 100000)
 //!   --radius PX                        circle radius (default 3)
-//!   --chunk-rows N                     at most N rows per column chunk, so
+//!   --samples 1|4                      MSAA samples of the window target
+//!                                      (default 4, every Gup-owned
+//!                                      target's default)
+//!   --chunk-rows N                    at most N rows per column chunk, so
 //!                                      the layer draws several instanced
 //!                                      draws (default: the device's size)
 //!   --size WxH                         windowed at this physical size
@@ -51,6 +54,7 @@ struct Options {
     warmup: usize,
     points: usize,
     radius: f32,
+    samples: u32,
     chunk_rows: Option<u32>,
     size: Option<(u32, u32)>,
     uncapped: bool,
@@ -63,6 +67,7 @@ fn options() -> Options {
         warmup: 60,
         points: 100_000,
         radius: 3.0,
+        samples: gup_core::DEFAULT_SAMPLES,
         chunk_rows: None,
         size: None,
         uncapped: false,
@@ -84,6 +89,7 @@ fn options() -> Options {
             "--warmup" => o.warmup = value().parse().expect("--warmup N"),
             "--points" => o.points = value().parse().expect("--points N"),
             "--radius" => o.radius = value().parse().expect("--radius PX"),
+            "--samples" => o.samples = value().parse().expect("--samples 1|4"),
             "--chunk-rows" => {
                 o.chunk_rows = Some(value().parse().expect("--chunk-rows N"));
             }
@@ -155,6 +161,7 @@ impl Bench {
         let cx = Context::new_blocking()?;
         let mut target = WindowTarget::new(&cx, window)?;
         target.set_present_mode(&cx, self.o.present)?;
+        target.set_samples(&cx, self.o.samples)?;
         let timestamps = cx
             .caps()
             .features
@@ -331,7 +338,7 @@ impl Bench {
         let gpu = self.gpu.as_ref().unwrap();
         let (w, h) = gpu.target.size();
         println!(
-            "run: {} points{}, radius {} px, {}x{} physical (dpr {}), present {:?}{}, \
+            "run: {} points{}, radius {} px, {}x{} physical (dpr {}), {}x MSAA, present {:?}{}, \
              {} warm-up + {} measured frames, {} build",
             o.points,
             o.chunk_rows
@@ -341,6 +348,7 @@ impl Bench {
             w,
             h,
             gpu.target.dpr(),
+            o.samples,
             o.present,
             if o.uncapped {
                 " uncapped"

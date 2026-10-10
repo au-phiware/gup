@@ -1230,6 +1230,19 @@ impl Prepared {
         self.clear
     }
 
+    /// Number of draw calls [`draw`](Self::draw) records: one per column
+    /// chunk of each data layer and one per guide or text batch. Tests pin
+    /// it as a deterministic proxy for GPU cost (`PERF_BUDGETS.md`).
+    pub fn draw_calls(&self) -> usize {
+        self.draws
+            .iter()
+            .map(|(_, draw)| match draw {
+                Draw::Marks { layer, .. } => layer.chunks.len(),
+                Draw::Instanced { .. } | Draw::Text(_) => 1,
+            })
+            .sum()
+    }
+
     /// Record every draw into `pass`. Allocates nothing, takes no locks
     /// and never submits, so it can run inside a host's pass.
     pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>) {
