@@ -1,0 +1,5 @@
+error: the WGSL declares 2 functions (ease, soften); name the one the glue calls with `entry = "…"`
+  --> tests/wgsl_function_fail/two_functions.rs:10:24
+   |
+10 | #[wgsl_function(wgsl = r#"
+   |                        ^

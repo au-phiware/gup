@@ -1,0 +1,5 @@
+error: the WGSL function takes a palette LUT (`texture_2d<f32>, sampler`), so `Heat` must supply it: add `fn resources(&self) -> Vec<gup_core::Resource> { vec![gup_core::Resource::Lut(colours)] }`
+  --> tests/wgsl_function_fail/missing_lut.rs:18:19
+   |
+18 | impl ShaderFn for Heat {
+   |                   ^^^^

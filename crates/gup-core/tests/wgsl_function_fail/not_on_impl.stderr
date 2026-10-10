@@ -1,0 +1,5 @@
+error: #[wgsl_function] goes on an `impl ShaderFn for YourType { … }` block
+  --> tests/wgsl_function_fail/not_on_impl.rs:15:1
+   |
+15 | struct Gamma;
+   | ^^^^^^

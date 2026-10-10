@@ -410,10 +410,24 @@ impl Library {
                     .iter()
                     .map(|m| m.import_path.as_str())
                     .collect();
+                let closest = known
+                    .iter()
+                    .map(|k| (edit_distance(import, k), *k))
+                    .min()
+                    .filter(|&(d, _)| d <= 3)
+                    .map(|(_, k)| format!(" (did you mean `{k}`?)"))
+                    .unwrap_or_default();
+                let line = src
+                    .text
+                    .lines()
+                    .position(|l| l.trim_start().starts_with("#import") && l.contains(import))
+                    .map_or(0, |n| n + 1);
                 return Err(Error::new(
                     &src.file,
                     format!(
-                        "`{import}` is not a module this one can import; the library has: {}",
+                        "{}:{line}: `{import}` is not a module this one can import{closest}; \
+                         the library has: {}",
+                        src.file,
                         known.join(", ")
                     ),
                 ));
@@ -740,6 +754,24 @@ struct Parsed<'a> {
     /// Pad `Params` to a multiple of 16 bytes (user modules) rather than
     /// reject it (the library).
     pad_params: bool,
+}
+
+/// Levenshtein distance, for "did you mean" suggestions.
+fn edit_distance(a: &str, b: &str) -> usize {
+    let b: Vec<char> = b.chars().collect();
+    let mut row: Vec<usize> = (0..=b.len()).collect();
+    for (i, ca) in a.chars().enumerate() {
+        let mut diagonal = row[0];
+        row[0] = i + 1;
+        for (j, &cb) in b.iter().enumerate() {
+            let above = row[j + 1];
+            row[j + 1] = (above + 1)
+                .min(row[j] + 1)
+                .min(diagonal + usize::from(ca != cb));
+            diagonal = above;
+        }
+    }
+    row[b.len()]
 }
 
 /// The names of the members [`Library::add_module`] appends to a short

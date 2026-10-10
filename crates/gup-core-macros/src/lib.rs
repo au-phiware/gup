@@ -49,18 +49,32 @@ fn stub(item: TokenStream2) -> TokenStream2 {
     };
     let (impl_generics, _, where_clause) = imp.generics.split_for_impl();
     let self_ty = &imp.self_ty;
-    let out = imp
-        .items
-        .iter()
-        .find_map(|i| match i {
-            ImplItem::Type(t) if t.ident == "Out" => Some(t.ty.clone()),
-            _ => None,
-        })
-        .map_or_else(|| quote!(f32), |t| quote!(#t));
+    // The user's items, but for those the macro derives and `params`,
+    // whose return type (the twin) was never generated.
+    let replaced = ["In", "Params", "MODULE", "ENTRY", "input_format", "params"];
+    let mut out = quote!(
+        type Out = f32;
+    );
+    let mut kept = Vec::new();
+    for item in &imp.items {
+        let name = match item {
+            ImplItem::Fn(f) => f.sig.ident.to_string(),
+            ImplItem::Type(t) if t.ident == "Out" => {
+                out = quote!(#item);
+                continue;
+            }
+            ImplItem::Type(t) => t.ident.to_string(),
+            ImplItem::Const(c) => c.ident.to_string(),
+            _ => String::new(),
+        };
+        if !replaced.contains(&name.as_str()) {
+            kept.push(item);
+        }
+    }
     quote! {
         impl #impl_generics #trait_path for #self_ty #where_clause {
             type In = f32;
-            type Out = #out;
+            #out
             type Params = f32;
             const MODULE: &'static ::gup_core::WgslModule = &::gup_core::__private::wgsl::VIEW;
             const ENTRY: &'static str = "";
@@ -70,7 +84,25 @@ fn stub(item: TokenStream2) -> TokenStream2 {
             fn input_format(&self) -> ::gup_core::column::ColumnFormat {
                 ::core::unreachable!()
             }
+            #(#kept)*
         }
+    }
+}
+
+/// A plainer explanation of naga_oil's terser reports.
+fn hint(report: &str) -> String {
+    if let Some(rest) = report.split("naga writeback rules: `").nth(1) {
+        let name = rest.split('`').next().unwrap_or_default();
+        let base = name.trim_end_matches(|c: char| c.is_ascii_digit() || c == '_');
+        format!(
+            "\nnote: naga's WGSL writer renames identifiers that end in a digit or contain \
+             `__`, so a module's items and struct members cannot: rename `{name}` (to \
+             `{base}_b`, say)"
+        )
+    } else if report.contains("Requires") && report.contains("arguments") {
+        "\nnote: a call passes a different number of arguments than the function takes".into()
+    } else {
+        String::new()
     }
 }
 
@@ -228,21 +260,6 @@ fn load(wgsl: &Wgsl) -> syn::Result<Text> {
                 track: Some(path.display().to_string()),
             })
         }
-    }
-}
-
-/// A plainer explanation of naga_oil's terser reports.
-fn hint(report: &str) -> &'static str {
-    if report.contains("must not require substitution") {
-        "\nnote: naga's WGSL writer renames identifiers that end in a digit or contain `__`, \
-         so a module's items and struct members cannot: rename it (`offset2` → `offset_b`)"
-    } else if report.contains("Requires") && report.contains("arguments") {
-        "\nnote: a call passes a different number of arguments than the function takes"
-    } else if report.contains("required import") || report.contains("not found") {
-        "\nnote: import gup's modules by path (`#import gup::scale::linear`); a user \
-         function may import only gup's library"
-    } else {
-        ""
     }
 }
 
@@ -639,7 +656,7 @@ fn check_items(
             format!(
                 "the WGSL function takes a palette LUT (`texture_2d<f32>, sampler`), so \
                  `{type_ident}` must supply it: add \
-                 `fn resources(&self) -> Vec<Resource> {{ vec![Resource::Lut(colours)] }}`"
+                 `fn resources(&self) -> Vec<gup_core::Resource> {{ vec![gup_core::Resource::Lut(colours)] }}`"
             ),
         ));
     }

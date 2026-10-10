@@ -1,0 +1,5 @@
+error: #[wgsl_function] derives `In` from the type of the WGSL function's first argument; remove it
+  --> tests/wgsl_function_fail/derived_item.rs:18:10
+   |
+18 |     type In = f32;
+   |          ^^

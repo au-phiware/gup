@@ -1,0 +1,13 @@
+error: #[wgsl_function] on `Seconds`: `seconds` cannot be called by gup's glue: a hi/lo `vec2<f32>` value is stored relative to its chunk, so a `base: vec2<f32>` argument must follow it.
+       found:
+           fn seconds(v: vec2<f32>, p: Params) -> f32
+       the glue calls one of these shapes:
+           fn seconds(v: f32, p: Params) -> f32                          a number
+           fn seconds(v: f32, base: f32, p: Params) -> f32               a number stored relative to its chunk (`base` comes from `chunk_base`)
+           fn seconds(v: vec2<f32>, base: vec2<f32>, p: Params) -> f32   a hi/lo pair relative to its chunk, for deep zoom
+           fn seconds(code: u32, p: Params) -> f32                       a dictionary code (`encode_key`)
+       each returning `f32` (a number) or `vec4<f32>` (a colour), optionally with `lut: texture_2d<f32>, smp: sampler` after `p` for a palette LUT
+  --> tests/wgsl_function_fail/hilo_without_base.rs:10:24
+   |
+10 | #[wgsl_function(wgsl = r#"
+   |                        ^

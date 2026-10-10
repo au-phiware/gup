@@ -1,0 +1,16 @@
+error: the WGSL of `Soften` (module `$CRATE::soften`) does not compose:
+       error: failed to build a valid final module: Function [1] '$CRATE::soften::soften' is invalid
+          ┌─ $DIR/tests/wgsl_function_fail/wrong_arity.rs:17:5
+          │
+       17 │ ╭     fn soften(t: f32, p: Params) -> f32 {
+       18 │ │         return ease(t, p.edge);
+          │ │                ^^^^^^^^^^^^^^^ invalid function call
+          │ ╰───────────────────────────────^ naga::ir::Function [1]
+          │
+          = Call to [0] is invalid
+          = Requires 1 arguments, but 2 are provided
+       note: a call passes a different number of arguments than the function takes
+  --> tests/wgsl_function_fail/wrong_arity.rs:10:42
+   |
+10 | #[wgsl_function(entry = "soften", wgsl = r#"
+   |                                          ^

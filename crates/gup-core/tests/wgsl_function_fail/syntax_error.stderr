@@ -1,0 +1,12 @@
+error: the WGSL of `Gamma` (module `$CRATE::gamma`) does not compose:
+       error: expected `;`, found "return"
+          ┌─ $DIR/tests/wgsl_function_fail/syntax_error.rs:15:9
+          │
+       15 │         return pow(t, g);
+          │         ^^^^^^ expected `;`
+          │
+          = expected `;`, found "return"
+  --> tests/wgsl_function_fail/syntax_error.rs:10:24
+   |
+10 | #[wgsl_function(wgsl = r#"
+   |                        ^

@@ -1,0 +1,22 @@
+error[E0277]: `Gamma` has no CPU mirror
+  --> tests/wgsl_function_fail/monotonic_without_mirror.rs:10:17
+   |
+10 | #[wgsl_function(monotonic, wgsl = r#"
+   |                 ^^^^^^^^^ `Gamma` needs `impl CpuMirror for Gamma`
+   |
+help: the trait `CpuMirror` is not implemented for `Gamma`
+  --> tests/wgsl_function_fail/monotonic_without_mirror.rs:8:1
+   |
+ 8 | struct Gamma;
+   | ^^^^^^^^^^^^
+   = note: a function needs a CPU mirror to start a chain (`a.then(b)` fits `b` to the image of the data through `a`), to be `monotonic`, or to place axes and legends: implement `CpuMirror` with `fn eval(&self, x: f64) -> f64` (or `-> Color`), the f64 twin of its WGSL
+   = help: the following other types implement trait `CpuMirror`:
+             Band
+             Categorical
+             Diverging
+             ScaleRef<S>
+             Sequential
+             Symlog
+             Then<A, B>
+             Time
+           and $N others

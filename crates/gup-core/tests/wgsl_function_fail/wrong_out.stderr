@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: #[wgsl_function]: `type Out` must be a type whose WGSL is `f32`, the return type of `gamma` (`f32` or `Px` for `f32`, `Color` for `vec4<f32>`)
+  --> tests/wgsl_function_fail/wrong_out.rs:18:16
+   |
+18 |     type Out = Color;
+   |                ^^^^^ evaluation of `_::_` failed here

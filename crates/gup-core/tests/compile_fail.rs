@@ -15,3 +15,12 @@ fn channel_mistakes_do_not_compile() {
     t.compile_fail("tests/compile_fail/*.rs");
     t.pass("tests/compile_pass/*.rs");
 }
+
+/// `#[wgsl_function]` reports WGSL and calling-convention mistakes at the
+/// user's code, saying what to do (GUP-420). naga_oil's reports point at
+/// the WGSL line inside the Rust file.
+#[test]
+fn wgsl_function_mistakes_do_not_compile() {
+    let t = trybuild::TestCases::new();
+    t.compile_fail("tests/wgsl_function_fail/*.rs");
+}

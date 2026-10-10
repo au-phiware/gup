@@ -1,0 +1,5 @@
+error: this function reads dictionary codes (`code: u32`), which are fitted by `fit_keys(&mut self, keys: &[Arc<str>])`, never `fit_domain`
+  --> tests/wgsl_function_fail/fit_domain_on_codes.rs:25:8
+   |
+25 |     fn fit_domain(&mut self, extent: (f64, f64)) -> gup_core::Result<()> {
+   |        ^^^^^^^^^^

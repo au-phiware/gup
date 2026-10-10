@@ -428,3 +428,54 @@ fn the_macro_derives_the_static_half() {
     );
     assert_eq!(ShaderFn::image(&Highlight::new("x"), (0.0, 3.0)), None);
 }
+
+/// Softplus, whose WGSL is a file (`file = "…"`, relative to the
+/// crate's manifest), importing one of Gup's library modules.
+#[derive(Clone, Debug)]
+struct Softplus;
+
+#[wgsl_function(monotonic, file = "tests/wgsl/softplus.wgsl")]
+impl ShaderFn for Softplus {
+    fn params(&self) -> SoftplusParams {
+        SoftplusParams { k: 1.0 }
+    }
+}
+
+impl CpuMirror for Softplus {
+    fn eval(&self, v: f64) -> f64 {
+        v.exp().ln_1p()
+    }
+}
+
+/// AC2: a function read from a file, importing a library module, composes
+/// at expansion and links against the library at run time: a softplus
+/// colour ramp draws each point in the colour its mirror gives.
+#[test]
+fn a_wgsl_file_importing_the_library() {
+    let module = <Softplus as ShaderFn>::MODULE;
+    assert_eq!(module.import_path, "wgsl_function::softplus");
+    let imports: Vec<&str> = module.imports.iter().map(|m| m.import_path).collect();
+    assert_eq!(imports, ["gup::scale::symlog"]);
+
+    let cx = Context::new_blocking().unwrap();
+    let rows: Vec<f64> = (0..9).map(|i| f64::from(i) - 4.0).collect();
+    let viridis = Sequential::viridis().domain(0.0, 4.5);
+    let colour = Softplus.then(viridis.clone());
+    let mut plot = Plot::new();
+    let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
+    plot.add(Selection::<f64, Circle>::new(rows.clone()))
+        .attr(Circle::X, x.encode(|v: &f64| *v))
+        .attr(Circle::Y, y.encode(|v: &f64| *v))
+        .attr(Circle::RADIUS, Px(6.0))
+        .attr(Circle::FILL, colour.encode(|v: &f64| *v));
+    let (image, _) = plot.render_resolved(&cx, 320, 200).unwrap();
+    for v in rows {
+        let (px, py) = (x.read().eval(v), y.read().eval(v));
+        let got = image.get_pixel(px as u32, py as u32).0;
+        let want = colour.eval(v).to_rgba8();
+        assert!(
+            (0..3).all(|k| got[k].abs_diff(want[k]) <= 2),
+            "{v}: {got:?} vs {want:?}"
+        );
+    }
+}

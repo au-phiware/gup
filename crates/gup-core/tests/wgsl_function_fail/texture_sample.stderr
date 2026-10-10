@@ -1,0 +1,5 @@
+error: #[wgsl_function] on `Heat`: `heat` runs in the vertex stage (the glue calls it once per mark), but it uses something only fragment shaders have: a derivative (`dpdx`, `fwidth`, …) or implicit-level sampling (`textureSample`). Read a LUT with `textureSampleLevel(lut, smp, uv, 0.0)` or `textureLoad` instead.
+  --> tests/wgsl_function_fail/texture_sample.rs:11:24
+   |
+11 | #[wgsl_function(wgsl = r#"
+   |                        ^
