@@ -305,7 +305,7 @@ mod tests {
     use crate::render::GlueProgram;
     use crate::scene::{ItemKind, MarkBatch, Scene};
     use crate::{
-        Circle, Context, Error, ImageTarget, Linear, Log, Plot, Renderer, Selection, ShaderFn,
+        Circle, Context, EncodeFn, Error, ImageTarget, Linear, Log, Plot, Renderer, Selection,
         TargetDesc,
     };
     use std::sync::Arc;

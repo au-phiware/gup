@@ -1,24 +1,38 @@
 // Copyright (C) 2024 Corin Lawson
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Encodings: shader functions with CPU mirrors (RFC-001 §5) and the
-//! `IntoEncoding` conversion that type-checks `Selection::attr` (§4).
+//! Encodings: shader functions with CPU mirrors (RFC-001 §5), their
+//! composition into chains (`a.then(b)`), and the `IntoEncoding`
+//! conversion that type-checks `Selection::attr` (§4).
+//!
+//! Two traits split the work:
+//!
+//! - [`ShaderFn`] is **one** WGSL function: its module, entry point,
+//!   `Params` uniform and per-chunk base. Every scale implements it.
+//! - [`EncodeFn`] is what a channel is encoded through: one `ShaderFn`
+//!   (every `ShaderFn` is one), or a chain of them made by
+//!   [`EncodeFn::then`]. `encode`, `encode_key` and `then` live here.
 
-use crate::channel::{ConstValue, GpuType, Visual};
+use crate::channel::{ConstValue, GpuType, Px, Visual};
 use crate::column::{ColumnData, ColumnFormat};
 use crate::error::{Error, Result};
 use crate::shader::WgslModule;
 use std::marker::PhantomData;
 
 /// A GPU function from a column value (`In`) to a visual value (`Out`),
-/// implemented by a WGSL library module.
+/// implemented by one function of a WGSL library module.
 ///
 /// The module's entry point has the signature
 /// `fn ENTRY(x: In, p: Params [, resources…]) -> Out`, or for relative
-/// inputs ([`ColumnFormat::F32Relative`])
-/// `fn ENTRY(v: f32, base: f32, p: Params [, resources…]) -> Out`, where
-/// `base` comes from [`ShaderFn::chunk_base`]. A resource
-/// ([`Resource::Lut`]) adds a `texture_2d<f32>` and a `sampler` argument.
+/// inputs ([`ColumnFormat::is_relative`])
+/// `fn ENTRY(v: T, base: T, p: Params [, resources…]) -> Out`, where `T`
+/// is the format's WGSL type (`f32`, or `vec2<f32>` for the hi/lo
+/// [`ColumnFormat::F32x2Relative`]) and `base` comes from
+/// [`ShaderFn::chunk_base`]. A resource ([`Resource::Lut`]) adds a
+/// `texture_2d<f32>` and a `sampler` argument.
+///
+/// Every `ShaderFn` is an [`EncodeFn`] (a chain of one), so it can encode
+/// a channel or start a chain with [`then`](EncodeFn::then).
 pub trait ShaderFn: Clone + Send + Sync + 'static {
     /// The GPU input type.
     type In: GpuType;
@@ -39,15 +53,20 @@ pub trait ShaderFn: Clone + Send + Sync + 'static {
     /// only these.
     fn params(&self) -> Self::Params;
 
-    /// How the input column is stored.
+    /// How the input column is stored when this function reads a column
+    /// (the first link of a chain). A later link reads the previous link's
+    /// output instead, as an absolute value: a relative entry point there
+    /// gets the base for origin 0.
     fn input_format(&self) -> ColumnFormat;
 
     /// The per-chunk `base` passed to a relative entry point for a chunk
-    /// whose values are stored relative to `origin`. The default makes the
-    /// shader see the absolute value; scales override it to fold their
-    /// domain start in (in f64) and keep precision.
-    fn chunk_base(&self, origin: f64) -> f32 {
-        origin as f32
+    /// whose values are stored relative to `origin`, in f64. The column
+    /// format turns it into what the shader takes (an `f32`, or a hi/lo
+    /// pair). The default makes the shader see the absolute value; scales
+    /// override it to fold their domain start in (in f64) and keep
+    /// precision.
+    fn chunk_base(&self, origin: f64) -> f64 {
+        origin
     }
 
     /// Extra GPU resources the entry point takes.
@@ -55,13 +74,33 @@ pub trait ShaderFn: Clone + Send + Sync + 'static {
         Vec::new()
     }
 
-    /// Adopt the data extent of the encoded column if this function has an
-    /// automatic (data-driven) domain. Functions without a domain accept
-    /// any extent.
+    /// Adopt `extent`, the extent of this function's input (the encoded
+    /// column's data, or its image through the links before it), if this
+    /// function has an automatic (data-driven) domain. Functions without
+    /// a domain accept any extent.
     fn fit_domain(&mut self, extent: (f64, f64)) -> Result<()> {
         let _ = extent;
         Ok(())
     }
+}
+
+/// What a channel is encoded through: one [`ShaderFn`], or a chain of
+/// them made by [`then`](Self::then). The GPU evaluates the links in
+/// order, in one expression of the generated glue; only the first link
+/// reads the stored column (and its per-chunk base).
+pub trait EncodeFn: Clone + Send + Sync + 'static {
+    /// The GPU type of the column the first link reads.
+    type Input: GpuType;
+    /// The GPU type the last link produces.
+    type Output: GpuType;
+
+    /// The links, in evaluation order. The first reads the column.
+    fn links(&self) -> Vec<&dyn DynShaderFn>;
+
+    /// Fit every link's automatic domain: the first link's to the
+    /// column's data `extent`, each later link's to the image of that
+    /// extent through the links before it.
+    fn fit(&mut self, extent: (f64, f64)) -> Result<()>;
 
     /// Encode a field of each row through (a clone of) this function:
     /// `scale.encode(|r: &Row| r.value)`. Taking `&self` keeps shared
@@ -89,7 +128,7 @@ pub trait ShaderFn: Clone + Send + Sync + 'static {
     /// can be missing use [`encode_nullable_key`](Self::encode_nullable_key).
     fn encode_key<T, A>(&self, accessor: A) -> KeyEncoded<Key<A>, Self>
     where
-        Self: ShaderFn<In = u32>,
+        Self: EncodeFn<Input = u32>,
         A: for<'a> Fn(&'a T) -> &'a str,
     {
         KeyEncoded {
@@ -104,7 +143,7 @@ pub trait ShaderFn: Clone + Send + Sync + 'static {
     /// draws in its null colour.
     fn encode_nullable_key<T, A>(&self, accessor: A) -> KeyEncoded<NullableKey<A>, Self>
     where
-        Self: ShaderFn<In = u32>,
+        Self: EncodeFn<Input = u32>,
         A: for<'a> Fn(&'a T) -> Option<&'a str>,
     {
         KeyEncoded {
@@ -112,13 +151,118 @@ pub trait ShaderFn: Clone + Send + Sync + 'static {
             func: self.clone(),
         }
     }
+
+    /// Feed this function's output into `next` (RFC-001 §5): the glue
+    /// evaluates `next(self(x))` in one expression, each link with its
+    /// own `Params` field in the layer's `Encodings` uniform.
+    /// `Linear::new().then(Pow::sqrt())` maps a value linearly, then by
+    /// its square root.
+    ///
+    /// The output must be `next`'s input type (a [`Px`] output also feeds
+    /// an `f32` input). This function needs a [`CpuMirror`]: `next`'s
+    /// automatic domain is fitted to the image of the data's extent
+    /// through it (the end points' images; every scale is monotonic), and
+    /// the chain's own mirror evaluates it.
+    fn then<B>(&self, next: B) -> Then<Self, B>
+    where
+        Self: CpuMirror,
+        Self::Output: Feeds<B::Input>,
+        B: EncodeFn,
+    {
+        Then {
+            first: self.clone(),
+            next,
+        }
+    }
 }
 
-/// The exact f64 CPU twin of a [`ShaderFn`], used for axes, ticks, legends,
-/// picking and vector output.
-pub trait CpuMirror: ShaderFn {
+impl<S: ShaderFn> EncodeFn for S {
+    type Input = S::In;
+    type Output = S::Out;
+
+    fn links(&self) -> Vec<&dyn DynShaderFn> {
+        vec![self]
+    }
+
+    fn fit(&mut self, extent: (f64, f64)) -> Result<()> {
+        self.fit_domain(extent)
+    }
+}
+
+/// The exact f64 CPU twin of an [`EncodeFn`], used for axes, ticks,
+/// legends, picking and vector output. A chain's mirror evaluates its
+/// links' mirrors in order.
+pub trait CpuMirror: EncodeFn {
     /// Evaluate the function on the CPU.
-    fn eval(&self, x: f64) -> <Self::Out as GpuType>::Cpu;
+    fn eval(&self, x: f64) -> <Self::Output as GpuType>::Cpu;
+}
+
+/// Whether a function's output of type `Self` can be the input of a
+/// function taking `In` in a chain: a number (its CPU mirror gives an
+/// `f64`) of the same type, or [`Px`] into `f32` (a pixel value is a
+/// number to the next link).
+#[diagnostic::on_unimplemented(
+    message = "a function producing `{Self}` cannot feed a function taking `{In}`",
+    label = "`then` needs this function's input to be `{Self}`",
+    note = "in `a.then(b)`, `a`'s output type must be `b`'s input type (a `Px` output also feeds an `f32` input)"
+)]
+pub trait Feeds<In: GpuType>: GpuType<Cpu = f64> {}
+
+impl<T: GpuType<Cpu = f64>> Feeds<T> for T {}
+
+impl Feeds<f32> for Px {}
+
+/// Two encoding functions in sequence, made by [`EncodeFn::then`]:
+/// `next(first(x))`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Then<A, B> {
+    first: A,
+    next: B,
+}
+
+impl<A, B> Then<A, B> {
+    /// The function evaluated first.
+    pub fn first(&self) -> &A {
+        &self.first
+    }
+
+    /// The function fed by [`first`](Self::first).
+    pub fn next(&self) -> &B {
+        &self.next
+    }
+}
+
+impl<A, B> EncodeFn for Then<A, B>
+where
+    A: CpuMirror,
+    A::Output: Feeds<B::Input>,
+    B: EncodeFn,
+{
+    type Input = A::Input;
+    type Output = B::Output;
+
+    fn links(&self) -> Vec<&dyn DynShaderFn> {
+        let mut links = self.first.links();
+        links.extend(self.next.links());
+        links
+    }
+
+    fn fit(&mut self, extent: (f64, f64)) -> Result<()> {
+        self.first.fit(extent)?;
+        let (a, b) = (self.first.eval(extent.0), self.first.eval(extent.1));
+        self.next.fit((a.min(b), a.max(b)))
+    }
+}
+
+impl<A, B> CpuMirror for Then<A, B>
+where
+    A: CpuMirror,
+    A::Output: Feeds<B::Input>,
+    B: CpuMirror,
+{
+    fn eval(&self, x: f64) -> <B::Output as GpuType>::Cpu {
+        self.next.eval(self.first.eval(x))
+    }
 }
 
 /// A GPU resource argument of a shader function.
@@ -158,23 +302,24 @@ impl ColumnValue for f32 {
     }
 }
 
-/// An accessor composed with a shader function, made by
-/// [`ShaderFn::encode`].
+/// An accessor composed with an encoding function, made by
+/// [`EncodeFn::encode`].
 #[derive(Clone)]
 pub struct Encoded<A, S> {
     accessor: A,
     func: S,
 }
 
-/// A key accessor composed with a shader function over dictionary codes,
-/// made by [`ShaderFn::encode_key`] or [`ShaderFn::encode_nullable_key`].
+/// A key accessor composed with an encoding function over dictionary
+/// codes, made by [`EncodeFn::encode_key`] or
+/// [`EncodeFn::encode_nullable_key`].
 #[derive(Clone)]
 pub struct KeyEncoded<K, S> {
     key: K,
     func: S,
 }
 
-/// Reads a dictionary key from a row (see [`ShaderFn::encode_key`]).
+/// Reads a dictionary key from a row (see [`EncodeFn::encode_key`]).
 /// Implemented by [`Key`] and [`NullableKey`], which those methods make.
 pub trait KeyAccessor<T>: Send + Sync + 'static {
     /// The key of `row`, borrowed from it; `None` is a null.
@@ -182,12 +327,12 @@ pub trait KeyAccessor<T>: Send + Sync + 'static {
 }
 
 /// A key accessor whose rows always have a key (made by
-/// [`ShaderFn::encode_key`]).
+/// [`EncodeFn::encode_key`]).
 #[derive(Clone)]
 pub struct Key<A>(A);
 
 /// A key accessor whose rows may lack a key (made by
-/// [`ShaderFn::encode_nullable_key`]).
+/// [`EncodeFn::encode_nullable_key`]).
 #[derive(Clone)]
 pub struct NullableKey<A>(A);
 
@@ -219,13 +364,13 @@ pub struct ColumnMarker<D>(PhantomData<fn() -> D>);
 pub enum KeyMarker {}
 
 /// Anything that can drive a channel of visual type `V` for rows of type
-/// `T`: a constant `V`, or `shader_fn.encode(accessor)` whose function
+/// `T`: a constant `V`, or `f.encode(accessor)` whose function (or chain)
 /// outputs `V`. `K` is a marker that keeps the blanket impls apart; it is
 /// always inferred.
 #[diagnostic::on_unimplemented(
     message = "`{Self}` cannot drive a channel of visual type `{V}`",
     label = "this encoding does not produce `{V}` for rows of type `{T}`",
-    note = "a `{V}` channel accepts a constant of type `{V}` (such as `Px(3.0)`) or `f.encode(|row: &{T}| …)` (or `f.encode_key(..)` for string keys) where `f: ShaderFn<Out = {V}>`"
+    note = "a `{V}` channel accepts a constant of type `{V}` (such as `Px(3.0)`) or `f.encode(|row: &{T}| …)` (or `f.encode_key(..)` for string keys) where `f: EncodeFn<Output = {V}>`"
 )]
 pub trait IntoEncoding<T, V: Visual, K> {
     /// Convert into a type-erased encoding.
@@ -244,7 +389,7 @@ where
     V: Visual,
     A: Fn(&T) -> D + Send + Sync + 'static,
     D: ColumnValue,
-    S: ShaderFn<In = D::Gpu, Out = V>,
+    S: EncodeFn<Input = D::Gpu, Output = V>,
 {
     fn into_encoding(self) -> Encoding<T> {
         Encoding::Column(Box::new(ColumnEncoding {
@@ -260,7 +405,7 @@ where
     T: 'static,
     V: Visual,
     K: KeyAccessor<T>,
-    S: ShaderFn<In = u32, Out = V>,
+    S: EncodeFn<Input = u32, Output = V>,
 {
     fn into_encoding(self) -> Encoding<T> {
         Encoding::Column(Box::new(self))
@@ -271,7 +416,7 @@ where
 pub enum Encoding<T> {
     /// A constant (a uniform field, no column).
     Const(ConstValue),
-    /// An accessor plus a shader function (a column plus a GPU call).
+    /// An accessor plus an encoding function (a column plus GPU calls).
     Column(Box<dyn DynColumnEncoding<T>>),
 }
 
@@ -279,20 +424,23 @@ impl<T> std::fmt::Debug for Encoding<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Encoding::Const(c) => write!(f, "Const({c:?})"),
-            Encoding::Column(c) => write!(f, "Column({})", c.func().signature()),
+            Encoding::Column(c) => {
+                let links: Vec<String> = c.links().iter().map(|l| l.signature()).collect();
+                write!(f, "Column({})", links.join(" then "))
+            }
         }
     }
 }
 
-/// Object-safe view of an accessor + shader function.
+/// Object-safe view of an accessor + encoding function.
 pub trait DynColumnEncoding<T>: Send + Sync {
     /// Run the accessor over every row: numbers, or keys borrowed from
     /// the rows.
     fn evaluate<'r>(&self, rows: &'r [T]) -> ColumnData<'r>;
-    /// The shader function.
-    fn func(&self) -> &dyn DynShaderFn;
-    /// The shader function, mutably.
-    fn func_mut(&mut self) -> &mut dyn DynShaderFn;
+    /// The encoding function's links, in evaluation order.
+    fn links(&self) -> Vec<&dyn DynShaderFn>;
+    /// See [`EncodeFn::fit`].
+    fn fit(&mut self, extent: (f64, f64)) -> Result<()>;
 }
 
 struct ColumnEncoding<A, S, D> {
@@ -305,36 +453,36 @@ impl<T, A, D, S> DynColumnEncoding<T> for ColumnEncoding<A, S, D>
 where
     A: Fn(&T) -> D + Send + Sync,
     D: ColumnValue,
-    S: ShaderFn,
+    S: EncodeFn,
 {
     fn evaluate<'r>(&self, rows: &'r [T]) -> ColumnData<'r> {
         ColumnData::Values(rows.iter().map(|r| (self.accessor)(r).to_f64()).collect())
     }
 
-    fn func(&self) -> &dyn DynShaderFn {
-        &self.func
+    fn links(&self) -> Vec<&dyn DynShaderFn> {
+        self.func.links()
     }
 
-    fn func_mut(&mut self) -> &mut dyn DynShaderFn {
-        &mut self.func
+    fn fit(&mut self, extent: (f64, f64)) -> Result<()> {
+        self.func.fit(extent)
     }
 }
 
 impl<T, K, S> DynColumnEncoding<T> for KeyEncoded<K, S>
 where
     K: KeyAccessor<T>,
-    S: ShaderFn,
+    S: EncodeFn,
 {
     fn evaluate<'r>(&self, rows: &'r [T]) -> ColumnData<'r> {
         ColumnData::Keys(rows.iter().map(|r| self.key.key(r)).collect())
     }
 
-    fn func(&self) -> &dyn DynShaderFn {
-        &self.func
+    fn links(&self) -> Vec<&dyn DynShaderFn> {
+        self.func.links()
     }
 
-    fn func_mut(&mut self) -> &mut dyn DynShaderFn {
-        &mut self.func
+    fn fit(&mut self, extent: (f64, f64)) -> Result<()> {
+        self.func.fit(extent)
     }
 }
 
@@ -355,11 +503,9 @@ pub trait DynShaderFn: Send + Sync {
     /// `rust_params_match_wgsl_params` checks the two agree).
     fn params_size(&self) -> u64;
     /// See [`ShaderFn::chunk_base`].
-    fn chunk_base(&self, origin: f64) -> f32;
+    fn chunk_base(&self, origin: f64) -> f64;
     /// See [`ShaderFn::resources`].
     fn resources(&self) -> Vec<Resource>;
-    /// See [`ShaderFn::fit_domain`].
-    fn fit_domain(&mut self, extent: (f64, f64)) -> Result<()>;
     /// A stable description used in the pipeline cache key: everything
     /// that changes the generated WGSL, nothing that only changes uniforms.
     fn signature(&self) -> String;
@@ -396,7 +542,7 @@ impl<S: ShaderFn> DynShaderFn for S {
         Ok(buf.into_inner())
     }
 
-    fn chunk_base(&self, origin: f64) -> f32 {
+    fn chunk_base(&self, origin: f64) -> f64 {
         ShaderFn::chunk_base(self, origin)
     }
 
@@ -404,16 +550,7 @@ impl<S: ShaderFn> DynShaderFn for S {
         ShaderFn::resources(self)
     }
 
-    fn fit_domain(&mut self, extent: (f64, f64)) -> Result<()> {
-        ShaderFn::fit_domain(self, extent)
-    }
-
     fn signature(&self) -> String {
-        let format = match ShaderFn::input_format(self) {
-            ColumnFormat::F32 => "f32",
-            ColumnFormat::F32Relative => "f32rel",
-            ColumnFormat::U32 => "u32",
-        };
         let resources = ShaderFn::resources(self)
             .iter()
             .map(|r| match r {
@@ -421,7 +558,8 @@ impl<S: ShaderFn> DynShaderFn for S {
             })
             .collect::<String>();
         format!(
-            "{format}→{}::{}{resources}",
+            "{}→{}::{}{resources}",
+            ShaderFn::input_format(self).signature(),
             S::MODULE.import_path,
             S::ENTRY
         )

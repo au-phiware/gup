@@ -59,6 +59,13 @@ pub enum ColumnFormat {
     F32,
     /// `f32` relative to the chunk's f64 origin.
     F32Relative,
+    /// A hi/lo pair of `f32`s (double-single) relative to the chunk's f64
+    /// origin: `hi = (v - origin) as f32` and `lo = ((v - origin) - hi) as
+    /// f32`, fetched as one `vec2<f32>`. About 48 bits of the offset from
+    /// the origin survive, so a chunk of 2^20 one-per-second samples keeps
+    /// nanoseconds where [`F32Relative`](Self::F32Relative) keeps 1/16 s
+    /// (RFC-001 §12 risk 6, GUP-418). Twice the bytes per row.
+    F32x2Relative,
     /// `u32` dictionary codes (band and categorical scales): each distinct
     /// key gets the next code in first-seen order, and a missing key is
     /// [`NULL_CODE`].
@@ -68,21 +75,54 @@ pub enum ColumnFormat {
 impl ColumnFormat {
     /// Bytes per row.
     pub const fn stride(self) -> u64 {
-        4
+        match self {
+            Self::F32 | Self::F32Relative | Self::U32 => 4,
+            Self::F32x2Relative => 8,
+        }
+    }
+
+    /// Whether values are stored relative to the chunk's origin, so the
+    /// entry point takes a per-chunk base.
+    pub const fn is_relative(self) -> bool {
+        matches!(self, Self::F32Relative | Self::F32x2Relative)
     }
 
     /// Whether nulls in a column of this format are recorded as validity
     /// bits: numeric formats are, while dictionary codes reserve
     /// [`NULL_CODE`] instead.
     pub const fn has_validity(self) -> bool {
-        matches!(self, Self::F32 | Self::F32Relative)
+        matches!(self, Self::F32 | Self::F32Relative | Self::F32x2Relative)
     }
 
-    /// The WGSL type of a value in the column.
+    /// The WGSL type of a value in the column (and of a relative entry
+    /// point's `base` argument).
     pub(crate) const fn wgsl_type(self) -> &'static str {
         match self {
             Self::F32 | Self::F32Relative => "f32",
+            Self::F32x2Relative => "vec2<f32>",
             Self::U32 => "u32",
+        }
+    }
+
+    /// Short name used in glue signatures (pipeline cache keys).
+    pub(crate) const fn signature(self) -> &'static str {
+        match self {
+            Self::F32 => "f32",
+            Self::F32Relative => "f32rel",
+            Self::F32x2Relative => "f32x2rel",
+            Self::U32 => "u32",
+        }
+    }
+
+    /// `value` (an offset from a chunk origin, or a chunk base) as this
+    /// format stores it: `[value as f32, 0]`, or for
+    /// [`F32x2Relative`](Self::F32x2Relative) a hi/lo pair whose sum is
+    /// `value` to about 48 bits.
+    pub(crate) fn split(self, value: f64) -> [f32; 2] {
+        let hi = value as f32;
+        match self {
+            Self::F32x2Relative => [hi, (value - f64::from(hi)) as f32],
+            Self::F32 | Self::F32Relative | Self::U32 => [hi, 0.0],
         }
     }
 
@@ -90,6 +130,7 @@ impl ColumnFormat {
     pub(crate) const fn vertex_format(self) -> wgpu::VertexFormat {
         match self {
             Self::F32 | Self::F32Relative => wgpu::VertexFormat::Float32,
+            Self::F32x2Relative => wgpu::VertexFormat::Float32x2,
             Self::U32 => wgpu::VertexFormat::Uint32,
         }
     }
@@ -303,9 +344,10 @@ impl ChunkColumn {
         if self.origin.is_none() {
             // Rows already stored are non-finite, so the origin they were
             // written against does not matter.
-            self.origin = match self.format {
-                ColumnFormat::F32Relative => values.iter().copied().find(|v| v.is_finite()),
-                ColumnFormat::F32 | ColumnFormat::U32 => Some(0.0),
+            self.origin = if self.format.is_relative() {
+                values.iter().copied().find(|v| v.is_finite())
+            } else {
+                Some(0.0)
             };
         }
         let origin = self.origin();
@@ -313,7 +355,11 @@ impl ChunkColumn {
         let start = self.offset as usize + at as usize * stride;
         let dst = &mut bytes[start..start + values.len() * stride];
         for (cell, &v) in dst.chunks_exact_mut(stride).zip(values) {
-            cell.copy_from_slice(&((v - origin) as f32).to_le_bytes());
+            let [hi, lo] = self.format.split(v - origin);
+            cell[..4].copy_from_slice(&hi.to_le_bytes());
+            if stride == 8 {
+                cell[4..].copy_from_slice(&lo.to_le_bytes());
+            }
             self.stats.push(v);
         }
     }
@@ -1065,6 +1111,7 @@ mod tests {
                     .copied()
                     .find(|v| v.is_finite())
                     .unwrap_or(0.0),
+                ColumnFormat::F32x2Relative => unreachable!("S0a had no hi/lo columns"),
             };
             let dst = &mut bytes[offset as usize..][..values.len() * 4];
             for (cell, v) in dst.chunks_exact_mut(4).zip(values) {

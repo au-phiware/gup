@@ -95,8 +95,8 @@ impl ShaderFn for Linear {
     }
 
     /// `origin - d0`, computed in f64.
-    fn chunk_base(&self, origin: f64) -> f32 {
-        (origin - self.resolved_domain().0) as f32
+    fn chunk_base(&self, origin: f64) -> f64 {
+        origin - self.resolved_domain().0
     }
 
     fn fit_domain(&mut self, extent: (f64, f64)) -> Result<()> {
@@ -259,11 +259,11 @@ mod tests {
             .domain(1.7e9, 1.7e9 + 86_400.0)
             .range(Px(0.0), Px(864.0));
         let origin = 1.7e9 + 3_600.0;
-        assert_eq!(s.chunk_base(origin), 3_600.0);
+        assert_eq!(ShaderFn::chunk_base(&s, origin), 3_600.0);
         // GPU formula with a relative value v = x - origin.
         let v = 0.5f32;
         let p = s.params();
-        let px = p.range_start + (v + s.chunk_base(origin)) * p.k;
+        let px = p.range_start + (v + ShaderFn::chunk_base(&s, origin) as f32) * p.k;
         assert!((f64::from(px) - s.eval(origin + 0.5)).abs() < 1e-3);
     }
 

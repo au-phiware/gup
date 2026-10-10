@@ -1,4 +1,4 @@
-error[E0271]: type mismatch resolving `<Sequential as ShaderFn>::Out == Px`
+error[E0271]: type mismatch resolving `<Sequential as EncodeFn>::Output == Px`
   --> tests/compile_fail/wrong_value_type.rs:13:30
    |
 13 |     sel.attr(Circle::RADIUS, Sequential::viridis().encode(|r: &Row| r.temp));

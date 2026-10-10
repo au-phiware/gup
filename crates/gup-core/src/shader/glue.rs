@@ -5,12 +5,20 @@
 //!
 //! For one `(mark, encoding signature)` pair it builds a small expression
 //! tree per channel and prints **one** top-level WGSL module: imports, the
-//! `Encodings` uniform struct (one field per channel: a shader function's
-//! `Params` or a constant), the per-chunk uniform, bindings, the vertex
-//! column inputs and the two entry points. Library modules are imported
-//! (naga_oil syntax, resolved by `gup_wgsl::link` against the modules
-//! flattened at build time), never edited, and entry points live only
-//! here.
+//! `Encodings` uniform struct (one field per constant channel and per link
+//! of each column channel's chain: a shader function's `Params` or a
+//! constant), the per-chunk uniform, bindings, the vertex column inputs and
+//! the two entry points. Library modules are imported (naga_oil syntax,
+//! resolved by `gup_wgsl::link` against the modules flattened at build
+//! time), never edited, and entry points live only here.
+//!
+//! A column channel is a **chain** of shader functions (`a.then(b)`,
+//! RFC-001 §5): the first link reads the vertex column, each later link
+//! reads the previous link's result, all in one expression
+//! (`b::map(a::map_rel(col.x, chunk.x_base, enc.x), enc.x_link1)`). The
+//! first link's `Encodings` field and `Chunk` base are named after the
+//! channel, so a one-link chain prints exactly what the one-function
+//! emitter did; link `k ≥ 1` adds `<channel>_link<k>`.
 
 use super::{StructLayout, VIEW, WgslModule};
 use crate::channel::Role;
@@ -23,8 +31,9 @@ use std::fmt::{self, Write as _};
 pub(crate) enum ChannelSource<'a> {
     /// A field of the `Encodings` uniform.
     Const,
-    /// A vertex column passed through a shader function.
-    Column(&'a dyn DynShaderFn),
+    /// A vertex column passed through a chain of shader functions, in
+    /// evaluation order (never empty).
+    Column(Vec<&'a dyn DynShaderFn>),
 }
 
 /// One mark channel, in mark order.
@@ -46,13 +55,32 @@ pub(crate) struct GlueSpec<'a> {
     pub validity: bool,
 }
 
-/// A texture + sampler pair bound for one channel's LUT.
+/// A texture + sampler pair bound for one link's LUT.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct LutBinding {
     /// Index into the spec's channels.
     pub channel: usize,
+    /// Index of the link in the channel's chain.
+    pub link: usize,
     /// Binding of the texture in group 1 (the sampler is `binding + 1`).
     pub binding: u32,
+}
+
+/// A per-chunk base in the `Chunk` uniform: one per link whose entry
+/// point is relative.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct ChunkBase {
+    /// Index into the spec's channels.
+    pub channel: usize,
+    /// Index of the link in the channel's chain. Only link 0 reads the
+    /// stored column, so only its base comes from the chunk's origin; a
+    /// later link's input is absolute (origin 0).
+    pub link: usize,
+    /// The link's input format: one `f32` member (`<field>_base`), or a
+    /// hi/lo pair (`<field>_base`, `<field>_base_lo`).
+    pub format: ColumnFormat,
+    /// The `Chunk` member holding the (hi) base.
+    pub member: String,
 }
 
 /// The generated top-level module and how to bind it.
@@ -69,8 +97,8 @@ pub(crate) struct Glue {
     pub columns: Vec<(usize, ColumnFormat)>,
     /// Whether group 2 binds the chunk's validity bits at binding 1.
     pub validity: bool,
-    /// Channels that take a per-chunk base (relative columns).
-    pub relative: Vec<usize>,
+    /// The per-chunk bases (relative links), in `Chunk` member order.
+    pub relative: Vec<ChunkBase>,
     /// LUT bindings in group 1.
     pub luts: Vec<LutBinding>,
     /// Layout of the `Encodings` uniform: each field starts on a 16-byte
@@ -78,24 +106,39 @@ pub(crate) struct Glue {
     /// GUP-406). A test checks them against naga's layout of the linked
     /// module.
     pub encodings: StructLayout,
-    /// Layout of the per-chunk `Chunk` uniform (`row_base`, then one
-    /// `<channel>_base: f32` per relative channel).
+    /// Layout of the per-chunk `Chunk` uniform (`row_base`, then each
+    /// relative link's base: `<field>_base: f32`, plus
+    /// `<field>_base_lo: f32` for a hi/lo input).
     pub chunk: StructLayout,
+}
+
+/// The `Encodings` field (and `Chunk` base, LUT and sampler prefix) of
+/// link `link` of channel `channel`: the channel's name for the first
+/// link, `<channel>_link<k>` after it.
+pub(crate) fn link_field(channel: &str, link: usize) -> String {
+    if link == 0 {
+        channel.to_string()
+    } else {
+        format!("{channel}_link{link}")
+    }
 }
 
 /// A WGSL expression in the vertex entry point.
 #[derive(Clone, Debug, PartialEq)]
 enum Expr {
     /// `col.<name>`.
-    Column(&'static str),
-    /// `chunk.<name>_base`.
-    ChunkBase(&'static str),
-    /// `enc.<name>`.
-    Uniform(&'static str),
-    /// `<name>_lut`.
-    Lut(&'static str),
-    /// `<name>_smp`.
-    Sampler(&'static str),
+    Column(String),
+    /// `chunk.<field>_base`, or for a hi/lo base
+    /// `vec2<f32>(chunk.<field>_base, chunk.<field>_base_lo)`.
+    ChunkBase { field: String, pair: bool },
+    /// `enc.<field>`.
+    Uniform(String),
+    /// `<field>_lut`.
+    Lut(String),
+    /// `<field>_smp`.
+    Sampler(String),
+    /// `vec2<f32>(expr, 0.0)`: an absolute value as a hi/lo pair.
+    Pair(Box<Expr>),
     /// `<alias>::<function>(args…)`.
     Call {
         alias: String,
@@ -110,10 +153,14 @@ impl fmt::Display for Expr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Expr::Column(n) => write!(f, "col.{n}"),
-            Expr::ChunkBase(n) => write!(f, "chunk.{n}_base"),
+            Expr::ChunkBase { field, pair: false } => write!(f, "chunk.{field}_base"),
+            Expr::ChunkBase { field, pair: true } => {
+                write!(f, "vec2<f32>(chunk.{field}_base, chunk.{field}_base_lo)")
+            }
             Expr::Uniform(n) => write!(f, "enc.{n}"),
             Expr::Lut(n) => write!(f, "{n}_lut"),
             Expr::Sampler(n) => write!(f, "{n}_smp"),
+            Expr::Pair(e) => write!(f, "vec2<f32>({e}, 0.0)"),
             Expr::Call {
                 alias,
                 function,
@@ -194,6 +241,7 @@ fn const_size(wgsl_type: &str) -> u64 {
         other => unreachable!("no constant channel has WGSL type {other}"),
     }
 }
+
 /// Generate the glue module for `spec`.
 pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
     let mut aliases = Aliases(Vec::new());
@@ -212,54 +260,80 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
     let mut signature_parts = Vec::new();
     let mut next_binding = 1;
     for (i, ch) in spec.channels.iter().enumerate() {
-        match ch.source {
+        match &ch.source {
             ChannelSource::Const => {
-                fields.push((ch.name, ch.wgsl_type.to_string(), const_size(ch.wgsl_type)));
-                exprs.push((ch.name, Expr::Uniform(ch.name)));
+                fields.push((
+                    ch.name.to_string(),
+                    ch.wgsl_type.to_string(),
+                    const_size(ch.wgsl_type),
+                ));
+                exprs.push((ch.name, Expr::Uniform(ch.name.to_string())));
                 signature_parts.push(format!("{}: const {}", ch.name, ch.wgsl_type));
             }
-            ChannelSource::Column(func) => {
-                let alias = aliases.get(func.module());
-                let size = func.params_size();
-                // A struct member must be followed by roundUp(16, size) bytes
-                // before the next member, and padding members would break
-                // that, so the struct itself spans a multiple of 16.
-                assert!(
-                    size % 16 == 0,
-                    "{}::Params is {size} bytes; uniform Params structs must span a multiple \
-                     of 16 bytes (pad them in WGSL and in the encase struct)",
-                    func.module().import_path
-                );
-                fields.push((ch.name, format!("{alias}::Params"), size));
-                columns.push((i, func.input_format()));
-                let plane = func.input_format().has_validity().then(|| {
+            ChannelSource::Column(links) => {
+                assert!(!links.is_empty(), "{}: an empty chain", ch.name);
+                let format = links[0].input_format();
+                columns.push((i, format));
+                let plane = format.has_validity().then(|| {
                     planes += 1;
                     planes - 1
                 });
-                let mut args = vec![Expr::Column(ch.name)];
-                if func.input_format() == ColumnFormat::F32Relative {
-                    relative.push(i);
-                    args.push(Expr::ChunkBase(ch.name));
-                }
-                args.push(Expr::Uniform(ch.name));
-                for resource in func.resources() {
-                    match resource {
-                        Resource::Lut(_) => {
-                            luts.push(LutBinding {
-                                channel: i,
-                                binding: next_binding,
-                            });
-                            next_binding += 2;
-                            args.push(Expr::Lut(ch.name));
-                            args.push(Expr::Sampler(ch.name));
+                let mut expr = Expr::Column(ch.name.to_string());
+                for (k, func) in links.iter().enumerate() {
+                    let field = link_field(ch.name, k);
+                    let alias = aliases.get(func.module());
+                    let size = func.params_size();
+                    // A struct member must be followed by roundUp(16, size)
+                    // bytes before the next member, and padding members
+                    // would break that, so the struct itself spans a
+                    // multiple of 16.
+                    assert!(
+                        size % 16 == 0,
+                        "{}::Params is {size} bytes; uniform Params structs must span a \
+                         multiple of 16 bytes (pad them in WGSL and in the encase struct)",
+                        func.module().import_path
+                    );
+                    fields.push((field.clone(), format!("{alias}::Params"), size));
+                    let input_format = func.input_format();
+                    // A later link reads an absolute value: as a hi/lo pair
+                    // if its entry point takes one.
+                    if k > 0 && input_format == ColumnFormat::F32x2Relative {
+                        expr = Expr::Pair(Box::new(expr));
+                    }
+                    let mut args = vec![expr];
+                    if input_format.is_relative() {
+                        relative.push(ChunkBase {
+                            channel: i,
+                            link: k,
+                            format: input_format,
+                            member: format!("{field}_base"),
+                        });
+                        args.push(Expr::ChunkBase {
+                            field: field.clone(),
+                            pair: input_format == ColumnFormat::F32x2Relative,
+                        });
+                    }
+                    args.push(Expr::Uniform(field.clone()));
+                    for resource in func.resources() {
+                        match resource {
+                            Resource::Lut(_) => {
+                                luts.push(LutBinding {
+                                    channel: i,
+                                    link: k,
+                                    binding: next_binding,
+                                });
+                                next_binding += 2;
+                                args.push(Expr::Lut(field.clone()));
+                                args.push(Expr::Sampler(field.clone()));
+                            }
                         }
                     }
+                    expr = Expr::Call {
+                        alias,
+                        function: func.entry(),
+                        args,
+                    };
                 }
-                let mut expr = Expr::Call {
-                    alias,
-                    function: func.entry(),
-                    args,
-                };
                 match plane {
                     // A null colour input draws in the null colour; a
                     // null position or size hides the row.
@@ -273,7 +347,8 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
                     None => {}
                 }
                 exprs.push((ch.name, expr));
-                signature_parts.push(format!("{}: {}", ch.name, func.signature()));
+                let chain: Vec<String> = links.iter().map(|f| f.signature()).collect();
+                signature_parts.push(format!("{}: {}", ch.name, chain.join(" then ")));
             }
         }
     }
@@ -310,7 +385,7 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
         // offsets, so the shader and the uniform bytes would disagree
         // (GUP-401).
         let _ = writeln!(w, "    {name}: {ty},");
-        encodings.members.push((name.to_string(), encodings.span));
+        encodings.members.push((name.clone(), encodings.span));
         for (k, pad) in ["a", "b", "c"].iter().enumerate() {
             let offset = *size as u32 + 4 * k as u32;
             if size.next_multiple_of(16) > u64::from(offset) {
@@ -327,19 +402,23 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
         span: 4,
         members: vec![("row_base".to_string(), 0)],
     };
-    for &i in &relative {
-        let _ = writeln!(w, "    {}_base: f32,", spec.channels[i].name);
-        chunk
-            .members
-            .push((format!("{}_base", spec.channels[i].name), chunk.span));
-        chunk.span += 4;
+    for base in &relative {
+        let mut members = vec![base.member.clone()];
+        if base.format == ColumnFormat::F32x2Relative {
+            members.push(format!("{}_lo", base.member));
+        }
+        for member in members {
+            let _ = writeln!(w, "    {member}: f32,");
+            chunk.members.push((member, chunk.span));
+            chunk.span += 4;
+        }
     }
     let _ = writeln!(w, "}}\n");
 
     let _ = writeln!(w, "@group(0) @binding(0) var<uniform> u_view: View;");
     let _ = writeln!(w, "@group(1) @binding(0) var<uniform> enc: Encodings;");
     for lut in &luts {
-        let name = spec.channels[lut.channel].name;
+        let name = link_field(spec.channels[lut.channel].name, lut.link);
         let _ = writeln!(
             w,
             "@group(1) @binding({}) var {name}_lut: texture_2d<f32>;",
@@ -443,8 +522,11 @@ fn find_module(spec: &GlueSpec<'_>, path: &str) -> Option<&'static WgslModule> {
     if spec.mark_module.import_path == path {
         return Some(spec.mark_module);
     }
-    spec.channels.iter().find_map(|ch| match ch.source {
-        ChannelSource::Column(f) if f.module().import_path == path => Some(f.module()),
-        _ => None,
+    spec.channels.iter().find_map(|ch| match &ch.source {
+        ChannelSource::Column(links) => links
+            .iter()
+            .map(|f| f.module())
+            .find(|m| m.import_path == path),
+        ChannelSource::Const => None,
     })
 }

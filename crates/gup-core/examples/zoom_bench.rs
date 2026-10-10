@@ -16,6 +16,9 @@
 //!   --samples 1|4                      MSAA samples of the window target
 //!                                      (default 4, every Gup-owned
 //!                                      target's default)
+//!   --time                             encode x (as Unix seconds) through a
+//!                                      Time scale: a hi/lo F32x2Relative
+//!                                      column (GUP-418)
 //!   --chunk-rows N                    at most N rows per column chunk, so
 //!                                      the layer draws several instanced
 //!                                      draws (default: the device's size)
@@ -38,7 +41,7 @@
 mod scatter;
 
 use gup_core::prelude::*;
-use gup_core::{RenderTarget, Renderer, ScaleRef, UploadStats, WindowTarget};
+use gup_core::{RenderTarget, Renderer, ScaleRef, Time, UploadStats, WindowTarget};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use winit::application::ApplicationHandler;
@@ -58,6 +61,7 @@ struct Options {
     chunk_rows: Option<u32>,
     size: Option<(u32, u32)>,
     uncapped: bool,
+    time: bool,
 }
 
 fn options() -> Options {
@@ -71,6 +75,7 @@ fn options() -> Options {
         chunk_rows: None,
         size: None,
         uncapped: false,
+        time: false,
     };
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut it = args.iter();
@@ -94,6 +99,7 @@ fn options() -> Options {
                 o.chunk_rows = Some(value().parse().expect("--chunk-rows N"));
             }
             "--uncapped" => o.uncapped = true,
+            "--time" => o.time = true,
             "--size" => {
                 let (w, h) = value().split_once('x').expect("--size WxH");
                 o.size = Some((w.parse().expect("width"), h.parse().expect("height")));
@@ -133,7 +139,7 @@ struct Gpu {
 struct Bench {
     o: Options,
     plot: Plot,
-    x: ScaleRef<Linear>,
+    x: XScale,
     y: ScaleRef<Log>,
     full: Option<((f64, f64), (f64, f64))>,
     gpu: Option<Gpu>,
@@ -209,9 +215,7 @@ impl Bench {
         let cx = x0 + 0.35 * (x1 - x0);
         let (ly0, ly1) = (y0.log10(), y1.log10());
         let cy = ly0 + 0.6 * (ly1 - ly0);
-        self.x
-            .write()
-            .set_domain(cx - (cx - x0) * k, cx + (x1 - cx) * k)?;
+        self.x.set_domain(cx - (cx - x0) * k, cx + (x1 - cx) * k)?;
         self.y.write().set_domain(
             10f64.powf(cy - (cy - ly0) * k),
             10f64.powf(cy + (ly1 - cy) * k),
@@ -246,7 +250,7 @@ impl Bench {
         let resolved = self.plot.resolve(&gpu.cx, w as f32 / dpr, h as f32 / dpr)?;
         if self.full.is_none() {
             self.full = Some((
-                self.x.read().current_domain().unwrap(),
+                self.x.current_domain().unwrap(),
                 self.y.read().current_domain().unwrap(),
             ));
         }
@@ -556,12 +560,26 @@ impl ApplicationHandler for Bench {
 fn main() {
     let o = options();
     let t = Instant::now();
-    let (plot, x, y) =
-        scatter::plot_rows_chunked(scatter::countries_n(o.points), Px(o.radius), o.chunk_rows);
+    let rows = scatter::countries_n(o.points);
+    let (plot, x, y) = if o.time {
+        let (plot, x, y) = time_plot(rows, Px(o.radius), o.chunk_rows);
+        (plot, XScale::Time(x), y)
+    } else {
+        let (plot, x, y) = scatter::plot_rows_chunked(rows, Px(o.radius), o.chunk_rows);
+        (plot, XScale::Linear(x), y)
+    };
     println!(
         "generated {} rows in {:.1} ms",
         o.points,
         t.elapsed().as_secs_f64() * 1e3
+    );
+    println!(
+        "x scale: {}",
+        if o.time {
+            "Time (hi/lo F32x2Relative column)"
+        } else {
+            "Linear (F32Relative column)"
+        }
     );
     let frames = o.frames;
     let mut bench = Bench {
@@ -586,4 +604,58 @@ fn main() {
         eprintln!("zoom bench failed: {e}");
         std::process::exit(1);
     }
+}
+
+/// The x scale handle: the reference scatter's `Linear`, or `--time`'s
+/// `Time`.
+enum XScale {
+    Linear(ScaleRef<Linear>),
+    Time(ScaleRef<Time>),
+}
+
+impl XScale {
+    fn current_domain(&self) -> Option<(f64, f64)> {
+        match self {
+            XScale::Linear(s) => s.read().current_domain(),
+            XScale::Time(s) => s.read().current_domain(),
+        }
+    }
+
+    fn set_domain(&self, d0: f64, d1: f64) -> gup_core::Result<()> {
+        match self {
+            XScale::Linear(s) => s.write().set_domain(d0, d1),
+            XScale::Time(s) => s.write().set_domain(d0, d1),
+        }
+    }
+}
+
+/// The reference scatter with x as Unix seconds (GDP per capita read as
+/// 1000 s units after 2020-09-13) through a `Time` scale, so the x column
+/// is a hi/lo `F32x2Relative` pair (GUP-418's precision spike).
+fn time_plot(
+    rows: Vec<scatter::Country>,
+    radius: Px,
+    max_chunk_rows: Option<u32>,
+) -> (Plot, ScaleRef<Time>, ScaleRef<Log>) {
+    let mut plot = Plot::new();
+    let (x, y) = (plot.x(Time::new()), plot.y(Log::new()));
+    let heat = Sequential::viridis();
+    let layer = plot
+        .title(scatter::TITLE)
+        .add(Selection::<scatter::Country, Circle>::new(rows));
+    layer
+        .attr(
+            Circle::X,
+            x.encode(|c: &scatter::Country| 1.6e9 + c.gdp_per_capita * 1000.0),
+        )
+        .attr(Circle::Y, y.encode(|c: &scatter::Country| c.population))
+        .attr(
+            Circle::FILL,
+            heat.encode(|c: &scatter::Country| c.life_expectancy),
+        )
+        .attr(Circle::RADIUS, radius);
+    if let Some(rows) = max_chunk_rows {
+        layer.max_chunk_rows(rows);
+    }
+    (plot, x, y)
 }

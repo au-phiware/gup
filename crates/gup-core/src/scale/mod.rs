@@ -13,6 +13,7 @@ mod categorical;
 mod linear;
 mod log;
 pub(crate) mod sequential;
+mod time;
 
 #[cfg(test)]
 mod conformance;
@@ -21,10 +22,11 @@ pub use categorical::{Categorical, CategoricalParams, NULL_COLOR, OKABE_ITO};
 pub use linear::{Linear, LinearParams};
 pub use log::{Log, LogParams};
 pub use sequential::{Sequential, SequentialParams};
+pub use time::Time;
 
 use crate::channel::Px;
 use crate::column::ColumnFormat;
-use crate::encoding::{CpuMirror, Resource, ShaderFn};
+use crate::encoding::{CpuMirror, EncodeFn, Resource, ShaderFn};
 use crate::error::Result;
 use crate::shader::WgslModule;
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
@@ -39,7 +41,9 @@ pub struct Ticks {
 }
 
 /// A scale from a numeric domain to a pixel range.
-pub trait PositionScale: ShaderFn<In = f32, Out = Px> + CpuMirror {
+pub trait PositionScale:
+    ShaderFn<In = f32, Out = Px> + EncodeFn<Input = f32, Output = Px> + CpuMirror
+{
     /// The domain, if set or fitted.
     fn current_domain(&self) -> Option<(f64, f64)>;
     /// Whether the domain is data-driven (not set explicitly).
@@ -102,7 +106,7 @@ impl<S: ShaderFn> ShaderFn for ScaleRef<S> {
         self.read().input_format()
     }
 
-    fn chunk_base(&self, origin: f64) -> f32 {
+    fn chunk_base(&self, origin: f64) -> f64 {
         self.read().chunk_base(origin)
     }
 
@@ -115,7 +119,10 @@ impl<S: ShaderFn> ShaderFn for ScaleRef<S> {
     }
 }
 
-impl<S: CpuMirror> CpuMirror for ScaleRef<S> {
+impl<S> CpuMirror for ScaleRef<S>
+where
+    S: ShaderFn + CpuMirror<Output = <S as ShaderFn>::Out>,
+{
     fn eval(&self, x: f64) -> <S::Out as crate::channel::GpuType>::Cpu {
         self.read().eval(x)
     }

@@ -2405,3 +2405,96 @@ bytes, the draw-call count (`Prepared::draw_calls`, new) and that no program or
 pipeline is created after the first frame. Seeded violations (an extra upload,
 an oversized upload, a duplicated chunk draw, an extra guide draw, a bypassed
 pipeline cache) each failed it.
+
+## S5a findings (2026-10-10, GUP-418)
+
+[GUP-418](../stories/GUP-418_RFC_001_S5a_ShaderFn_V2_And_Numeric_Scales.md)
+generalised the glue to chains (`a.then(b)`) and added the numeric scales. Same
+machine as S0a–S4b (Intel HD Graphics 630, Mesa 26.0.0 Vulkan, i7-7700HQ, niri
+at 1920×1080, rustc 1.93.1), and lavapipe for the CI rasteriser.
+
+### Time precision: the spike
+
+S4a left three options for deep zoom into a large chunk (§12 risk 6). The story
+asked for a measured choice between two of them before building either:
+value-span-capped `F32Relative` chunks, and a hi/lo `f32` pair column format
+(double-single), `ColumnFormat::F32x2Relative`, stored relative to the same
+per-chunk origin. The scenarios: (a) three years of one-per-second samples
+(94,672,800 rows) at a 1 s / 1000 px zoom, and (b) the same data at 1 ms / 1000
+px.
+
+**Precision.** `conformance::chunk_boundary::spike_precision_table` (ignored;
+`--ignored --nocapture` prints it) runs the scale's WGSL over one uploaded chunk
+whose origin is _span_ seconds before 256 points in the zoom window, against the
+f64 mirror. That is exactly what a value-span cap of _span_ allows. The table is
+Intel; lavapipe gives the same `F32Relative` column and 4.4e-5 px for hi/lo at 1
+s.
+
+| Chunk span (s) | `F32Relative`, 1 s zoom | `F32Relative`, 1 ms zoom | hi/lo, 1 s zoom | hi/lo, 1 ms zoom |
+| -------------: | ----------------------: | -----------------------: | --------------: | ---------------: |
+|  1e8 (3 years) |                  999 px |                   999 px |       3.1e-5 px |        4.4e-5 px |
+|   2^20 (12 d.) |                   64 px |                   999 px |       3.1e-5 px |        4.4e-5 px |
+|          8,192 |                 0.71 px |                   763 px |       3.1e-5 px |        4.4e-5 px |
+|          4,096 |             **0.26 px** |                   455 px |       3.1e-5 px |        4.4e-5 px |
+|          2,048 |                 0.14 px |                   153 px |       3.1e-5 px |        4.4e-5 px |
+|             64 |               5.5e-3 px |                   5.7 px |       3.1e-5 px |        4.4e-5 px |
+|              8 |               7.5e-4 px |                  0.48 px |       3.1e-5 px |        4.4e-5 px |
+|              4 |               2.7e-4 px |              **0.24 px** |       3.1e-5 px |        4.4e-5 px |
+
+- A span cap must be **2,048 s** for scenario (a): 4,096 s misses the budget
+  (0.26 px; the story estimated 4,200 s). For (b) it must be **4 s**, and that
+  passes by 0.01 px.
+- hi/lo is within budget at every span, even one chunk spanning three years. f64
+  Unix seconds near 1.7e9 are multiples of 2^-22 s, so an offset of up to 2^26 s
+  from the chunk origin needs at most 48 bits. The hi/lo pair holds all of them,
+  and the column is exact relative to its f64 input. The WGSL
+  (`gup::scale::time::map_rel`) adds the high words first (`v.x + base.x`, exact
+  for an on-screen point because the two nearly cancel), then the low words. No
+  driver reassociated it: Intel and lavapipe both pass.
+
+**Chunks, draws and bytes**, for scenario (a)'s 94,672,800 rows:
+
+|                                 | Chunks (draws) | x column bytes | Chunk uniform bytes per zoom frame |
+| ------------------------------- | -------------: | -------------: | ---------------------------------: |
+| `F32Relative`, cap 2,048 s (a)  |        ~46,200 |       378.7 MB |                            11.8 MB |
+| `F32Relative`, cap 4 s (b)      |    ~18,900,000 |       378.7 MB |    4.8 GB (over `max_buffer_size`) |
+| hi/lo, 2^20-row chunks (a), (b) |             91 |       757.3 MB |                            23.3 KB |
+
+Both approaches need 91 chunks, because 2^20 rows is the most a chunk holds.
+
+**Frame time.** Scenario (a) cannot run here: 94.7M rows need about 5 GB of host
+and GPU memory, and the machine had 5 GB free. Without culling (S9), either
+approach would draw every row, so frame time would mostly measure instance
+throughput. `zoom_bench` instead ran 100K points at each approach's draw count
+(`--chunk-rows`) and with the hi/lo column (`--time`, new). `Mailbox` uncapped,
+fullscreen, 4× MSAA, 600 frames, two alternating runs each. The GPU clock was
+sampled; its median was 350–517 MHz in every run, the unboosted state.
+
+| Run (100K points)                          | Draws | CPU work median (ms) | GPU pass median / p95 (ms) | Uniform B/frame | Column bytes |
+| ------------------------------------------ | ----: | -------------------: | -------------------------: | --------------: | -----------: |
+| `F32Relative`, 1 chunk (today)             |     1 |          0.792–0.796 |      3.95–4.13 / 6.95–7.32 |              88 |    1,200,000 |
+| hi/lo (`--time`), 1 chunk                  |     1 |          0.842–0.855 |      3.83–3.98 / 5.86–6.61 |              92 |    1,600,000 |
+| `F32Relative`, 91 chunks                   |    91 |          1.164–1.193 |      4.60–4.62 / 6.70–9.07 |          23,128 |    1,200,000 |
+| hi/lo, 91 chunks: (a) and (b)              |    91 |          1.261–1.313 |      4.65–4.72 / 6.31–7.74 |          23,132 |    1,600,000 |
+| span-cap proxy, 25,000 chunks (a at 4,096) | 25000 |          55.96–56.49 |      8.95–8.96 / 16.7–17.3 |       6,399,832 |    1,200,000 |
+| span-cap proxy, 50,000 chunks (a at 2,048) | 50000 |          95.22–95.24 |    12.57–12.76 / 43.3–43.8 |      12,799,832 |    1,200,000 |
+
+- **Span capping fails the frame budget in (a) and cannot run in (b).** A 2,048
+  s cap needs about 46,200 draws. At 50,000 draws a frame takes 95 ms of CPU (10
+  fps), almost all of it in `draw` and the 12.8 MB chunk-uniform write. The S0b
+  budget is 16.7 ms. Scenario (b) would need about 19M chunks, with a chunk
+  uniform larger than a buffer may be.
+- **hi/lo costs nothing measurable on the GPU** (3.83–3.98 against 3.95–4.13 ms;
+  its WGSL is 3 adds and a fused multiply-add, against 1 and 1). It costs about
+  0.05 ms of CPU and 4 bytes per row of x, and 4 bytes per chunk of uniform (the
+  base's low word).
+
+**Decision: the hi/lo column format.** The story's rule was "if span capping
+needs more than about 64 chunks in scenario (a), or fails (b), use the hi/lo
+format". Span capping needs about 46,200 chunks in (a) and fails (b). `Time`
+reads `F32x2Relative`; `Linear` keeps `F32Relative`, so existing layers, their
+bytes and the `scatter_glue.wgsl` fixture are unchanged. One finding goes beyond
+the rule: the 64-chunk threshold assumes the alternative needs few chunks. At
+94.7M rows any store needs 91, because of `MAX_CHUNK_ROWS`. That costs about 0.4
+ms of CPU and 0.6 ms of GPU at 100K points, whichever format is used. It is a
+cost of row count, not of precision, so it does not change the decision.

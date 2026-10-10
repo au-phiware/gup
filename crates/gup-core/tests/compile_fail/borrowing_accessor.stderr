@@ -21,7 +21,7 @@ note: required by a bound in `encode`
    |        ------ required by a bound in this associated function
 ...
    |         D: ColumnValue,
-   |            ^^^^^^^^^^^ required by this bound in `ShaderFn::encode`
+   |            ^^^^^^^^^^^ required by this bound in `EncodeFn::encode`
 
 error[E0277]: `&str` is not a column value; `encode` takes accessors returning numbers
   --> tests/compile_fail/borrowing_accessor.rs:19:9

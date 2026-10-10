@@ -6,13 +6,13 @@
 //! append are later S-stories.
 
 use crate::channel::{Channel, Mark, Role, Visual};
-use crate::column::{ColumnData, ColumnStore};
+use crate::column::{ColumnData, ColumnFormat, ColumnStore};
 use crate::context::Context;
 use crate::encoding::{Encoding, IntoEncoding, Resource};
 use crate::error::{Error, Result};
 use crate::render::{ChunkDraw, LayerGpu, LayerUniforms, chunk_uniform_offset, chunk_uniforms};
 use crate::scene::MarkBatch;
-use crate::shader::glue::{self, ChannelSource, Glue, GlueChannel, GlueSpec};
+use crate::shader::glue::{self, ChannelSource, ChunkBase, Glue, GlueChannel, GlueSpec};
 use std::any::Any;
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -243,7 +243,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
     fn evaluate(&mut self, cx: &Context) -> Result<&mut ColumnStore> {
         let formats: Vec<_> = self
             .column_encodings()
-            .map(|(_, c)| c.func().input_format())
+            .map(|(_, c)| c.links()[0].input_format())
             .collect();
         let chunk_rows = ColumnStore::chunk_rows_for(&cx.caps().limits, &formats)
             .min(self.max_chunk_rows.unwrap_or(u32::MAX));
@@ -293,7 +293,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
                 wgsl_type: desc.wgsl_type,
                 role: desc.role,
                 source: match enc {
-                    Some(Encoding::Column(c)) => ChannelSource::Column(c.func()),
+                    Some(Encoding::Column(c)) => ChannelSource::Column(c.links()),
                     _ => ChannelSource::Const,
                 },
             })
@@ -307,23 +307,30 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
     }
 
     /// The `Chunk` uniform entries (laid out as `layout`) of every chunk
-    /// of the evaluated store: each chunk's first row and, for each
-    /// channel in `relative`, `(origin - d0)` from the chunk's own f64
-    /// origin.
+    /// of the evaluated store: each chunk's first row and each relative
+    /// link's base in `relative`. A channel's first link reads the stored
+    /// column, so its base is `(origin - d0)` from the chunk's own f64
+    /// origin; a later link reads an absolute value (origin 0). A hi/lo
+    /// link gets its base as a hi/lo pair.
     fn chunk_uniform_bytes(
         &self,
         layout: &crate::shader::StructLayout,
-        relative: &[usize],
+        relative: &[ChunkBase],
     ) -> Result<Vec<u8>> {
         let store = self.columns.as_ref().ok_or_else(|| {
             Error::config("layer", "prepare called before the columns were evaluated")
         })?;
-        // (`Chunk` member, column index, function) per relative channel.
-        let relative: Vec<_> = self
-            .column_encodings()
-            .enumerate()
-            .filter(|(_, (i, _))| relative.contains(i))
-            .map(|(col, (i, c))| (format!("{}_base", M::CHANNELS[i].name), col, c.func()))
+        // (base, column index, link function) per relative link.
+        let relative: Vec<_> = relative
+            .iter()
+            .map(|b| {
+                let (col, (_, c)) = self
+                    .column_encodings()
+                    .enumerate()
+                    .find(|(_, (i, _))| *i == b.channel)
+                    .expect("relative bases belong to column channels");
+                (b, col, c.links()[b.link])
+            })
             .collect();
         let mut bytes = chunk_uniforms(store.chunks().len(), layout.span);
         for (k, chunk) in store.chunks().iter().enumerate() {
@@ -339,9 +346,18 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
                 )
             })?;
             write_field(entry, layout, "row_base", &row_base.to_le_bytes())?;
-            for (member, col, func) in &relative {
-                let base = func.chunk_base(chunk.columns()[*col].origin());
-                write_field(entry, layout, member, &base.to_le_bytes())?;
+            for (base, col, func) in &relative {
+                let origin = if base.link == 0 {
+                    chunk.columns()[*col].origin()
+                } else {
+                    0.0
+                };
+                let [hi, lo] = base.format.split(func.chunk_base(origin));
+                write_field(entry, layout, &base.member, &hi.to_le_bytes())?;
+                if base.format == ColumnFormat::F32x2Relative {
+                    let member = format!("{}_lo", base.member);
+                    write_field(entry, layout, &member, &lo.to_le_bytes())?;
+                }
             }
         }
         Ok(bytes)
@@ -376,8 +392,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         for (i, enc) in self.encodings.iter_mut().enumerate() {
             if let Some(Encoding::Column(c)) = enc {
                 if let Some(s) = stats[k] {
-                    c.func_mut()
-                        .fit_domain(s.extent())
+                    c.fit(s.extent())
                         .map_err(|e| context(e, M::NAME, M::CHANNELS[i].name))?;
                 }
                 k += 1;
@@ -411,21 +426,33 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         let mut encodings = vec![0u8; program.encodings.span as usize];
         let mut luts: Vec<Vec<[u8; 4]>> = Vec::new();
         for (i, desc) in M::CHANNELS.iter().enumerate() {
-            let bytes = match &self.encodings[i] {
+            match &self.encodings[i] {
+                // One field per link of the chain.
                 Some(Encoding::Column(c)) => {
-                    let func = c.func();
-                    if glue.luts.iter().any(|l| l.channel == i) {
-                        for r in func.resources() {
-                            let Resource::Lut(lut) = r;
-                            luts.push(lut);
-                        }
+                    for (k, func) in c.links().into_iter().enumerate() {
+                        let field = glue::link_field(desc.name, k);
+                        let bytes = func.params_bytes()?;
+                        write_field(&mut encodings, &program.encodings, &field, &bytes)?;
                     }
-                    func.params_bytes()?
                 }
-                Some(Encoding::Const(v)) => v.bytes(),
-                None => desc.default.bytes(),
+                Some(Encoding::Const(v)) => {
+                    write_field(&mut encodings, &program.encodings, desc.name, &v.bytes())?;
+                }
+                None => {
+                    let bytes = desc.default.bytes();
+                    write_field(&mut encodings, &program.encodings, desc.name, &bytes)?;
+                }
+            }
+        }
+        // The LUTs, in binding order.
+        for lut in &glue.luts {
+            let Some(Encoding::Column(c)) = &self.encodings[lut.channel] else {
+                unreachable!("LUTs belong to column channels")
             };
-            write_field(&mut encodings, &program.encodings, desc.name, &bytes)?;
+            for r in c.links()[lut.link].resources() {
+                let Resource::Lut(data) = r;
+                luts.push(data);
+            }
         }
 
         let chunks = self.chunk_uniform_bytes(&program.chunk, &glue.relative)?;
@@ -604,7 +631,7 @@ mod tests {
     use super::*;
     use crate::channel::Px;
     use crate::column::ColumnFormat;
-    use crate::encoding::ShaderFn;
+    use crate::encoding::EncodeFn;
     use crate::marks::Circle;
     use crate::scale::{Categorical, Linear, Log, ScaleRef, Sequential};
     use crate::shader::link;
@@ -674,7 +701,7 @@ mod tests {
             let origin = chunk.columns()[0].origin();
             assert_eq!(origin, 1.7e9 + f64::from(8 * k as u32 + 1) * 60.0);
             let base = f32::from_le_bytes(entry[x_base..x_base + 4].try_into().unwrap());
-            assert_eq!(base, x.func().chunk_base(origin));
+            assert_eq!(base, x.links()[0].chunk_base(origin) as f32);
             bases.push(base);
         }
         assert!(bases[0] < bases[1] && bases[1] < bases[2], "{bases:?}");
@@ -783,7 +810,15 @@ mod tests {
                 (3, ColumnFormat::F32)
             ]
         );
-        assert_eq!(glue.relative, vec![0]);
+        assert_eq!(
+            glue.relative,
+            vec![glue::ChunkBase {
+                channel: 0,
+                link: 0,
+                format: ColumnFormat::F32Relative,
+                member: "x_base".into(),
+            }]
+        );
         check_fixture("scatter_glue.wgsl", &glue.source);
         let linked = link(&glue.signature, &glue.source, &glue.modules).unwrap();
         check_fixture("scatter_linked.wgsl", &linked);
@@ -856,7 +891,9 @@ mod tests {
 
     #[test]
     fn rust_params_match_wgsl_params() {
-        use crate::shader::{COLOR_CATEGORICAL, COLOR_SEQUENTIAL, SCALE_LINEAR, SCALE_LOG};
+        use crate::shader::{
+            COLOR_CATEGORICAL, COLOR_SEQUENTIAL, SCALE_LINEAR, SCALE_LOG, SCALE_TIME,
+        };
         use encase::ShaderType;
         for (module, size) in [
             (
@@ -865,6 +902,7 @@ mod tests {
             ),
             (&SCALE_LINEAR, crate::scale::LinearParams::min_size().get()),
             (&SCALE_LOG, crate::scale::LogParams::min_size().get()),
+            (&SCALE_TIME, crate::scale::LinearParams::min_size().get()),
             (
                 &COLOR_SEQUENTIAL,
                 crate::scale::SequentialParams::min_size().get(),

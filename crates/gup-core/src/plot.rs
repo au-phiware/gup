@@ -448,7 +448,7 @@ impl Plot {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::encoding::{CpuMirror, ShaderFn};
+    use crate::encoding::{CpuMirror, EncodeFn};
     use crate::marks::Circle;
     use crate::scale::{Linear, Log, ScaleRef};
     use crate::scene::ItemKind;
