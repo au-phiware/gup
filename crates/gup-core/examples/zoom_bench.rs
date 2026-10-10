@@ -394,15 +394,14 @@ impl Bench {
             "  encode + submit + present",
             t.iter().map(|f| ms(f.submit)).collect(),
         );
-        stats(
+        let (cpu_med, cpu_p95) = stats(
             "  CPU work (all but acquire)",
             t.iter()
                 .map(|f| ms(f.resolve + f.prepare + f.submit))
                 .collect(),
         );
-        if !self.gpu_ms.is_empty() {
-            stats("GPU render pass (timestamps)", self.gpu_ms.clone());
-        }
+        let gpu = (!self.gpu_ms.is_empty())
+            .then(|| stats("GPU render pass (timestamps)", self.gpu_ms.clone()));
         let over = |limit: f64| t.iter().filter(|f| ms(f.interval) > limit).count();
         println!(
             "fps: median {:.1}, p95 {:.1} (from the median and p95 frame interval); \
@@ -436,6 +435,43 @@ impl Bench {
              one write per column per chunk)",
             all.columns.bytes, all.columns.writes
         );
+
+        // The same numbers, one per line, for `scripts/perf_budget.sh`
+        // (`mask perf-budget`) to compare with `PERF_BUDGETS.md`.
+        let frames = o.frames as u64;
+        let mut metrics = vec![
+            ("zoom.size", format!("{w}x{h}")),
+            ("zoom.samples", o.samples.to_string()),
+            ("zoom.interval.median_ms", format!("{med:.3}")),
+            ("zoom.cpu.median_ms", format!("{cpu_med:.3}")),
+            ("zoom.cpu.p95_ms", format!("{cpu_p95:.3}")),
+        ];
+        if let Some((gpu_med, gpu_p95)) = gpu {
+            metrics.push(("zoom.gpu_pass.median_ms", format!("{gpu_med:.3}")));
+            metrics.push(("zoom.gpu_pass.p95_ms", format!("{gpu_p95:.3}")));
+        }
+        metrics.extend([
+            ("zoom.columns.bytes", d.columns.bytes.to_string()),
+            ("zoom.columns.writes", d.columns.writes.to_string()),
+            ("zoom.validity.bytes", d.validity.bytes.to_string()),
+            (
+                "zoom.uniforms.bytes_per_frame",
+                (d.uniforms.bytes / frames).to_string(),
+            ),
+            (
+                "zoom.uniforms.writes_per_frame",
+                (d.uniforms.writes / frames).to_string(),
+            ),
+            ("zoom.instances.bytes", d.instances.bytes.to_string()),
+            (
+                "zoom.instances.writes_per_frame",
+                (d.instances.writes / frames).to_string(),
+            ),
+            ("zoom.textures.bytes", d.textures.bytes.to_string()),
+        ]);
+        for (key, value) in metrics {
+            println!("metric {key} {value}");
+        }
     }
 }
 

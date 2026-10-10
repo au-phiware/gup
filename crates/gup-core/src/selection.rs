@@ -1013,7 +1013,8 @@ mod tests {
 /// Wall-clock cost of creating the reference pipeline (RFC-001 §12 risk
 /// 2): run with
 /// `cargo test -p gup-core --lib pipeline_timings -- --ignored --nocapture`
-/// (add `--release` for release numbers).
+/// (add `--release` for release numbers). `mask perf-budget` runs it in
+/// release and compares its `metric` lines with `PERF_BUDGETS.md`.
 #[cfg(test)]
 mod timings {
     use super::tests::reference;
@@ -1084,6 +1085,21 @@ mod timings {
             "link + create, first run             {:>8.3} ms",
             first.unwrap().as_secs_f64() * 1e3
         );
-        summary("link + create", total);
+        summary("link + create", total.clone());
+        // For `scripts/perf_budget.sh` (`mask perf-budget`, PERF_BUDGETS.md).
+        total.sort();
+        let ms = |d: Duration| d.as_secs_f64() * 1e3;
+        println!(
+            "metric pipeline.link_create.median_ms {:.3}",
+            ms(total[total.len() / 2])
+        );
+        println!(
+            "metric pipeline.link_create.cold_ms {:.3}",
+            ms(first.unwrap())
+        );
+        println!(
+            "metric pipeline.link_create.max_ms {:.3}",
+            ms(total[total.len() - 1])
+        );
     }
 }
