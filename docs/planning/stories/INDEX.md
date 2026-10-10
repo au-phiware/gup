@@ -223,6 +223,11 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   `compile_error!`-reported naga_oil failures, a calling-convention check, and
   `Error::Gpu` naming the user's function. Deps: GUP-418 📋, GUP-406 ✅, GUP-410
   ✅.
+- [GUP-421](GUP-421_Analytic_AA_Rules_Rects_1x_MSAA.md) 📋 — Give rules and
+  rects the same analytic edge coverage circles already have, then flip
+  `DEFAULT_SAMPLES` to 1 with MSAA opt-in and auto-enabled for area/polygon
+  marks (owner decision 2026-10-10, RFC-001), reusing the line-coverage math for
+  RFC-001 S6's future `Line`/`Segment` mark. Deps: GUP-417 ✅, GUP-401 ✅.
 
 ## GPU Rendering Pipeline
 
