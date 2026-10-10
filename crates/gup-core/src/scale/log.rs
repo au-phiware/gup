@@ -189,7 +189,7 @@ impl PositionScale for Log {
 
 /// Plain decimals from 0.001 to 999, SI suffixes (k, M, G, T) from 1000 up
 /// and exponent form below 0.001, so one axis never mixes notations.
-fn format_log_tick(v: f64) -> String {
+pub(super) fn format_log_tick(v: f64) -> String {
     // Round away binary noise from powi (e.g. 0.30000000000000004).
     let clean = |x: f64| {
         let scale = 10f64.powi(6 - x.abs().log10().floor() as i32);

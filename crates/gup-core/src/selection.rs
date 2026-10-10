@@ -633,7 +633,7 @@ mod tests {
     use crate::column::ColumnFormat;
     use crate::encoding::EncodeFn;
     use crate::marks::Circle;
-    use crate::scale::{Categorical, Linear, Log, ScaleRef, Sequential};
+    use crate::scale::{Categorical, Linear, Log, Pow, ScaleRef, Sequential, Symlog, Time};
     use crate::shader::link;
     use crate::shader::testing::{parse, struct_layout};
     use std::path::Path;
@@ -889,10 +889,187 @@ mod tests {
         assert_eq!(glue.encodings.span, 64);
     }
 
+    /// A layer whose channels are chains (GUP-418): a hi/lo `Time` x, a
+    /// `Symlog` y, a three-link fill (`Linear`, `Sqrt`, viridis) and a
+    /// three-link radius whose second link is a relative entry point
+    /// reading an absolute value.
+    fn chained() -> Selection<Row, Circle> {
+        let rows = (1..=20)
+            .map(|i| {
+                let i = f64::from(i);
+                Row {
+                    x: 1.7e9 + i * 60.0,
+                    y: (i - 10.0) * 1e3,
+                    v: 1.7e9 + i,
+                }
+            })
+            .collect::<Vec<_>>();
+        let mut sel = Selection::<Row, Circle>::new(rows);
+        let size = Linear::new()
+            .range(Px(0.0), Px(100.0))
+            .then(Linear::new().domain(0.0, 100.0).range(Px(0.0), Px(400.0)))
+            .then(Pow::sqrt().range(Px(2.0), Px(12.0)));
+        sel.attr(Circle::X, Time::new().encode(|r: &Row| r.x))
+            .attr(Circle::Y, Symlog::new().encode(|r: &Row| r.y))
+            .attr(Circle::RADIUS, size.encode(|r: &Row| r.v))
+            .attr(
+                Circle::FILL,
+                Linear::new()
+                    .range(Px(0.0), Px(1.0))
+                    .then(Pow::sqrt())
+                    .then(Sequential::viridis())
+                    .encode(|r: &Row| r.v),
+            );
+        sel
+    }
+
+    /// GUP-418 AC1: each link of a chain has its own `Encodings` field
+    /// (`<channel>`, `<channel>_link<k>`), the signature names every link,
+    /// a LUT belongs to its link, and only first links read the chunk's
+    /// origin; naga's layout of the linked module agrees.
+    #[test]
+    fn chained_glue_has_a_field_and_signature_per_link() {
+        let glue = chained().glue();
+        let fields: Vec<&str> = glue
+            .encodings
+            .members
+            .iter()
+            .map(|(n, _)| n.as_str())
+            .filter(|n| !n.contains("_pad_"))
+            .collect();
+        assert_eq!(
+            fields,
+            [
+                "x",
+                "y",
+                "radius",
+                "radius_link1",
+                "radius_link2",
+                "fill",
+                "fill_link1",
+                "fill_link2"
+            ]
+        );
+        assert!(
+            glue.signature.contains(
+                "fill: f32rel→gup::scale::linear::map_rel then f32→gup::scale::pow::map then \
+                 f32→gup::color::sequential::map(lut)"
+            ),
+            "{}",
+            glue.signature
+        );
+        assert!(
+            glue.signature
+                .contains("x: f32x2rel→gup::scale::time::map_rel, y: f32→gup::scale::symlog::map"),
+            "{}",
+            glue.signature
+        );
+        assert_eq!(
+            glue.luts,
+            vec![glue::LutBinding {
+                channel: 3,
+                link: 2,
+                binding: 1
+            }]
+        );
+        let chunk: Vec<&str> = glue.chunk.members.iter().map(|(n, _)| n.as_str()).collect();
+        assert_eq!(
+            chunk,
+            [
+                "row_base",
+                "x_base",
+                "x_base_lo",
+                "radius_base",
+                "radius_link1_base",
+                "fill_base"
+            ]
+        );
+        assert!(
+            glue.source.contains(
+                "m.fill = sequential::map(pow::map(linear::map_rel(col.fill, chunk.fill_base, \
+                 enc.fill), enc.fill_link1), enc.fill_link2, fill_link2_lut, fill_link2_smp);"
+            ),
+            "{}",
+            glue.source
+        );
+        assert!(
+            glue.source.contains(
+                "m.x = time::map_rel(col.x, vec2<f32>(chunk.x_base, chunk.x_base_lo), enc.x);"
+            ),
+            "{}",
+            glue.source
+        );
+        assert!(glue.source.contains("@location(0) x: vec2<f32>,"));
+        let linked = parse(
+            &glue.signature,
+            &link(&glue.signature, &glue.source, &glue.modules).unwrap(),
+        );
+        assert_eq!(
+            Some(glue.encodings.clone()),
+            struct_layout(&linked, "Encodings")
+        );
+        assert_eq!(Some(glue.chunk.clone()), struct_layout(&linked, "Chunk"));
+    }
+
+    /// GUP-418 AC1: a first link's base comes from the chunk's origin, a
+    /// later relative link's from origin 0, and a hi/lo base is split
+    /// into words that sum to the f64 base; the layer prepares (its
+    /// pipeline validates) and auto domains fit through the chain.
+    #[test]
+    fn chained_chunk_bases_apply_the_origin_once() {
+        let cx = Context::new_blocking().unwrap();
+        let mut sel = chained();
+        sel.max_chunk_rows(8);
+        sel.fit_domains(&cx).unwrap();
+        let glue = sel.glue();
+        let program = cx.program(&glue).unwrap();
+        let bytes = sel
+            .chunk_uniform_bytes(&program.chunk, &glue.relative)
+            .unwrap();
+        let store = sel.columns.as_ref().unwrap();
+        let link = |ch: usize, k: usize| {
+            let Some(Encoding::Column(c)) = &sel.encodings[ch] else {
+                panic!()
+            };
+            c.links()[k].chunk_base(0.0)
+        };
+        let read = |entry: &[u8], member: &str| {
+            let at = program.chunk.offset(member).unwrap() as usize;
+            f32::from_le_bytes(entry[at..at + 4].try_into().unwrap())
+        };
+        for (k, chunk) in store.chunks().iter().enumerate() {
+            let entry = &bytes[k * 256..];
+            // x: Time over a hi/lo column: base = origin − d0, split.
+            let origin = chunk.columns()[0].origin();
+            let x_d0 = -link(0, 0);
+            let (hi, lo) = (read(entry, "x_base"), read(entry, "x_base_lo"));
+            assert_eq!(f64::from(hi) + f64::from(lo), origin - x_d0);
+            // radius: the first link (relative) from the chunk origin.
+            let origin = chunk.columns()[2].origin();
+            let r_d0 = -link(2, 0);
+            assert_eq!(read(entry, "radius_base"), (origin - r_d0) as f32);
+            // The radius's second link reads an absolute value: origin 0.
+            assert_eq!(read(entry, "radius_link1_base"), link(2, 1) as f32);
+            assert_eq!(link(2, 1), 0.0);
+        }
+        // The fill chain's later links fitted to the image of the data
+        // through the links before them: Linear's range, then its sqrt.
+        let Some(Encoding::Column(fill)) = &sel.encodings[3] else {
+            panic!()
+        };
+        let p = fill.links()[1].params_bytes().unwrap();
+        let lo = f32::from_le_bytes(p[4..8].try_into().unwrap());
+        let k = f32::from_le_bytes(p[8..12].try_into().unwrap());
+        assert_eq!((lo, k), (0.0, 1.0), "sqrt fitted to [0, 1]");
+        let batch = sel.prepare(&cx).unwrap();
+        assert_eq!(batch.instances(), 20);
+    }
+
     #[test]
     fn rust_params_match_wgsl_params() {
         use crate::shader::{
-            COLOR_CATEGORICAL, COLOR_SEQUENTIAL, SCALE_LINEAR, SCALE_LOG, SCALE_TIME,
+            COLOR_CATEGORICAL, COLOR_SEQUENTIAL, SCALE_LINEAR, SCALE_LOG, SCALE_POW, SCALE_SYMLOG,
+            SCALE_TIME,
         };
         use encase::ShaderType;
         for (module, size) in [
@@ -903,6 +1080,8 @@ mod tests {
             (&SCALE_LINEAR, crate::scale::LinearParams::min_size().get()),
             (&SCALE_LOG, crate::scale::LogParams::min_size().get()),
             (&SCALE_TIME, crate::scale::LinearParams::min_size().get()),
+            (&SCALE_POW, crate::scale::PowParams::min_size().get()),
+            (&SCALE_SYMLOG, crate::scale::SymlogParams::min_size().get()),
             (
                 &COLOR_SEQUENTIAL,
                 crate::scale::SequentialParams::min_size().get(),

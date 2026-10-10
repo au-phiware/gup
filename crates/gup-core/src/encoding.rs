@@ -163,6 +163,55 @@ pub trait EncodeFn: Clone + Send + Sync + 'static {
     /// automatic domain is fitted to the image of the data's extent
     /// through it (the end points' images; every scale is monotonic), and
     /// the chain's own mirror evaluates it.
+    ///
+    /// Size cities by population (area ∝ population, through a square
+    /// root), and colour them by the same square root through viridis:
+    ///
+    /// ```
+    /// use gup_core::prelude::*;
+    ///
+    /// #[derive(Clone)]
+    /// struct City { lon: f64, lat: f64, population: f64 }
+    /// let cities = vec![
+    ///     City { lon: 139.7, lat: 35.7, population: 3.7e7 },
+    ///     City { lon: -0.1, lat: 51.5, population: 9.0e6 },
+    ///     City { lon: 151.2, lat: -33.9, population: 5.3e6 },
+    ///     City { lon: -70.7, lat: -33.4, population: 6.8e6 },
+    ///     City { lon: 4.9, lat: 52.4, population: 1.1e6 },
+    /// ];
+    ///
+    /// let cx = Context::new_blocking()?;
+    /// let mut plot = Plot::new();
+    /// let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
+    /// let area = Pow::sqrt().domain(0.0, 4e7);
+    /// plot.add(Selection::<City, Circle>::new(cities.clone()))
+    ///     .attr(Circle::X, x.encode(|c: &City| c.lon))
+    ///     .attr(Circle::Y, y.encode(|c: &City| c.lat))
+    ///     .attr(
+    ///         Circle::RADIUS,
+    ///         area.clone().range(Px(3.0), Px(24.0)).encode(|c: &City| c.population),
+    ///     )
+    ///     .attr(
+    ///         Circle::FILL,
+    ///         area.range(Px(0.0), Px(1.0))
+    ///             .then(Sequential::viridis().domain(0.0, 1.0))
+    ///             .encode(|c: &City| c.population),
+    ///     );
+    /// let (image, _) = plot.render_resolved(&cx, 480, 320)?;
+    ///
+    /// // Each city's centre is drawn in the chain's colour: viridis at
+    /// // sqrt(population / 4e7).
+    /// let viridis = Sequential::viridis().domain(0.0, 1.0);
+    /// for c in &cities {
+    ///     let (px, py) = (x.read().eval(c.lon), y.read().eval(c.lat));
+    ///     let got = image.get_pixel(px as u32, py as u32).0;
+    ///     let want = viridis.eval((c.population / 4e7).sqrt()).to_rgba8();
+    ///     for k in 0..3 {
+    ///         assert!(got[k].abs_diff(want[k]) <= 2, "{got:?} vs {want:?}");
+    ///     }
+    /// }
+    /// # Ok::<(), gup_core::Error>(())
+    /// ```
     fn then<B>(&self, next: B) -> Then<Self, B>
     where
         Self: CpuMirror,

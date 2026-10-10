@@ -99,8 +99,8 @@ pub use marks::Circle;
 pub use plot::{Layout, PlacedText, Plot, Resolved};
 pub use render::{PipelineStats, Prepared, Renderer, TargetDesc};
 pub use scale::{
-    Categorical, Linear, Log, NULL_COLOR, OKABE_ITO, PositionScale, ScaleRef, Sequential, Ticks,
-    Time,
+    Categorical, Linear, Log, NULL_COLOR, OKABE_ITO, PositionScale, Pow, ScaleRef, Sequential,
+    Symlog, Ticks, Time,
 };
 pub use scene::Scene;
 pub use selection::{Retain, Selection};
@@ -116,6 +116,6 @@ pub use window::WindowTarget;
 pub mod prelude {
     pub use crate::{
         Categorical, Circle, Color, Context, CpuMirror, EncodeFn, Linear, Log, Plot, PositionScale,
-        Px, Retain, Selection, Sequential, ShaderFn,
+        Pow, Px, Retain, Selection, Sequential, ShaderFn, Symlog, Time,
     };
 }

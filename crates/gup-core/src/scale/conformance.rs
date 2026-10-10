@@ -7,7 +7,7 @@
 //! must match its f64 `CpuMirror` within 0.25 px (position) or 1/255
 //! (colour).
 
-use super::{Linear, Log, Sequential, Time};
+use super::{Linear, Log, PositionScale, Pow, Sequential, Symlog, Time};
 use crate::channel::Px;
 use crate::column::ColumnFormat;
 use crate::context::Context;
@@ -71,6 +71,20 @@ fn dispatch_links(
     xs: wgpu::BufferBinding<'_>,
     n: usize,
     origin: f64,
+) -> Vec<f32> {
+    let mut origins = vec![0.0; links.len()];
+    origins[0] = origin;
+    dispatch_links_with(cx, links, xs, n, &origins)
+}
+
+/// [`dispatch_links`] with each link's base computed for `origins[k]`
+/// (a test seam for applying a base where it does not belong).
+fn dispatch_links_with(
+    cx: &Context,
+    links: &[&dyn DynShaderFn],
+    xs: wgpu::BufferBinding<'_>,
+    n: usize,
+    origins: &[f64],
 ) -> Vec<f32> {
     let format = links[0].input_format();
     let out_wgsl = links.last().unwrap().out_wgsl();
@@ -186,7 +200,7 @@ fn dispatch_links(
     let mut per_link = Vec::new();
     for (k, link) in links.iter().enumerate() {
         let params = init(&link.params_bytes().unwrap(), wgpu::BufferUsages::UNIFORM);
-        let link_origin = if k == 0 { origin } else { 0.0 };
+        let link_origin = origins[k];
         let [hi, lo] = link.input_format().split(link.chunk_base(link_origin));
         let base = init(
             bytemuck::cast_slice(&[hi, lo, 0.0, 0.0]),
@@ -339,6 +353,186 @@ fn sequential_gpu_matches_cpu_mirror() {
     }
     eprintln!("max channel error = {worst:.2e}");
     assert!(worst <= 1.0 / 255.0, "max channel error {worst} (> 1/255)");
+}
+
+/// GUP-418 AC2: `Pow` and `Sqrt` within 0.25 px, over domains that start
+/// at zero (size by area), cross zero (the sign-keeping transform) and sit
+/// far from it, including values near zero where `|x|^0.5` is steepest.
+#[test]
+fn pow_and_sqrt_gpu_match_cpu_mirror() {
+    let cx = Context::new_blocking().unwrap();
+    let ramp = |lo: f64, hi: f64| -> Vec<f64> {
+        (0..SAMPLES)
+            .map(|i| lo + (hi - lo) * i as f64 / (SAMPLES - 1) as f64)
+            .collect()
+    };
+    let near_zero: Vec<f64> = (0..SAMPLES)
+        .map(|i| 1e-6 * 1.02f64.powi(i as i32 % 700) * if i % 2 == 0 { 1.0 } else { -1.0 })
+        .collect();
+    let cases = [
+        (
+            "sqrt [0, 1.5e9] → 2..30 px",
+            Pow::sqrt().domain(0.0, 1.5e9).range(Px(2.0), Px(30.0)),
+            ramp(0.0, 1.5e9),
+        ),
+        (
+            "sqrt [0, 1] near zero",
+            Pow::sqrt().domain(0.0, 1.0).range(Px(0.0), Px(1000.0)),
+            near_zero.iter().map(|v| v.abs()).collect(),
+        ),
+        (
+            "sqrt [-1, 1] through zero",
+            Pow::sqrt().domain(-1.0, 1.0).range(Px(0.0), Px(1000.0)),
+            near_zero.clone(),
+        ),
+        (
+            "sqrt [-400, 900]",
+            Pow::sqrt().domain(-400.0, 900.0).range(Px(800.0), Px(20.0)),
+            ramp(-400.0, 900.0),
+        ),
+        (
+            "pow 2 [-3, 3]",
+            Pow::new(2.0).domain(-3.0, 3.0).range(Px(0.0), Px(1000.0)),
+            ramp(-3.0, 3.0),
+        ),
+        (
+            "pow 3 [1e3, 2e3]",
+            Pow::new(3.0).domain(1e3, 2e3).range(Px(0.0), Px(1000.0)),
+            ramp(1e3, 2e3),
+        ),
+        (
+            "pow 0.25 [0, 1e6]",
+            Pow::new(0.25).domain(0.0, 1e6).range(Px(0.0), Px(1000.0)),
+            ramp(0.0, 1e6),
+        ),
+    ];
+    for (name, s, inputs) in cases {
+        let err = max_position_error(&cx, &s, &inputs, None);
+        eprintln!("{name}: max |gpu - cpu| = {err:.2e} px");
+        assert!(err <= 0.25, "{name}: max |gpu - cpu| = {err} px");
+    }
+}
+
+/// GUP-418 AC3: `Symlog` within 0.25 px over domains straddling zero,
+/// with points inside and outside the linear threshold.
+#[test]
+fn symlog_gpu_matches_cpu_mirror() {
+    let cx = Context::new_blocking().unwrap();
+    // Signed, log-spaced from 1e-4 to 1e6, plus exact zero and points
+    // either side of each constant.
+    let mut inputs: Vec<f64> = (0..SAMPLES)
+        .map(|i| {
+            let m = 10f64.powf(-4.0 + 10.0 * (i / 2) as f64 / (SAMPLES / 2) as f64);
+            if i % 2 == 0 { m } else { -m }
+        })
+        .collect();
+    inputs.extend([
+        0.0, 0.99, 1.0, 1.01, -0.99, -1.0, -1.01, 9.9, 10.0, 10.1, -10.1,
+    ]);
+    for (name, s) in [
+        ("c = 1, ±1e6", Symlog::new().constant(1.0).domain(-1e6, 1e6)),
+        (
+            "c = 10, [-5e4, 1e6]",
+            Symlog::new().constant(10.0).domain(-5e4, 1e6),
+        ),
+        (
+            "c = 1, ±2 (mostly linear)",
+            Symlog::new().constant(1.0).domain(-2.0, 2.0),
+        ),
+        (
+            "c = 0.01, ±1e3",
+            Symlog::new().constant(0.01).domain(-1e3, 1e3),
+        ),
+    ] {
+        let s = s.range(Px(1000.0), Px(0.0));
+        let (lo, hi) = s.current_domain().unwrap();
+        let inside: Vec<f64> = inputs
+            .iter()
+            .copied()
+            .filter(|v| (lo..=hi).contains(v))
+            .collect();
+        let err = max_position_error(&cx, &s, &inside, None);
+        eprintln!(
+            "symlog {name}: max |gpu - cpu| = {err:.2e} px over {} points",
+            inside.len()
+        );
+        assert!(err <= 0.25, "symlog {name}: max |gpu - cpu| = {err} px");
+    }
+}
+
+/// GUP-418 AC1: a three-link chain, `Linear` (relative column) then `Sqrt`
+/// then `Sequential`, matches its links' CPU mirrors in the same order
+/// within 1/255. The first link reads Unix seconds relative to the chunk
+/// origin; only it takes the chunk's base.
+#[test]
+fn a_three_link_chain_matches_its_mirrors_in_order() {
+    let cx = Context::new_blocking().unwrap();
+    let t0 = 1.7e9;
+    let chain = Linear::new()
+        .domain(t0, t0 + 86_400.0)
+        .range(Px(0.0), Px(100.0))
+        .then(Pow::sqrt().domain(0.0, 100.0).range(Px(0.0), Px(1.0)))
+        .then(Sequential::viridis().domain(0.0, 1.0));
+    assert_eq!(chain.links().len(), 3);
+    let inputs: Vec<f64> = (0..SAMPLES).map(|i| t0 + i as f64 * 86.4 + 0.37).collect();
+    let gpu = dispatch(&cx, &chain, &inputs, None);
+    let mut worst = 0.0f32;
+    for (k, &x) in inputs.iter().enumerate() {
+        let (a, b, c) = (chain.first().first(), chain.first().next(), chain.next());
+        let cpu = c.eval(b.eval(a.eval(x))).to_array();
+        assert_eq!(chain.eval(x).to_array(), cpu);
+        for ch in 0..4 {
+            worst = worst.max((gpu[k * 4 + ch] - cpu[ch]).abs());
+        }
+    }
+    eprintln!("linear → sqrt → viridis: max channel error = {worst:.2e}");
+    assert!(worst <= 1.0 / 255.0, "max channel error {worst} (> 1/255)");
+}
+
+/// GUP-418 AC1: the per-chunk base is applied once. `Linear` over Unix
+/// seconds (relative column, chunk base `origin − d0`) then a second
+/// `Linear` (a relative entry point reading an absolute value: base for
+/// origin 0) stays within 0.25 px; giving the second link the chunk's
+/// base as well (`Twice`) is off by the origin's worth of pixels.
+#[test]
+fn a_relative_first_link_takes_the_chunk_base_once() {
+    let cx = Context::new_blocking().unwrap();
+    let t0 = 1.7e9;
+    let chain = Linear::new()
+        .domain(t0, t0 + 3_600.0)
+        .range(Px(0.0), Px(360.0))
+        .then(Linear::new().domain(0.0, 360.0).range(Px(1000.0), Px(0.0)));
+    let inputs: Vec<f64> = (0..SAMPLES)
+        .map(|i| t0 + 1_800.0 + i as f64 * 1.7)
+        .collect();
+    let err = max_position_error(&cx, &chain, &inputs, None);
+    eprintln!("linear → linear: max |gpu - cpu| = {err:.2e} px");
+    assert!(err <= 0.25, "max |gpu - cpu| = {err} px");
+
+    // Seeded fault: every link gets the chunk origin's base.
+    let links = chain.links();
+    let origin = inputs[0];
+    let xs = cx
+        .device()
+        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: None,
+            contents: &column_bytes(ColumnFormat::F32Relative, &inputs, origin),
+            usage: wgpu::BufferUsages::STORAGE,
+        });
+    let gpu = dispatch_links_with(
+        &cx,
+        &links,
+        xs.as_entire_buffer_binding(),
+        inputs.len(),
+        &[origin, origin],
+    );
+    let wrong = inputs
+        .iter()
+        .zip(gpu)
+        .map(|(&x, g)| (f64::from(g) - chain.eval(x)).abs())
+        .fold(0.0, f64::max);
+    eprintln!("base applied twice: max |gpu - cpu| = {wrong:.3e} px");
+    assert!(wrong > 1.0, "a second base should be visible: {wrong} px");
 }
 
 /// Negative control: the same timestamps stored as absolute f32 (origin 0)

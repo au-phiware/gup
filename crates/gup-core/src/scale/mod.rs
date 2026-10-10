@@ -12,7 +12,9 @@
 mod categorical;
 mod linear;
 mod log;
+mod pow;
 pub(crate) mod sequential;
+mod symlog;
 mod time;
 
 #[cfg(test)]
@@ -21,7 +23,9 @@ mod conformance;
 pub use categorical::{Categorical, CategoricalParams, NULL_COLOR, OKABE_ITO};
 pub use linear::{Linear, LinearParams};
 pub use log::{Log, LogParams};
+pub use pow::{Pow, PowParams};
 pub use sequential::{Sequential, SequentialParams};
+pub use symlog::{Symlog, SymlogParams};
 pub use time::Time;
 
 use crate::channel::Px;
