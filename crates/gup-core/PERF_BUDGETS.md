@@ -98,7 +98,7 @@ of S0b→S4a's (+30%, which [GUP-417](#history) traced to MSAA).
 
 | Configuration (same machine, Mailbox uncapped, 6 runs each) | GPU pass median (ms) | GPU pass p95 (ms) |
 | ----------------------------------------------------------- | -------------------: | ----------------: |
-| S0b's tree (`e6bba47`, before MSAA)                         |          2.76 – 3.00 |       5.36 – 6.36 |
+| S0b's tree (`e6bba47`, before MSAA)                         |          2.76 – 3.01 |       5.36 – 6.36 |
 | this tree, `--samples 1`                                    |          2.94 – 3.04 |       4.62 – 6.38 |
 | this tree, `--samples 4` (the default)                      |          3.73 – 4.14 |       5.97 – 6.79 |
 
@@ -173,6 +173,6 @@ seeded violation (GUP-417 retrospective).
 - **S4a (GUP-414)** measured ~3.7 ms and left the cause open.
 - **GUP-417** measured S0b's tree, this tree at 1× and this tree at 4× on the
   same machine, alternating: S0b and 1× agree within 2%, and 4× costs +0.9 ms
-  median uncapped (+29%) and +1.6 ms under vsync at the clock floor (+55%). MSAA
+  median uncapped (+29%) and +1.7 ms under vsync at the clock floor (+56%). MSAA
   accounts for all of the S0b→S4a gap. Whether to keep 4× as the default is an
   owner decision recorded in RFC-001's GUP-417 findings.
