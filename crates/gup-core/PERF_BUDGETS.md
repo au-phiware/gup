@@ -211,3 +211,11 @@ seeded violation (GUP-417 retrospective).
   clock median 583 MHz, above the floor) passed every other budget: GPU pass
   3.14 ms median, CPU 0.67 ms, 88 uniform bytes and 0 column bytes per frame,
   link and create 0.91 ms median (cold 4.5 ms).
+- **GUP-420 (S5c)** re-recorded the WASM scatter (+6,580 B gz: 1,714 B of
+  library, 4,866 B for the browser scene of user `#[wgsl_function]`s). Its first
+  `perf-budget` run failed only `pipeline.link_create.cold_ms` (10.8 ms, Mesa's
+  shader cache cold after the rebuild, as GUP-417 found); the second (GPU clock
+  median 500 MHz) passed every timing budget: GPU pass 3.75 ms median, CPU 0.63
+  ms, 88 uniform bytes and 0 column bytes per frame, link and create 0.94 ms
+  median (cold 1.08 ms). A third, complete run passed every check with the clock
+  boosted (750 MHz). The reference scatter's glue is unchanged.

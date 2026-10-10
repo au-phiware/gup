@@ -2824,3 +2824,191 @@ there (1.96e-3).
   The legend or `keys()` turns it into a label.
 - **S10 (bar builder).** It needs `Band::band_width()` and `KeyEncoded::domain`
   for sorted categories, and S6's width-from-scale above.
+
+## S5c findings (2026-10-11, GUP-420)
+
+[GUP-420](../stories/GUP-420_RFC_001_S5c_Wgsl_Function_Macro_V2.md) added
+`#[wgsl_function]`: a user writes a shader function as WGSL in their own crate,
+and the macro composes and checks it when that crate compiles. Same machine as
+S0a–S5b (Intel HD Graphics 630, Mesa 26.0.0 Vulkan, rustc 1.93.1), and lavapipe
+for the CI rasteriser. S5a's trait shapes held: the macro emits a `ShaderFn`
+impl, and `EncodeFn`, `then`, the chain glue and `CpuMirror` over chains needed
+no change.
+
+### The shape
+
+```rust
+#[derive(Clone)]
+struct Energy;
+
+#[wgsl_function(monotonic, wgsl = r#"
+    struct Params { slope: f32, offset: f32 }
+
+    fn energy(magnitude: f32, p: Params) -> f32 {
+        return pow(10.0, p.slope * magnitude + p.offset);
+    }
+"#)]
+impl ShaderFn for Energy {
+    fn params(&self) -> EnergyParams {
+        EnergyParams { slope: 1.5, offset: 4.8 }
+    }
+}
+
+impl CpuMirror for Energy {
+    fn eval(&self, magnitude: f64) -> f64 {
+        10f64.powf(1.5 * magnitude + 4.8)
+    }
+}
+
+let radius = Energy.then(Pow::sqrt().range(Px(1.5), Px(36.0)));
+```
+
+- **On the impl, not a free function.** The attribute goes on
+  `impl ShaderFn for T` and completes it: the macro derives `In`, `Out`,
+  `Params`, `MODULE`, `ENTRY` and `input_format` from the WGSL, and the user
+  writes `params` plus any hook (`fit_domain`, `fit_keys`, `chunk_base`,
+  `resources`, `image`) as an ordinary trait method. A free function could not
+  hold a domain or the key a `fit_keys` looks up. Writing a derived item by
+  hand, or a hook the WGSL contradicts (`fit_domain` on codes, `chunk_base`
+  without a `base`, `resources` without a LUT), is a compile error.
+- **The calling convention is inferred.** The first arguments say the input:
+  `v: f32` (absolute), `v: f32, base: f32` (`F32Relative`),
+  `v: vec2<f32>, base: vec2<f32>` (hi/lo), `code: u32` (dictionary codes). Then
+  `p: Params`, then optionally `lut: texture_2d<f32>, smp: sampler`. The result
+  is `f32` or `vec4<f32>`. An `f32` result is `Out = f32` unless the impl writes
+  `type Out = Px;` (checked against the WGSL in a constant).
+- **`Params` twin.** The macro generates `<Type>Params`, one public field per
+  WGSL member (`f32`, `u32`, `i32`, `vec4<f32>` as `Color`), with an
+  `encase::ShaderType` impl rooted at gup-core's re-export, so user crates need
+  no `encase`. A constant assertion compares its size with naga's span.
+- **Padding is automatic.** `Library::add_module` pads a short user `Params` in
+  the flattened text (`gup_pad_a`…, reusing a 4-byte scalar type that precedes
+  the struct, since naga requires members to reference earlier types), and the
+  twin covers the padding with encase's `size` attribute on its last field. The
+  library keeps the strict 16-byte rule. The story's AC3 asked for rejection;
+  padding removes the most common boilerplate instead, and the rejection (with
+  the exact members to add) remains for a `Params` with no such scalar.
+- **`monotonic`** derives `image` from the mirror (the end points' images). A
+  missing mirror is an error at the `monotonic` keyword: `CpuMirror` now has an
+  `on_unimplemented` message saying why a mirror is needed and how to write one.
+  `then` without a mirror gets the same message.
+
+### Composing at expansion
+
+- **Library sources.** The library modules moved from `gup-core/src/shaders` to
+  `crates/gup-wgsl/library`, listed by a gup-wgsl build script and returned by
+  `gup_wgsl::compose::library()`. gup-core's build script and the macro both
+  compose against that one copy. gup-wgsl rather than a data crate: both
+  consumers already enable its `compose` feature, and the run-time half does not
+  carry the text. The guide shaders stay in gup-core. A module file left in
+  `src/shaders` fails the build.
+- **`Library::add_module(source, path)`** composes one module from outside the
+  library with every library check (identifiers, layouts, the round trip). It
+  sets the import path with naga_oil's `as_name`, rejects a
+  `#define_import_path`, and suggests the closest library path for an unknown
+  import. `remove_module` undoes it.
+- **Checks naga_oil does not make**, on the composed module: the calling
+  convention (with the found and expected signatures); the vertex stage, read
+  from naga's `FunctionInfo::available_stages` (the glue calls the function once
+  per mark, so `textureSample` and derivatives fail, with the
+  `textureSampleLevel` fix); and no resource bindings, non-private globals or
+  `override`s.
+- **Error spans.** `proc_macro::Span::{line, column, file}` are stable since
+  Rust 1.88, so the macro prefixes the inline WGSL with whitespace to the
+  literal's line and column. naga_oil's report then names the Rust file and the
+  WGSL's own line (`tests/…/syntax_error.rs:15:9`), and `compile_error!` points
+  at the literal's first character instead of underlining the whole string.
+  After an error the macro emits a placeholder impl keeping the user's items, so
+  nothing else fails (it reads the result type lexically, so a colour function's
+  uses do not cascade).
+- **Cost.** Composing the library takes about 0.36 s in the debug-built macro.
+  It is composed once per compiler thread and cached; each expansion adds, reads
+  and removes its module. Six functions in one test file rebuild in about 1.6 s,
+  against 2.7 s uncached. Nothing is added at run time: the macro emits a
+  `WgslModule` static, as the build script does.
+
+### Import paths
+
+The default is `<CARGO_CRATE_NAME>::<type in snake_case>`, overridden with
+`path = "…"`; `gup::` is refused. The type, not the WGSL function, names the
+default, because entry functions are usually all `map`.
+
+A finding: `link`'s duplicate-path check never saw the dangerous case. The glue
+emitter aliases imports by path and imports the first module with a given path,
+so two functions sharing a path in one chain (both entries `map`) would silently
+call the first one's WGSL twice. The layer now checks its links before emitting
+glue and fails with `Error::Compose` naming both Rust types. AC1 asked for the
+failure at `link`; it comes earlier, because `link` would never see the second
+module.
+
+### `Color` in a uniform
+
+The twin's size assertion caught a layout bug on its first colour: encase lays a
+struct of four `f32`s out with 4-byte alignment, so `{vec4, vec4, u32}` came to
+36 bytes against WGSL's 48. `Color` is now `#[repr(C)]`, `Pod`, and an encase
+`vec4<f32>` (`impl_vector!`), and `Categorical`'s private `Rgba` twin is gone.
+Its layout happened to match only because the colour came first.
+
+### Proofs
+
+- **External crate.** `tests/wgsl_function.rs` uses the macro as a user does.
+  `gup_core/wgsl_function_aftershocks`: a synthetic aftershock sequence on a
+  map, each disc's area growing with the energy released (`Energy`, a user
+  transfer function, then `Pow::sqrt()`), coloured by depth with a ramp legend;
+  the fault's westward dip shows as a gradient.
+  `gup_core/wgsl_function_highlight`: the continents scatter with Asia in
+  vermilion and every other or missing continent grey, from a user colour
+  function over codes that finds its key in `fit_keys`. Both are 0 of 324,000
+  pixels apart on lavapipe (max ΔE 1.2, 1.3). Pixel checks: every disc inside
+  the plot (the plot insets by the chain's `image`), the largest disc's edge at
+  the mirror's radius, every visible centre in its mirror's colour. A softplus
+  read with `file = "…"` imports `gup::scale::symlog` and draws each point in
+  its mirror's colour.
+- **trybuild.** Fifteen cases in `tests/wgsl_function_fail`, each a plausible
+  mistake, each pointing at the user's code and saying what to do.
+- **`Error::Gpu`.** A macro-generated function in GUP-410's seeded scope tests
+  fails as an `Error::Gpu` in the mark pipeline whose signature includes
+  `radius: f32→gup_core::doubled::doubled`.
+- **Browser.** `mask wasm-browser` draws a sixth scene: a user transfer function
+  chained into `Pow::sqrt()` and a user colour function whose `Params` hold two
+  colours, both checked against their mirrors in wasm. `GUP PASS` on
+  SwiftShader.
+- **WASM size.** 294,333 → 300,913 B gz: 1,714 B of library (the clash check
+  with each function's type name, `Color` as a vector), 4,866 B for the scene.
+  gup-core is 259,201 B over bare wgpu.
+- **`mask perf-budget`** passed at a GPU clock median of 500 MHz: GPU pass 3.75
+  ms, CPU 0.63 ms, 88 uniform and 0 column bytes per frame, link and create 0.94
+  ms median (cold 1.08 ms, after a first run at 10.8 ms with Mesa's shader cache
+  cold).
+
+### What a newcomer hits
+
+Writing the examples as a newcomer surfaced WGSL's own rules more than the
+macro's: `smooth` and `from` are reserved words, and `d0`/`d1`, the natural
+domain names, end in digits. Both now fail at compile time with the line and a
+suggested rename (`d0` → `d_a`). The remaining boilerplate is inherent: the
+function is written twice (WGSL and its f64 mirror), and constants live in
+`Params` and the mirror alike.
+
+### Proposed adjustments to S6, S7 and later
+
+- **S6 (marks).** `derive(Mark)` (or `#[wgsl_mark]`) can follow this pattern
+  exactly: `Library::add_module` plus the thread-local cache, a naga check of
+  the `<NAME>In` struct against the channels, and Rust generated from the WGSL
+  struct as the `Params` twin is. `Color` is now a uniform `vec4`, so mark
+  uniforms can hold colours directly. A user colour function returns straight
+  alpha like the built-ins, so S6's fill opacity and stroke must compose with
+  it, not assume a library palette.
+- **S7 (guides).** A chain has no legend: the aftershock golden places a ramp by
+  hand, and `Log.then(viridis)` (S5a) could not have one. Legends for chains,
+  and a `legend()` a user's colour function can supply, belong with S7's legend
+  guides. A user function can follow an axis scale but not be one:
+  `PositionScale` (ticks, `invert`, `nice`) is a full scale, and a custom axis
+  (logit, probability) needs a helper the macro does not write.
+- **Default paths** can collide for two types with one name in different modules
+  of a crate; the layer's check names both, and `path = "…"` fixes it.
+  `Span::file()` could make the default unique if this proves common.
+- **User modules import only Gup's library**, not each other: a macro cannot
+  read another expansion's WGSL.
+- **Tutorials.** `docs/tutorials/03_custom_shader_functions.md` still describes
+  the old path's macro; rewrite it at the S14 flip.
