@@ -9,7 +9,7 @@
 mod common;
 
 use common::scatter::{self, HEIGHT, WIDTH};
-use common::vr::{harness, metadata};
+use common::vr::{harness, layout_metadata, metadata, rgba8};
 use gup_core::prelude::*;
 use gup_core::{Layout, scene::TextRole};
 use gup_visual_regression::RgbaImage;
@@ -121,4 +121,142 @@ fn marks(resolved: &gup_core::Resolved) -> &gup_core::scene::MarkBatch {
             _ => None,
         })
         .expect("a mark layer")
+}
+
+/// RFC-001 S4b (AC1, AC2, AC4): a scatter coloured by continent through a
+/// dictionary column (`encode_nullable_key`), with missing continents and
+/// some null positions.
+///
+/// - **Null positions are not drawn.** Six isolated rows get a NaN x, a
+///   NaN y or an infinite y. Their would-be discs (where the same rows are
+///   drawn in a plot with every position valid) hold no ink, and the
+///   image equals, byte for byte, the plot with those rows removed: on the
+///   same device in the same run, the other rows go through the same
+///   arithmetic. (Intel/Mesa does not rasterise a NaN position even with
+///   the degenerate quad disabled, so this shows the outcome;
+///   `plot::tests::a_cleared_validity_bit_hides_a_finite_row` shows that
+///   the validity bit alone hides a row.)
+/// - **Every drawn point carries its category's colour.** At the centre
+///   of every point that no later point overlaps, the pixel is the
+///   Okabe-Ito colour of its continent's first-seen code (computed here,
+///   independently of gup-core), or the null colour where the continent is
+///   missing.
+/// - **The GUP-388 harness** checks the image (title and ticks, marks
+///   inside the plot, the five palette colours and the null colour) and
+///   compares it with the golden through its ΔE tolerance.
+#[test]
+fn categorical_scatter_with_nulls() {
+    use common::continents::{self, HEIGHT, Place, RADIUS, WIDTH};
+    use gup_core::{NULL_COLOR, OKABE_ITO};
+
+    let cx = Context::new_blocking().expect("headless GPU context");
+    let rows = continents::places();
+    let white = image::Rgba([255, 255, 255, 255]);
+
+    // Every position valid: where each row is drawn.
+    let (mut all, x, y) = continents::plot(rows.clone());
+    let (all_image, all_layout) = all.render_resolved(&cx, WIDTH, HEIGHT).unwrap();
+    let centre = |p: &Place| -> (f32, f32) {
+        (
+            x.read().eval(p.gdp_per_capita) as f32,
+            y.read().eval(p.population) as f32,
+        )
+    };
+    let centres: Vec<_> = rows.iter().map(centre).collect();
+    let dist = |a: (f32, f32), b: (f32, f32)| ((a.0 - b.0).powi(2) + (a.1 - b.1).powi(2)).sqrt();
+    // Rows whose disc touches no other disc (and that are not the first
+    // of their continent, so removing them keeps every code).
+    let isolated: Vec<usize> = (20..rows.len())
+        .filter(|&i| {
+            (0..rows.len()).all(|j| j == i || dist(centres[i], centres[j]) > 2.0 * RADIUS + 3.0)
+        })
+        .take(6)
+        .collect();
+    assert_eq!(isolated.len(), 6, "{isolated:?}");
+
+    let mut nulls = rows.clone();
+    for (k, &i) in isolated.iter().enumerate() {
+        match k % 3 {
+            0 => nulls[i].gdp_per_capita = f64::NAN,
+            1 => nulls[i].population = f64::NAN,
+            _ => nulls[i].population = f64::INFINITY,
+        }
+    }
+    let (mut plot, _, _) = continents::plot(nulls.clone());
+    let (image, layout) = plot.render_resolved(&cx, WIDTH, HEIGHT).unwrap();
+    assert_eq!(layout.plot, all_layout.plot);
+
+    // AC1: no ink where the null rows would be; the control image has it.
+    for &i in &isolated {
+        let (cx_, cy_) = centres[i];
+        let mut covered = 0;
+        for py in (cy_ - RADIUS) as u32..=(cy_ + RADIUS) as u32 {
+            for px in (cx_ - RADIUS) as u32..=(cx_ + RADIUS) as u32 {
+                if dist((px as f32 + 0.5, py as f32 + 0.5), (cx_, cy_)) < RADIUS - 1.0 {
+                    covered += 1;
+                    assert_ne!(*all_image.get_pixel(px, py), white, "control: row {i}");
+                    assert_eq!(*image.get_pixel(px, py), white, "null row {i} drawn");
+                }
+            }
+        }
+        assert!(covered > 30, "row {i}: {covered} pixels checked");
+    }
+    let kept: Vec<Place> = rows
+        .iter()
+        .enumerate()
+        .filter(|(i, _)| !isolated.contains(i))
+        .map(|(_, p)| p.clone())
+        .collect();
+    let (removed, _) = continents::plot(kept)
+        .0
+        .render_resolved(&cx, WIDTH, HEIGHT)
+        .unwrap();
+    assert!(
+        image == removed,
+        "null rows changed more than their own discs"
+    );
+
+    // AC2, AC4: each point's centre in its category's colour.
+    let palette = |code: Option<u32>| match code {
+        Some(c) => OKABE_ITO[c as usize % OKABE_ITO.len()],
+        None => NULL_COLOR,
+    };
+    let codes = continents::codes(&nulls);
+    let mut checked = [0usize; 6];
+    for (i, p) in nulls.iter().enumerate() {
+        if isolated.contains(&i) {
+            continue;
+        }
+        let (cx_, cy_) = centre(p);
+        let pixel = (cx_.floor(), cy_.floor());
+        let at = (pixel.0 + 0.5, pixel.1 + 0.5);
+        // Skip points that a later point (drawn on top) reaches.
+        let covered_later = (i + 1..nulls.len())
+            .filter(|j| !isolated.contains(j))
+            .any(|j| dist(centres[j], at) < RADIUS + 1.5);
+        if covered_later {
+            continue;
+        }
+        let expected = palette(codes[i]).to_rgba8();
+        let got = image.get_pixel(pixel.0 as u32, pixel.1 as u32).0;
+        assert!(
+            got.iter().zip(expected).all(|(g, e)| g.abs_diff(e) <= 1),
+            "row {i} ({:?}, code {:?}): {got:?}, expected {expected:?}",
+            p.continent,
+            codes[i]
+        );
+        checked[codes[i].map_or(5, |c| c as usize)] += 1;
+    }
+    eprintln!("points checked per code (5 = null): {checked:?}");
+    assert!(checked.iter().all(|&n| n >= 2), "{checked:?}");
+
+    let mut meta = layout_metadata(&layout);
+    for (k, c) in OKABE_ITO.iter().take(5).enumerate() {
+        meta = meta.with_expected_color(format!("code {k}"), rgba8(*c));
+    }
+    meta = meta.with_expected_color("null", rgba8(NULL_COLOR));
+    let vr = RgbaImage::new(WIDTH, HEIGHT, image.into_raw()).unwrap();
+    harness()
+        .run("gup_core/categorical_nulls", Ok((vr, meta)))
+        .assert_ok();
 }

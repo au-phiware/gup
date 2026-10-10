@@ -448,7 +448,7 @@ impl Plot {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::encoding::ShaderFn;
+    use crate::encoding::{CpuMirror, ShaderFn};
     use crate::marks::Circle;
     use crate::scale::{Linear, Log, ScaleRef};
     use crate::scene::ItemKind;
@@ -772,5 +772,39 @@ mod tests {
                 "{policy:?}: another context renders differently"
             );
         }
+    }
+
+    /// S4b (AC1): the vertex stage hides a row by its validity bit, never
+    /// by testing the value. Row 0 keeps a finite position, but with its x
+    /// bit cleared (the store already has a null, row 2, so it uploads
+    /// bits) its disc vanishes while row 1 still draws.
+    #[test]
+    fn a_cleared_validity_bit_hides_a_finite_row() {
+        let cx = Context::new_blocking().unwrap();
+        let mut plot = Plot::new();
+        let (x, y) = (
+            plot.x(Linear::new().domain(0.0, 10.0)),
+            plot.y(Linear::new().domain(0.0, 10.0)),
+        );
+        plot.add(Selection::<Pt, Circle>::new(vec![
+            (2.0, 5.0),
+            (8.0, 5.0),
+            (f64::NAN, 5.0),
+        ]))
+        .attr(Circle::X, x.encode(|r: &Pt| r.0))
+        .attr(Circle::Y, y.encode(|r: &Pt| r.1))
+        .attr(Circle::RADIUS, Px(10.0));
+        let white = image::Rgba([255, 255, 255, 255]);
+        let (before, _) = plot.render_resolved(&cx, 300, 200).unwrap();
+        let centre = |v: f64| (x.read().eval(v) as u32, y.read().eval(5.0) as u32);
+        let ((x0, y0), (x1, y1)) = (centre(2.0), centre(8.0));
+        assert_ne!(*before.get_pixel(x0, y0), white);
+        assert_ne!(*before.get_pixel(x1, y1), white);
+
+        let layer: &mut Selection<Pt, Circle> = plot.layers[0].as_any_mut().downcast_mut().unwrap();
+        layer.store_mut().unwrap().clear_valid(0, 0);
+        let (after, _) = plot.render_resolved(&cx, 300, 200).unwrap();
+        assert_eq!(*after.get_pixel(x0, y0), white, "row 0 still drawn");
+        assert_eq!(*after.get_pixel(x1, y1), *before.get_pixel(x1, y1));
     }
 }

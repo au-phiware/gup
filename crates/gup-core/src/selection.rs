@@ -205,6 +205,12 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         self.columns.as_ref()
     }
 
+    /// The evaluated column store, mutably, for tests.
+    #[cfg(test)]
+    pub(crate) fn store_mut(&mut self) -> Option<&mut ColumnStore> {
+        self.columns.as_mut()
+    }
+
     /// Drive `channel` with a constant or an encoding. The encoding's
     /// output type must be the channel's visual type, or this does not
     /// compile.

@@ -958,7 +958,26 @@ impl ColumnStore {
             .filter_map(|c| c.release(chunk_rows).then_some(()))
             .count()
     }
+
+    /// Clear row `row`'s validity bit in `plane`, whatever its value, and
+    /// have the next upload rewrite that chunk's bits: a seam for proving
+    /// the vertex stage reads the bit, not the value.
+    #[cfg(test)]
+    pub(crate) fn clear_valid(&mut self, row: u64, plane: usize) {
+        let planes = self.validity_planes();
+        let chunk = self
+            .chunks
+            .iter_mut()
+            .find(|c| (c.row_base..c.row_base + u64::from(c.len)).contains(&row))
+            .expect("row in the store");
+        let r = (row - chunk.row_base) as usize;
+        chunk.cpu.as_mut().expect("CPU copy").validity[r / 32 * planes + plane] &= !(1 << (r % 32));
+        if let Some(v) = chunk.gpu.as_mut().and_then(|g| g.validity.as_mut()) {
+            v.rows = 0;
+        }
+    }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -33,10 +33,9 @@ pub fn role(role: TextRole) -> VrTextRole {
     }
 }
 
-/// Everything from gup-core's own `Layout`, plus the extremes of the
-/// sequential fill: the darkest and brightest points are drawn with
-/// exactly these colours at their centres.
-pub fn metadata(layout: &Layout, fill: &Sequential) -> LayoutMetadata {
+/// Everything from gup-core's own `Layout`: plot rect, background, text
+/// and guides.
+pub fn layout_metadata(layout: &Layout) -> LayoutMetadata {
     let mut meta = LayoutMetadata::new(rect(layout.plot)).with_background(Rgba8::WHITE);
     for t in &layout.texts {
         meta = meta.with_text(
@@ -50,14 +49,22 @@ pub fn metadata(layout: &Layout, fill: &Sequential) -> LayoutMetadata {
         // Pad by half a pixel for the edge pixels of snapped hairlines.
         meta = meta.with_guide(rect(*g).inflate(0.5));
     }
-    meta.with_expected_color(
-        "fill at domain min (viridis start)",
-        rgba8(fill.eval(f64::MIN)),
-    )
-    .with_expected_color(
-        "fill at domain max (viridis end)",
-        rgba8(fill.eval(f64::MAX)),
-    )
+    meta
+}
+
+/// [`layout_metadata`] plus the extremes of the sequential fill: the
+/// darkest and brightest points are drawn with exactly these colours at
+/// their centres.
+pub fn metadata(layout: &Layout, fill: &Sequential) -> LayoutMetadata {
+    layout_metadata(layout)
+        .with_expected_color(
+            "fill at domain min (viridis start)",
+            rgba8(fill.eval(f64::MIN)),
+        )
+        .with_expected_color(
+            "fill at domain max (viridis end)",
+            rgba8(fill.eval(f64::MAX)),
+        )
 }
 
 /// The harness over the workspace's golden images and expected failures.
