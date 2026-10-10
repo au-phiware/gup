@@ -205,7 +205,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   Deps: GUP-396 ✅, GUP-401 ✅, GUP-414 ✅, GUP-398 ✅. Result: MSAA explains
   all of the gap (+29–56% GPU pass); `DEFAULT_SAMPLES` stays 4 pending an owner
   decision (RFC-001 "GUP-417 findings").
-- [GUP-418](GUP-418_RFC_001_S5a_ShaderFn_V2_And_Numeric_Scales.md) 🚧 — RFC-001
+- [GUP-418](GUP-418_RFC_001_S5a_ShaderFn_V2_And_Numeric_Scales.md) ✅ — RFC-001
   step S5a: generalise the glue emitter to chains of calls for `a.then(b)`
   composition, add `Pow`/`Sqrt` and `Symlog`, add `Time` (calendar ticks) and
   fix S4a's "full chunk of seconds" precision miss, choosing span-capped chunks

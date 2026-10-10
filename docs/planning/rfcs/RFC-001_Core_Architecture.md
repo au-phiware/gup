@@ -2498,3 +2498,122 @@ the rule: the 64-chunk threshold assumes the alternative needs few chunks. At
 94.7M rows any store needs 91, because of `MAX_CHUNK_ROWS`. That costs about 0.4
 ms of CPU and 0.6 ms of GPU at 100K points, whichever format is used. It is a
 cost of row count, not of precision, so it does not change the decision.
+
+### `then`: chains in the glue
+
+- **Two traits.** `ShaderFn` stays one WGSL function: module, entry, `Params`,
+  `input_format`, `chunk_base`, `resources`, `fit_domain`, and now `image` (the
+  output extent over an input extent). `EncodeFn` is what a channel encodes
+  through: every `ShaderFn` is one (a blanket impl), and so is `Then<A, B>`.
+  `encode`, `encode_key`, `encode_nullable_key` and `then` moved to it, so
+  callers import `EncodeFn` (it is in the prelude). `CpuMirror` is over
+  `EncodeFn`, so a chain has a mirror: its links' mirrors in order. Its output
+  type is `EncodeFn::Output`, not `ShaderFn::Out`; `PositionScale` names both
+  (`ShaderFn<Out = Px> + EncodeFn<Output = Px>`), because rustc does not
+  normalise one through the blanket impl inside generic code.
+- **Type rule.** `a.then(b)` needs `a: CpuMirror` and
+  `a::Output: Feeds<b::Input>` : the same numeric type, or `Px` into `f32`. A
+  position scale's pixels are a number to the next link, so
+  `Linear.then(Pow::sqrt()).then(viridis)` type-checks. A colour cannot feed
+  anything (trybuild `wrong_chain`).
+- **Glue.** A column channel is a list of links. The first reads `col.<ch>`;
+  each later link reads the previous call. Each link has its own `Encodings`
+  field: `<ch>` for the first, `<ch>_link<k>` after it. Its LUT is
+  `<ch>_link<k>_lut`, and its signature fragment is joined by `then`
+  (`fill: f32rel→gup::scale::linear::map_rel then f32→gup::scale::pow::map then f32→gup::color::sequential::map(lut)`).
+  A one-link chain prints exactly what the one-function emitter did:
+  `scatter_glue.wgsl`, `scatter_linked.wgsl` and `nulls_glue.wgsl` are
+  unchanged.
+- **Bases.** `chunk_base` returns f64. The column format turns it into one `f32`
+  or a hi/lo pair (`<field>_base`, `<field>_base_lo`). Only the first link reads
+  the stored column, so only its base comes from the chunk's origin. A later
+  link with a relative entry point gets the base for origin 0 (for `Linear`,
+  `-d0`) in the `Chunk` uniform; a hi/lo entry gets `vec2(prev, 0.0)`. Giving
+  the second link of `Linear.then(Linear)` the chunk's base too is off by 4.7e9
+  px (conformance `a_relative_first_link_takes_the_chunk_base_once`).
+- **Domains.** A chain fits its first link to the column's extent and each later
+  link to the image of that extent through the links before it (end points
+  through the mirrors; every scale is monotonic). A plot insets its ranges by an
+  encoded `Size` channel's largest output (`image`), not only a constant's, so a
+  `Sqrt` radius keeps discs inside the plot rect.
+
+### The scales
+
+| Scale    | Column          | Transform                               | Ticks                                                                         | Conformance (max px)          |
+| -------- | --------------- | --------------------------------------- | ----------------------------------------------------------------------------- | ----------------------------- |
+| `Pow`    | `F32`           | `sign(x)·\|x\|^e`, e > 0; `Pow::sqrt()` | linear                                                                        | 2.7e-3 (e = 3), sqrt ≤ 1.3e-4 |
+| `Symlog` | `F32`           | `sign(x)·log2(1 + \|x\|/c)`, smooth     | 0 and signed decades from ~3c; linear in ±10c                                 | ≤ 1.2e-4 (c = 0.01 to 10)     |
+| `Time`   | `F32x2Relative` | linear over Unix seconds (UTC)          | calendar: fractions, s, min, h, days, Monday weeks, 1/3/6 months, 1–2–5 years | 4.4e-5 at 1 ms over 2^20 s    |
+
+- `Symlog` has its own module (`gup::scale::symlog`), so `Log`'s `Params`, glue
+  and fixtures are unchanged. Near zero it uses a five-term series for
+  `log2(1 + u)`, because `1 + u` drops `u`'s low bits in f32. Its decade ticks
+  start at the first power of ten past about 3c, because ±1 next to 0 overlapped
+  at c = 1.
+- `Pow` keeps 0 exact (`select`) rather than trust `pow(0, e)` =
+  `exp2(e·log2 0)`. Exponents must be positive.
+- `Time` labels each tick by the coarsest unit it begins (`2021`, `Mar`,
+  `Feb 29`, `14:00`, `:30`, `.250`). The civil-date conversion is Hinnant's,
+  checked against known Unix timestamps. Unit tests cross a leap day, months of
+  28–31 days and year boundaries. Every label character is in the bundled Inter
+  subset (the font sweep now covers `Pow`, `Symlog` and `Time`).
+- **Pixels.** Goldens through the harness tolerance: `gup_core/sqrt_radius`,
+  `gup_core/symlog_signed` and `gup_core/time_years`. On lavapipe 0 of 324,000
+  pixels differ (max ΔE 1.6). Pixel checks without a golden: disc areas grow
+  linearly with the value (within 3%). A `Time` axis zoomed to 1 ms, 2^20 s from
+  its chunk's origin, draws each disc's ink centroid within 0.016 px of the
+  mirror (Intel and lavapipe), against 0 of 8 discs in place through `Linear`.
+
+### GPU reductions (AC5)
+
+None was added. Every scale here fits its domain from the column store's f64
+chunk stats, computed on the CPU at append. The guardrail stands for later
+stories. A GPU min/max reduction must be proved on an input that forces several
+workgroups. The old path's `compute_basic_stats`
+(`src/shaders/statistics.compute.wgsl`) was racy across workgroups. Each
+workgroup's thread 0 wrote its own partial count, sum, min and max over the one
+`result`, with no atomic and no second pass, so the last writer won. Each also
+read its input length from `result.count`, which an earlier workgroup may
+already have overwritten. A test sized to one workgroup cannot see that bug.
+
+### Browser, WASM, performance
+
+- **Browser.** `mask wasm-browser` draws a third scene: hourly readings on
+  `Time`, a signed quantity on `Symlog`, a `Sqrt` radius and a fill through
+  `Linear.then(Sqrt).then(viridis)`. The wasm side checks every centre's colour
+  against the chain's mirrors, and a 1 ms `Time` zoom 65,536 s from the chunk's
+  origin against the mirror's positions. On SwiftShader: `GUP PASS`, 0.027 px.
+  Tint and SwiftShader keep the hi/lo sum's order too.
+- **WASM size.** Library changes cost +974 B gz (253,899 B before the scene).
+  The scene costs +17,807 B gz, so the harness is 271,706 B and gup-core is
+  229,994 B over bare wgpu (ceiling 400,000 B). `PERF_BUDGETS.md` re-records the
+  scatter.
+- **`mask perf-budget`** passed three runs. At GPU clock medians of 517 and 483
+  MHz (near the floor), the GPU pass was 3.26 and 3.53 ms median, CPU 0.74 and
+  0.81 ms, 88 uniform bytes and 0 column bytes a frame. A third run was boosted
+  (867 MHz) and so says little. Single-link glue is unchanged, so the reference
+  scatter's costs are unchanged.
+
+### Proposed adjustments to S5b, S5c and later
+
+- **S5b (colour scales, dictionary hook, Band/Point).** Implement each as a
+  `ShaderFn`; it then chains for free. `Diverging` is a three-stop
+  `Sequential`-like LUT with a midpoint, and `Linear.then(diverging)` already
+  type-checks. The dictionary hook belongs on `ShaderFn` beside `fit_domain`
+  (and on `EncodeFn`, forwarding to the first link). Band and Point on X/Y need
+  `image` too, for the plot's inset. `Feeds` admits only numbers today. A `u32`
+  output feeding a `u32` input (code remapping) would need its own impl and a
+  `Cpu = u32` mirror path.
+- **S5c (`#[wgsl_function]` v2).** Emit a `ShaderFn` impl. `EncodeFn`, `then`
+  and the chain glue come with it. A user function that should start a chain
+  also needs a `CpuMirror` (and `image`, to size marks). The macro can emit
+  `image` from the mirror when the user declares the function monotonic.
+- **`Linear` deep zoom.** `Linear` still reads `F32Relative`, so a full chunk of
+  Unix seconds misses at a one-second zoom (the S4a test now pins it). Users
+  with timestamps should use `Time`. If a non-time workload needs it, a
+  `Linear::precise()` reading `F32x2Relative` (sharing `gup::scale::time`'s
+  arithmetic) is a few lines.
+- **S9 (culling).** Scenario (a)'s 94.7M rows need 91 chunks in any format, and
+  without culling every row is drawn at every zoom. Culling chunks by their f64
+  stats against the domain is what makes deep zoom into large data cheap, not
+  the column format.

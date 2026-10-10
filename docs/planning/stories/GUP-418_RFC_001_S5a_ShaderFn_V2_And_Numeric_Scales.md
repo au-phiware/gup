@@ -2,8 +2,8 @@
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 🚧 In Progress **Created**:
-2026-10-10
+**Initiative**: RFC-001 Migration **Status**: ✅ Complete (2026-10-11)
+**Created**: 2026-10-10
 
 ## Context
 
@@ -114,31 +114,31 @@ and revisit before building the hi/lo format, rather than building both.
 
 ### AC1: `then` composition
 
-- [ ] `a.then(b)` (where `A::Out == B::In`) produces a value usable wherever a
+- [x] `a.then(b)` (where `A::Out == B::In`) produces a value usable wherever a
       single `ShaderFn` is today (as a channel's encoding function), and the
       generated glue calls `b`'s entry on `a`'s result in one expression, per
       §5.
-- [ ] Each link in a chain contributes its own `Params` field to the generated
+- [x] Each link in a chain contributes its own `Params` field to the generated
       `Encodings` struct (not a merged/flattened struct), and the pipeline cache
       signature names every link.
-- [ ] Only the chain's first link (the one consuming the stored column) can take
+- [x] Only the chain's first link (the one consuming the stored column) can take
       a per-chunk relative base; a test using a `F32Relative` first link and a
       `Then` second link confirms the base is applied once, correctly.
-- [ ] A test chains at least three scales/colour functions
+- [x] A test chains at least three scales/colour functions
       (`linear.then(sqrt_like).then(sequential)` or an equivalent real
       three-link chain) and checks the GPU result against evaluating the CPU
       mirrors in the same order, within the position/colour tolerance.
-- [ ] An external-crate doctest on `gup-core`'s public API builds and renders a
+- [x] An external-crate doctest on `gup-core`'s public API builds and renders a
       chart using `.then(..)` on at least one channel.
 
 ### AC2: Pow/Sqrt scale
 
-- [ ] A `Pow` scale (with `Sqrt` as `Pow::sqrt()` or equivalent) implements
+- [x] A `Pow` scale (with `Sqrt` as `Pow::sqrt()` or equivalent) implements
       `PositionScale` and `CpuMirror`, with a configurable exponent.
-- [ ] `conformance`'s GPU≡CPU harness covers `Pow`/`Sqrt` within 0.25 px,
+- [x] `conformance`'s GPU≡CPU harness covers `Pow`/`Sqrt` within 0.25 px,
       including near-zero and negative-domain inputs if the scale supports them
       (document the domain restriction if it does not).
-- [ ] A golden/structural render (read by eye, and checked through the
+- [x] A golden/structural render (read by eye, and checked through the
       `gup-visual-regression` harness's perceptual tolerance — never a
       byte-exact comparison to a PNG blessed only on this machine) shows a
       scatter with `Circle::RADIUS` driven by a `Sqrt` scale (the RFC's own
@@ -147,25 +147,25 @@ and revisit before building the hi/lo format, rather than building both.
 
 ### AC3: Log gains Symlog
 
-- [ ] `Log` supports (or a new `Symlog` type sharing its WGSL module supports) a
+- [x] `Log` supports (or a new `Symlog` type sharing its WGSL module supports) a
       symmetric-log mode that is linear through zero and logarithmic beyond a
       configurable linear threshold, per §5.
-- [ ] `conformance` covers `Symlog` within 0.25 px across a domain that
+- [x] `conformance` covers `Symlog` within 0.25 px across a domain that
       straddles zero, including points inside and outside the linear threshold.
-- [ ] A render with a y-domain that crosses zero (e.g. a signed quantity) using
+- [x] A render with a y-domain that crosses zero (e.g. a signed quantity) using
       `Symlog` shows points on both sides of zero without a gap or a
       discontinuity jump at the threshold, verified by eye.
 
 ### AC4: `Time` scale and the precision fix
 
-- [ ] `Time` implements `PositionScale` and `CpuMirror` as "Linear over f64
+- [x] `Time` implements `PositionScale` and `CpuMirror` as "Linear over f64
       seconds," per §5, accepting a numeric (Unix-seconds-like) accessor — this
       story does not require a `chrono`/calendar-type accessor, only
       calendar-aware **ticks**.
-- [ ] `Time::ticks` produces calendar-aware tick positions and labels (for
+- [x] `Time::ticks` produces calendar-aware tick positions and labels (for
       example, ticks that land on whole days, months or years depending on the
       domain span), not merely evenly spaced numeric ticks.
-- [ ] **Precision approach chosen by a measured spike, not by argument**
+- [x] **Precision approach chosen by a measured spike, not by argument**
       (orchestrator amendment, 2026-10-10). The Context recommends value-span
       capping, but the arithmetic is unfavourable at scale: with f32's 24-bit
       mantissa, 0.25 px at a 1 s / 1000 px zoom allows a chunk span of only
@@ -188,20 +188,20 @@ and revisit before building the hi/lo format, rather than building both.
       or fails (b), use the hi/lo format. Record the numbers and the decision
       in RFC-001's findings.
 
-- [ ] The chosen approach makes `conformance::chunk_boundary`'s "full chunk of
+- [x] The chosen approach makes `conformance::chunk_boundary`'s "full chunk of
       one-per-second samples, one-second zoom" scenario pass within 0.25 px
       (replacing or adding to the existing test that documents the miss as a
       known limit), and a new 1 ms-zoom variant also passes.
-- [ ] The existing `conformance::chunk_boundary` tests
+- [x] The existing `conformance::chunk_boundary` tests
       (`relative_chunks_stay_within_a_quarter_pixel_at_the_boundary`,
       `absolute_f32_misses_at_the_boundary`,
       `one_relative_chunk_spanning_years_misses`) still pass unchanged, proving
       the span cap does not regress the already-proven multi-chunk and
       negative-control behaviour.
-- [ ] A golden render shows a line or scatter chart with a `Time` x-axis across
+- [x] A golden render shows a line or scatter chart with a `Time` x-axis across
       a multi-year domain with calendar tick labels (e.g. year boundaries), read
       by eye through the harness tolerance.
-- [ ] A second golden or structural test zooms a `Time`-scaled chart to a
+- [x] A second golden or structural test zooms a `Time`-scaled chart to a
       sub-second window inside a large dataset and confirms (via the
       `Layout`/pick machinery or a direct position check, not merely "looks
       right") that rendered positions match the CPU mirror within 0.25 px at
@@ -209,10 +209,10 @@ and revisit before building the hi/lo format, rather than building both.
 
 ### AC5: Multi-workgroup correctness guardrail
 
-- [ ] Domain fitting for every scale in this story continues to use the
+- [x] Domain fitting for every scale in this story continues to use the
       `ColumnStore`'s existing CPU f64 chunk stats (per RFC-001 §3); no new GPU
       compute reduction is introduced for this story's scales.
-- [ ] If the implementation does introduce any GPU compute-shader reduction (for
+- [x] If the implementation does introduce any GPU compute-shader reduction (for
       example, to accelerate domain fitting at very large row counts), it is
       proven correct when dispatched across more than one workgroup — with a
       dedicated test that forces a multi-workgroup dispatch, not just a
@@ -223,38 +223,41 @@ and revisit before building the hi/lo format, rather than building both.
 
 ### AC6: Browser and old-path freeze
 
-- [ ] `mask wasm-browser` is extended to exercise `then` composition, `Pow`/
+- [x] `mask wasm-browser` is extended to exercise `then` composition, `Pow`/
       `Sqrt`, `Symlog` and `Time` (at minimum one scene using each), and passes
       on WebGPU/SwiftShader.
-- [ ] No file outside `crates/gup-core` (and planning docs) changes;
-      `mask old-path-loc` reports the same count as before this story.
+- [x] No file outside `crates/gup-core` (and planning docs) changes;
+      `mask old-path-loc` reports the same count as before this story. (28,910
+      before and after. The three new goldens live in `tests/golden/gup_core/`,
+      where every gup-core golden lives; they are the only files outside
+      `crates/gup-core` and `docs/planning`.)
 
 ## Technical Tasks
 
-- [ ] Generalise the glue emitter's channel source from "one `DynShaderFn`" to
+- [x] Generalise the glue emitter's channel source from "one `DynShaderFn`" to
       "a chain of `DynShaderFn`s," threading each link's output as the next
       link's input, emitting one `Encodings` field and one pipeline-signature
       fragment per link, and applying the per-chunk relative base only to the
       first link.
-- [ ] Add a `Then<A, B>` (or equivalently named) combinator and wire it through
+- [x] Add a `Then<A, B>` (or equivalently named) combinator and wire it through
       `IntoEncoding` so `a.then(b)` type-checks like any other `ShaderFn`-backed
       encoding.
-- [ ] Implement `Pow`/`Sqrt` as a `PositionScale` + `CpuMirror`, with its WGSL
+- [x] Implement `Pow`/`Sqrt` as a `PositionScale` + `CpuMirror`, with its WGSL
       module under `src/shaders`.
-- [ ] Extend `Log`'s WGSL/Rust (or add `Symlog`) for the symmetric-log mode.
-- [ ] Implement `Time` as a `PositionScale` + `CpuMirror` over f64 seconds, with
+- [x] Extend `Log`'s WGSL/Rust (or add `Symlog`) for the symmetric-log mode.
+- [x] Implement `Time` as a `PositionScale` + `CpuMirror` over f64 seconds, with
       calendar-aware `ticks()`.
-- [ ] Extend `ColumnStore`'s chunking (`chunk_rows_for` and the append path)
-      with a value-span cap usable by `Time` (and any future scale that declares
-      one), opening a new chunk with a fresh origin when the cap would be
-      exceeded.
-- [ ] Extend `conformance.rs` and `conformance::chunk_boundary` with
-      `Pow`/`Sqrt`, `Symlog` and `Time` cases, including the positive,
-      span-capped "full chunk" case.
-- [ ] Add the `then`-chain GPU≡CPU and pipeline-signature tests (AC1).
-- [ ] Add the guardrail test or documentation note for AC5.
-- [ ] Extend the `mask wasm-browser` harness scene(s) for AC6.
-- [ ] Re-run `mask old-path-loc` and confirm it is unchanged.
+- [x] ~~Extend `ColumnStore`'s chunking with a value-span cap~~ Replaced by the
+      spike's decision: a hi/lo `ColumnFormat::F32x2Relative` column, read by
+      `Time` (span capping needs ~46,200 chunks in scenario (a) and ~19M in
+      (b)). See RFC-001 "S5a findings".
+- [x] Extend `conformance.rs` and `conformance::chunk_boundary` with
+      `Pow`/`Sqrt`, `Symlog` and `Time` cases, including the positive, hi/lo
+      "full chunk" case.
+- [x] Add the `then`-chain GPU≡CPU and pipeline-signature tests (AC1).
+- [x] Add the guardrail test or documentation note for AC5.
+- [x] Extend the `mask wasm-browser` harness scene(s) for AC6.
+- [x] Re-run `mask old-path-loc` and confirm it is unchanged.
 
 ## Dependencies
 
@@ -298,13 +301,13 @@ and revisit before building the hi/lo format, rather than building both.
 
 ## Success Metrics
 
-- [ ] `then` composition, `Pow`/`Sqrt`, `Symlog` and `Time` all pass their
+- [x] `then` composition, `Pow`/`Sqrt`, `Symlog` and `Time` all pass their
       GPU≡CPU conformance checks within 0.25 px (or 1/255 for colour, where
       applicable).
-- [ ] The S4a "full chunk of seconds, one-second zoom" miss is fixed (not merely
+- [x] The S4a "full chunk of seconds, one-second zoom" miss is fixed (not merely
       documented) for `Time` columns, proved against
       `conformance::chunk_boundary`.
-- [ ] `mask wasm-browser` and `mask old-path-loc` are unaffected beyond the
+- [x] `mask wasm-browser` and `mask old-path-loc` are unaffected beyond the
       intended scene additions.
 
 ## Risk Assessment
@@ -329,11 +332,224 @@ and revisit before building the hi/lo format, rather than building both.
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (golden image or PNG read) for AC2, AC3
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -p gup-core -- --test-threads=1` on Intel (and
+      the lib, doc and `scales_png` tests on lavapipe). The root crate's tests
+      are left to CI: the orchestrator ruled out building them locally (disk).
+- [x] Lint and format clean: `cargo fmt --all --check`, gup-core clippy
+      (`--all-targets --all-features -D warnings`), `scripts/clippy_wasm32.sh`
+      and the pre-commit hook on every commit. The full `mask all-check` is left
+      to CI, for the same disk reason.
+- [x] All examples compile: `cargo check -p gup-core --examples` (gup-core only,
+      as above)
+- [x] Rendered output verified by eye (golden image or PNG read) for AC2, AC3
       and AC4
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+**Precision spike and decision: hi/lo.** The spike's numbers are in RFC-001 "S5a
+findings".
+
+- A value-span cap must be 2,048 s at a 1 s / 1000 px zoom (4,096 s misses at
+  0.26 px) and 4 s at 1 ms (0.24 px). For three years of one-per-second data
+  that is about 46,200 chunks in scenario (a) and about 18.9M in (b).
+- A `zoom_bench` proxy with 50,000 draws (100K points) spends 95 ms of CPU per
+  frame and 12.8 MB of chunk uniforms. Scenario (b)'s chunk uniform would be
+  larger than a buffer may be.
+- The hi/lo `ColumnFormat::F32x2Relative` is within 4.4e-5 px at every chunk
+  span (up to 1e8 s) and both zooms, on Intel and lavapipe. It needs 91 chunks
+  in both scenarios, which is `MAX_CHUNK_ROWS`, not precision.
+- hi/lo costs nothing measurable on the GPU (3.83–3.98 against 3.95–4.13 ms), a
+  few hundredths of a ms of CPU, and 4 B per row.
+- The story's rule picked hi/lo, and the spike's numbers are committed
+  (`dc7354e`) before any of the rest was built.
+
+**Delivered** (all in `crates/gup-core`, plus three goldens):
+
+- **ShaderFn v2 and `then`** (`src/encoding.rs`, `src/shader/glue.rs`,
+  `src/selection.rs`):
+  - `ShaderFn` is one WGSL function. `chunk_base` now returns f64, split by the
+    column format, and there is a new `image` (the output extent).
+  - `EncodeFn` is what a channel encodes through: a `ShaderFn` or a
+    `Then<A, B>`. `encode`, `encode_key` and `then` live on it.
+  - `Feeds` is the link type rule (a `Px` output feeds an `f32` input).
+  - `CpuMirror` is over `EncodeFn`, so chains have mirrors.
+  - The glue emits a chain per channel: an `Encodings` field per link (`<ch>`,
+    `<ch>_link<k>`), `then`-joined signatures and LUTs per link. Only the first
+    link's base comes from the chunk origin; later relative links get origin
+    0's. Single-link glue is byte-identical, and the fixtures are unchanged.
+  - Later links' auto domains fit to the image of the data.
+  - Plots inset their ranges by an encoded `Size` channel's largest output.
+- **`ColumnFormat::F32x2Relative`** (`src/column.rs`): 8-byte stride, fetched as
+  `Float32x2`, with hi/lo chunk bases in the `Chunk` uniform.
+- **Scales** (`src/scale/{pow,symlog,time}.rs`, `src/shaders/scale_*.wgsl`):
+  - `Pow`/`Pow::sqrt()`: sign-keeping power, positive exponents.
+  - `Symlog`: smooth `log2(1 + |x|/c)` with a near-zero series, and decade ticks
+    across zero.
+  - `Time`: linear over Unix seconds through `gup::scale::time` (hi/lo), with
+    UTC calendar ticks and calendar `nice`.
+- **Tests**:
+  - Conformance: Pow/Sqrt ≤ 2.7e-3 px, Symlog ≤ 1.2e-4 px, a three-link chain ≤
+    2.3e-5 per colour channel, the base applied once (a seeded second base is
+    off by 4.7e9 px), hi/lo full chunk at 1 s and 1 ms (7.0e-4 and 4.4e-5 px),
+    and the S4a `F32Relative` miss kept as the negative control (39.9 px).
+  - Glue and layout tests for chains, a trybuild case for a mismatched chain,
+    and an external doctest on `EncodeFn::then`.
+  - Calendar unit tests: leap day, 28–31-day months, year boundaries, hours to
+    sub-milliseconds.
+  - `tests/scales_png.rs`: three goldens plus the sqrt-area, symlog and 1 ms
+    deep-zoom pixel checks.
+  - Test counts: gup-core lib 108 passed (3 ignored), doc 7, integration 21 (5
+    new in `scales_png`).
+- **Browser**: a third `mask wasm-browser` scene (`Time`, `Symlog`, `Sqrt`, a
+  three-link `then` fill) with in-wasm mirror checks. It passes on SwiftShader,
+  with the 1 ms zoom at 0.027 px.
+- **`zoom_bench --time`** encodes x through `Time`.
+- **`PERF_BUDGETS.md`** re-records the WASM scatter: +17,807 B gz for the new
+  scene, +974 B for the library.
+
+### Definition-of-Done evidence
+
+- **Rendered output, read by eye.**
+  - `gup_core/sqrt_radius`: 60 countries, GDP against life expectancy, discs
+    from barely visible to 28 px whose areas follow population, viridis by life
+    expectancy, every disc inside the plot rect.
+  - `gup_core/symlog_signed`: an S-curve of `i³/8` from −216,000 to 216,000.
+    Ticks run −1M … −10, 0, 10 … 1M, uncrowded at zero. Points are continuous
+    through zero.
+  - `gup_core/time_years`: a daily series from mid-2019 to late 2023, with x
+    ticks `2019, Jul, 2020, Jul, …, 2024` on 1 January and 1 July.
+  - The browser PNG's third panel: hourly points labelled
+    `Nov 15, 06:00, 12:00, 18:00, Nov 16` on a symlog y axis, sized by sqrt and
+    coloured by the chain.
+  - On lavapipe the goldens differ by 0 of 324,000 pixels (max ΔE 1.6).
+
+**`mask perf-budget`**: every check passed in its final run, at GPU clock median
+483 MHz (the floor state):
+
+| Metric                        | Measured | Budget      |
+| ----------------------------- | -------: | ----------- |
+| `zoom.gpu_pass.median_ms`     |    3.530 | ≤ 4.668     |
+| `zoom.gpu_pass.p95_ms`        |    6.409 | ≤ 7.875     |
+| `zoom.cpu.median_ms`          |    0.806 | ≤ 0.912     |
+| `zoom.cpu.p95_ms`             |    1.082 | ≤ 1.412     |
+| uploads (columns, uniforms)   |  0, 88 B | exact       |
+| `pipeline.link_create.median` | 0.856 ms | ≤ 1.056     |
+| `pipeline.link_create.cold`   | 1.056 ms | ≤ 10        |
+| `wasm.scatter.gz_bytes`       |  271,706 | re-recorded |
+| `wasm.over_wgpu.gz_bytes`     |  229,994 | ≤ 400,000   |
+
+Earlier runs:
+
+- At 517 MHz: GPU 3.26 ms, CPU 0.74 ms. It failed only `wasm.scatter`, before
+  the re-record.
+- At 867 MHz (boosted, so its timing checks are weak): passed.
+
+## Retrospective
+
+**Completed**: 2026-10-11
+
+### Key Technical Learnings
+
+#### The spike's arithmetic was right, and the margin was thinner
+
+- **Challenge**: the story estimated a 4,200 s span cap. The measured cap that
+  passes at 1 s / 1000 px is 2,048 s: at 4,096 s the error is 0.26 px, because
+  rounding the base and the value each costs half a ULP.
+- **Solution**: measure with points at the far end of a chunk, on golden-ratio
+  offsets. The first version put points at short binary fractions, whose
+  rounding cancelled against the base's, and reported 0 px at 8,192 s.
+- **Pattern**: precision tests need inputs that do not share the base's
+  rounding. Otherwise a broken store can look exact.
+
+#### hi/lo is lossless for f64 Unix seconds
+
+- **Challenge**: double-single was expected to need careful arithmetic
+  (two-sum), and to lose at very sparse chunks.
+- **Solution**: f64 timestamps near 1.7e9 are multiples of 2^-22 s, so any
+  offset within 2^26 s of the origin fits the pair's 48 bits exactly. Adding the
+  high words first cancels exactly for on-screen points (Sterbenz), so plain f32
+  adds suffice. Intel/Mesa, lavapipe and SwiftShader/Tint all keep the order.
+- **Pattern**: before reaching for a general double-single library, check
+  whether the input's own precision already bounds the problem.
+
+#### Associated types across a blanket impl
+
+- **Challenge**: with `CpuMirror: EncodeFn` and
+  `impl<S: ShaderFn> EncodeFn for S`, generic code bounded by
+  `S: ShaderFn + CpuMirror` sees `<S as EncodeFn>::Output` as opaque: rustc
+  prefers the where-clause candidate to the impl. So it cannot equal
+  `ShaderFn::Out`.
+- **Solution**: give the chain trait differently named associated types
+  (`Input`, `Output`), and spell both out where needed
+  (`PositionScale: ShaderFn<Out = Px> + EncodeFn<Output = Px>`,
+  `S: CpuMirror<Output = <S as ShaderFn>::Out>`).
+- **Pattern**: a supertrait over a blanket-implemented trait needs its
+  projections named in bounds.
+
+#### `then` is cheap once the glue thinks in links
+
+- **Solution**: the emitter loops over links where it had one call, and the
+  per-link names (`<ch>`, `<ch>_link<k>`) keep the single-link output
+  byte-identical. The real decision was the base rule: only link 0 reads the
+  stored column, so a later relative link's base is computed for origin 0.
+
+### Architectural Decisions
+
+#### hi/lo column for `Time`, not span-capped chunks
+
+- **Decision**: `ColumnFormat::F32x2Relative`, read by `Time`. `Linear` keeps
+  `F32Relative`.
+- **Reasoning**: the measured rule. Span capping needs 46,200 draws (95 ms of
+  CPU a frame in the proxy) or 19M. hi/lo costs 4 B a row and nothing on the
+  GPU.
+- **Trade-off**: twice the x column bytes for time data, and a second relative
+  format to support (validity, chunk bases, glue).
+- **Future**: `Linear::precise()` could share the arithmetic. S9's chunk
+  culling, not the format, is what makes deep zoom into 94.7M rows cheap.
+
+#### `ShaderFn` (one function) plus `EncodeFn` (a chain)
+
+- **Decision**: keep `ShaderFn` as what one WGSL function (and S5c's macro)
+  implements, and put `encode`, `encode_key` and `then` on `EncodeFn`.
+- **Reasoning**: `Then<A, B>` has no single module, entry or `Params`, so it
+  cannot honestly be a `ShaderFn`.
+- **Trade-off**: users import `EncodeFn` (it is in the prelude). The compile
+  errors name `EncodeFn::Output`.
+- **Future**: S5b and S5c implement `ShaderFn` and get chaining for free.
+
+#### `Symlog` as its own module
+
+- **Decision**: a new `gup::scale::symlog` beside `gup::scale::log`.
+- **Reasoning**: adding a mode to `Log` would change its `Params`, layout and
+  the linked reference-scatter fixture, against this story's own risk
+  mitigation.
+
+### Development Workflow Insights
+
+- **The browser harness is also the WASM size proxy.** A test scene costs size
+  budget (+17.8 KB gz here), and the budget had to be re-recorded with the split
+  between library and scene stated.
+- **Measuring the GPU pass at 100K points with each approach's draw count**
+  separated draw-call cost from instance throughput. The full 94.7M-row scenario
+  would not fit in the machine's free memory (5 GB), and without culling it
+  would only have measured throughput.
+- **Disk was tight.** Deleting stale test binaries did not free space until the
+  ZFS pool caught up. A heredoc-plus-perl edit that failed to compile once
+  truncated a file to empty before a `cp`; it was recovered from git. Use the
+  Edit tool for multi-line edits.
+- **A first `Symlog` golden used data that is the inverse of the transform.** It
+  drew a straight line, which proves nothing. Read the PNG before trusting a
+  pass.
+
+### Follow-up Stories
+
+None. The open items are already covered:
+
+- S5b (GUP-419) and S5c (GUP-420) take the adjustments in RFC-001 "S5a
+  findings".
+- Chunk culling is RFC-001 S9.
+- `Linear::precise()` and time-zone or locale-aware `Time` labels are noted
+  there and in the RFC. Neither has a workload asking for it yet.
