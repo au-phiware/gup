@@ -443,7 +443,12 @@ fn categorical_gpu_matches_cpu_mirror() {
     assert_eq!(c.eval(20.0), NULL_COLOR, "outside the domain");
     let worst = max_color_error(&cx, &c, &inputs);
     eprintln!("categorical (20 keys): max channel error = {worst:.2e}");
-    assert_eq!(worst, 0.0, "a palette is read by texel, exactly");
+    // Read by texel: exact up to the driver's 8-bit-to-float conversion
+    // (lavapipe is an f32 ulp off).
+    assert!(
+        worst <= 1e-6,
+        "max channel error {worst}: a palette is read by texel"
+    );
 
     let palette: Vec<Color> = (0..100u32)
         .map(|i: u32| Color::hex(i.wrapping_mul(2_654_435_761) & 0xffffff))
@@ -453,7 +458,7 @@ fn categorical_gpu_matches_cpu_mirror() {
     long.fit_keys(&keys).unwrap();
     let inputs: Vec<f64> = (0..101).map(f64::from).collect();
     let worst = max_color_error(&cx, &long, &inputs);
-    assert_eq!(worst, 0.0);
+    assert!(worst <= 1e-6, "max channel error {worst}");
     assert_eq!(long.eval(99.0), palette[99]);
 }
 
