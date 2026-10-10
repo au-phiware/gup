@@ -2321,3 +2321,87 @@ and lavapipe for the CI rasteriser.
   reject nullable layers with the configuration error above. If compatibility
   mode matters, the fallback is a per-row validity attribute, which costs a
   vertex slot and 4 bytes a row (vertex strides are multiples of 4).
+
+## GUP-417 findings (2026-10-10)
+
+[GUP-417](../stories/GUP-417_Track_Gup_Core_Performance_Budgets.md) asked why
+S4a's GPU pass (about 3.7 ms) was slower than S0b's (2.7–3.0 ms), and set
+budgets so the next regression is caught on purpose.
+`crates/gup-core/PERF_BUDGETS.md` records them, with `mask perf-budget` (local,
+needs a GPU) and the deterministic CI proxies.
+
+### MSAA explains the S0b→S4a gap
+
+`zoom_bench` gained `--samples 1|4`. Three binaries ran alternately on the S0b
+machine (Intel HD Graphics 630, Mesa 26.0.0 Vulkan, niri at 1920×1080 60.02 Hz,
+rustc 1.93.1): S0b's tree (`e6bba47`, before S3 added MSAA, built in a scratch
+worktree; `cmp` confirmed it differs from the current binary) and this tree
+(after S4b) at 1 and 4 samples. Each run is 100K points, fullscreen, 60 warm-up
+and 600 measured frames. Each cell is the median of the runs' medians (or p95s).
+
+| `Mailbox` uncapped, 6 runs each    | Frame interval median / p95 (ms) | fps median / p95 | CPU work median / p95 (ms) | GPU pass median / p95 (ms) | GPU pass median, range |
+| ---------------------------------- | -------------------------------: | ---------------: | -------------------------: | -------------------------: | ---------------------: |
+| S0b (`e6bba47`), 1 sample          |                    4.455 / 6.833 |    224.5 / 146.3 |              0.688 / 0.856 |              2.984 / 5.860 |            2.76 – 3.01 |
+| this tree, `--samples 1`           |                    4.526 / 6.910 |    220.9 / 144.7 |              0.686 / 0.864 |              3.024 / 5.868 |            2.94 – 3.04 |
+| this tree, `--samples 4` (default) |                    4.908 / 7.326 |    203.7 / 136.5 |              0.762 / 1.127 |              3.888 / 6.297 |            3.73 – 4.14 |
+
+| `Fifo` (vsync), 3 runs each        | fps median / p95 | CPU work median (ms) | GPU pass median / p95 (ms) |
+| ---------------------------------- | ---------------: | -------------------: | -------------------------: |
+| S0b (`e6bba47`), 1 sample          |      60.0 / 59.4 |                0.771 |              3.033 / 5.711 |
+| this tree, `--samples 1`           |      60.0 / 59.4 |                0.769 |              3.008 / 5.537 |
+| this tree, `--samples 4` (default) |      60.0 / 59.4 |                0.778 |              4.703 / 8.296 |
+
+- **MSAA accounts for all of the gap.** S0b and this tree at 1 sample agree
+  within 1.5% (2.98 against 3.02 ms). At 4 samples the pass costs +0.86 ms
+  median uncapped (+29%) and +1.7 ms under vsync (+56%), which is S4a's 3.7 ms.
+  S1–S4b, GUP-407's font and S4b's validity bits cost nothing measurable.
+- **The GPU clock is the confounder.** The i915 driver raises the clock from 350
+  to ~1050 MHz when the GPU is busy enough, and `zoom_bench` sits at the
+  threshold. A boosted run's GPU pass is about half (1.9 ms at 4×), so two runs
+  of one binary can differ by 2×. An earlier session on a loaded machine saw
+  bimodal 4× runs (1.87 and 4.27 ms). Every run above sampled `gt_act_freq_mhz`
+  and ran at the floor (median 350–483 MHz); under `Fifo` the clock never left
+  it. GPU timings on this machine are comparable only at the same clock state,
+  so `mask perf-budget` samples it. Earlier findings tables did not record the
+  clock.
+- **Visual trade-off (S3).** 4× helps only geometric edges: on a fan of 1.5 px
+  diagonal rules, 1× has 0 partially covered pixels and 4× has 597; on a rect at
+  fractional coordinates, 0 and 71. Circles antialias analytically: 1× and 4×
+  differ by at most 2/255.
+- **Headroom.** At 4×, under vsync, no frame missed a refresh and the GPU p95
+  (8.3 ms) uses half the 16.7 ms frame; at 1×, a third (5.5 ms). Uncapped, the
+  median falls from 221 to 204 fps.
+
+### Decision needed: `DEFAULT_SAMPLES`
+
+The cost is not negligible (+29–56% of the GPU pass), so GUP-417 leaves
+`DEFAULT_SAMPLES` at 4 and asks the owner. Options:
+
+1. **Keep 4× (recommended).** The ≥ 60 fps target holds with 2× p95 headroom on
+   a 2017 integrated GPU, guides look right, and the budgets are recorded at 4×.
+   Revisit with S9's larger datasets.
+2. **Default to 1×, 4× opt-in** (`TargetOptions::samples`,
+   `WindowTarget::set_samples`). Saves 0.9–1.7 ms of GPU per frame here; rules
+   and fractional rects alias again, and the 4× goldens need re-blessing.
+3. **Antialias rules and rects analytically, then default to 1×.** The circle
+   shader already does this; rules and rects would get coverage from their edge
+   distance. That keeps the look and the 1× cost, and needs its own story.
+
+### Pipeline creation depends on Mesa's shader cache
+
+`pipeline_timings` (release, 12 runs): link + create median 0.84–0.97 ms, first
+run 0.94–1.23 ms (once 4.47 ms). With `MESA_SHADER_CACHE_DISABLE=true` the
+median is 5.0 ms and the first run 5.3–7.8 ms. That explains most of the spread
+between earlier findings (GUP-406's 8.4 ms cold run). The budget holds the
+median to +20% and the cold run to an absolute 10 ms, below S0a's 13.5 ms.
+
+### WASM size and the CI proxies
+
+`scripts/wasm_size.sh` (`mask wasm-size`) now fails above 400,000 B gz over bare
+wgpu, and the Visual regression workflow's browser job runs it. Today: 211,213 B
+(scatter 252,925 B, bare wgpu 41,712 B). `tests/zoom_uploads.rs` now also pins
+exact uniform bytes per frame, one instance write per guide draw, the guide
+bytes, the draw-call count (`Prepared::draw_calls`, new) and that no program or
+pipeline is created after the first frame. Seeded violations (an extra upload,
+an oversized upload, a duplicated chunk draw, an extra guide draw, a bypassed
+pipeline cache) each failed it.
