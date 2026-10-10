@@ -171,6 +171,15 @@ Before marking the story complete, perform comprehensive checks:
    The agent returns the file path. Read the screenshot to verify the output,
    then kill the example process. Note what you tested.
 
+9. **Performance budgets** (`gup-core` stories): if the story touches `gup-core`
+   rendering, uploads, pipeline creation or WASM size, run `mask perf-budget`
+   and paste its pass/fail table into the story's Definition-of-Done evidence,
+   next to the visual verification. It compares `zoom_bench`, `pipeline_timings`
+   and `mask wasm-size` with `crates/gup-core/PERF_BUDGETS.md` and needs a
+   display and a GPU. A timing failure alone warrants a second run; a real
+   regression is fixed, or the budget is re-recorded in the same commit with the
+   measured reason. Never raise a budget just to pass.
+
 ---
 
 ## Phase 4: Complete the Story
