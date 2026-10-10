@@ -2374,6 +2374,9 @@ and 600 measured frames. Each cell is the median of the runs' medians (or p95s).
 
 ### Decision needed: `DEFAULT_SAMPLES`
 
+**Decided (2026-10-10): option 3, delivered by GUP-421.** See "Decisions
+(2026-10-10)" below.
+
 The cost is not negligible (+29–56% of the GPU pass), so GUP-417 leaves
 `DEFAULT_SAMPLES` at 4 and asks the owner. Options:
 
@@ -2617,3 +2620,30 @@ already have overwritten. A test sized to one workgroup cannot see that bug.
   without culling every row is drawn at every zoom. Culling chunks by their f64
   stats against the domain is what makes deep zoom into large data cheap, not
   the column format.
+
+## Decisions (2026-10-10)
+
+One owner decision, closing the "GUP-417 findings" `DEFAULT_SAMPLES` question
+above (option 3).
+
+### Decision: keep 4× MSAA for now; analytic AA for rules and rects unlocks 1×
+
+GUP-417 found the cost not negligible (+29% of the GPU pass uncapped, +56% under
+vsync, on the HD 630) but also found it buys antialiasing only on geometric
+edges: a fan of 1.5 px diagonal rules goes from 0 partially covered pixels at 1×
+to 597 at 4×, and a rect at fractional coordinates from 0 to 71. Circles
+antialias analytically already (§7) and differ by at most 2/255 between 1× and
+4×.
+
+The owner decided: **keep `DEFAULT_SAMPLES = 4` for now.** Flipping the default
+to 1× today would alias every rule and fractional rect — axis lines, ticks, grid
+and the plot background — which is a visible regression, not a neutral
+performance win. Once rules and rects get the same analytic edge coverage
+circles already have, the default becomes 1×, with MSAA opt-in
+(`TargetOptions`/`TargetDesc`) and automatically applied to any scene containing
+area or polygon items, matching §7's original design. That work is
+[GUP-421](../stories/GUP-421_Analytic_AA_Rules_Rects_1x_MSAA.md).
+
+This supersedes the "GUP-417 findings" section's "Decision needed:
+`DEFAULT_SAMPLES`" options list above: option 3 is chosen, to be delivered by
+GUP-421, with option 1 (keep 4×) as the interim state until it lands.
