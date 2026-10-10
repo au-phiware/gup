@@ -408,11 +408,13 @@ impl Bench {
         let d = self.uploads_during.unwrap() - self.uploads_before;
         println!(
             "GPU writes over the {} measured frames: columns {} B in {} writes; \
-             uniforms {} B in {} writes; guide instances {} B in {} writes; \
+             validity {} B in {} writes; uniforms {} B in {} writes; guide instances {} B in {} writes; \
              textures {} B in {} writes",
             o.frames,
             d.columns.bytes,
             d.columns.writes,
+            d.validity.bytes,
+            d.validity.writes,
             d.uniforms.bytes,
             d.uniforms.writes,
             d.instances.bytes,
