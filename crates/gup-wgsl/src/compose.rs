@@ -38,7 +38,7 @@ use std::path::Path;
 /// A WGSL source file.
 #[derive(Clone, Debug)]
 pub struct Source {
-    /// The path shown in error reports, e.g. `src/shaders/view.wgsl`.
+    /// The path shown in error reports, e.g. `gup-wgsl/library/view.wgsl`.
     pub file: String,
     /// The WGSL text, with naga_oil directives.
     pub text: String,

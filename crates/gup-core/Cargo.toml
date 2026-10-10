@@ -13,10 +13,11 @@ publish = false
 # Versions match those already resolved in Cargo.lock (RFC-001 appendix).
 #
 # Shader composition runs at build time on every target (RFC-001 "Decisions
-# (2026-10-09)", GUP-406): `build.rs` flattens `src/shaders` with naga_oil
-# through gup-wgsl's `compose` feature, and at run time gup-wgsl's
-# dependency-free linker joins generated glue to that text. naga and
-# naga_oil are never linked into a gup-core binary.
+# (2026-10-09)", GUP-406): `build.rs` flattens the library (`gup-wgsl/library`)
+# and the guide shaders (`src/shaders`) with naga_oil through gup-wgsl's
+# `compose` feature, and at run time gup-wgsl's dependency-free linker joins
+# generated glue to that text. naga and naga_oil are never linked into a
+# gup-core binary.
 [dependencies]
 wgpu = { version = "27.0", features = ["wgsl"] }
 gup-wgsl = { path = "../gup-wgsl" }

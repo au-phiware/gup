@@ -4,11 +4,13 @@
 //! Shader composition (RFC-001 §6): WGSL library modules flattened at
 //! build time, plus the typed glue emitter in [`glue`].
 //!
-//! `build.rs` runs naga_oil over `src/shaders` once, at build time, on
-//! every target (RFC-001 "Decisions (2026-10-09)", GUP-406). Library
-//! modules (marks, scales, palettes, the view transform) become plain WGSL
-//! whose items have flat names (`gup::scale::linear::map_rel` →
-//! `gup_scale_linear_map_rel`), as the [`WgslModule`] statics below; the
+//! `build.rs` runs naga_oil over Gup's WGSL library (`gup-wgsl/library`,
+//! shared with `#[wgsl_function]`) and the guide shaders (`src/shaders`)
+//! once, at build time, on every target (RFC-001 "Decisions
+//! (2026-10-09)", GUP-406). Library modules (marks, scales, palettes,
+//! the view transform) become plain WGSL whose items have flat names
+//! (`gup::scale::linear::map_rel` → `gup_scale_linear_map_rel`), as the
+//! [`WgslModule`] statics below; the
 //! hand-authored guide shaders are flattened completely. At run time the
 //! glue emitter prints one top-level module per `(mark, encoding
 //! signature)`, [`link`] joins it to the flattened modules it imports, and
