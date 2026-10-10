@@ -49,7 +49,7 @@ impl Sequential {
             domain: None,
             explicit: false,
             reverse: false,
-            lut: build_lut(stops).into(),
+            lut: build_lut(stops, LUT_SIZE).into(),
         }
     }
 
@@ -214,12 +214,12 @@ pub(crate) fn oklab_to_srgb([l, a, b]: [f32; 3]) -> [f32; 3] {
 }
 
 /// Interpolate evenly spaced sRGB stops in OKLab into an RGBA8 LUT.
-fn build_lut(stops: &[[f32; 3]]) -> Vec<[u8; 4]> {
+pub(crate) fn build_lut(stops: &[[f32; 3]], size: usize) -> Vec<[u8; 4]> {
     assert!(stops.len() >= 2, "a palette needs at least two stops");
     let lab: Vec<[f32; 3]> = stops.iter().map(|&s| srgb_to_oklab(s)).collect();
-    (0..LUT_SIZE)
+    (0..size)
         .map(|i| {
-            let pos = i as f32 / (LUT_SIZE - 1) as f32 * (lab.len() - 1) as f32;
+            let pos = i as f32 / (size - 1) as f32 * (lab.len() - 1) as f32;
             let j = (pos.floor() as usize).min(lab.len() - 2);
             let f = pos - j as f32;
             let mix = |k: usize| lab[j][k] + (lab[j + 1][k] - lab[j][k]) * f;

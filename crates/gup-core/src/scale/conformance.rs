@@ -7,11 +7,14 @@
 //! must match its f64 `CpuMirror` within 0.25 px (position) or 1/255
 //! (colour).
 
-use super::{Linear, Log, PositionScale, Pow, Sequential, Symlog, Time};
-use crate::channel::Px;
-use crate::column::ColumnFormat;
+use super::{
+    Categorical, Diverging, Linear, Log, NULL_COLOR, PositionScale, Pow, Sequential, Symlog, Time,
+};
+use crate::channel::{Color, Px};
+use crate::column::{ColumnFormat, NULL_CODE};
 use crate::context::Context;
-use crate::encoding::{CpuMirror, DynShaderFn, EncodeFn, Resource};
+use crate::encoding::{CpuMirror, DynShaderFn, EncodeFn, Resource, ShaderFn};
+use std::sync::Arc;
 use wgpu::util::DeviceExt;
 
 const SAMPLES: usize = 1_000;
@@ -353,6 +356,99 @@ fn sequential_gpu_matches_cpu_mirror() {
     }
     eprintln!("max channel error = {worst:.2e}");
     assert!(worst <= 1.0 / 255.0, "max channel error {worst} (> 1/255)");
+}
+
+/// The largest per-channel difference between `f`'s GPU colours and its
+/// mirror's over `inputs`.
+fn max_color_error<S: CpuMirror<Output = Color>>(cx: &Context, f: &S, inputs: &[f64]) -> f32 {
+    let gpu = dispatch(cx, f, inputs, None);
+    let mut worst = 0.0f32;
+    for (k, &x) in inputs.iter().enumerate() {
+        let cpu = f.eval(x).to_array();
+        for c in 0..4 {
+            worst = worst.max((gpu[k * 4 + c] - cpu[c]).abs());
+        }
+    }
+    worst
+}
+
+/// GUP-419 AC3: `Diverging` within 1/255 per channel below, at and above
+/// the midpoint, with a symmetric fitted domain and an asymmetric
+/// explicit one (each side its own slope), reversed, and out of domain
+/// (clamped); and fed by `Linear` through `then`.
+#[test]
+fn diverging_gpu_matches_cpu_mirror() {
+    let cx = Context::new_blocking().unwrap();
+    let mut fitted = Diverging::blue_red().midpoint(14.0);
+    fitted.fit_domain((11.5, 15.0)).unwrap();
+    let cases = [
+        ("fitted about 14", fitted, (8.0, 20.0)),
+        (
+            "explicit -2 | 0 | 6",
+            Diverging::blue_red().domain(-2.0, 0.0, 6.0),
+            (-3.0, 7.0),
+        ),
+        (
+            "reversed",
+            Diverging::blue_red().domain(-1.0, 0.0, 1.0).reversed(),
+            (-1.5, 1.5),
+        ),
+    ];
+    for (name, d, (lo, hi)) in cases {
+        let mid = d.current_domain().unwrap()[1];
+        let mut inputs: Vec<f64> = (0..SAMPLES)
+            .map(|i| lo + (hi - lo) * (i as f64 + 0.37) / SAMPLES as f64)
+            .collect();
+        inputs.extend([mid, mid - 1e-3, mid + 1e-3]);
+        let worst = max_color_error(&cx, &d, &inputs);
+        eprintln!("diverging {name}: max channel error = {worst:.2e}");
+        assert!(worst <= 1.0 / 255.0, "{name}: max channel error {worst}");
+    }
+    let chain = Linear::new()
+        .domain(0.0, 100.0)
+        .range(Px(-1.0), Px(1.0))
+        .then(Diverging::blue_red().domain(-1.0, 0.0, 1.0));
+    let inputs: Vec<f64> = (0..SAMPLES).map(|i| i as f64 * 0.1 + 0.03).collect();
+    let gpu = dispatch(&cx, &chain, &inputs, None);
+    let mut worst = 0.0f32;
+    for (k, &x) in inputs.iter().enumerate() {
+        let cpu = chain.eval(x).to_array();
+        for c in 0..4 {
+            worst = worst.max((gpu[k * 4 + c] - cpu[c]).abs());
+        }
+    }
+    eprintln!("linear → diverging: max channel error = {worst:.2e}");
+    assert!(worst <= 1.0 / 255.0, "chain: max channel error {worst}");
+}
+
+/// GUP-419 AC2: `Categorical` over a dictionary of 20 keys (8 Okabe-Ito
+/// colours and 12 generated ones), exactly: every code in the domain,
+/// the null code and codes outside the domain (the null colour). Then a
+/// user palette longer than 8.
+#[test]
+fn categorical_gpu_matches_cpu_mirror() {
+    let cx = Context::new_blocking().unwrap();
+    let keys: Vec<Arc<str>> = (0..20).map(|i| format!("key {i}").into()).collect();
+    let mut c = Categorical::okabe_ito();
+    c.fit_keys(&keys).unwrap();
+    let mut inputs: Vec<f64> = (0..20).map(f64::from).collect();
+    inputs.extend([20.0, 63.0, 64.0, 1e6, f64::from(NULL_CODE)]);
+    assert_eq!(c.eval(f64::from(NULL_CODE)), NULL_COLOR);
+    assert_eq!(c.eval(20.0), NULL_COLOR, "outside the domain");
+    let worst = max_color_error(&cx, &c, &inputs);
+    eprintln!("categorical (20 keys): max channel error = {worst:.2e}");
+    assert_eq!(worst, 0.0, "a palette is read by texel, exactly");
+
+    let palette: Vec<Color> = (0..100u32)
+        .map(|i: u32| Color::hex(i.wrapping_mul(2_654_435_761) & 0xffffff))
+        .collect();
+    let mut long = Categorical::from_palette(palette.clone());
+    let keys: Vec<Arc<str>> = (0..100).map(|i| i.to_string().into()).collect();
+    long.fit_keys(&keys).unwrap();
+    let inputs: Vec<f64> = (0..101).map(f64::from).collect();
+    let worst = max_color_error(&cx, &long, &inputs);
+    assert_eq!(worst, 0.0);
+    assert_eq!(long.eval(99.0), palette[99]);
 }
 
 /// GUP-418 AC2: `Pow` and `Sqrt` within 0.25 px, over domains that start

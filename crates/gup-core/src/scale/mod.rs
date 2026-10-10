@@ -16,6 +16,7 @@
 //! their domain from the channel's keys ([`ShaderFn::fit_keys`]).
 
 mod categorical;
+mod diverging;
 mod legend;
 mod linear;
 mod log;
@@ -30,6 +31,7 @@ mod conformance;
 pub use categorical::{
     CATEGORICAL_COLORS, Categorical, CategoricalParams, MAX_PALETTE, NULL_COLOR, OKABE_ITO,
 };
+pub use diverging::{Diverging, DivergingParams};
 pub use legend::{ColorScale, Legend, Ramp, RampTick, Swatch};
 pub use linear::{Linear, LinearParams};
 pub use log::{Log, LogParams};

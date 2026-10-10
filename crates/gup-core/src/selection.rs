@@ -1090,8 +1090,8 @@ mod tests {
     #[test]
     fn rust_params_match_wgsl_params() {
         use crate::shader::{
-            COLOR_CATEGORICAL, COLOR_SEQUENTIAL, SCALE_LINEAR, SCALE_LOG, SCALE_POW, SCALE_SYMLOG,
-            SCALE_TIME,
+            COLOR_CATEGORICAL, COLOR_DIVERGING, COLOR_SEQUENTIAL, SCALE_LINEAR, SCALE_LOG,
+            SCALE_POW, SCALE_SYMLOG, SCALE_TIME,
         };
         use encase::ShaderType;
         for (module, size) in [
@@ -1107,6 +1107,10 @@ mod tests {
             (
                 &COLOR_SEQUENTIAL,
                 crate::scale::SequentialParams::min_size().get(),
+            ),
+            (
+                &COLOR_DIVERGING,
+                crate::scale::DivergingParams::min_size().get(),
             ),
         ] {
             let wgsl = parse(module.import_path, module.wgsl);

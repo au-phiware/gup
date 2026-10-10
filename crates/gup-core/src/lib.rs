@@ -99,9 +99,9 @@ pub use marks::Circle;
 pub use plot::{Layout, PlacedText, Plot, Resolved};
 pub use render::{PipelineStats, Prepared, Renderer, TargetDesc};
 pub use scale::{
-    CATEGORICAL_COLORS, Categorical, ColorScale, Legend, Linear, Log, MAX_PALETTE, NULL_COLOR,
-    OKABE_ITO, PositionScale, Pow, Ramp, RampTick, ScaleRef, Sequential, Swatch, Symlog, Ticks,
-    Time,
+    CATEGORICAL_COLORS, Categorical, ColorScale, Diverging, Legend, Linear, Log, MAX_PALETTE,
+    NULL_COLOR, OKABE_ITO, PositionScale, Pow, Ramp, RampTick, ScaleRef, Sequential, Swatch,
+    Symlog, Ticks, Time,
 };
 pub use scene::Scene;
 pub use selection::{Retain, Selection};
@@ -116,7 +116,8 @@ pub use window::WindowTarget;
 /// The names most programs need.
 pub mod prelude {
     pub use crate::{
-        Categorical, Circle, Color, ColorScale, Context, CpuMirror, EncodeFn, Linear, Log, Plot,
-        PositionScale, Pow, Px, Retain, ScaleRef, Selection, Sequential, ShaderFn, Symlog, Time,
+        Categorical, Circle, Color, ColorScale, Context, CpuMirror, Diverging, EncodeFn, Linear,
+        Log, Plot, PositionScale, Pow, Px, Retain, ScaleRef, Selection, Sequential, ShaderFn,
+        Symlog, Time,
     };
 }
