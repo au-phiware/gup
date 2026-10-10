@@ -20,6 +20,67 @@ use std::sync::Arc;
 /// The palette LUTs a layer's GPU state was built with.
 type Luts = Vec<Vec<[u8; 4]>>;
 
+/// How much CPU data a [`Selection`] keeps once its columns are on the
+/// GPU (RFC-001 §3).
+///
+/// Retained data serves picking (returning `&T`), vector output,
+/// accessibility descriptions, re-encoding a channel and uploading to
+/// another [`Context`]. Every policy keeps the column stats (which drive
+/// domains) and dictionaries, and the last, unfilled chunk's CPU copy, so
+/// rows can still be appended. Data is released after each successful
+/// [`Plot::resolve`](crate::Plot::resolve).
+///
+/// | Policy    | Rows (`T`)       | CPU columns      |
+/// | --------- | ---------------- | ---------------- |
+/// | `Auto`    | ≤ 10M rows: kept | ≤ 10M rows: kept |
+/// | `Rows`    | kept             | dropped          |
+/// | `Columns` | dropped          | kept             |
+/// | `GpuOnly` | dropped          | dropped          |
+///
+/// Without rows, re-encoding a channel (or resolving on a device that
+/// needs a different chunk size) is an error: there is nothing to run the
+/// new accessor on. Without rows or CPU columns, so under `GpuOnly`,
+/// resolving on another context is an error too. With rows but no CPU
+/// columns (`Rows`), another context re-evaluates the columns from the
+/// rows.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub enum Retain {
+    /// Keep everything up to [`Retain::AUTO_MAX_ROWS`] rows, and behave
+    /// as [`GpuOnly`](Retain::GpuOnly) above that.
+    #[default]
+    Auto,
+    /// Keep the rows; drop the CPU columns of full, uploaded chunks.
+    Rows,
+    /// Keep the CPU columns; drop the rows.
+    Columns,
+    /// Keep only stats and dictionaries (and the last chunk's CPU copy).
+    GpuOnly,
+}
+
+impl Retain {
+    /// The most rows [`Retain::Auto`] keeps on the CPU (RFC-001 §3).
+    pub const AUTO_MAX_ROWS: u64 = 10_000_000;
+
+    /// Whether a selection of `rows` rows keeps them after upload.
+    pub const fn keeps_rows(self, rows: u64) -> bool {
+        match self {
+            Retain::Auto => rows <= Self::AUTO_MAX_ROWS,
+            Retain::Rows => true,
+            Retain::Columns | Retain::GpuOnly => false,
+        }
+    }
+
+    /// Whether a selection of `rows` rows keeps its CPU columns after
+    /// upload.
+    pub const fn keeps_columns(self, rows: u64) -> bool {
+        match self {
+            Retain::Auto => rows <= Self::AUTO_MAX_ROWS,
+            Retain::Columns => true,
+            Retain::Rows | Retain::GpuOnly => false,
+        }
+    }
+}
+
 /// Rows of `T` drawn as mark `M`.
 ///
 /// ```
@@ -34,7 +95,11 @@ type Luts = Vec<Vec<[u8; 4]>>;
 ///     .attr(Circle::RADIUS, Px(2.5));
 /// ```
 pub struct Selection<T, M: Mark> {
+    /// The rows not yet released: rows `released..` of the selection.
     rows: Vec<T>,
+    /// How many leading rows were dropped after upload ([`Retain`]).
+    released: usize,
+    retain: Retain,
     encodings: Vec<Option<Encoding<T>>>,
     /// Evaluated columns, one per column-encoded channel in channel order.
     columns: Option<ColumnStore>,
@@ -51,7 +116,8 @@ impl<T, M: Mark> std::fmt::Debug for Selection<T, M> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Selection")
             .field("mark", &M::NAME)
-            .field("rows", &self.rows.len())
+            .field("rows", &(self.released + self.rows.len()))
+            .field("retain", &self.retain)
             .field("encodings", &self.encodings)
             .finish_non_exhaustive()
     }
@@ -63,6 +129,8 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
     pub fn new(rows: impl Into<Vec<T>>) -> Self {
         Self {
             rows: rows.into(),
+            released: 0,
+            retain: Retain::Auto,
             encodings: M::CHANNELS.iter().map(|_| None).collect(),
             columns: None,
             max_chunk_rows: None,
@@ -109,14 +177,32 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         Ok(())
     }
 
-    /// Number of rows.
+    /// Number of rows, including any dropped after upload.
     pub fn len(&self) -> usize {
-        self.rows.len()
+        self.released + self.rows.len()
     }
 
     /// Whether there are no rows.
     pub fn is_empty(&self) -> bool {
-        self.rows.is_empty()
+        self.len() == 0
+    }
+
+    /// Set how much CPU data to keep once the columns are on the GPU
+    /// (default [`Retain::Auto`]).
+    pub fn retain(&mut self, policy: Retain) -> &mut Self {
+        self.retain = policy;
+        self
+    }
+
+    /// Whether the rows were dropped after upload (see [`Retain`]).
+    pub fn rows_released(&self) -> bool {
+        self.released > 0
+    }
+
+    /// The evaluated column store, for tests.
+    #[cfg(test)]
+    pub(crate) fn store(&self) -> Option<&ColumnStore> {
+        self.columns.as_ref()
     }
 
     /// Drive `channel` with a constant or an encoding. The encoding's
@@ -152,11 +238,32 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             .collect();
         let chunk_rows = ColumnStore::chunk_rows_for(&cx.caps().limits, &formats)
             .min(self.max_chunk_rows.unwrap_or(u32::MAX));
-        if self
-            .columns
-            .as_ref()
-            .is_none_or(|c| c.chunk_rows() != chunk_rows)
-        {
+        let stale = match &self.columns {
+            None => Some("a channel was encoded after the rows were dropped"),
+            Some(c) if c.chunk_rows() != chunk_rows => {
+                Some("this device (or `max_chunk_rows`) needs a different chunk size")
+            }
+            // Released CPU columns (`Retain::Rows`, `GpuOnly`) cannot go to
+            // another context; with the rows, evaluate them again.
+            Some(c) if !c.uploadable_to(cx) => {
+                Some("the columns are on another context and their CPU copy was dropped")
+            }
+            Some(_) => None,
+        };
+        if let Some(reason) = stale {
+            if self.released > 0 {
+                return Err(Error::config(
+                    "layer",
+                    format!(
+                        "{} layer: its columns must be evaluated again ({reason}), but its {} \
+                         rows were dropped after upload (Retain::{:?}); keep them with \
+                         `.retain(Retain::Rows)` or `Retain::Columns`",
+                        M::NAME,
+                        self.len(),
+                        self.retain
+                    ),
+                ));
+            }
             let values: Vec<ColumnData<'_>> = self
                 .column_encodings()
                 .map(|(_, c)| c.evaluate(&self.rows))
@@ -243,6 +350,10 @@ pub(crate) trait Layer: wgpu::WasmNotSendSync {
     fn overhang(&self) -> f32;
     /// Generate the glue, link it (cached), write uniforms and upload.
     fn prepare(&mut self, cx: &Context) -> Result<MarkBatch>;
+    /// Drop the CPU data the [`Retain`] policy does not keep. Called after
+    /// a successful [`prepare`](Self::prepare), so everything dropped is
+    /// on the GPU.
+    fn release(&mut self);
     /// The generated glue (for tests and diagnostics).
     fn glue_source(&self) -> Glue;
     fn as_any_mut(&mut self) -> &mut dyn Any;
@@ -397,6 +508,21 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         );
         self.gpu = Some((Arc::clone(&gpu), luts));
         Ok(MarkBatch { gpu })
+    }
+
+    fn release(&mut self) {
+        let rows = self.len() as u64;
+        let Some(store) = &mut self.columns else {
+            return;
+        };
+        if !self.retain.keeps_columns(rows) {
+            store.release();
+        }
+        if !self.retain.keeps_rows(rows) {
+            // Drops every `T`: the store holds what the GPU needs.
+            self.released += self.rows.len();
+            self.rows = Vec::new();
+        }
     }
 
     fn glue_source(&self) -> Glue {

@@ -99,7 +99,7 @@ pub use scale::{
     Categorical, Linear, Log, NULL_COLOR, OKABE_ITO, PositionScale, ScaleRef, Sequential, Ticks,
 };
 pub use scene::Scene;
-pub use selection::Selection;
+pub use selection::{Retain, Selection};
 pub use shader::WgslModule;
 #[cfg(all(feature = "window", not(target_arch = "wasm32")))]
 pub use show::show;
@@ -112,6 +112,6 @@ pub use window::WindowTarget;
 pub mod prelude {
     pub use crate::{
         Categorical, Circle, Color, Context, CpuMirror, Linear, Log, Plot, PositionScale, Px,
-        Selection, Sequential, ShaderFn,
+        Retain, Selection, Sequential, ShaderFn,
     };
 }

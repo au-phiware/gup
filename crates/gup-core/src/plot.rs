@@ -281,6 +281,9 @@ impl Plot {
             || "layer resolution (column upload, uniforms)".to_owned(),
             || layer.prepare(cx),
         )?;
+        // Only after the upload succeeded: CPU data the layer's `Retain`
+        // policy does not keep.
+        layer.release();
 
         // 7. The scene.
         let mut scene = Scene::new(width, height, style::BACKGROUND);
@@ -449,6 +452,7 @@ mod tests {
     use crate::marks::Circle;
     use crate::scale::{Linear, Log, ScaleRef};
     use crate::scene::ItemKind;
+    use crate::selection::Retain;
     use std::sync::Arc;
 
     fn batch(r: &Resolved) -> Arc<crate::render::LayerGpu> {
@@ -621,5 +625,152 @@ mod tests {
         plot.y(Log::new());
         let err = plot.resolve(&cx, 300.0, 200.0).unwrap_err();
         assert!(err.to_string().contains("0 layers"), "{err}");
+    }
+
+    /// A row that counts its live copies through a shared token.
+    struct Tracked {
+        x: f64,
+        y: f64,
+        _token: Arc<()>,
+    }
+
+    fn tracked(range: std::ops::Range<u32>, token: &Arc<()>) -> Vec<Tracked> {
+        points(range)
+            .into_iter()
+            .map(|(x, y)| Tracked {
+                x,
+                y,
+                _token: Arc::clone(token),
+            })
+            .collect()
+    }
+
+    /// A scatter of tracked rows in chunks of at most 64 rows.
+    fn tracked_plot(rows: Vec<Tracked>, retain: Retain) -> (Plot, ScaleRef<Linear>) {
+        let mut plot = Plot::new();
+        let (x, y) = (plot.x(Linear::new()), plot.y(Log::new()));
+        plot.add(Selection::<Tracked, Circle>::new(rows))
+            .retain(retain)
+            .attr(Circle::X, x.encode(|r: &Tracked| r.x))
+            .attr(Circle::Y, y.encode(|r: &Tracked| r.y))
+            .max_chunk_rows(64);
+        (plot, x)
+    }
+
+    fn tracked_layer(plot: &mut Plot) -> &mut Selection<Tracked, Circle> {
+        plot.layers[0].as_any_mut().downcast_mut().unwrap()
+    }
+
+    /// Which chunks of the layer still have their CPU copy.
+    fn kept(plot: &mut Plot) -> Vec<bool> {
+        let store = tracked_layer(plot).store().unwrap();
+        store.chunks().iter().map(|c| c.bytes().is_some()).collect()
+    }
+
+    #[test]
+    fn retain_policies_keep_what_they_say() {
+        use Retain::*;
+        let max = Retain::AUTO_MAX_ROWS;
+        assert_eq!(Retain::default(), Auto);
+        for (policy, rows, keeps) in [
+            (Auto, max, (true, true)),
+            (Auto, max + 1, (false, false)),
+            (Rows, max + 1, (true, false)),
+            (Columns, 1, (false, true)),
+            (GpuOnly, 1, (false, false)),
+        ] {
+            assert_eq!(
+                (policy.keeps_rows(rows), policy.keeps_columns(rows)),
+                keeps,
+                "{policy:?} at {rows} rows"
+            );
+        }
+    }
+
+    /// S4b (AC5): under `GpuOnly`, a successful resolve drops every row
+    /// (each `T` is dropped, not just unused) and the CPU copy of every
+    /// full chunk, keeping stats and GPU buffers: zooming still works and
+    /// renders what a plot that kept everything renders. Appended rows are
+    /// dropped after their upload too. Resolving on another context, or
+    /// re-encoding a channel, is an error naming the policy.
+    #[test]
+    fn gpu_only_drops_rows_and_full_chunks_after_upload() {
+        let cx = Context::new_blocking().unwrap();
+        let token = Arc::new(());
+        let (mut plot, x) = tracked_plot(tracked(0..150, &token), Retain::GpuOnly);
+        assert_eq!(Arc::strong_count(&token), 151);
+        let resolved = plot.resolve(&cx, 400.0, 300.0).unwrap();
+        assert_eq!(Arc::strong_count(&token), 1, "every row was dropped");
+        assert!(tracked_layer(&mut plot).rows_released());
+        assert_eq!(tracked_layer(&mut plot).len(), 150);
+        assert_eq!(kept(&mut plot), [false, false, true]);
+        let stats = tracked_layer(&mut plot).store().unwrap().stats(0).unwrap();
+        assert_eq!(stats.extent(), (points(0..1)[0].0, points(149..150)[0].0));
+
+        // The same picture as a plot that keeps everything.
+        let mut target = ImageTarget::new(&cx, 400, 300).unwrap();
+        let released = target.render_blocking(&cx, &resolved.scene).unwrap();
+        let (mut keep, _) = tracked_plot(tracked(0..150, &token), Retain::Auto);
+        let kept_image = keep.render(&cx, 400, 300).unwrap();
+        assert!(released == kept_image, "releasing changed the render");
+        drop(keep);
+
+        // Zooming writes uniforms only.
+        let start = cx.upload_stats();
+        plot.zoom(Point::new(200.0, 150.0), 0.5).unwrap();
+        let zoomed = plot.resolve(&cx, 400.0, 300.0).unwrap();
+        assert_eq!(batch(&zoomed).instances(), 150);
+        assert_eq!((cx.upload_stats() - start).columns, Default::default());
+
+        // Appending: the new rows are evaluated, uploaded, then dropped.
+        tracked_layer(&mut plot)
+            .append(tracked(150..170, &token))
+            .unwrap();
+        assert_eq!(Arc::strong_count(&token), 21);
+        let grown = plot.resolve(&cx, 400.0, 300.0).unwrap();
+        assert_eq!(batch(&grown).instances(), 170);
+        assert_eq!(Arc::strong_count(&token), 1);
+        assert_eq!(kept(&mut plot), [false, false, true]);
+
+        let other = Context::from_wgpu(cx.device().clone(), cx.queue().clone());
+        let err = plot.resolve(&other, 400.0, 300.0).unwrap_err().to_string();
+        assert!(
+            err.contains("on another context and their CPU copy was dropped")
+                && err.contains("Retain::GpuOnly"),
+            "{err}"
+        );
+
+        tracked_layer(&mut plot).attr(Circle::X, x.encode(|r: &Tracked| r.x * 2.0));
+        let err = plot.resolve(&cx, 400.0, 300.0).unwrap_err().to_string();
+        assert!(
+            err.contains("Circle layer: its columns must be evaluated again")
+                && err.contains("170 rows were dropped after upload (Retain::GpuOnly)"),
+            "{err}"
+        );
+    }
+
+    /// S4b: `Rows` keeps the rows and re-evaluates them for another
+    /// context; `Columns` drops the rows but uploads its CPU columns to
+    /// another context; `Auto` keeps both at this size.
+    #[test]
+    fn rows_and_columns_policies_survive_another_context() {
+        let cx = Context::new_blocking().unwrap();
+        let other = Context::from_wgpu(cx.device().clone(), cx.queue().clone());
+        let token = Arc::new(());
+        for (policy, rows_kept, chunks_kept) in [
+            (Retain::Rows, true, [false, false, true]),
+            (Retain::Columns, false, [true, true, true]),
+            (Retain::Auto, true, [true, true, true]),
+        ] {
+            let (mut plot, _) = tracked_plot(tracked(0..150, &token), policy);
+            let here = plot.render(&cx, 400, 300).unwrap();
+            assert_eq!(Arc::strong_count(&token) > 1, rows_kept, "{policy:?}");
+            assert_eq!(kept(&mut plot), chunks_kept, "{policy:?}");
+            let there = plot.render(&other, 400, 300).unwrap();
+            assert!(
+                here == there,
+                "{policy:?}: another context renders differently"
+            );
+        }
     }
 }
