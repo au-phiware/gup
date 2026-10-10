@@ -277,7 +277,7 @@ impl PositionScale for Symlog {
             .iter()
             .map(|&v| match v {
                 0.0 => "0".to_string(),
-                v if v < 0.0 => format!("-{}", format_log_tick(-v)),
+                v if v < 0.0 => format!("{}{}", super::MINUS, format_log_tick(-v)),
                 v => format_log_tick(v),
             })
             .collect();
@@ -332,17 +332,17 @@ mod tests {
         let t = s.ticks(10);
         assert_eq!(
             t.labels,
-            vec!["-10k", "-1k", "-100", "-10", "0", "10", "100", "1k", "10k"]
+            vec!["−10k", "−1k", "−100", "−10", "0", "10", "100", "1k", "10k"]
         );
         // Few decades get 2× and 5×; a wide domain thins to every other.
         let few = Symlog::new().constant(1.0).domain(-50.0, 50.0).ticks(10);
-        assert!(few.labels.contains(&"-20".to_string()), "{:?}", few.labels);
+        assert!(few.labels.contains(&"−20".to_string()), "{:?}", few.labels);
         let wide = Symlog::new().constant(1.0).domain(-1e12, 1e12).ticks(8);
         assert!(wide.values.len() <= 13, "{:?}", wide.labels);
         assert!(wide.values.contains(&0.0));
         // Inside the linear region: evenly spaced.
         let lin = Symlog::new().constant(10.0).domain(-4.0, 4.0).ticks(4);
-        assert_eq!(lin.labels, vec!["-4", "-2", "0", "2", "4"]);
+        assert_eq!(lin.labels, vec!["−4", "−2", "0", "2", "4"]);
     }
 
     #[test]

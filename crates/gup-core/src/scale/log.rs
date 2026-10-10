@@ -200,7 +200,7 @@ pub(super) fn format_log_tick(v: f64) -> String {
         format!("{}", (x * scale).round() / scale)
     };
     if v < 1e-3 {
-        return format!("{v:e}");
+        return super::typographic(format!("{v:e}"));
     }
     for (div, suffix) in [(1e12, "T"), (1e9, "G"), (1e6, "M"), (1e3, "k")] {
         if v >= div {
@@ -268,7 +268,7 @@ mod tests {
         let pop = Log::new().domain(1e5, 1e9).ticks(8).labels;
         assert_eq!(pop[..4], ["100k", "200k", "500k", "1M"]);
         assert_eq!(pop.last().unwrap(), "1G");
-        assert_eq!(format_log_tick(2e-5), "2e-5");
+        assert_eq!(format_log_tick(2e-5), "2e\u{2212}5");
     }
 
     #[test]

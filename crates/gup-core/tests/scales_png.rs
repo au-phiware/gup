@@ -170,7 +170,7 @@ fn symlog_signed_scatter() {
     let (image, layout) = plot.render_resolved(&cx, WIDTH, HEIGHT).unwrap();
     // Ticks either side of zero, and zero itself.
     let labels: Vec<&str> = layout.texts.iter().map(|t| &*t.run.text).collect();
-    for want in ["0", "10", "-10", "1k", "-1k", "100k", "-100k"] {
+    for want in ["0", "10", "−10", "1k", "−1k", "100k", "−100k"] {
         assert!(labels.contains(&want), "no {want:?} tick in {labels:?}");
     }
     // No jump at zero or at the constant (±1), and every point is drawn

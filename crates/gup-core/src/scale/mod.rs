@@ -262,7 +262,22 @@ pub(crate) fn step_value(i: f64, step: f64) -> f64 {
     i * step
 }
 
-/// Format `v` with as many decimals as `step` needs (no `-0`).
+/// The minus sign tick labels use: U+2212 MINUS SIGN, as wide as a digit
+/// in the bundled font (tabular figures), not the shorter hyphen-minus.
+pub(crate) const MINUS: char = '\u{2212}';
+
+/// `label` with every hyphen-minus (a sign or an exponent's sign) set as
+/// [`MINUS`].
+pub(crate) fn typographic(label: String) -> String {
+    if label.contains('-') {
+        label.replace('-', "\u{2212}")
+    } else {
+        label
+    }
+}
+
+/// Format `v` with as many decimals as `step` needs (no `−0`), with a
+/// typographic minus sign.
 pub(crate) fn format_with_step(v: f64, step: f64) -> String {
     let decimals = if step >= 1.0 {
         0
@@ -276,7 +291,7 @@ pub(crate) fn format_with_step(v: f64, step: f64) -> String {
     {
         s.trim_start_matches('-').to_string()
     } else {
-        s
+        typographic(s)
     }
 }
 
@@ -346,7 +361,7 @@ mod tests {
         // Digits, sign, point, exponent, every SI suffix and the calendar
         // labels' colon were reached (month names are checked below).
         emitted.extend("JanFebMarAprMayJunJulAugSepOctNovDec".chars());
-        for c in "0123456789-.ekMGT:".chars() {
+        for c in "0123456789−.ekMGT:".chars() {
             assert!(
                 emitted.contains(&c),
                 "the sweep never emitted {c:?}: {emitted:?}"
