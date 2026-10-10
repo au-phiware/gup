@@ -11,7 +11,7 @@
   <body>
     <pre id="out">pending</pre>
     <script type="module">
-      import init, { render_scatter } from "./scatter.js";
+      import init, { render_scatter, render_categorical } from "./scatter.js";
       const out = document.getElementById("out");
       const [w, h] = [320, 200];
       let result;
@@ -57,14 +57,55 @@
           else if (Math.abs(r - g) < 8 && Math.abs(g - b) < 8) grey++;
           else coloured++;
         }
+        // A dictionary-encoded colour (RFC-001 S4b): four keys through
+        // `encode_nullable_key` must draw in the first four Okabe-Ito
+        // colours and missing keys in the null grey; a row with a NaN x is
+        // not drawn (validity bits read in the vertex stage), so leaving the
+        // row out gives the same pixels.
+        const dict = await render_categorical(w, h, false);
+        const dictDropped = await render_categorical(w, h, true);
+        let dictDiff = dict.length === dictDropped.length ? 0 : w * h;
+        for (let i = 0; i < Math.min(dict.length, dictDropped.length); i += 4) {
+          for (let c = 0; c < 4; c++) {
+            if (dict[i + c] !== dictDropped[i + c]) {
+              dictDiff++;
+              break;
+            }
+          }
+        }
+        const expected = [
+          [0xe6, 0x9f, 0x00],
+          [0x56, 0xb4, 0xe9],
+          [0x00, 0x9e, 0x73],
+          [0xf0, 0xe4, 0x42],
+          [0x99, 0x99, 0x99],
+        ];
+        const dictCounts = expected.map(([r, g, b]) => {
+          let n = 0;
+          for (let i = 0; i < dict.length; i += 4) {
+            if (
+              Math.abs(dict[i] - r) <= 1 &&
+              Math.abs(dict[i + 1] - g) <= 1 &&
+              Math.abs(dict[i + 2] - b) <= 1
+            )
+              n++;
+          }
+          return n;
+        });
         const c = document.createElement("canvas");
-        [c.width, c.height] = [w, h];
-        c.getContext("2d").putImageData(
+        [c.width, c.height] = [w, 2 * h];
+        const ctx = c.getContext("2d");
+        ctx.putImageData(
           new ImageData(new Uint8ClampedArray(chunked), w, h),
           0,
           0
         );
-        // The PNG is the chunked render.
+        ctx.putImageData(
+          new ImageData(new Uint8ClampedArray(dict), w, h),
+          0,
+          h
+        );
+        // The PNG is the chunked render above the dictionary render.
         console.log("GUPPNG " + c.toDataURL("image/png"));
         // The scatter covers a fraction of the plot; a flooded plot (a
         // uniform-layout bug) or an empty one fails.
@@ -73,8 +114,10 @@
           coloured < 0.4 * w * h &&
           grey > 1000 &&
           chunkDiff <= 64 &&
-          chunkWorst <= 1;
-        result = `${ok ? "PASS" : "FAIL"} white=${white} grey=${grey} coloured=${coloured} chunked-diff=${chunkDiff}px/${chunkWorst}`;
+          chunkWorst <= 1 &&
+          dictCounts.every(n => n >= 20) &&
+          dictDiff === 0;
+        result = `${ok ? "PASS" : "FAIL"} white=${white} grey=${grey} coloured=${coloured} chunked-diff=${chunkDiff}px/${chunkWorst} dict=${dictCounts.join(",")} dict-null-row-diff=${dictDiff}px`;
       } catch (e) {
         result = "FAIL " + e;
       }

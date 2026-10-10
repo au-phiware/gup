@@ -5,7 +5,9 @@
 //! labels) on a tinted plot background with a viridis legend bar, drawn
 //! through gup-core into an `ImageTarget` and read back asynchronously,
 //! plus its guides as SVG: everything a browser chart needs from gup-core
-//! today, and every pipeline kind (marks, rules, rects, gradients, text).
+//! today, and every pipeline kind (marks, rules, rects, gradients, text). A
+//! second scene colours points by a dictionary-encoded key, with nulls
+//! (RFC-001 S4b).
 
 use gup_core::geom::Rect;
 use gup_core::prelude::*;
@@ -113,6 +115,61 @@ pub async fn render_scatter(
     svg.render(&scene.guides()).map_err(js)?;
     web_log(svg.svg().len());
     Ok(image.into_raw())
+}
+
+/// A scatter coloured by a dictionary-encoded key (RFC-001 S4b): 60 rows
+/// over four keys through `Categorical::encode_nullable_key`, every ninth
+/// key missing (the null colour) and row 40's x NaN (not drawn, through the
+/// validity bits read in the vertex stage). With `drop_null_row` row 40 is
+/// left out instead, and the page checks that the pixels do not change.
+/// Returns straight-alpha RGBA pixels.
+#[wasm_bindgen]
+pub async fn render_categorical(
+    width: u32,
+    height: u32,
+    drop_null_row: bool,
+) -> Result<Vec<u8>, JsValue> {
+    std::panic::set_hook(Box::new(|info| web_error(&info.to_string())));
+    let cx = Context::new().await.map_err(js)?;
+    let keys = ["Europe", "Asia", "Africa", "Americas"];
+    let rows: Vec<Place> = (0..60u32)
+        .filter(|&i| !(drop_null_row && i == 40))
+        .map(|i| Place {
+            x: if i == 40 { f64::NAN } else { f64::from(i) },
+            y: f64::from((i * 7) % 11 + 1),
+            key: (i % 9 != 4).then_some(keys[(i % 4) as usize]),
+        })
+        .collect();
+    let mut plot = Plot::new();
+    let (x, y) = (
+        plot.x(Linear::new().domain(-1.0, 60.0)),
+        plot.y(Linear::new().domain(0.0, 12.0)),
+    );
+    plot.title("Dictionary colours")
+        .add(Selection::<Place, Circle>::new(rows))
+        .attr(Circle::X, x.encode(|p: &Place| p.x))
+        .attr(Circle::Y, y.encode(|p: &Place| p.y))
+        .attr(
+            Circle::FILL,
+            Categorical::okabe_ito().encode_nullable_key(|p: &Place| p.key),
+        )
+        .attr(Circle::RADIUS, Px(4.5));
+    let resolved = plot
+        .resolve(&cx, width as f32, height as f32)
+        .map_err(js)?;
+    let image = ImageTarget::new(&cx, width, height)
+        .map_err(js)?
+        .render(&cx, &resolved.scene)
+        .await
+        .map_err(js)?;
+    Ok(image.into_raw())
+}
+
+/// A row of the dictionary scene.
+struct Place {
+    x: f64,
+    y: f64,
+    key: Option<&'static str>,
 }
 
 #[wasm_bindgen]
