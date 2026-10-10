@@ -41,23 +41,34 @@ pub const OKABE_ITO: [Color; 8] = [
 ///
 /// ```
 /// use gup_core::prelude::*;
-/// use gup_core::{Categorical, NULL_COLOR, OKABE_ITO};
+/// use gup_core::{NULL_COLOR, OKABE_ITO};
 ///
-/// struct Row { x: f64, y: f64, continent: String }
+/// struct Row { x: f64, y: f64, continent: Option<String> }
 /// let rows = vec![
-///     Row { x: 1.0, y: 2.0, continent: "Asia".into() },
-///     Row { x: 2.0, y: 3.0, continent: "Europe".into() },
+///     Row { x: 1.0, y: 1.0, continent: Some("Asia".into()) },
+///     Row { x: 2.0, y: 2.0, continent: Some("Europe".into()) },
+///     Row { x: 3.0, y: 3.0, continent: None },
 /// ];
+/// let cx = Context::new_blocking()?;
 /// let mut plot = Plot::new();
 /// let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
 /// plot.add(Selection::<Row, Circle>::new(rows))
 ///     .attr(Circle::X, x.encode(|r: &Row| r.x))
 ///     .attr(Circle::Y, y.encode(|r: &Row| r.y))
-///     // The accessor returns a borrow of its row.
-///     .attr(Circle::FILL, Categorical::okabe_ito().encode_key(|r: &Row| r.continent.as_str()));
-/// // Asia was seen first, so it is drawn in the first palette colour.
-/// assert_eq!(Categorical::okabe_ito().eval(0.0), OKABE_ITO[0]);
-/// assert_eq!(Categorical::okabe_ito().eval(f64::NAN), NULL_COLOR);
+///     .attr(Circle::RADIUS, Px(6.0))
+///     // The accessor returns a borrow of its row; `None` is a null.
+///     .attr(
+///         Circle::FILL,
+///         Categorical::okabe_ito().encode_nullable_key(|r: &Row| r.continent.as_deref()),
+///     );
+/// let image = plot.render(&cx, 320, 200)?;
+///
+/// // Codes in first-seen order: Asia 0, Europe 1; the missing key is null.
+/// let centre = |v: f64| image.get_pixel(x.read().eval(v) as u32, y.read().eval(v) as u32).0;
+/// assert_eq!(centre(1.0), OKABE_ITO[0].to_rgba8());
+/// assert_eq!(centre(2.0), OKABE_ITO[1].to_rgba8());
+/// assert_eq!(centre(3.0), NULL_COLOR.to_rgba8());
+/// # Ok::<(), gup_core::Error>(())
 /// ```
 #[derive(Clone, Debug, PartialEq)]
 pub struct Categorical {

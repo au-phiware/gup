@@ -8,7 +8,10 @@
 //! - one cloneable [`Context`] that owns or wraps a wgpu device;
 //! - a GPU [column store](mod@column) — accessors run once, columns live on
 //!   the GPU as instance-rate vertex buffers, relative to a per-chunk f64
-//!   origin;
+//!   origin; string keys are dictionary-encoded ([`ShaderFn::encode_key`]),
+//!   nulls are validity bits or a reserved code (a null position is not
+//!   drawn, a null colour is [`NULL_COLOR`]), and [`Retain`] says how much
+//!   CPU data to keep after upload;
 //! - typed [channels](channel): `Circle::RADIUS: Channel<Circle, Px>`, so
 //!   wrong value types, unknown channels and wrong marks don't compile;
 //! - one [scale] family, each a [`ShaderFn`] with an f64
@@ -21,10 +24,10 @@
 //!   [`RenderTarget`] ([`ImageTarget`], [`TextureTarget`], a window, or a
 //!   host's own pass), or written as SVG by [`SvgTarget`] (guides only).
 //!
-//! The data side is still the S0 vertical slice: one mark ([`Circle`]), three scales
-//! ([`Linear`], [`Log`], [`Sequential`]) and a headless PNG path. It is not
-//! re-exported by the `gup` crate until the RFC-001 S14 flip, and it never
-//! depends on `gup`.
+//! The data side is still the S0 vertical slice: one mark ([`Circle`]), four
+//! scales ([`Linear`], [`Log`], [`Sequential`] and a minimal [`Categorical`])
+//! and a headless PNG path. It is not re-exported by the `gup` crate until
+//! the RFC-001 S14 flip, and it never depends on `gup`.
 //!
 //! ## Contracts
 //!
