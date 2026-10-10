@@ -11,7 +11,9 @@
 //! `Symlog`, `Sqrt` and a `then` chain) and checks them against their CPU
 //! mirrors. A fourth and fifth draw the colour and ordinal scales of
 //! RFC-001 S5b: a `Band` axis with an 11-key `Categorical` and its swatch
-//! legend, a hidden null key, and a `Diverging` scale with its ramp.
+//! legend, a hidden null key, and a `Diverging` scale with its ramp. A
+//! sixth draws user functions written with `#[wgsl_function]` (RFC-001
+//! S5c).
 
 use gup_core::geom::Rect;
 use gup_core::prelude::*;
@@ -542,6 +544,174 @@ pub async fn render_diverging(width: u32, height: u32) -> Result<Vec<u8>, JsValu
         if (0..3).any(|k| got[k].abs_diff(want[k]) > 3) {
             return fail(format!("legend {end} drew {got:?}, not {want:?}"));
         }
+    }
+    Ok(image.into_raw())
+}
+
+/// The energy an earthquake releases, in joules, from its magnitude
+/// (`log10 E = 1.5 M + 4.8`): a user's function (RFC-001 S5c), composed
+/// and checked when this crate compiles.
+#[derive(Clone)]
+struct Energy;
+
+#[wgsl_function(
+    monotonic,
+    wgsl = r#"
+    struct Params { slope: f32, offset: f32 }
+
+    fn energy(magnitude: f32, p: Params) -> f32 {
+        return pow(10.0, p.slope * magnitude + p.offset);
+    }
+"#
+)]
+impl ShaderFn for Energy {
+    fn params(&self) -> EnergyParams {
+        EnergyParams {
+            slope: 1.5,
+            offset: 4.8,
+        }
+    }
+}
+
+impl CpuMirror for Energy {
+    fn eval(&self, magnitude: f64) -> f64 {
+        10f64.powf(1.5 * magnitude + 4.8)
+    }
+}
+
+/// A two-colour ramp over `[d0, d1]`: a user colour function whose
+/// `Params` hold colours.
+#[derive(Clone)]
+struct Blend {
+    from: Color,
+    to: Color,
+}
+
+#[wgsl_function(wgsl = r#"
+    struct Params { low: vec4<f32>, high: vec4<f32>, lo: f32, hi: f32 }
+
+    fn blend(v: f32, p: Params) -> vec4<f32> {
+        return mix(p.low, p.high, clamp((v - p.lo) / (p.hi - p.lo), 0.0, 1.0));
+    }
+"#)]
+impl ShaderFn for Blend {
+    fn params(&self) -> BlendParams {
+        BlendParams {
+            low: self.from,
+            high: self.to,
+            lo: 0.0,
+            hi: 40.0,
+        }
+    }
+}
+
+impl CpuMirror for Blend {
+    fn eval(&self, v: f64) -> Color {
+        let t = (v / 40.0).clamp(0.0, 1.0) as f32;
+        let mix = |a: f32, b: f32| a + (b - a) * t;
+        Color {
+            r: mix(self.from.r, self.to.r),
+            g: mix(self.from.g, self.to.g),
+            b: mix(self.from.b, self.to.b),
+            a: mix(self.from.a, self.to.a),
+        }
+    }
+}
+
+/// RFC-001 S5c (GUP-420): user functions written with `#[wgsl_function]`
+/// in this crate. Each quake's radius goes through `Energy` then the
+/// built-in `Pow::sqrt()` (area grows with energy), and its fill through
+/// `Blend`, whose `Params` hold two colours. Checks each centre's colour
+/// and the largest disc's radius against the mirrors, and throws on a
+/// mismatch.
+#[wasm_bindgen]
+pub async fn render_user_function(width: u32, height: u32) -> Result<Vec<u8>, JsValue> {
+    std::panic::set_hook(Box::new(|info| web_error(&info.to_string())));
+    let cx = Context::new().await.map_err(js)?;
+    // (lon, lat, magnitude, depth km), largest first.
+    let quakes: Vec<(f64, f64, f64, f64)> = (0..30u32)
+        .map(|i| {
+            let t = f64::from(i);
+            let magnitude = if i == 0 { 7.4 } else { 6.0 - 0.08 * t };
+            (
+                0.5 * (t * 2.399).cos() * (t / 30.0).sqrt(),
+                0.5 * (t * 2.399).sin() * (t / 30.0).sqrt(),
+                magnitude,
+                (t * 7.3) % 40.0,
+            )
+        })
+        .collect();
+    let radius = Energy.then(
+        Pow::sqrt()
+            .domain(0.0, Energy.eval(7.4))
+            .range(Px(2.0), Px(24.0)),
+    );
+    let fill = Blend {
+        from: Color::hex(0xf0c419),
+        to: Color::hex(0x3b1f6e),
+    };
+    let mut plot = Plot::new();
+    let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
+    type Quake = (f64, f64, f64, f64);
+    plot.title("User functions")
+        .add(Selection::<Quake, Circle>::new(quakes.clone()))
+        .attr(Circle::X, x.encode(|q: &Quake| q.0))
+        .attr(Circle::Y, y.encode(|q: &Quake| q.1))
+        .attr(Circle::RADIUS, radius.encode(|q: &Quake| q.2))
+        .attr(Circle::FILL, fill.encode(|q: &Quake| q.3));
+    let resolved = plot.resolve(&cx, width as f32, height as f32).map_err(js)?;
+    let image = ImageTarget::new(&cx, width, height)
+        .map_err(js)?
+        .render(&cx, &resolved.scene)
+        .await
+        .map_err(js)?;
+    let fail = |m: String| Err(JsValue::from_str(&format!("user function: {m}")));
+    // Later (smaller) discs draw over earlier ones: check the centres no
+    // later disc covers.
+    let centres: Vec<(f64, f64, f64)> = quakes
+        .iter()
+        .map(|q| (x.read().eval(q.0), y.read().eval(q.1), radius.eval(q.2)))
+        .collect();
+    let mut checked = 0;
+    for (i, q) in quakes.iter().enumerate() {
+        let (px, py, _) = centres[i];
+        if centres[i + 1..]
+            .iter()
+            .any(|&(cx_, cy, r)| (cx_ - px).hypot(cy - py) < r + 1.5)
+        {
+            continue;
+        }
+        let want = fill.eval(q.3).to_rgba8();
+        let got = image.get_pixel(px as u32, py as u32).0;
+        if (0..3).any(|k| got[k].abs_diff(want[k]) > 2) {
+            return fail(format!("{q:?} drew {got:?}, not the mirror's {want:?}"));
+        }
+        checked += 1;
+    }
+    if checked < 10 {
+        return fail(format!("only {checked} centres were visible"));
+    }
+    // The largest disc's edge is at the chain's mirror radius, 24 px:
+    // ink 2 px inside it, white 2 px outside, along each axis.
+    let (mx, my, r) = centres[0];
+    if (r - 24.0).abs() > 1e-9 {
+        return fail(format!("the largest radius is {r}, not 24"));
+    }
+    let white = |dx: f64, dy: f64| {
+        image.get_pixel((mx + dx) as u32, (my + dy) as u32).0[..3] == [255, 255, 255]
+    };
+    let outside = [(-1.0, 0.0), (1.0, 0.0), (0.0, -1.0), (0.0, 1.0)]
+        .iter()
+        .filter(|&&(dx, dy)| white(dx * (r + 2.0), dy * (r + 2.0)))
+        .count();
+    let inside = [(-1.0, 0.0), (1.0, 0.0), (0.0, -1.0), (0.0, 1.0)]
+        .iter()
+        .filter(|&&(dx, dy)| !white(dx * (r - 2.0), dy * (r - 2.0)))
+        .count();
+    if outside == 0 || inside < 4 {
+        return fail(format!(
+            "the largest disc's edge: {inside} of 4 inked inside, {outside} white outside"
+        ));
     }
     Ok(image.into_raw())
 }

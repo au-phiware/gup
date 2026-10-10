@@ -4,7 +4,7 @@ error: the WGSL of `Gamma` (module `$CRATE::gamma`) does not compose:
           │
        12 │     struct Params { gamma2: f32 }
           │     ^^^^^^^^^^^^^^^^^^^^^^^^^^^ Composable module identifiers must not require substitution according to naga writeback rules: `gamma2`
-       note: naga's WGSL writer renames identifiers that end in a digit or contain `__`, so a module's items and struct members cannot: rename `gamma2` (to `gamma_b`, say)
+       note: naga's WGSL writer renames identifiers that end in a digit or contain `__`, so a module's items and struct members cannot: rename `gamma2` (to `gamma_c`, say)
   --> tests/wgsl_function_fail/trailing_digit.rs:11:24
    |
 11 | #[wgsl_function(wgsl = r#"

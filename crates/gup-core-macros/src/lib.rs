@@ -27,12 +27,12 @@ use syn::{ImplItem, ItemImpl, LitStr};
 /// See `gup_core::wgsl_function`.
 #[proc_macro_attribute]
 pub fn wgsl_function(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let item: TokenStream2 = item.into();
-    match expand(attr.into(), item.clone()) {
+    let (attr, item): (TokenStream2, TokenStream2) = (attr.into(), item.into());
+    match expand(attr.clone(), item.clone()) {
         Ok(tokens) => tokens.into(),
         Err(e) => {
             let mut out = e.to_compile_error();
-            out.extend(stub(item));
+            out.extend(stub(attr, item));
             out.into()
         }
     }
@@ -40,7 +40,7 @@ pub fn wgsl_function(attr: TokenStream, item: TokenStream) -> TokenStream {
 
 /// After an error, a placeholder impl, so that the type's other uses
 /// (`impl CpuMirror`, `encode`, `then`) do not add errors of their own.
-fn stub(item: TokenStream2) -> TokenStream2 {
+fn stub(attr: TokenStream2, item: TokenStream2) -> TokenStream2 {
     let Ok(imp) = syn::parse2::<ItemImpl>(item) else {
         return TokenStream2::new();
     };
@@ -52,9 +52,24 @@ fn stub(item: TokenStream2) -> TokenStream2 {
     // The user's items, but for those the macro derives and `params`,
     // whose return type (the twin) was never generated.
     let replaced = ["In", "Params", "MODULE", "ENTRY", "input_format", "params"];
-    let mut out = quote!(
-        type Out = f32;
-    );
+    // `Out` as the WGSL spells it, read lexically (it may not compose).
+    let colour = parse_args(attr)
+        .ok()
+        .and_then(|args| {
+            let text = load(args.wgsl.as_ref()?).ok()?.text;
+            let entry = args.entry.map(|e| e.value());
+            Some(returns_colour(&text, entry.as_deref()))
+        })
+        .unwrap_or(false);
+    let mut out = if colour {
+        quote!(
+            type Out = ::gup_core::Color;
+        )
+    } else {
+        quote!(
+            type Out = f32;
+        )
+    };
     let mut kept = Vec::new();
     for item in &imp.items {
         let name = match item {
@@ -89,15 +104,40 @@ fn stub(item: TokenStream2) -> TokenStream2 {
     }
 }
 
+/// Whether the function `entry` (or else the last function) in `wgsl`
+/// returns `vec4<f32>`, by a lexical scan.
+fn returns_colour(wgsl: &str, entry: Option<&str>) -> bool {
+    let mut found = None;
+    for chunk in wgsl.split("fn ").skip(1) {
+        let name: String = chunk
+            .chars()
+            .take_while(|c| c.is_alphanumeric() || *c == '_')
+            .collect();
+        let Some(ret) = chunk.split('{').next().and_then(|s| s.split("->").nth(1)) else {
+            continue;
+        };
+        if entry.is_none_or(|e| e == name) {
+            found = Some(ret.trim().replace(' ', "") == "vec4<f32>");
+        }
+    }
+    found.unwrap_or(false)
+}
+
 /// A plainer explanation of naga_oil's terser reports.
 fn hint(report: &str) -> String {
     if let Some(rest) = report.split("naga writeback rules: `").nth(1) {
         let name = rest.split('`').next().unwrap_or_default();
         let base = name.trim_end_matches(|c: char| c.is_ascii_digit() || c == '_');
+        let digits = name[base.len()..].trim_start_matches('_');
+        let letter = digits
+            .parse::<u8>()
+            .ok()
+            .filter(|n| *n < 26)
+            .map_or('b', |n| char::from(b'a' + n));
         format!(
             "\nnote: naga's WGSL writer renames identifiers that end in a digit or contain \
              `__`, so a module's items and struct members cannot: rename `{name}` (to \
-             `{base}_b`, say)"
+             `{base}_{letter}`, say)"
         )
     } else if report.contains("Requires") && report.contains("arguments") {
         "\nnote: a call passes a different number of arguments than the function takes".into()
@@ -701,6 +741,17 @@ mod tests {
         assert_eq!(snake_case("EnergyScale"), "energy_scale");
         assert_eq!(snake_case("HSLColor"), "hsl_color");
         assert_eq!(snake_case("Log2Scale"), "log2_scale");
+    }
+
+    #[test]
+    fn the_result_type_is_read_lexically() {
+        let wgsl = "struct Params { k: f32 }\n\
+                    fn ease(t: f32) -> f32 { return t; }\n\
+                    fn paint(v: f32, p: Params) -> vec4 < f32 > { return vec4<f32>(v); }\n";
+        assert!(returns_colour(wgsl, None));
+        assert!(returns_colour(wgsl, Some("paint")));
+        assert!(!returns_colour(wgsl, Some("ease")));
+        assert!(!returns_colour("fn f(v: f32, p: Params) -> f32 {", None));
     }
 
     #[test]

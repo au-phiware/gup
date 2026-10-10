@@ -411,6 +411,67 @@ mod tests {
         assert_eq!(cx.pipelines().mark_pipelines(), vec![signature]);
     }
 
+    /// A user's shader function, as `#[wgsl_function]` generates it
+    /// (GUP-420): its module's import path is `gup_core::doubled`.
+    #[derive(Clone)]
+    struct Doubled;
+
+    #[crate::wgsl_function(wgsl = r#"
+        struct Params { k: f32 }
+
+        fn doubled(v: f32, p: Params) -> f32 {
+            return v * p.k;
+        }
+    "#)]
+    impl crate::ShaderFn for Doubled {
+        type Out = crate::Px;
+
+        fn params(&self) -> DoubledParams {
+            DoubledParams { k: 2.0 }
+        }
+    }
+
+    /// GUP-420 AC5: a user function that composed at compile time but
+    /// whose pipeline fails (seeded as GUP-410's tests seed it) is an
+    /// `Error::Gpu` whose pipeline signature names the user's module, so
+    /// the message points at the user's function, not an internal name.
+    #[test]
+    fn a_gpu_error_names_the_user_function() {
+        let cx = Context::new_blocking().unwrap();
+        let mut plot = Plot::new();
+        let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
+        plot.add(Selection::<(f64, f64), Circle>::new(vec![
+            (1.0, 1.0),
+            (5.0, 3.0),
+        ]))
+        .attr(Circle::X, x.encode(|r: &(f64, f64)| r.0))
+        .attr(Circle::Y, y.encode(|r: &(f64, f64)| r.1))
+        .attr(Circle::RADIUS, Doubled.encode(|r: &(f64, f64)| r.1));
+        let good = plot.resolve(&cx, 300.0, 200.0).unwrap().scene;
+        let user = "radius: f32→gup_core::doubled::doubled";
+
+        let bad = seeded(&cx, good.clone(), missing_group);
+        let mut target = ImageTarget::new(&cx, 300, 200).unwrap();
+        let (what, message) = gpu_error(target.render_blocking(&cx, &bad).unwrap_err());
+        eprintln!("GPU error in {what}: {message}");
+        assert!(what.starts_with("mark pipeline `Circle {"), "{what}");
+        assert!(what.contains(user), "{what}");
+
+        let bad = seeded(&cx, good.clone(), broken_wgsl);
+        let desc = TargetDesc {
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            width: 300,
+            height: 200,
+            dpr: 1.0,
+            samples: 1,
+        };
+        let (what, _) = gpu_error(Renderer::new().prepare(&cx, &bad, &desc).unwrap_err());
+        assert!(what.contains(user), "{what}");
+
+        // Unseeded, the user's function draws.
+        target.render_blocking(&cx, &good).unwrap();
+    }
+
     /// A WGSL error is an `Err` carrying the WGSL diagnostic, from
     /// `Renderer::prepare` for hosts that own the pass.
     #[test]

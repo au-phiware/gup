@@ -442,6 +442,7 @@ dependencies = [
  "bytemuck",
  "encase",
  "futures-channel",
+ "gup-core-macros",
  "gup-text",
  "gup-wgsl",
  "image",
@@ -450,6 +451,18 @@ dependencies = [
  "wasm-bindgen-futures",
  "web-time",
  "wgpu",
+]
+
+[[package]]
+name = "gup-core-macros"
+version = "0.1.0"
+dependencies = [
+ "encase_derive_impl",
+ "gup-wgsl",
+ "naga",
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]

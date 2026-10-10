@@ -17,6 +17,7 @@
         render_scales,
         render_band_categorical,
         render_diverging,
+        render_user_function,
       } from "./scatter.js";
       const out = document.getElementById("out");
       const [w, h] = [320, 200];
@@ -116,6 +117,11 @@
         // here, each must draw some coloured ink (an empty plot fails).
         const band = await render_band_categorical(w, h);
         const diverging = await render_diverging(w, h);
+        // User functions written with `#[wgsl_function]` (RFC-001 S5c): a
+        // radius through a user transfer function and the built-in Pow,
+        // and a user colour function whose Params hold colours. It checks
+        // its pixels against the mirrors itself and throws on a mismatch.
+        const user = await render_user_function(w, h);
         const colouredPx = img => {
           let n = 0;
           for (let i = 0; i < img.length; i += 4) {
@@ -126,8 +132,9 @@
         };
         const bandColoured = colouredPx(band);
         const divergingColoured = colouredPx(diverging);
+        const userColoured = colouredPx(user);
         const c = document.createElement("canvas");
-        [c.width, c.height] = [w, 5 * h];
+        [c.width, c.height] = [w, 6 * h];
         const ctx = c.getContext("2d");
         ctx.putImageData(
           new ImageData(new Uint8ClampedArray(chunked), w, h),
@@ -154,9 +161,14 @@
           0,
           4 * h
         );
+        ctx.putImageData(
+          new ImageData(new Uint8ClampedArray(user), w, h),
+          0,
+          5 * h
+        );
         // The PNG is the chunked render, the dictionary render, the scales
-        // render, the band/categorical render and the diverging render, top
-        // to bottom.
+        // render, the band/categorical render, the diverging render and the
+        // user-function render, top to bottom.
         console.log("GUPPNG " + c.toDataURL("image/png"));
         // The scatter covers a fraction of the plot; a flooded plot (a
         // uniform-layout bug) or an empty one fails.
@@ -170,8 +182,9 @@
           dictDiff === 0 &&
           scalesColoured > 200 &&
           bandColoured > 300 &&
-          divergingColoured > 300;
-        result = `${ok ? "PASS" : "FAIL"} white=${white} grey=${grey} coloured=${coloured} chunked-diff=${chunkDiff}px/${chunkWorst} dict=${dictCounts.join(",")} dict-null-row-diff=${dictDiff}px scales=${scalesColoured} band=${bandColoured} diverging=${divergingColoured}`;
+          divergingColoured > 300 &&
+          userColoured > 300;
+        result = `${ok ? "PASS" : "FAIL"} white=${white} grey=${grey} coloured=${coloured} chunked-diff=${chunkDiff}px/${chunkWorst} dict=${dictCounts.join(",")} dict-null-row-diff=${dictDiff}px scales=${scalesColoured} band=${bandColoured} diverging=${divergingColoured} user=${userColoured}`;
       } catch (e) {
         result = "FAIL " + e;
       }

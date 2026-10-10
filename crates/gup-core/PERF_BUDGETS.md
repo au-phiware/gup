@@ -74,8 +74,8 @@ X) or `info` (printed, never fails).
 | `pipeline.link_create.cold_ms`    | 1.04      | <= 10     | `pipeline_timings`, its first run                 |
 | `pipeline.link_create.max_ms`     | 1.06      | info      | `pipeline_timings`                                |
 | `wasm.wgpu.gz_bytes`              | 41,712    | info      | `scripts/wasm_size.sh`, bare wgpu                 |
-| `wasm.scatter.gz_bytes`           | 294,333   | +2%       | `scripts/wasm_size.sh`, the reference scatter     |
-| `wasm.over_wgpu.gz_bytes`         | 252,621   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10       |
+| `wasm.scatter.gz_bytes`           | 300,913   | +2%       | `scripts/wasm_size.sh`, the reference scatter     |
+| `wasm.over_wgpu.gz_bytes`         | 259,201   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10       |
 
 A legitimate change that moves a number (a new guide, a bigger feature) records
 the new value here, in the same commit, with the reason in the story.
@@ -145,8 +145,8 @@ mask wasm-size   # ./scripts/wasm_size.sh
 
 The reference scatter harness against bare wgpu, both release
 `wasm32-unknown-unknown`, `wasm-bindgen --target web` without name or producers
-sections, `gzip -9`. Recorded: scatter 294,333 B gz, bare wgpu 41,712 B gz, so
-**gup-core costs 252,621 B gz over bare wgpu** against RFC-001 §12 risk 10's
+sections, `gzip -9`. Recorded: scatter 300,913 B gz, bare wgpu 41,712 B gz, so
+**gup-core costs 259,201 B gz over bare wgpu** against RFC-001 §12 risk 10's
 ceiling of +400 KB gz, read as 400,000 B (the RFC's KB are 1,000 B). Sizes
 depend only on the tree and toolchain, so the scatter is held to +2% (about 5 KB
 gz, smaller than one story's typical growth: S4b added 6.4 KB) and the ceiling
@@ -167,6 +167,14 @@ existing dictionary scene. Two new scenes, a `Band` axis with an 11-key
 `Categorical`, its swatch legend and a hidden null key, and a `Diverging` scale
 with its ramp, each with CPU-mirror checks, cost 14,642 B (+5.2%), which
 includes `Band`, `Point` and `Diverging` themselves.
+
+GUP-420 (S5c) re-recorded it at 300,913 B (from 294,333). Its library changes,
+measured without the new scene, cost 1,714 B (+0.6%): the import-path clash
+check and its message, each shader function's type name for it, and `Color` as a
+WGSL `vec4<f32>`. The macro and naga_oil run at compile time and add nothing.
+The scene, a user transfer function chained into `Pow::sqrt()` and a user colour
+function whose `Params` hold colours, written with `#[wgsl_function]` and
+checked against their mirrors, costs 4,866 B (+1.6%).
 
 ## CI-side proxies
 
