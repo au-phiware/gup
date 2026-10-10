@@ -807,4 +807,35 @@ mod tests {
         assert_eq!(*after.get_pixel(x0, y0), white, "row 0 still drawn");
         assert_eq!(*after.get_pixel(x1, y1), *before.get_pixel(x1, y1));
     }
+
+    /// S4b: a non-finite value driving a numeric colour scale draws the
+    /// point in the null colour (a `select` on its validity bit), not a
+    /// palette colour, and the point is still drawn.
+    #[test]
+    fn a_null_sequential_input_draws_in_the_null_colour() {
+        let cx = Context::new_blocking().unwrap();
+        let mut plot = Plot::new();
+        let (x, y) = (
+            plot.x(Linear::new().domain(0.0, 10.0)),
+            plot.y(Linear::new().domain(0.0, 10.0)),
+        );
+        let rows: Vec<(f64, f64)> = vec![(2.0, 1.0), (5.0, f64::NAN), (8.0, 3.0)];
+        plot.add(Selection::<Pt, Circle>::new(rows))
+            .attr(Circle::X, x.encode(|r: &Pt| r.0))
+            .attr(Circle::Y, y.encode(|r: &Pt| r.0))
+            .attr(
+                Circle::FILL,
+                crate::scale::Sequential::viridis().encode(|r: &Pt| r.1),
+            )
+            .attr(Circle::RADIUS, Px(8.0));
+        let (image, _) = plot.render_resolved(&cx, 300, 200).unwrap();
+        let at = |v: f64| {
+            let (px, py) = (x.read().eval(v), y.read().eval(v));
+            image.get_pixel(px as u32, py as u32).0
+        };
+        assert_eq!(at(5.0), crate::scale::NULL_COLOR.to_rgba8());
+        let viridis = crate::scale::Sequential::viridis().domain(1.0, 3.0);
+        assert_eq!(at(2.0), viridis.eval(1.0).to_rgba8());
+        assert_eq!(at(8.0), viridis.eval(3.0).to_rgba8());
+    }
 }

@@ -152,8 +152,11 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
 
     /// Append `rows`: only they are evaluated, and the next resolve writes
     /// only their bytes, at the tail of the last chunk (or in new chunks).
-    /// Auto domains refit to the grown stats on that resolve. (A handle to
-    /// append to a selection already in a plot is RFC-001 S12.)
+    /// Auto domains refit to the grown stats on that resolve, and new keys
+    /// get the next dictionary codes. It works under every [`Retain`]
+    /// policy: the last chunk keeps its CPU copy, and appended rows are
+    /// released after their upload like the rest. (A handle to append to a
+    /// selection already in a plot is RFC-001 S12.)
     #[cfg_attr(
         not(test),
         expect(dead_code, reason = "the public append handle is RFC-001 S12")
@@ -245,7 +248,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         let chunk_rows = ColumnStore::chunk_rows_for(&cx.caps().limits, &formats)
             .min(self.max_chunk_rows.unwrap_or(u32::MAX));
         let stale = match &self.columns {
-            None => Some("a channel was encoded after the rows were dropped"),
+            None => Some("a channel was encoded, or `max_chunk_rows` changed"),
             Some(c) if c.chunk_rows() != chunk_rows => {
                 Some("this device (or `max_chunk_rows`) needs a different chunk size")
             }
