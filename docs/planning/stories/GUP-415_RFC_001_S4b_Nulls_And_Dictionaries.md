@@ -2,8 +2,8 @@
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 🚧 In Progress **Created**:
-2026-10-10
+**Initiative**: RFC-001 Migration **Status**: ✅ Complete (2026-10-10)
+**Created**: 2026-10-10
 
 ## Context
 
@@ -67,73 +67,73 @@ context an error in that mode.
 
 ### AC1: Validity bits for nulls
 
-- [ ] A position channel (X or Y) encoded from an accessor that can produce a
+- [x] A position channel (X or Y) encoded from an accessor that can produce a
       non-finite value (`f64::NAN`) gets a 1-bit-per-row validity column
       alongside its value column, packed as the RFC specifies.
-- [ ] The vertex stage emits a degenerate quad (zero screen-space area, or
+- [x] The vertex stage emits a degenerate quad (zero screen-space area, or
       otherwise reliably not rasterised) for rows whose validity bit is unset,
       without the shader testing the value itself for NaN.
-- [ ] A test harness (reusing the GUP-388 structural-assertion module) renders a
+- [x] A test harness (reusing the GUP-388 structural-assertion module) renders a
       selection with some rows' X or Y set to NaN and asserts that no coloured
       pixels appear at those rows' would-be positions, while the other rows
       render normally.
 
 ### AC2: Null colour for colour channels
 
-- [ ] A colour channel encoded from an accessor that can produce a null (for a
+- [x] A colour channel encoded from an accessor that can produce a null (for a
       dictionary-encoded column, see AC3/AC4) maps null to a reserved code that
       the shader resolves to a fixed null colour, without branching on the input
       value's bit pattern.
-- [ ] A test asserts that rows with a null colour-channel value render in the
+- [x] A test asserts that rows with a null colour-channel value render in the
       null colour (read by eye from the rendered PNG via the harness, not
       inferred indirectly), distinct from every real palette entry.
-- [ ] The null colour is a documented constant for this story (RFC-001 S7 has
+- [x] The null colour is a documented constant for this story (RFC-001 S7 has
       not yet built the `Theme` type); the doc comment notes that S7's `Theme`
       is expected to make it configurable and this becomes `theme.null_color`.
 
 ### AC3: Dictionary encoding and the key-accessor API
 
-- [ ] A new `ColumnFormat::U32` (or equivalent) stores dictionary codes.
-- [ ] A CPU dictionary maps `Hash + Eq` keys (starting with `&str`, per the
+- [x] A new `ColumnFormat::U32` (or equivalent) stores dictionary codes.
+- [x] A CPU dictionary maps `Hash + Eq` keys (starting with `&str`, per the
       RFC's categorical example) to `u32` codes in first-seen order; that order
       becomes the column's domain.
-- [ ] A new entry point on `ShaderFn`/`Selection` accepts an accessor bounded by
+- [x] A new entry point on `ShaderFn`/`Selection` accepts an accessor bounded by
       `for<'a> Fn(&'a T) -> &'a str` (addressing RFC §12 risk 4 and S0a finding
       6 directly), so `|d: &Row| d.continent.as_str()` compiles where today's
       `Fn(&T) -> D` accessor cannot.
-- [ ] A `trybuild` or doctest proves the naive accessor shape still fails to
+- [x] A `trybuild` or doctest proves the naive accessor shape still fails to
       compile with a clear message, and the new entry point succeeds, for the
       same closure shape.
 
 ### AC4: Dictionary-encoded colour end to end
 
-- [ ] A minimal `Categorical` colour `ShaderFn` maps a `U32` dictionary code to
+- [x] A minimal `Categorical` colour `ShaderFn` maps a `U32` dictionary code to
       a `Color` through a small uniform array of the Okabe-Ito colour-blind-safe
       palette (the RFC's default for categorical scales).
-- [ ] A golden-image test encodes `Circle::FILL` from a categorical string key
+- [x] A golden-image test encodes `Circle::FILL` from a categorical string key
       (through the AC3 key-accessor entry point) across several distinct
       categories, and the rendered PNG is read by eye (or compared to a
       checked-in golden) to confirm each category's points carry a distinct,
       correct Okabe-Ito colour.
-- [ ] An external-crate doctest (in `gup-core`'s public doc comments, run as
+- [x] An external-crate doctest (in `gup-core`'s public doc comments, run as
       part of `cargo test --doc`) exercises the same dictionary-colour encoding,
       proving the public API compiles and runs outside the crate.
 
 ### AC5: Retain policy
 
-- [ ] A `Retain` enum (`Auto`, `Rows`, `Columns`, `GpuOnly`) is added, with
+- [x] A `Retain` enum (`Auto`, `Rows`, `Columns`, `GpuOnly`) is added, with
       `Auto` as `Selection`'s default.
-- [ ] `Retain::Auto` keeps `rows: Vec<T>` and evaluated CPU columns while the
+- [x] `Retain::Auto` keeps `rows: Vec<T>` and evaluated CPU columns while the
       row count is at or below the RFC's 10M-row threshold, and behaves as
       `GpuOnly` above it (frees `rows`/CPU columns after upload, keeping only
       stats and dictionaries).
-- [ ] `Retain::GpuOnly` frees `rows`/CPU columns unconditionally after the first
+- [x] `Retain::GpuOnly` frees `rows`/CPU columns unconditionally after the first
       successful upload; stats and dictionaries remain available (they drive
       domains and are small).
-- [ ] A test proves that under `GpuOnly`, `rows: Vec<T>` is actually dropped
+- [x] A test proves that under `GpuOnly`, `rows: Vec<T>` is actually dropped
       (not merely unused) after `prepare` — for example via a drop counter or
       `Weak` reference on `T`, not just an API-surface check.
-- [ ] Re-`attr`-ing a channel, or appending rows (GUP-414), on a `GpuOnly`
+- [x] Re-`attr`-ing a channel, or appending rows (GUP-414), on a `GpuOnly`
       selection documents its limitation clearly (either a clear `Result` error,
       since there is no retained accessor input to re-run, or an explicit
       restriction in the type/method signature) rather than panicking or
@@ -141,42 +141,42 @@ context an error in that mode.
 
 ### AC6: Browser
 
-- [ ] `mask wasm-browser` still passes with a scene that exercises the
+- [x] `mask wasm-browser` still passes with a scene that exercises the
       dictionary-encoded-colour path (AC4), proving the new entry-point shape
       runs on WebGPU as well as natively.
 
 ### AC7: Old path frozen
 
-- [ ] No file outside `crates/gup-core` (and planning docs) changes;
+- [x] No file outside `crates/gup-core` (and planning docs) changes;
       `mask old-path-loc` reports the same count as before this story.
 
 ## Technical Tasks
 
-- [ ] Design and implement the validity-bit column format and its packing
+- [x] Design and implement the validity-bit column format and its packing
       (alongside the relevant value column, at the chunk level from GUP-414).
-- [ ] Update the Circle (and any other mark's) glue emitter to check validity
+- [x] Update the Circle (and any other mark's) glue emitter to check validity
       for position channels and emit a degenerate quad when unset.
-- [ ] Reserve a null code for colour channels and update the relevant glue path
+- [x] Reserve a null code for colour channels and update the relevant glue path
       to resolve it to a fixed null colour without a value-based branch.
-- [ ] Add `ColumnFormat::U32` and the CPU dictionary (key → code, first-seen
+- [x] Add `ColumnFormat::U32` and the CPU dictionary (key → code, first-seen
       order) in `column.rs`/`encoding.rs`.
-- [ ] Add the `for<'a> Fn(&'a T) -> &'a str` key-accessor entry point
+- [x] Add the `for<'a> Fn(&'a T) -> &'a str` key-accessor entry point
       (`encode_key`/`color_key` or equivalent) and its `IntoEncoding` impl.
-- [ ] Add a `trybuild` case proving the naive `Fn(&T) -> D` shape still fails
+- [x] Add a `trybuild` case proving the naive `Fn(&T) -> D` shape still fails
       for a borrowing accessor, alongside the new entry point's success case.
-- [ ] Add a minimal `Categorical` `ShaderFn` (U32 → Color via a small uniform
+- [x] Add a minimal `Categorical` `ShaderFn` (U32 → Color via a small uniform
       array) with the Okabe-Ito palette as its default resource, documented as a
       placeholder for RFC-001 S5's full scale family.
-- [ ] Add the `Retain` enum and wire `Auto`/`GpuOnly` behaviour into `Selection`
+- [x] Add the `Retain` enum and wire `Auto`/`GpuOnly` behaviour into `Selection`
       (drop `rows`/CPU columns after upload per policy).
-- [ ] Add the drop-proof test for `GpuOnly` retention (AC5).
-- [ ] Write the null-position golden/structural test (AC1) and the null-colour
+- [x] Add the drop-proof test for `GpuOnly` retention (AC5).
+- [x] Write the null-position golden/structural test (AC1) and the null-colour
       test (AC2), reusing the GUP-388 harness.
-- [ ] Write the dictionary-colour golden test and the external-crate doctest
+- [x] Write the dictionary-colour golden test and the external-crate doctest
       (AC4).
-- [ ] Extend `mask wasm-browser`'s harness to include a dictionary-encoded
+- [x] Extend `mask wasm-browser`'s harness to include a dictionary-encoded
       colour scene (AC6).
-- [ ] Re-run `mask old-path-loc` and confirm it is unchanged (AC7).
+- [x] Re-run `mask old-path-loc` and confirm it is unchanged (AC7).
 
 ## Dependencies
 
@@ -217,14 +217,14 @@ context an error in that mode.
 
 ## Success Metrics
 
-- [ ] Null position values never rasterise, and null colour values render in a
+- [x] Null position values never rasterise, and null colour values render in a
       distinct, documented null colour — both verified by eye.
-- [ ] `|d: &Row| d.continent.as_str()` (or equivalent) compiles through the new
+- [x] `|d: &Row| d.continent.as_str()` (or equivalent) compiles through the new
       key-accessor entry point and renders the correct Okabe-Ito colour per
       category.
-- [ ] `Retain::GpuOnly` actually frees `rows: Vec<T>` after upload, proved by a
+- [x] `Retain::GpuOnly` actually frees `rows: Vec<T>` after upload, proved by a
       drop/weak-reference test, not just documentation.
-- [ ] `mask wasm-browser` and `mask old-path-loc` are unaffected.
+- [x] `mask wasm-browser` and `mask old-path-loc` are unaffected.
 
 ## Risk Assessment
 
@@ -251,11 +251,119 @@ context an error in that mode.
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (golden image or PNG read) for AC1, AC2
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye (golden image or PNG read) for AC1, AC2
       and AC4
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+The numbers are in RFC-001's "S4b findings (2026-10-10, GUP-415)" section.
+
+### Delivered
+
+- **Validity bits** (`crates/gup-core/src/column.rs`). There is one plane per
+  numeric column, with one word per plane in each 32-row group. Each chunk has a
+  small storage buffer, created only once the store has a null and counted as
+  the new `Upload::Validity`. A tail write rewrites the last partial group; a
+  grown chunk's bits are rewritten in full.
+- **Glue** (`crates/gup-core/src/shader/glue.rs`). With nulls, group 2 binding 1
+  is `var<storage, read> validity`. A null position or size replaces the mark's
+  `clip` with one point outside the clip volume, a degenerate quad. A null
+  numeric colour `select`s `NULL_COLOR`. `U32` columns are `u32` vertex inputs
+  fetched as `Uint32`. The mark contract now names the position member `clip`.
+- **Dictionaries** (`column.rs`). `ColumnFormat::U32`, `Dictionary` (one per
+  `U32` column per store, first-seen order, append-only) and
+  `NULL_CODE = u32::MAX`. `ColumnStore::append` now takes `ColumnData`:
+  `Values(Vec<f64>)` or `Keys(Vec<Option<&str>>)`.
+- **Key accessors** (`encoding.rs`). `ShaderFn::encode_key` takes
+  `for<'a> Fn(&'a T) -> &'a str`, and `encode_nullable_key` takes
+  `Option<&'a str>`, through `KeyEncoded`, `Key`, `NullableKey` and
+  `KeyAccessor`. `ColumnValue` has an `on_unimplemented` message that points to
+  `encode_key`.
+- **`Categorical`** (`scale/categorical.rs`, `shaders/color_categorical.wgsl`).
+  A stand-in for S5: Okabe-Ito in a uniform array of 8, `code % 8`, and the null
+  code mapped to `NULL_COLOR` (`#999999`, documented as S7's
+  `theme.null_color`). It is in the prelude.
+- **`Retain`** (`selection.rs`, `plot.rs`). `Auto` (the default: everything up
+  to 10M rows, `GpuOnly` above), `Rows`, `Columns` and `GpuOnly`.
+  `Plot::resolve` releases after the scoped prepare succeeds. Re-encoding a
+  channel, a different chunk size, or another context without the needed data is
+  a configuration error naming the policy. `Retain::Rows` re-evaluates for
+  another context, and appends work under every policy.
+- **Browser** (`wasm-size/scatter`). `render_categorical` draws a dictionary
+  scene with nulls, and the page checks its colours and the null row.
+
+### Deviations and decisions
+
+- **The validity column is its own buffer per chunk**, not a sub-range of the
+  chunk buffer. Data without nulls keeps the S0a bytes, glue and upload counts,
+  and the bits use no vertex slot. The trade-off is one more buffer and bind
+  group per chunk for nullable layers.
+- **One plane per numeric column**, not one shared bitmask. A null colour must
+  draw grey, while a null position must hide the row. It is still one binding.
+- **AC5 (append under `GpuOnly`)** works rather than erroring: the last chunk
+  keeps its CPU copy, and appended rows are released after their upload.
+  Re-encoding and re-binding are the clear errors.
+- **AC7.** One file outside `crates/gup-core` was added: the golden
+  `tests/golden/gup_core/categorical_nulls.png`, test data beside S0a's
+  `scatter.png`. `mask old-path-loc` reads 28910 before and after.
+- **Fixed on the way.** A NaN driving `Sequential` was undefined (`clamp` on
+  NaN). It now draws `NULL_COLOR`, which a pixel test checks.
+
+### Tests
+
+gup-core's lib tests went from 71 to 84 (2 ignored); all pass on Intel/Mesa and
+on lavapipe.
+
+- `column::tests` (4): validity packing per plane, dictionary codes across
+  appends and chunks, validity upload byte counts (first null, growth, tail),
+  and release with another context's error.
+- `selection::tests` (3): the `nulls_glue.wgsl` fixture with naga layouts, the
+  numeric-colour null `select`, and the `Categorical` params at naga's offsets.
+- `plot::tests` (5): the `Retain` table, the `GpuOnly` drop proof (an `Arc`
+  strong count, 151 → 1), `Rows`/`Columns`/`Auto` on another context, a cleared
+  bit hiding a finite row, and a NaN sequential input drawing grey.
+- `scale::categorical::tests` (1).
+- `tests/scatter_png.rs::categorical_scatter_with_nulls`, against the new
+  golden.
+- trybuild: `compile_fail/borrowing_accessor.rs` and
+  `compile_pass/key_accessor.rs`; the `bare_number` snapshot gained the
+  `encode_key` note.
+- A rendering doctest on `Categorical`.
+- `mask wasm-browser` passes: `dict=652,657,651,708,318 dict-null-row-diff=0px`.
+
+### Evidence
+
+- **Visual.** I read three images:
+  - `categorical_nulls.png`: the title, log-y and linear-x ticks, and points in
+    orange, sky blue, bluish green, yellow and blue, with grey for missing
+    continents, all inside the plot.
+  - The browser PNG: the chunked scatter, with the dictionary scene below it in
+    four palette colours plus grey and no point at the NaN row.
+  - `window_scatter.png`: ΔE 0 against the `ImageTarget` and the golden.
+- **Seeded bug.** With the degenerate quad disabled,
+  `a_cleared_validity_bit_hides_a_finite_row` fails ("row 0 still drawn").
+- **Gates.** `cargo test -p gup-core -p gup-text` and `mask all-check` pass.
+  `mask old-path-loc` is unchanged at 28910.
+- **Not run locally.** The root crate's tests and `mask smoke-examples` were
+  left to CI, as the orchestrator asked. `mask all-check` type-checks every
+  example with clippy `--all-targets`.
+
+### Key files
+
+- `crates/gup-core/src/{column,encoding,selection,plot,render,channel,context,lib}.rs`
+- `crates/gup-core/src/shader/glue.rs`
+- `crates/gup-core/src/scale/{categorical,mod}.rs`
+- `crates/gup-core/src/shaders/{color_categorical,circle}.wgsl`
+- `crates/gup-core/tests/{scatter_png,compile_fail}.rs`
+- `crates/gup-core/tests/common/{continents,vr}.rs`
+- `crates/gup-core/tests/compile_fail/borrowing_accessor.{rs,stderr}`
+- `crates/gup-core/tests/compile_pass/key_accessor.rs`
+- `crates/gup-core/tests/fixtures/nulls_glue.wgsl`
+- `crates/gup-core/wasm-size/scatter/{src/lib.rs,index.html}`
+- `tests/golden/gup_core/categorical_nulls.png`

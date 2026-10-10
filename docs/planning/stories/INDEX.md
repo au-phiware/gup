@@ -192,7 +192,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   origins and stats, a multi-draw rendering path) and add counted tail append,
   proved at a forced multi-chunk boundary. Deps: GUP-395 ✅, GUP-401 ✅, GUP-410
   ✅ (soft).
-- [GUP-415](GUP-415_RFC_001_S4b_Nulls_And_Dictionaries.md) 🚧 — RFC-001 step
+- [GUP-415](GUP-415_RFC_001_S4b_Nulls_And_Dictionaries.md) ✅ — RFC-001 step
   S4b: validity bits for nulls (degenerate quads, a reserved null colour code),
   dictionary-encoded categorical columns with the `for<'a> Fn(&'a T) -> &'a str`
   key-accessor fix for RFC-001 §12 risk 4, and the `Retain` policy controlling
