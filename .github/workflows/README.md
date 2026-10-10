@@ -68,9 +68,11 @@ harness for wasm32 and renders it in headless Chrome for Testing (a pinned
 version) through WebGPU on SwiftShader, Chrome's bundled software adapter. It
 fails on `GUP FAIL`, a timeout, a console error, an uncaught exception, a failed
 load or a WebGPU/WGSL diagnostic; the step summary records the browser and
-adapter, and the render is uploaded as the `browser-smoke` artifact.
-`mask ci visual-regression` runs both locally; `mask wasm-browser` runs the
-browser job alone.
+adapter, and the render is uploaded as the `browser-smoke` artifact. The same
+job then enforces gup-core's WASM size budget (GUP-417, `scripts/wasm_size.sh`):
+it fails when the scatter costs more than 400,000 B gz over bare wgpu.
+`mask ci visual-regression` runs both jobs locally; `mask wasm-browser` and
+`mask wasm-size` run the browser job's two checks alone.
 
 ### No workflow scopes by changed files
 

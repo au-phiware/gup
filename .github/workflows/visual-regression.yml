@@ -129,7 +129,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: browser-${{ runner.os }}-cargo-${{ hashFiles('crates/gup-core/wasm-size/scatter/Cargo.lock', 'rust-toolchain.toml') }}
+          key: browser-${{ runner.os }}-cargo-${{ hashFiles('crates/gup-core/wasm-size/scatter/Cargo.lock', 'crates/gup-core/wasm-size/baseline/Cargo.lock', 'rust-toolchain.toml') }}
           restore-keys: |
             browser-${{ runner.os }}-cargo-
 
@@ -161,6 +161,11 @@ jobs:
         env:
           GUP_CHROMIUM: ${{ steps.chrome.outputs.chrome-path }}
         run: ./scripts/wasm_browser.sh
+
+      # gup-core's WASM size budget (GUP-417, RFC-001 §12 risk 10): fails when
+      # the scatter costs more than 400,000 B gz over bare wgpu.
+      - name: Check gup-core's WASM size budget (mask wasm-size)
+        run: ./scripts/wasm_size.sh
 
       - name: Upload the browser's render
         if: always()

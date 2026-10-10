@@ -47,43 +47,21 @@ cargo run -p gup-core --release --example zoom_bench -- --present mailbox --unca
 
 ## wasm-size
 
-gup-core's gzipped WASM cost (GUP-401, RFC-001 §12 risk 10). Builds two
-`crates/gup-core/wasm-size` harnesses in release for `wasm32-unknown-unknown`:
-bare wgpu, and the reference scatter through gup-core (whose shaders are
-composed at build time, GUP-406). Each goes through `wasm-bindgen --target web`
-without name sections, then `gzip -9`; the last lines are gup-core's cost over
-bare wgpu and the bundled Inter font, which the budget counts separately. Needs
-`wasm-bindgen` 0.2.113 on the PATH. Delete
+gup-core's gzipped WASM cost (GUP-401, RFC-001 §12 risk 10), with its budget
+enforced (GUP-417). Builds two `crates/gup-core/wasm-size` harnesses in release
+for `wasm32-unknown-unknown`: bare wgpu, and the reference scatter through
+gup-core (whose shaders are composed at build time, GUP-406). Each goes through
+`wasm-bindgen --target web` without name sections, then `gzip -9`. Prints each
+size, gup-core's cost over bare wgpu and the bundled Inter subset, and **fails**
+when gup-core costs more than 400,000 B gz over bare wgpu
+(`GUP_WASM_OVER_WGPU_MAX_GZ` overrides the budget). The Visual regression
+workflow's browser job runs the same script. Needs `wasm-bindgen` at the
+harnesses' `Cargo.lock` version. Delete
 `$CARGO_TARGET_DIR/wasm32-unknown-unknown/release` afterwards if disk is tight.
+See `scripts/wasm_size.sh` and `crates/gup-core/PERF_BUDGETS.md`.
 
 ```bash
-set -euo pipefail
-root=$(pwd)
-out=$(mktemp -d)
-# The harnesses are their own workspaces: point them at this target directory.
-export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$root/target}"
-release="$CARGO_TARGET_DIR/wasm32-unknown-unknown/release"
-measure() { # name, crate dir, crate file name, cargo flags...
-  local name=$1 dir=$2 file=$3
-  shift 3
-  (cd "$root/crates/gup-core/wasm-size/$dir" &&
-    cargo build --quiet --release --target wasm32-unknown-unknown "$@")
-  wasm-bindgen --target web --remove-name-section --remove-producers-section \
-    --out-dir "$out/$name" --out-name "$name" "$release/$file.wasm"
-  local wasm="$out/$name/${name}_bg.wasm"
-  raw=$(stat -c %s "$wasm")
-  gz=$(gzip -9 -c "$wasm" | wc -c)
-  printf '%-26s %10d B raw %9d B gz\n' "$name" "$raw" "$gz"
-}
-measure wgpu baseline gup_core_wasm_size_baseline
-base_raw=$raw base_gz=$gz
-measure gup-core-scatter scatter gup_core_wasm_size_scatter
-printf '%-26s %10d B raw %9d B gz\n' "(gup-core over wgpu)" \
-  $((raw - base_raw)) $((gz - base_gz))
-font=crates/gup-text/fonts/Inter-Regular-Subset.ttf
-printf '%-26s %10d B raw %9d B gz\n' "(Inter subset, bundled)" \
-  "$(stat -c %s $font)" "$(gzip -9 -c $font | wc -c)"
-rm -rf "$out"
+./scripts/wasm_size.sh
 ```
 
 ## wasm-browser
@@ -388,6 +366,8 @@ cargo test -p gup-core --test compile_fail
 mask smoke-examples
 # The browser job (GUP-408), on SwiftShader as on CI
 ./scripts/wasm_browser.sh
+# and its WASM size budget (GUP-417)
+./scripts/wasm_size.sh
 ```
 
 ### ci tests
