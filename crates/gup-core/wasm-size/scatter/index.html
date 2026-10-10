@@ -15,6 +15,8 @@
         render_scatter,
         render_categorical,
         render_scales,
+        render_band_categorical,
+        render_diverging,
       } from "./scatter.js";
       const out = document.getElementById("out");
       const [w, h] = [320, 200];
@@ -107,8 +109,25 @@
           const [r, g, b] = [scales[i], scales[i + 1], scales[i + 2]];
           if (Math.abs(r - g) >= 8 || Math.abs(g - b) >= 8) scalesColoured++;
         }
+        // The colour and ordinal scales (RFC-001 S5b): an 11-key
+        // Categorical on a Band axis with its swatch legend and a hidden
+        // null key, and a Diverging scale with its ramp. Each checks its
+        // pixels against the CPU mirrors itself and throws on a mismatch;
+        // here, each must draw some coloured ink (an empty plot fails).
+        const band = await render_band_categorical(w, h);
+        const diverging = await render_diverging(w, h);
+        const colouredPx = img => {
+          let n = 0;
+          for (let i = 0; i < img.length; i += 4) {
+            const [r, g, b] = [img[i], img[i + 1], img[i + 2]];
+            if (Math.abs(r - g) >= 8 || Math.abs(g - b) >= 8) n++;
+          }
+          return n;
+        };
+        const bandColoured = colouredPx(band);
+        const divergingColoured = colouredPx(diverging);
         const c = document.createElement("canvas");
-        [c.width, c.height] = [w, 3 * h];
+        [c.width, c.height] = [w, 5 * h];
         const ctx = c.getContext("2d");
         ctx.putImageData(
           new ImageData(new Uint8ClampedArray(chunked), w, h),
@@ -125,8 +144,19 @@
           0,
           2 * h
         );
-        // The PNG is the chunked render, the dictionary render and the
-        // scales render, top to bottom.
+        ctx.putImageData(
+          new ImageData(new Uint8ClampedArray(band), w, h),
+          0,
+          3 * h
+        );
+        ctx.putImageData(
+          new ImageData(new Uint8ClampedArray(diverging), w, h),
+          0,
+          4 * h
+        );
+        // The PNG is the chunked render, the dictionary render, the scales
+        // render, the band/categorical render and the diverging render, top
+        // to bottom.
         console.log("GUPPNG " + c.toDataURL("image/png"));
         // The scatter covers a fraction of the plot; a flooded plot (a
         // uniform-layout bug) or an empty one fails.
@@ -138,8 +168,10 @@
           chunkWorst <= 1 &&
           dictCounts.every(n => n >= 20) &&
           dictDiff === 0 &&
-          scalesColoured > 200;
-        result = `${ok ? "PASS" : "FAIL"} white=${white} grey=${grey} coloured=${coloured} chunked-diff=${chunkDiff}px/${chunkWorst} dict=${dictCounts.join(",")} dict-null-row-diff=${dictDiff}px scales=${scalesColoured}`;
+          scalesColoured > 200 &&
+          bandColoured > 300 &&
+          divergingColoured > 300;
+        result = `${ok ? "PASS" : "FAIL"} white=${white} grey=${grey} coloured=${coloured} chunked-diff=${chunkDiff}px/${chunkWorst} dict=${dictCounts.join(",")} dict-null-row-diff=${dictDiff}px scales=${scalesColoured} band=${bandColoured} diverging=${divergingColoured}`;
       } catch (e) {
         result = "FAIL " + e;
       }

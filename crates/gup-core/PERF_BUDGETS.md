@@ -74,8 +74,8 @@ X) or `info` (printed, never fails).
 | `pipeline.link_create.cold_ms`    | 1.04      | <= 10     | `pipeline_timings`, its first run                 |
 | `pipeline.link_create.max_ms`     | 1.06      | info      | `pipeline_timings`                                |
 | `wasm.wgpu.gz_bytes`              | 41,712    | info      | `scripts/wasm_size.sh`, bare wgpu                 |
-| `wasm.scatter.gz_bytes`           | 271,706   | +2%       | `scripts/wasm_size.sh`, the reference scatter     |
-| `wasm.over_wgpu.gz_bytes`         | 229,994   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10       |
+| `wasm.scatter.gz_bytes`           | 294,332   | +2%       | `scripts/wasm_size.sh`, the reference scatter     |
+| `wasm.over_wgpu.gz_bytes`         | 252,620   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10       |
 
 A legitimate change that moves a number (a new guide, a bigger feature) records
 the new value here, in the same commit, with the reason in the story.
@@ -145,8 +145,8 @@ mask wasm-size   # ./scripts/wasm_size.sh
 
 The reference scatter harness against bare wgpu, both release
 `wasm32-unknown-unknown`, `wasm-bindgen --target web` without name or producers
-sections, `gzip -9`. Recorded: scatter 271,706 B gz, bare wgpu 41,712 B gz, so
-**gup-core costs 229,994 B gz over bare wgpu** against RFC-001 §12 risk 10's
+sections, `gzip -9`. Recorded: scatter 294,332 B gz, bare wgpu 41,712 B gz, so
+**gup-core costs 252,620 B gz over bare wgpu** against RFC-001 §12 risk 10's
 ceiling of +400 KB gz, read as 400,000 B (the RFC's KB are 1,000 B). Sizes
 depend only on the tree and toolchain, so the scatter is held to +2% (about 5 KB
 gz, smaller than one story's typical growth: S4b added 6.4 KB) and the ceiling
@@ -158,6 +158,15 @@ chain-aware glue, `EncodeFn`, the hi/lo column format) cost 974 B (+0.4%,
 measured before the new scene), and the scene that draws `Time`, `Symlog`,
 `Sqrt` and a `then` chain, with its CPU-mirror checks, 17,807 B (+7.0%): code a
 chart using those scales pays, and the reference scatter alone does not.
+
+GUP-419 (S5b) re-recorded it at 294,332 B (from 271,706). Its library changes,
+measured before the new scenes, cost 7,985 B (+2.9%): mostly the categorical
+palette (a LUT read by texel, its generated extension past the palette and the
+key domain), the legend types and the generic key dictionaries, reached by the
+existing dictionary scene. Two new scenes, a `Band` axis with an 11-key
+`Categorical`, its swatch legend and a hidden null key, and a `Diverging` scale
+with its ramp, each with CPU-mirror checks, cost 14,641 B (+5.2%), which
+includes `Band`, `Point` and `Diverging` themselves.
 
 ## CI-side proxies
 

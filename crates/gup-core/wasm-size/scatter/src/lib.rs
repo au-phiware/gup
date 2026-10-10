@@ -9,7 +9,9 @@
 //! second scene colours points by a dictionary-encoded key, with nulls
 //! (RFC-001 S4b). A third draws the numeric scales of RFC-001 S5a (`Time`,
 //! `Symlog`, `Sqrt` and a `then` chain) and checks them against their CPU
-//! mirrors.
+//! mirrors. A fourth and fifth draw the colour and ordinal scales of
+//! RFC-001 S5b: a `Band` axis with an 11-key `Categorical` and its swatch
+//! legend, a hidden null key, and a `Diverging` scale with its ramp.
 
 use gup_core::geom::Rect;
 use gup_core::prelude::*;
@@ -291,6 +293,255 @@ pub async fn render_scales(width: u32, height: u32) -> Result<Vec<u8>, JsValue> 
         return Err(JsValue::from_str(&format!(
             "scales: a 1 ms Time zoom drew points {worst:.3} px from the mirror"
         )));
+    }
+    Ok(image.into_raw())
+}
+
+/// The colour scales and ordinal positions of RFC-001 S5b (GUP-419) on
+/// WebGPU: eleven keys on a `Band` x axis, coloured by the full
+/// `Categorical` (Okabe-Ito's 8 and 3 generated colours), with a swatch
+/// legend to the right; every fifth row's key is missing. Checks, in
+/// Rust, that every keyed row's centre is drawn in its key's colour (the
+/// mirror's), that each legend swatch is drawn in its key's colour and
+/// that the 11 colours differ. Then that a null key is hidden by the
+/// glue, not by its position: a `Band` with an empty range maps every
+/// code, the null code too, to one row of pixels, where the keyed rows
+/// draw and the null rows must not. Returns the first plot's
+/// straight-alpha RGBA pixels.
+#[wasm_bindgen]
+pub async fn render_band_categorical(width: u32, height: u32) -> Result<Vec<u8>, JsValue> {
+    std::panic::set_hook(Box::new(|info| web_error(&info.to_string())));
+    let cx = Context::new().await.map_err(js)?;
+    const KEYS: [&str; 11] = [
+        "Ash", "Birch", "Cedar", "Elm", "Fir", "Hazel", "Larch", "Maple", "Oak", "Pine", "Yew",
+    ];
+    // (key, value)
+    let rows: Vec<(Option<&'static str>, f64)> = (0..66u32)
+        .map(|i| {
+            let k = (i % 11) as usize;
+            let key = (i % 5 != 4).then_some(KEYS[k]);
+            (key, 2.0 + f64::from((i * 7) % 13) + k as f64 * 0.5)
+        })
+        .collect();
+    type Row = (Option<&'static str>, f64);
+    let legend_width = 64.0;
+    let mut plot = Plot::new();
+    let (x, y) = (plot.x(Band::new()), plot.y(Linear::new()));
+    let colour = ScaleRef::new(Categorical::okabe_ito());
+    plot.title("Band and categorical")
+        .add(Selection::<Row, Circle>::new(rows.clone()))
+        .attr(Circle::X, x.encode_nullable_key(|r: &Row| r.0))
+        .attr(Circle::Y, y.encode(|r: &Row| r.1))
+        .attr(Circle::RADIUS, Px(3.5))
+        .attr(Circle::FILL, colour.encode_nullable_key(|r: &Row| r.0));
+    let resolved = plot
+        .resolve(&cx, width as f32 - legend_width, height as f32)
+        .map_err(js)?;
+    let mut scene = resolved.scene;
+    scene.width = width as f32;
+    let swatches = colour.read().legend().swatches().to_vec();
+    let left = width as f32 - legend_width + 6.0;
+    let rects: Vec<RectPrim> = swatches
+        .iter()
+        .enumerate()
+        .map(|(i, s)| RectPrim {
+            rect: Rect::new(left, resolved.layout.plot.top() + i as f32 * 12.0, 9.0, 9.0),
+            color: s.color,
+        })
+        .collect();
+    scene.push(Item {
+        z: Z_TITLE,
+        clip: None,
+        kind: ItemKind::Rects(rects.clone()),
+    });
+    let image = ImageTarget::new(&cx, width, height)
+        .map_err(js)?
+        .render(&cx, &scene)
+        .await
+        .map_err(js)?;
+
+    let fail = |m: String| Err(JsValue::from_str(&format!("band/categorical: {m}")));
+    if swatches.len() != KEYS.len() {
+        return fail(format!("{} swatches", swatches.len()));
+    }
+    for (i, a) in swatches.iter().enumerate() {
+        if swatches[..i].iter().any(|b| b.color == a.color) {
+            return fail(format!("{} repeats a colour", a.label));
+        }
+        let r = rects[i].rect;
+        let got = image
+            .get_pixel((r.x + r.width / 2.0) as u32, (r.y + r.height / 2.0) as u32)
+            .0;
+        if got != a.color.to_rgba8() {
+            return fail(format!(
+                "swatch {} drew {got:?}, not {:?}",
+                a.label, a.color
+            ));
+        }
+    }
+    // A keyed row's code (first-seen order, which the scales share) and
+    // centre, unless a later row's disc covers it.
+    let code = |r: &Row| {
+        swatches
+            .iter()
+            .position(|s| Some(&*s.label) == r.0)
+            .unwrap() as f64
+    };
+    let centre = |r: &Row| (x.read().eval(code(r)), y.read().eval(r.1));
+    for (i, r) in rows.iter().enumerate().filter(|(_, r)| r.0.is_some()) {
+        let (px, py) = centre(r);
+        let covered = rows[i + 1..].iter().filter(|o| o.0.is_some()).any(|o| {
+            let (qx, qy) = centre(o);
+            (qx - px).hypot(qy - py) < 4.5
+        });
+        if covered {
+            continue;
+        }
+        let want = colour.read().eval(code(r)).to_rgba8();
+        let got = image.get_pixel(px as u32, py as u32).0;
+        if (0..3).any(|k| got[k].abs_diff(want[k]) > 1) {
+            return fail(format!(
+                "{r:?} drew {got:?} at ({px:.1}, {py:.1}), not {want:?}"
+            ));
+        }
+    }
+
+    // The null key is hidden by the glue's comparison: on an empty band
+    // every code, the null code too, maps to y = 60. Every third row has
+    // no key; rows are about 8 px apart, so a hidden row's spot is clear.
+    let proof_rows: Vec<Row> = (0..30u32)
+        .map(|i| ((i % 3 != 2).then_some("k"), f64::from(i)))
+        .collect();
+    let mut proof = Plot::new();
+    let (px_scale, _) = (
+        proof.x(Linear::new().domain(-1.0, 30.0)),
+        proof.y(Linear::new().domain(0.0, 1.0)),
+    );
+    proof
+        .add(Selection::<Row, Circle>::new(proof_rows.clone()))
+        .attr(Circle::X, px_scale.encode(|r: &Row| r.1))
+        .attr(
+            Circle::Y,
+            Band::new()
+                .range(Px(60.0), Px(60.0))
+                .encode_nullable_key(|r: &Row| r.0),
+        )
+        .attr(Circle::RADIUS, Px(2.0))
+        .attr(Circle::FILL, Color::BLACK);
+    let resolved = proof
+        .resolve(&cx, width as f32, height as f32)
+        .map_err(js)?;
+    let hidden = ImageTarget::new(&cx, width, height)
+        .map_err(js)?
+        .render(&cx, &resolved.scene)
+        .await
+        .map_err(js)?;
+    let (mut keyed, mut nulls) = (0, 0);
+    for r in &proof_rows {
+        let px = px_scale.read().eval(r.1);
+        let ink = hidden.get_pixel(px as u32, 60).0[0] < 128;
+        match (r.0, ink) {
+            (Some(_), false) => {
+                return fail(format!("keyed row {r:?} not drawn on the empty band"));
+            }
+            (None, true) => return fail(format!("null-key row {r:?} drawn on the empty band")),
+            (Some(_), true) => keyed += 1,
+            (None, false) => nulls += 1,
+        }
+    }
+    web_log_text(&format!(
+        "GUP band/categorical: {} colours, {keyed} keyed rows drawn, {nulls} null-key rows hidden",
+        swatches.len()
+    ));
+    Ok(image.into_raw())
+}
+
+/// A diverging colour scale (RFC-001 S5b) on WebGPU: a signed quantity,
+/// blue below zero and red above, with a ramp legend bar. Checks, in
+/// Rust, every point's centre against the scale's CPU mirror, and that the
+/// legend bar's ends are the colours of the domain's ends. Returns the
+/// straight-alpha RGBA pixels.
+#[wasm_bindgen]
+pub async fn render_diverging(width: u32, height: u32) -> Result<Vec<u8>, JsValue> {
+    std::panic::set_hook(Box::new(|info| web_error(&info.to_string())));
+    let cx = Context::new().await.map_err(js)?;
+    let rows: Vec<(f64, f64)> = (0..40u32)
+        .map(|i| {
+            let t = f64::from(i);
+            (t, 0.06 * (t - 14.0) + 0.3 * (t * 0.7).sin())
+        })
+        .collect();
+    let mut plot = Plot::new();
+    let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
+    let colour = ScaleRef::new(Diverging::blue_red());
+    plot.title("Diverging")
+        .add(Selection::<(f64, f64), Circle>::new(rows.clone()))
+        .attr(Circle::X, x.encode(|r: &(f64, f64)| r.0))
+        .attr(Circle::Y, y.encode(|r: &(f64, f64)| r.1))
+        .attr(Circle::RADIUS, Px(4.5))
+        .attr(Circle::FILL, colour.encode(|r: &(f64, f64)| r.1));
+    let resolved = plot
+        .resolve(&cx, width as f32 - LEGEND_WIDTH, height as f32)
+        .map_err(js)?;
+    let (mut scene, plot_rect) = (resolved.scene, resolved.layout.plot);
+    scene.width = width as f32;
+    let clip = scene.add_clip(plot_rect);
+    scene.push(Item {
+        z: Z_GRID,
+        clip: Some(clip),
+        kind: ItemKind::Rects(vec![RectPrim {
+            rect: plot_rect,
+            color: Color::hex(0xe4e7ee),
+        }]),
+    });
+    let right = width as f32 - LEGEND_WIDTH;
+    let bar = Rect::from_edges(
+        right + 6.0,
+        plot_rect.top(),
+        right + 18.0,
+        plot_rect.bottom(),
+    );
+    scene.push(Item {
+        z: Z_TITLE,
+        clip: None,
+        kind: ItemKind::Gradient(GradientBar::new(
+            &colour.read().ramp(),
+            bar,
+            GradientDirection::Vertical,
+        )),
+    });
+    let image = ImageTarget::new(&cx, width, height)
+        .map_err(js)?
+        .render(&cx, &scene)
+        .await
+        .map_err(js)?;
+    let fail = |m: String| Err(JsValue::from_str(&format!("diverging: {m}")));
+    for r in &rows {
+        let (px, py) = (x.read().eval(r.0), y.read().eval(r.1));
+        let want = colour.read().eval(r.1).to_rgba8();
+        let got = image.get_pixel(px as u32, py as u32).0;
+        if (0..3).any(|k| got[k].abs_diff(want[k]) > 2) {
+            return fail(format!("{r:?} drew {got:?}, not the mirror's {want:?}"));
+        }
+    }
+    let [lo, mid, hi] = colour.read().current_domain().unwrap_or([0.0; 3]);
+    if mid != 0.0 || lo != -hi {
+        return fail(format!(
+            "domain {lo} | {mid} | {hi} is not symmetric about 0"
+        ));
+    }
+    let cx_ = (bar.x + bar.width / 2.0) as u32;
+    for (py, value, end) in [
+        (bar.top() as u32, hi, "top"),
+        (bar.bottom() as u32 - 1, lo, "bottom"),
+    ] {
+        let (got, want) = (
+            image.get_pixel(cx_, py).0,
+            colour.read().eval(value).to_rgba8(),
+        );
+        if (0..3).any(|k| got[k].abs_diff(want[k]) > 3) {
+            return fail(format!("legend {end} drew {got:?}, not {want:?}"));
+        }
     }
     Ok(image.into_raw())
 }
