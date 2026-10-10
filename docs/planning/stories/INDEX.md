@@ -212,7 +212,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   vs a hi/lo f32 format by a measured spike, proved against
   `conformance::chunk_boundary`. Deps: GUP-395 ✅, GUP-414 ✅, GUP-410 ✅
   (soft).
-- [GUP-419](GUP-419_RFC_001_S5b_Colour_Scales_And_Dictionary_Hook.md) 📋 —
+- [GUP-419](GUP-419_RFC_001_S5b_Colour_Scales_And_Dictionary_Hook.md) 🚧 —
   RFC-001 step S5b: a dictionary hook (keys and `len()` for scale domains), the
   full `Categorical` (palette sized to the dictionary, with a legend), new
   `Diverging`, and `Band`/`Point` position scales with a hidden null key. Deps:
