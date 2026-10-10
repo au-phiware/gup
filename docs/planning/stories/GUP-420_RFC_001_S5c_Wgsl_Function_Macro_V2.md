@@ -482,11 +482,14 @@ let area = Energy.then(Pow::sqrt().domain(0.0, Energy.eval(7.8)).range(Px(0.0), 
   A colour function's compile error also cascaded into three unrelated type
   errors. The first two produce clear messages; the third and the rename
   suggestion were fixed.
-- **Disk.** Each Rust commit's hook run consumed 2.1–2.5 GB (2,483, 2,112,
-  2,175, 2,086 and about 2,190 MB), almost all of it debug incremental caches
-  left by clippy over the root crate. Twice free space dipped below 5 GB during
-  a hook or `mask all-check` (3.1 and 4.5 GB) before pruning `debug/incremental`
-  and superseded test binaries brought it back to 5.5–9.5 GB. No `cargo clean`.
+- **Disk.** Each of the seven Rust commits' hook runs consumed 2.1–2.5 GB
+  (2,483, 2,113, 2,112, 2,175, 2,086, 2,192 and 2,071 MB; the first ran the full
+  `mask all-check`), almost all of it debug incremental caches left by clippy
+  over the root crate. Docs-only commits cost nothing. Three times free space
+  dipped below 5 GB during a hook or `mask all-check` (3.1, 4.5 and 3.2 GB), and
+  pruning `debug/incremental` and superseded test binaries brought it back to
+  5.3–9.5 GB each time. No `cargo clean`. Pruning before every Rust commit, not
+  after, is the habit to keep.
 - **`perf-budget`**: a first run after rebuilding the release harness hits
   Mesa's cold shader cache (`cold_ms` 10.8). The second run is the measurement.
 
