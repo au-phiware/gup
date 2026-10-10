@@ -6,7 +6,7 @@
 //! append are later S-stories.
 
 use crate::channel::{Channel, Mark, Role, Visual};
-use crate::column::{ColumnData, ColumnFormat, ColumnStore};
+use crate::column::{ColumnFormat, ColumnStore};
 use crate::context::Context;
 use crate::encoding::{Encoding, IntoEncoding, Resource};
 use crate::error::{Error, Result};
@@ -167,14 +167,14 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         if let Some(store) = &mut self.columns {
             let new = &self.rows[start..];
             // The same columns, in the same order, as `column_encodings`.
-            let values: Vec<ColumnData<'_>> = self
+            let values = self
                 .encodings
-                .iter()
+                .iter_mut()
                 .filter_map(|e| match e {
                     Some(Encoding::Column(c)) => Some(c.evaluate(new)),
                     _ => None,
                 })
-                .collect();
+                .collect::<Result<Vec<_>>>()?;
             store.append(new.len(), &values)?;
         }
         Ok(())
@@ -273,10 +273,15 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
                     ),
                 ));
             }
-            let values: Vec<ColumnData<'_>> = self
-                .column_encodings()
-                .map(|(_, c)| c.evaluate(&self.rows))
-                .collect();
+            let rows = &self.rows;
+            let values = self
+                .encodings
+                .iter_mut()
+                .filter_map(|e| match e {
+                    Some(Encoding::Column(c)) => Some(c.evaluate(rows)),
+                    _ => None,
+                })
+                .collect::<Result<Vec<_>>>()?;
             let mut store = ColumnStore::new(formats, chunk_rows)?;
             store.append(self.rows.len(), &values)?;
             self.columns = Some(store);
@@ -391,10 +396,8 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         let mut k = 0;
         for (i, enc) in self.encodings.iter_mut().enumerate() {
             if let Some(Encoding::Column(c)) = enc {
-                if let Some(s) = stats[k] {
-                    c.fit(s.extent())
-                        .map_err(|e| context(e, M::NAME, M::CHANNELS[i].name))?;
-                }
+                c.fit(stats[k])
+                    .map_err(|e| context(e, M::NAME, M::CHANNELS[i].name))?;
                 k += 1;
             }
         }

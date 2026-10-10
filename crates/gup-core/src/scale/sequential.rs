@@ -164,7 +164,7 @@ pub(crate) fn sample_lut(lut: &[[u8; 4]], t: f64) -> Color {
     }
 }
 
-fn srgb_to_linear(c: f32) -> f32 {
+pub(crate) fn srgb_to_linear(c: f32) -> f32 {
     if c <= 0.04045 {
         c / 12.92
     } else {
@@ -180,7 +180,7 @@ fn linear_to_srgb(c: f32) -> f32 {
     }
 }
 
-fn srgb_to_oklab([r, g, b]: [f32; 3]) -> [f32; 3] {
+pub(crate) fn srgb_to_oklab([r, g, b]: [f32; 3]) -> [f32; 3] {
     let (r, g, b) = (srgb_to_linear(r), srgb_to_linear(g), srgb_to_linear(b));
     let l = (0.412_221_46 * r + 0.536_332_55 * g + 0.051_445_995 * b).cbrt();
     let m = (0.211_903_5 * r + 0.680_699_5 * g + 0.107_396_96 * b).cbrt();
@@ -192,7 +192,7 @@ fn srgb_to_oklab([r, g, b]: [f32; 3]) -> [f32; 3] {
     ]
 }
 
-fn oklab_to_srgb([l, a, b]: [f32; 3]) -> [f32; 3] {
+pub(crate) fn oklab_to_srgb([l, a, b]: [f32; 3]) -> [f32; 3] {
     let l_ = (l + 0.396_337_78 * a + 0.215_803_76 * b).powi(3);
     let m_ = (l - 0.105_561_346 * a - 0.063_854_17 * b).powi(3);
     let s_ = (l - 0.089_484_18 * a - 1.291_485_5 * b).powi(3);

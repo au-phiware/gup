@@ -5,7 +5,7 @@ error[E0277]: `&str` is not a column value; `encode` takes accessors returning n
    |                                  ^^^^^^ `encode`'s accessor returns `&str`
    |
    = help: the trait `ColumnValue` is not implemented for `&str`
-   = note: for string keys (categories), use `encode_key(|row| row.field.as_str())` on a dictionary function such as `Categorical`: its accessor may return a borrow of the row
+   = note: for string keys (categories), use `encode_key(|row| row.field.as_str())`, whose accessor may return a borrow of the row; for integer or enum keys, `encode_owned_key(|row| row.field)`; both on a dictionary function such as `Categorical`, `Band` or `Point`
 help: the following other types implement trait `ColumnValue`
   --> src/encoding.rs
    |
@@ -33,7 +33,7 @@ error[E0277]: `&str` is not a column value; `encode` takes accessors returning n
    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `encode`'s accessor returns `&str`
    |
    = help: the trait `ColumnValue` is not implemented for `&str`
-   = note: for string keys (categories), use `encode_key(|row| row.field.as_str())` on a dictionary function such as `Categorical`: its accessor may return a borrow of the row
+   = note: for string keys (categories), use `encode_key(|row| row.field.as_str())`, whose accessor may return a borrow of the row; for integer or enum keys, `encode_owned_key(|row| row.field)`; both on a dictionary function such as `Categorical`, `Band` or `Point`
 help: the following other types implement trait `ColumnValue`
   --> src/encoding.rs
    |

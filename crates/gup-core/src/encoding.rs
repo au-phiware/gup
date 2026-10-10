@@ -11,13 +11,14 @@
 //!   `Params` uniform and per-chunk base. Every scale implements it.
 //! - [`EncodeFn`] is what a channel is encoded through: one `ShaderFn`
 //!   (every `ShaderFn` is one), or a chain of them made by
-//!   [`EncodeFn::then`]. `encode`, `encode_key` and `then` live here.
+//!   [`EncodeFn::then`]. `encode`, the key encoders and `then` live here.
 
 use crate::channel::{ConstValue, GpuType, Px, Visual};
-use crate::column::{ColumnData, ColumnFormat};
+use crate::column::{ColumnData, ColumnFormat, ColumnStats, Dictionary, DictionaryKey, NULL_CODE};
 use crate::error::{Error, Result};
 use crate::shader::WgslModule;
 use std::marker::PhantomData;
+use std::sync::Arc;
 
 /// A GPU function from a column value (`In`) to a visual value (`Out`),
 /// implemented by one function of a WGSL library module.
@@ -83,6 +84,25 @@ pub trait ShaderFn: Clone + Send + Sync + 'static {
         Ok(())
     }
 
+    /// Adopt the keys of a dictionary-encoded column (RFC-001 S5b), if
+    /// this function has an automatic domain over dictionary codes:
+    /// `keys[code]` is the label of code `code`, in first-seen order, and
+    /// `keys.len()` is the domain's size.
+    ///
+    /// This is the dictionary channel's counterpart of
+    /// [`fit_domain`](Self::fit_domain): when a channel encodes keys
+    /// (`encode_key`, `encode_owned_key`), its first link is fitted by
+    /// `fit_keys` instead, with every key seen so far, and the links after
+    /// it by `fit_domain` (over the image of codes `0..len`). A codes'
+    /// numeric extent says nothing about the keys, so a function reading
+    /// codes never sees one. Appended rows with a new key call it again
+    /// with one more key: a domain change, so a uniform write, with no
+    /// column bytes. Functions without a key domain accept any keys.
+    fn fit_keys(&mut self, keys: &[Arc<str>]) -> Result<()> {
+        let _ = keys;
+        Ok(())
+    }
+
     /// The extent of this function's numeric output over inputs in
     /// `extent`, if it has one (`None`, the default, for colours and
     /// functions without a CPU mirror). Scales are monotonic, so theirs is
@@ -112,6 +132,12 @@ pub trait EncodeFn: Clone + Send + Sync + 'static {
     /// extent through the links before it.
     fn fit(&mut self, extent: (f64, f64)) -> Result<()>;
 
+    /// Fit every link's automatic domain from a dictionary-encoded
+    /// column's `keys` (see [`ShaderFn::fit_keys`]): the first link's by
+    /// its keys, each later link's to the image of codes `0..keys.len()`
+    /// through the links before it.
+    fn fit_keys(&mut self, keys: &[Arc<str>]) -> Result<()>;
+
     /// The extent of the chain's numeric output over column values in
     /// `extent`: each link's [`ShaderFn::image`] in turn.
     fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)>;
@@ -134,36 +160,102 @@ pub trait EncodeFn: Clone + Send + Sync + 'static {
     /// Encode a string key of each row through a dictionary (RFC-001 S4b):
     /// `categorical.encode_key(|r: &Row| r.continent.as_str())`. Each
     /// distinct key gets the next `u32` code in first-seen order, and that
-    /// order is the domain.
+    /// order is the domain: the function sees the keys through
+    /// [`ShaderFn::fit_keys`].
     ///
     /// The accessor may return a borrow of its row: its bound is
     /// `for<'a> Fn(&'a T) -> &'a str`, which [`encode`](Self::encode)'s
     /// `Fn(&T) -> D` cannot express (RFC-001 §12 risk 4). Rows whose key
-    /// can be missing use [`encode_nullable_key`](Self::encode_nullable_key).
+    /// can be missing use [`encode_nullable_key`](Self::encode_nullable_key);
+    /// integer, enum and other owned keys use
+    /// [`encode_owned_key`](Self::encode_owned_key).
     fn encode_key<T, A>(&self, accessor: A) -> KeyEncoded<Key<A>, Self>
     where
         Self: EncodeFn<Input = u32>,
-        A: for<'a> Fn(&'a T) -> &'a str,
+        A: for<'a> Fn(&'a T) -> &'a str + Send + Sync + 'static,
     {
-        KeyEncoded {
-            key: Key(accessor),
-            func: self.clone(),
-        }
+        KeyEncoded::new(Key(accessor), self.clone())
     }
 
     /// Like [`encode_key`](Self::encode_key), for keys that may be
     /// missing: `None` is a null, stored as
-    /// [`NULL_CODE`](crate::column::NULL_CODE), which a colour function
-    /// draws in its null colour.
+    /// [`NULL_CODE`](crate::column::NULL_CODE). A colour function draws it
+    /// in its null colour; a null position is not drawn.
     fn encode_nullable_key<T, A>(&self, accessor: A) -> KeyEncoded<NullableKey<A>, Self>
     where
         Self: EncodeFn<Input = u32>,
-        A: for<'a> Fn(&'a T) -> Option<&'a str>,
+        A: for<'a> Fn(&'a T) -> Option<&'a str> + Send + Sync + 'static,
     {
-        KeyEncoded {
-            key: NullableKey(accessor),
-            func: self.clone(),
-        }
+        KeyEncoded::new(NullableKey(accessor), self.clone())
+    }
+
+    /// Encode an owned key of each row through a dictionary (RFC-001
+    /// S5b): integers, enums or anything else that is
+    /// `Hash + Eq + Clone + Display` ([`DictionaryKey`]). Codes follow
+    /// first-seen order, as for [`encode_key`](Self::encode_key), and each
+    /// key's label (on an axis or in a legend) is its `Display`. Keys are
+    /// compared by `Eq`, not by label.
+    ///
+    /// ```
+    /// use gup_core::prelude::*;
+    /// use std::fmt;
+    ///
+    /// #[derive(Clone, Copy, Hash, PartialEq, Eq)]
+    /// enum Grade { Low, Mid, High }
+    /// impl fmt::Display for Grade {
+    ///     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    ///         f.write_str(match self { Grade::Low => "low", Grade::Mid => "mid", Grade::High => "high" })
+    ///     }
+    /// }
+    /// struct Sample { grade: Grade, year: i32, value: f64 }
+    /// let rows = vec![
+    ///     Sample { grade: Grade::Mid, year: 2021, value: 3.0 },
+    ///     Sample { grade: Grade::High, year: 2019, value: 5.0 },
+    ///     Sample { grade: Grade::Mid, year: 2020, value: 4.0 },
+    ///     Sample { grade: Grade::Low, year: 2019, value: 1.0 },
+    /// ];
+    ///
+    /// let cx = Context::new_blocking()?;
+    /// let mut plot = Plot::new();
+    /// let (x, y) = (plot.x(Point::new()), plot.y(Linear::new()));
+    /// let colour = ScaleRef::new(Categorical::okabe_ito());
+    /// plot.add(Selection::<Sample, Circle>::new(rows))
+    ///     .attr(Circle::X, x.encode_owned_key(|s: &Sample| s.year))
+    ///     .attr(Circle::Y, y.encode(|s: &Sample| s.value))
+    ///     .attr(Circle::FILL, colour.encode_owned_key(|s: &Sample| s.grade));
+    /// let (_, layout) = plot.render_resolved(&cx, 320, 200)?;
+    ///
+    /// // Each axis tick is a key, labelled by `Display`, in first-seen
+    /// // order; so is each legend swatch.
+    /// let labels: Vec<_> = layout.texts.iter().map(|t| &*t.run.text).collect();
+    /// assert!(labels.starts_with(&["2021", "2019", "2020"]), "{labels:?}");
+    /// let legend = colour.read().legend();
+    /// let swatches: Vec<_> = legend.swatches().iter().map(|s| &*s.label).collect();
+    /// assert_eq!(swatches, ["mid", "high", "low"]);
+    /// # Ok::<(), gup_core::Error>(())
+    /// ```
+    fn encode_owned_key<T, K, A>(&self, accessor: A) -> KeyEncoded<OwnedKey<A, K>, Self>
+    where
+        Self: EncodeFn<Input = u32>,
+        K: DictionaryKey,
+        A: Fn(&T) -> K + Send + Sync + 'static,
+    {
+        KeyEncoded::new(OwnedKey(accessor, PhantomData), self.clone())
+    }
+
+    /// Like [`encode_owned_key`](Self::encode_owned_key), for keys that may
+    /// be missing: `None` is a null (see
+    /// [`encode_nullable_key`](Self::encode_nullable_key)).
+    fn encode_nullable_owned_key<T, K, A>(
+        &self,
+        accessor: A,
+    ) -> KeyEncoded<NullableOwnedKey<A, K>, Self>
+    where
+        Self: EncodeFn<Input = u32>,
+        K: DictionaryKey,
+        A: Fn(&T) -> Option<K> + Send + Sync + 'static,
+    {
+        KeyEncoded::new(NullableOwnedKey(accessor, PhantomData), self.clone())
     }
 
     /// Feed this function's output into `next` (RFC-001 §5): the glue
@@ -251,6 +343,10 @@ impl<S: ShaderFn> EncodeFn for S {
         self.fit_domain(extent)
     }
 
+    fn fit_keys(&mut self, keys: &[Arc<str>]) -> Result<()> {
+        ShaderFn::fit_keys(self, keys)
+    }
+
     fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)> {
         ShaderFn::image(self, extent)
     }
@@ -320,6 +416,15 @@ where
         self.next.fit((a.min(b), a.max(b)))
     }
 
+    fn fit_keys(&mut self, keys: &[Arc<str>]) -> Result<()> {
+        self.first.fit_keys(keys)?;
+        let Some(last) = keys.len().checked_sub(1) else {
+            return Ok(());
+        };
+        let (a, b) = (self.first.eval(0.0), self.first.eval(last as f64));
+        self.next.fit((a.min(b), a.max(b)))
+    }
+
     fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)> {
         self.next.image(self.first.image(extent)?)
     }
@@ -350,7 +455,7 @@ pub enum Resource {
 #[diagnostic::on_unimplemented(
     message = "`{Self}` is not a column value; `encode` takes accessors returning numbers",
     label = "`encode`'s accessor returns `{Self}`",
-    note = "for string keys (categories), use `encode_key(|row| row.field.as_str())` on a dictionary function such as `Categorical`: its accessor may return a borrow of the row"
+    note = "for string keys (categories), use `encode_key(|row| row.field.as_str())`, whose accessor may return a borrow of the row; for integer or enum keys, `encode_owned_key(|row| row.field)`; both on a dictionary function such as `Categorical`, `Band` or `Point`"
 )]
 pub trait ColumnValue: Copy + 'static {
     /// The GPU type the column holds.
@@ -382,37 +487,94 @@ pub struct Encoded<A, S> {
 }
 
 /// A key accessor composed with an encoding function over dictionary
-/// codes, made by [`EncodeFn::encode_key`] or
-/// [`EncodeFn::encode_nullable_key`].
+/// codes, made by [`EncodeFn::encode_key`] and its siblings. It owns the
+/// channel's [`Dictionary`]: the column store holds only codes, and the
+/// function is fitted to the dictionary's keys
+/// ([`ShaderFn::fit_keys`]).
 #[derive(Clone)]
-pub struct KeyEncoded<K, S> {
+pub struct KeyEncoded<K: KeySource, S> {
     key: K,
     func: S,
+    dictionary: Dictionary<K::Key>,
 }
 
-/// Reads a dictionary key from a row (see [`EncodeFn::encode_key`]).
-/// Implemented by [`Key`] and [`NullableKey`], which those methods make.
-pub trait KeyAccessor<T>: Send + Sync + 'static {
-    /// The key of `row`, borrowed from it; `None` is a null.
-    fn key<'a>(&self, row: &'a T) -> Option<&'a str>;
+impl<K: KeySource, S> KeyEncoded<K, S> {
+    fn new(key: K, func: S) -> Self {
+        Self {
+            key,
+            func,
+            dictionary: Dictionary::new(),
+        }
+    }
 }
 
-/// A key accessor whose rows always have a key (made by
+/// The type of key a key accessor reads (see [`KeyAccessor`]).
+pub trait KeySource: Send + Sync + 'static {
+    /// What the channel's [`Dictionary`] keys on.
+    type Key: DictionaryKey;
+}
+
+/// Reads a dictionary key from a row and encodes it (see
+/// [`EncodeFn::encode_key`]). Implemented by [`Key`], [`NullableKey`],
+/// [`OwnedKey`] and [`NullableOwnedKey`], which those methods make.
+pub trait KeyAccessor<T>: KeySource {
+    /// The code of `row`'s key in `dictionary`, which gives a new key the
+    /// next code; [`NULL_CODE`] for a missing key.
+    fn code(&self, row: &T, dictionary: &mut Dictionary<Self::Key>) -> Result<u32>;
+}
+
+/// A string key accessor whose rows always have a key (made by
 /// [`EncodeFn::encode_key`]).
 #[derive(Clone)]
 pub struct Key<A>(A);
 
-/// A key accessor whose rows may lack a key (made by
+/// A string key accessor whose rows may lack a key (made by
 /// [`EncodeFn::encode_nullable_key`]).
 #[derive(Clone)]
 pub struct NullableKey<A>(A);
+
+/// An owned key accessor whose rows always have a key (made by
+/// [`EncodeFn::encode_owned_key`]).
+pub struct OwnedKey<A, K>(A, PhantomData<fn() -> K>);
+
+/// An owned key accessor whose rows may lack a key (made by
+/// [`EncodeFn::encode_nullable_owned_key`]).
+pub struct NullableOwnedKey<A, K>(A, PhantomData<fn() -> K>);
+
+impl<A: Clone, K> Clone for OwnedKey<A, K> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone(), PhantomData)
+    }
+}
+
+impl<A: Clone, K> Clone for NullableOwnedKey<A, K> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone(), PhantomData)
+    }
+}
+
+impl<A: Send + Sync + 'static> KeySource for Key<A> {
+    type Key = Arc<str>;
+}
+
+impl<A: Send + Sync + 'static> KeySource for NullableKey<A> {
+    type Key = Arc<str>;
+}
+
+impl<A: Send + Sync + 'static, K: DictionaryKey> KeySource for OwnedKey<A, K> {
+    type Key = K;
+}
+
+impl<A: Send + Sync + 'static, K: DictionaryKey> KeySource for NullableOwnedKey<A, K> {
+    type Key = K;
+}
 
 impl<T, A> KeyAccessor<T> for Key<A>
 where
     A: for<'a> Fn(&'a T) -> &'a str + Send + Sync + 'static,
 {
-    fn key<'a>(&self, row: &'a T) -> Option<&'a str> {
-        Some((self.0)(row))
+    fn code(&self, row: &T, dictionary: &mut Dictionary) -> Result<u32> {
+        dictionary.encode_borrowed((self.0)(row))
     }
 }
 
@@ -420,8 +582,28 @@ impl<T, A> KeyAccessor<T> for NullableKey<A>
 where
     A: for<'a> Fn(&'a T) -> Option<&'a str> + Send + Sync + 'static,
 {
-    fn key<'a>(&self, row: &'a T) -> Option<&'a str> {
-        (self.0)(row)
+    fn code(&self, row: &T, dictionary: &mut Dictionary) -> Result<u32> {
+        (self.0)(row).map_or(Ok(NULL_CODE), |k| dictionary.encode_borrowed(k))
+    }
+}
+
+impl<T, A, K> KeyAccessor<T> for OwnedKey<A, K>
+where
+    A: Fn(&T) -> K + Send + Sync + 'static,
+    K: DictionaryKey,
+{
+    fn code(&self, row: &T, dictionary: &mut Dictionary<K>) -> Result<u32> {
+        dictionary.encode((self.0)(row))
+    }
+}
+
+impl<T, A, K> KeyAccessor<T> for NullableOwnedKey<A, K>
+where
+    A: Fn(&T) -> Option<K> + Send + Sync + 'static,
+    K: DictionaryKey,
+{
+    fn code(&self, row: &T, dictionary: &mut Dictionary<K>) -> Result<u32> {
+        (self.0)(row).map_or(Ok(NULL_CODE), |k| dictionary.encode(k))
     }
 }
 
@@ -505,13 +687,16 @@ impl<T> std::fmt::Debug for Encoding<T> {
 
 /// Object-safe view of an accessor + encoding function.
 pub trait DynColumnEncoding<T>: Send + Sync {
-    /// Run the accessor over every row: numbers, or keys borrowed from
-    /// the rows.
-    fn evaluate<'r>(&self, rows: &'r [T]) -> ColumnData<'r>;
+    /// Run the accessor over `rows`: numbers, or keys encoded through the
+    /// channel's dictionary (which grows by any new key).
+    fn evaluate(&mut self, rows: &[T]) -> Result<ColumnData>;
     /// The encoding function's links, in evaluation order.
     fn links(&self) -> Vec<&dyn DynShaderFn>;
-    /// See [`EncodeFn::fit`].
-    fn fit(&mut self, extent: (f64, f64)) -> Result<()>;
+    /// Fit the function's automatic domains to the column: a numeric
+    /// column's `stats` ([`EncodeFn::fit`]; nothing to fit without a
+    /// non-null value), or a key column's dictionary
+    /// ([`EncodeFn::fit_keys`]).
+    fn fit(&mut self, stats: Option<ColumnStats>) -> Result<()>;
     /// See [`EncodeFn::image`].
     fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)>;
 }
@@ -528,16 +713,18 @@ where
     D: ColumnValue,
     S: EncodeFn,
 {
-    fn evaluate<'r>(&self, rows: &'r [T]) -> ColumnData<'r> {
-        ColumnData::Values(rows.iter().map(|r| (self.accessor)(r).to_f64()).collect())
+    fn evaluate(&mut self, rows: &[T]) -> Result<ColumnData> {
+        Ok(ColumnData::Values(
+            rows.iter().map(|r| (self.accessor)(r).to_f64()).collect(),
+        ))
     }
 
     fn links(&self) -> Vec<&dyn DynShaderFn> {
         self.func.links()
     }
 
-    fn fit(&mut self, extent: (f64, f64)) -> Result<()> {
-        self.func.fit(extent)
+    fn fit(&mut self, stats: Option<ColumnStats>) -> Result<()> {
+        stats.map_or(Ok(()), |s| self.func.fit(s.extent()))
     }
 
     fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)> {
@@ -550,23 +737,27 @@ where
     K: KeyAccessor<T>,
     S: EncodeFn,
 {
-    fn evaluate<'r>(&self, rows: &'r [T]) -> ColumnData<'r> {
-        ColumnData::Keys(rows.iter().map(|r| self.key.key(r)).collect())
+    fn evaluate(&mut self, rows: &[T]) -> Result<ColumnData> {
+        let dictionary = &mut self.dictionary;
+        Ok(ColumnData::Codes(
+            rows.iter()
+                .map(|r| self.key.code(r, dictionary))
+                .collect::<Result<_>>()?,
+        ))
     }
 
     fn links(&self) -> Vec<&dyn DynShaderFn> {
         self.func.links()
     }
 
-    fn fit(&mut self, extent: (f64, f64)) -> Result<()> {
-        self.func.fit(extent)
+    fn fit(&mut self, _stats: Option<ColumnStats>) -> Result<()> {
+        self.func.fit_keys(self.dictionary.labels())
     }
 
     fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)> {
         self.func.image(extent)
     }
 }
-
 /// Object-safe view of a [`ShaderFn`], used by the glue emitter and the
 /// layer's uniform writer.
 pub trait DynShaderFn: Send + Sync {

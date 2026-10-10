@@ -35,21 +35,26 @@
 //!   null, so data without nulls pays nothing on the GPU; being a storage
 //!   binding, it uses none of the 8 vertex-buffer slots (RFC-001 §12 risk
 //!   7). A null row's value bytes are unspecified, and stats skip it.
-//! - **Dictionary columns** store [`NULL_CODE`] for a missing key, which
-//!   the colour function resolves to its null colour.
+//! - **Dictionary columns** store [`NULL_CODE`] for a missing key: a colour
+//!   function resolves it to its null colour, and the glue hides a row
+//!   whose position key is null by comparing the code (RFC-001 S5b), so
+//!   these columns need no validity plane either. The keys themselves live
+//!   in each channel's [`Dictionary`]; the store holds only codes.
 //!
 //! ## Retention
 //!
 //! [`release`](ColumnStore::release) drops the CPU copy of every full
 //! chunk whose rows are uploaded (the `Retain` policies of RFC-001 §3).
-//! Stats, origins and dictionaries stay. A released chunk can still be
+//! Stats and origins stay. A released chunk can still be
 //! drawn and appended after, but not uploaded to another context:
 //! [`upload`](ColumnStore::upload) says so with an error.
 
 use crate::context::{Context, ContextId, Upload};
 use crate::error::{Error, Result};
-use std::borrow::Cow;
+use std::borrow::{Borrow, Cow};
 use std::collections::HashMap;
+use std::fmt::Display;
+use std::hash::Hash;
 use std::sync::Arc;
 
 /// How a column's values are stored on the GPU.
@@ -140,17 +145,54 @@ impl ColumnFormat {
 /// key. No key is ever given this code.
 pub const NULL_CODE: u32 = u32::MAX;
 
+/// What a [`Dictionary`] can key on: strings, integers, enums, anything
+/// hashable whose `Display` is its label (on an axis or in a legend).
+pub trait DictionaryKey: Hash + Eq + Clone + Display + Send + Sync + 'static {}
+
+impl<K: Hash + Eq + Clone + Display + Send + Sync + 'static> DictionaryKey for K {}
+
 /// Keys to `u32` codes, in first-seen order: the domain of a dictionary
-/// column. One per [`U32`](ColumnFormat::U32) column of a store, and
-/// append-only, so appended rows never renumber a code; a new key only
-/// grows the domain.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct Dictionary {
-    codes: HashMap<Arc<str>, u32>,
-    keys: Vec<Arc<str>>,
+/// ([`U32`](ColumnFormat::U32)) column. Append-only, so appended rows never
+/// renumber a code; a new key only grows the domain.
+///
+/// Each dictionary-encoded channel owns one (RFC-001 S5b): its key
+/// accessor ([`encode_key`](crate::EncodeFn::encode_key) for borrowed
+/// strings, [`encode_owned_key`](crate::EncodeFn::encode_owned_key) for
+/// integers, enums and other owned keys) encodes rows through it, the
+/// column store holds only the codes, and the channel's scale sees the
+/// [`labels`](Self::labels) (each key's `Display`) through
+/// [`ShaderFn::fit_keys`](crate::ShaderFn::fit_keys).
+///
+/// ```
+/// use gup_core::column::Dictionary;
+///
+/// let mut years = Dictionary::<i32>::new();
+/// assert_eq!(years.encode(2024)?, 0);
+/// assert_eq!(years.encode(1999)?, 1);
+/// assert_eq!(years.encode(2024)?, 0);
+/// assert_eq!(years.code(&1999), Some(1));
+/// assert_eq!(years.key(1), Some(&1999));
+/// assert_eq!(&*years.labels()[1], "1999");
+/// # Ok::<(), gup_core::Error>(())
+/// ```
+#[derive(Clone, Debug)]
+pub struct Dictionary<K = Arc<str>> {
+    codes: HashMap<K, u32>,
+    keys: Vec<K>,
+    labels: Vec<Arc<str>>,
 }
 
-impl Dictionary {
+impl<K> Default for Dictionary<K> {
+    fn default() -> Self {
+        Self {
+            codes: HashMap::new(),
+            keys: Vec::new(),
+            labels: Vec::new(),
+        }
+    }
+}
+
+impl<K: DictionaryKey> Dictionary<K> {
     /// An empty dictionary.
     pub fn new() -> Self {
         Self::default()
@@ -167,25 +209,53 @@ impl Dictionary {
     }
 
     /// The code of `key`, if it has been seen.
-    pub fn code(&self, key: &str) -> Option<u32> {
+    pub fn code<Q>(&self, key: &Q) -> Option<u32>
+    where
+        K: Borrow<Q>,
+        Q: Hash + Eq + ?Sized,
+    {
         self.codes.get(key).copied()
     }
 
     /// The key with `code`, if any ([`NULL_CODE`] has none).
-    pub fn key(&self, code: u32) -> Option<&str> {
-        self.keys.get(code as usize).map(|k| &**k)
+    pub fn key(&self, code: u32) -> Option<&K> {
+        self.keys.get(code as usize)
     }
 
     /// The keys in code order (first-seen order): the domain.
-    pub fn keys(&self) -> impl ExactSizeIterator<Item = &str> {
-        self.keys.iter().map(|k| &**k)
+    pub fn keys(&self) -> impl ExactSizeIterator<Item = &K> {
+        self.keys.iter()
+    }
+
+    /// Each key's label (its `Display`), in code order: what an axis or a
+    /// legend shows for it.
+    pub fn labels(&self) -> &[Arc<str>] {
+        &self.labels
     }
 
     /// The code of `key`, giving it the next code if it is new.
-    pub(crate) fn encode(&mut self, key: &str) -> Result<u32> {
+    pub fn encode(&mut self, key: K) -> Result<u32> {
+        if let Some(&code) = self.codes.get(&key) {
+            return Ok(code);
+        }
+        self.insert(key)
+    }
+
+    /// Like [`encode`](Self::encode) for a borrowed key, copied into the
+    /// dictionary only if it is new: a string key read from a row costs a
+    /// hash lookup, not an allocation.
+    pub fn encode_borrowed<Q>(&mut self, key: &Q) -> Result<u32>
+    where
+        K: Borrow<Q> + for<'q> From<&'q Q>,
+        Q: Hash + Eq + ?Sized,
+    {
         if let Some(&code) = self.codes.get(key) {
             return Ok(code);
         }
+        self.insert(K::from(key))
+    }
+
+    fn insert(&mut self, key: K) -> Result<u32> {
         let code = u32::try_from(self.keys.len())
             .ok()
             .filter(|&c| c != NULL_CODE)
@@ -198,8 +268,8 @@ impl Dictionary {
                     ),
                 )
             })?;
-        let key: Arc<str> = key.into();
-        self.codes.insert(Arc::clone(&key), code);
+        self.codes.insert(key.clone(), code);
+        self.labels.push(key.to_string().into());
         self.keys.push(key);
         Ok(code)
     }
@@ -207,21 +277,23 @@ impl Dictionary {
 
 /// New rows of one column, as an accessor produced them.
 #[derive(Clone, Debug, PartialEq)]
-pub enum ColumnData<'a> {
-    /// Numbers, for an [`F32`](ColumnFormat::F32) or
-    /// [`F32Relative`](ColumnFormat::F32Relative) column. Non-finite
+pub enum ColumnData {
+    /// Numbers, for an [`F32`](ColumnFormat::F32),
+    /// [`F32Relative`](ColumnFormat::F32Relative) or
+    /// [`F32x2Relative`](ColumnFormat::F32x2Relative) column. Non-finite
     /// values are nulls.
     Values(Vec<f64>),
-    /// Keys, for a [`U32`](ColumnFormat::U32) column, encoded through the
-    /// column's [`Dictionary`]. `None` is a null.
-    Keys(Vec<Option<&'a str>>),
+    /// Dictionary codes, for a [`U32`](ColumnFormat::U32) column: keys
+    /// already encoded through the channel's [`Dictionary`].
+    /// [`NULL_CODE`] is a null.
+    Codes(Vec<u32>),
 }
 
-impl ColumnData<'_> {
+impl ColumnData {
     fn len(&self) -> usize {
         match self {
             Self::Values(v) => v.len(),
-            Self::Keys(k) => k.len(),
+            Self::Codes(c) => c.len(),
         }
     }
 
@@ -229,12 +301,12 @@ impl ColumnData<'_> {
     fn fits(&self, format: ColumnFormat) -> bool {
         match self {
             Self::Values(_) => format.has_validity(),
-            Self::Keys(_) => format == ColumnFormat::U32,
+            Self::Codes(_) => format == ColumnFormat::U32,
         }
     }
 }
 
-impl From<Vec<f64>> for ColumnData<'_> {
+impl From<Vec<f64>> for ColumnData {
     fn from(values: Vec<f64>) -> Self {
         Self::Values(values)
     }
@@ -544,19 +616,12 @@ impl Chunk {
         self.capacity = capacity;
     }
 
-    /// Store rows `range` of `columns` as the chunk's rows `len..`,
-    /// encoding keys through `dictionaries`.
-    fn write(
-        &mut self,
-        columns: &[ColumnData<'_>],
-        range: std::ops::Range<usize>,
-        dictionaries: &mut [Option<Dictionary>],
-        planes: usize,
-    ) -> Result<()> {
+    /// Store rows `range` of `columns` as the chunk's rows `len..`.
+    fn write(&mut self, columns: &[ColumnData], range: std::ops::Range<usize>, planes: usize) {
         let at = self.len;
         let cpu = self.cpu.as_mut().expect("only full chunks are released");
         let mut plane = 0;
-        for ((col, data), dictionary) in self.columns.iter_mut().zip(columns).zip(dictionaries) {
+        for (col, data) in self.columns.iter_mut().zip(columns) {
             match data {
                 ColumnData::Values(values) => {
                     let values = &values[range.clone()];
@@ -569,17 +634,11 @@ impl Chunk {
                     }
                     plane += 1;
                 }
-                ColumnData::Keys(keys) => {
-                    let dictionary = dictionary.as_mut().expect("U32 columns have a dictionary");
-                    let codes = keys[range.clone()]
-                        .iter()
-                        .map(|k| k.map_or(Ok(NULL_CODE), |k| dictionary.encode(k)))
-                        .collect::<Result<Vec<_>>>()?;
-                    col.write_codes(&mut cpu.bytes, at, &codes);
+                ColumnData::Codes(codes) => {
+                    col.write_codes(&mut cpu.bytes, at, &codes[range.clone()]);
                 }
             }
         }
-        Ok(())
     }
 
     /// Whether [`upload`](Self::upload) to `cx` can bring this chunk up to
@@ -754,8 +813,6 @@ pub struct ColumnStore {
     chunk_rows: u32,
     formats: Vec<ColumnFormat>,
     chunks: Vec<Chunk>,
-    /// One per column: a dictionary for each `U32` column.
-    dictionaries: Vec<Option<Dictionary>>,
 }
 
 /// Column sub-ranges are aligned for both vertex fetch and storage binding.
@@ -812,10 +869,6 @@ impl ColumnStore {
         Ok(Self {
             rows: 0,
             chunk_rows,
-            dictionaries: formats
-                .iter()
-                .map(|f| (*f == ColumnFormat::U32).then(Dictionary::new))
-                .collect(),
             formats,
             chunks: Vec::new(),
         })
@@ -824,11 +877,11 @@ impl ColumnStore {
     /// Build a store from evaluated accessor outputs, one
     /// `(format, data)` pair per column, `chunk_rows` rows per chunk.
     /// All columns must have the same length.
-    pub fn from_columns<'a, D: Into<ColumnData<'a>>>(
+    pub fn from_columns<D: Into<ColumnData>>(
         columns: Vec<(ColumnFormat, D)>,
         chunk_rows: u32,
     ) -> Result<Self> {
-        let (formats, data): (Vec<_>, Vec<ColumnData<'a>>) =
+        let (formats, data): (Vec<_>, Vec<ColumnData>) =
             columns.into_iter().map(|(f, d)| (f, d.into())).unzip();
         let rows = data.first().map_or(0, ColumnData::len);
         let mut store = Self::new(formats, chunk_rows)?;
@@ -845,10 +898,9 @@ impl ColumnStore {
     /// per column (none for a store without columns, whose rows only
     /// count instances). Fills the last chunk, growing its buffer, then
     /// opens new chunks with fresh origins and stats; full chunks are
-    /// never touched. Keys are encoded through each column's append-only
-    /// dictionary. The next [`upload`](Self::upload) writes only the new
+    /// never touched. The next [`upload`](Self::upload) writes only the new
     /// rows' bytes.
-    pub fn append(&mut self, rows: usize, columns: &[ColumnData<'_>]) -> Result<()> {
+    pub fn append(&mut self, rows: usize, columns: &[ColumnData]) -> Result<()> {
         if columns.len() != self.formats.len() {
             return Err(Error::config(
                 "column store",
@@ -873,7 +925,7 @@ impl ColumnStore {
                         "column {i} is {format:?} but was given {}",
                         match c {
                             ColumnData::Values(_) => "numbers",
-                            ColumnData::Keys(_) => "keys",
+                            ColumnData::Codes(_) => "codes",
                         }
                     ),
                 ));
@@ -904,12 +956,7 @@ impl ColumnStore {
                     .min(self.chunk_rows);
                 chunk.grow(&self.formats, planes, capacity);
             }
-            chunk.write(
-                columns,
-                done..done + take as usize,
-                &mut self.dictionaries,
-                planes,
-            )?;
+            chunk.write(columns, done..done + take as usize, planes);
             chunk.len += take;
             self.rows += u64::from(take);
             done += take as usize;
@@ -945,12 +992,6 @@ impl ColumnStore {
             .map(|c| c.columns[index].stats)
             .fold(Acc::EMPTY, Acc::merge)
             .stats()
-    }
-
-    /// The dictionary of column `index`, if it is a
-    /// [`U32`](ColumnFormat::U32) column. Kept by every retention policy.
-    pub fn dictionary(&self, index: usize) -> Option<&Dictionary> {
-        self.dictionaries.get(index)?.as_ref()
     }
 
     /// Whether any numeric column has a null, so the store uploads (and
@@ -993,9 +1034,8 @@ impl ColumnStore {
     }
 
     /// Drop the CPU copy of every full chunk whose rows (and null bits)
-    /// are uploaded, keeping its stats and origins; the store's
-    /// dictionaries stay too. The last, unfilled chunk keeps its copy so
-    /// appends can fill it. Returns the number of chunks released by this
+    /// are uploaded, keeping its stats and origins. The last, unfilled
+    /// chunk keeps its copy so appends can fill it. Returns the number of chunks released by this
     /// call.
     pub fn release(&mut self) -> usize {
         let chunk_rows = self.chunk_rows;
@@ -1356,6 +1396,16 @@ mod tests {
         (chunk.validity().unwrap()[row / 32 * planes + plane] >> (row % 32)) & 1 == 1
     }
 
+    /// `keys` encoded through `dict`, as a key accessor encodes them.
+    fn keyed(dict: &mut Dictionary, keys: &[Option<&str>]) -> ColumnData {
+        ColumnData::Codes(
+            keys.iter()
+                .map(|k| k.map_or(Ok(NULL_CODE), |k| dict.encode_borrowed(k)))
+                .collect::<Result<_>>()
+                .unwrap(),
+        )
+    }
+
     /// The codes stored in column `col` of every chunk, in row order.
     fn codes(store: &ColumnStore, col: usize) -> Vec<u32> {
         store
@@ -1390,7 +1440,7 @@ mod tests {
         let store = ColumnStore::from_columns(
             vec![
                 (ColumnFormat::F32Relative, ColumnData::Values(x.clone())),
-                (ColumnFormat::U32, ColumnData::Keys(keys)),
+                (ColumnFormat::U32, keyed(&mut Dictionary::new(), &keys)),
                 (ColumnFormat::F32, ColumnData::Values(y.clone())),
             ],
             ALL,
@@ -1421,30 +1471,26 @@ mod tests {
     /// a missing key is `NULL_CODE`, which is not a validity bit.
     #[test]
     fn dictionary_codes_follow_first_seen_order_and_never_renumber() {
+        let mut dict = Dictionary::new();
         let mut store = ColumnStore::new(vec![ColumnFormat::U32], 64).unwrap();
-        store
-            .append(
-                4,
-                &[ColumnData::Keys(vec![
-                    Some("Europe"),
-                    Some("Asia"),
-                    None,
-                    Some("Europe"),
-                ])],
-            )
-            .unwrap();
+        let first = keyed(
+            &mut dict,
+            &[Some("Europe"), Some("Asia"), None, Some("Europe")],
+        );
+        store.append(4, &[first]).unwrap();
         assert_eq!(codes(&store, 0), [0, 1, NULL_CODE, 0]);
         let more: Vec<Option<&str>> = (0..70)
             .map(|i| Some(["Africa", "Asia", "Oceania"][i % 3]))
             .collect();
-        store.append(70, &[ColumnData::Keys(more)]).unwrap();
+        store.append(70, &[keyed(&mut dict, &more)]).unwrap();
         assert_eq!(store.chunks().len(), 2);
-        let dict = store.dictionary(0).unwrap();
         assert_eq!(
-            dict.keys().collect::<Vec<_>>(),
+            dict.keys().map(|k| &**k).collect::<Vec<_>>(),
             ["Europe", "Asia", "Africa", "Oceania"]
         );
-        assert_eq!((dict.code("Oceania"), dict.key(1)), (Some(3), Some("Asia")));
+        assert_eq!(dict.code("Oceania"), Some(3));
+        assert_eq!(dict.key(1).map(|k| &**k), Some("Asia"));
+        assert_eq!(&*dict.labels()[3], "Oceania");
         assert_eq!(dict.key(NULL_CODE), None);
         let all = codes(&store, 0);
         assert_eq!(&all[..7], [0, 1, NULL_CODE, 0, 2, 1, 3]);
@@ -1473,7 +1519,7 @@ mod tests {
         let cx = Context::new_blocking().unwrap();
         let mut store =
             ColumnStore::new(vec![ColumnFormat::F32Relative, ColumnFormat::F32], 256).unwrap();
-        let rows = |from: u32, n: u32, nan: Option<u32>| -> Vec<ColumnData<'static>> {
+        let rows = |from: u32, n: u32, nan: Option<u32>| -> Vec<ColumnData> {
             let v: Vec<f64> = (from..from + n)
                 .map(|i| {
                     if Some(i) == nan {
@@ -1485,7 +1531,7 @@ mod tests {
                 .collect();
             vec![ColumnData::Values(v.clone()), ColumnData::Values(v)]
         };
-        let step = |store: &mut ColumnStore, data: Vec<ColumnData<'_>>| {
+        let step = |store: &mut ColumnStore, data: Vec<ColumnData>| {
             let n = data[0].len();
             store.append(n, &data).unwrap();
             let start = cx.upload_stats();
@@ -1522,7 +1568,7 @@ mod tests {
     }
 
     /// S4b: `release` drops the CPU copy of full, uploaded chunks only,
-    /// keeping stats, dictionaries and the GPU buffers; appends still work
+    /// keeping stats and the GPU buffers; appends still work
     /// on the same context, and uploading to another context is an error.
     #[test]
     fn release_drops_full_uploaded_chunks_only() {
@@ -1530,11 +1576,12 @@ mod tests {
         let values: Vec<f64> = (0..150)
             .map(|i| if i == 70 { f64::NAN } else { f64::from(i) })
             .collect();
+        let mut dict = Dictionary::new();
         let keys: Vec<Option<&str>> = (0..150).map(|i| Some(["p", "q"][i % 2])).collect();
         let mut store = ColumnStore::from_columns(
             vec![
                 (ColumnFormat::F32, ColumnData::Values(values)),
-                (ColumnFormat::U32, ColumnData::Keys(keys)),
+                (ColumnFormat::U32, keyed(&mut dict, &keys)),
             ],
             64,
         )
@@ -1547,7 +1594,6 @@ mod tests {
         assert!(chunks[0].bytes().is_none() && chunks[1].validity().is_none());
         assert!(chunks[2].bytes().is_some(), "the last chunk keeps its copy");
         assert_eq!(store.stats(0), stats);
-        assert_eq!(store.dictionary(1).unwrap().len(), 2);
         assert!(chunks[1].buffer(&cx).is_some() && chunks[1].validity_buffer(&cx).is_some());
 
         // Appending fills the last chunk and opens another; only the new
@@ -1555,13 +1601,13 @@ mod tests {
         let more: Vec<f64> = (150..200).map(f64::from).collect();
         let keys: Vec<Option<&str>> = vec![Some("r"); 50];
         store
-            .append(50, &[ColumnData::Values(more), ColumnData::Keys(keys)])
+            .append(50, &[ColumnData::Values(more), keyed(&mut dict, &keys)])
             .unwrap();
         let start = cx.upload_stats();
         store.upload(&cx).unwrap();
         assert_eq!((cx.upload_stats() - start).columns.bytes, 50 * 8);
         assert_eq!(store.release(), 1);
-        assert_eq!(store.dictionary(1).unwrap().code("r"), Some(2));
+        assert_eq!(dict.code("r"), Some(2));
 
         let other = Context::from_wgpu(cx.device().clone(), cx.queue().clone());
         assert!(store.uploadable_to(&cx) && !store.uploadable_to(&other));
