@@ -228,7 +228,23 @@ Rules:
 
 ---
 
-## Step 5: Announce
+## Step 5: Commit
+
+Commit the new or changed story files and `INDEX.md` before announcing. Never
+leave them uncommitted for someone else, and never use `git commit --no-verify`.
+The pre-commit hook takes about 2 s for docs-only commits. If it fails, fix the
+reported formatting with the dev shell's pinned `prettier`/`mdl` and commit
+again. In a worktree, commit on the worktree's branch; the orchestrator merges
+it.
+
+```bash
+git add docs/planning/stories/GUP-NNN_*.md docs/planning/stories/INDEX.md
+git commit -m "Add GUP-NNN: <title>"
+```
+
+---
+
+## Step 6: Announce
 
 Output a brief summary:
 
