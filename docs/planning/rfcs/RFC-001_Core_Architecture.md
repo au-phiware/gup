@@ -2192,3 +2192,132 @@ byte-identical to the 4× `ImageTarget` and the golden (ΔE 0 on 324,000 px).
   `row_base` values that do not start at 0; picking must map rows through the
   window. A growth copy submits during resolve; hosts that resolve inside their
   own frame graph should know.
+
+## S4b findings (2026-10-10, GUP-415)
+
+[GUP-415](../stories/GUP-415_RFC_001_S4b_Nulls_And_Dictionaries.md) added nulls,
+dictionary-encoded columns and the `Retain` policy to the column store. Same
+machine as S0a–S4a (Intel HD Graphics 630, Mesa 26.0.0 Vulkan, rustc 1.93.1),
+and lavapipe for the CI rasteriser.
+
+### Validity bits
+
+- **Layout.** One plane per numeric (`F32`, `F32Relative`) column: bit `r % 32`
+  of word `(r / 32) × planes + p` is set when row `r` of plane `p` is finite.
+  Planes are interleaved per 32-row group, so growing a chunk only extends the
+  array and a tail write is one contiguous range per chunk.
+- **Where they live.** Each chunk gets a small storage buffer (`STORAGE`,
+  `COPY_DST`, `COPY_SRC`), not a sub-range of the chunk's column buffer. The
+  buffer exists only once the store has a null. Data without nulls keeps the S0a
+  bytes, the S0a glue (`scatter_glue.wgsl` is unchanged) and its upload counts.
+  The bits are read through group 2 binding 1, `var<storage, read>`, so they use
+  none of the 8 vertex-buffer slots (§12 risk 7). A device without vertex-stage
+  storage buffers gets a configuration error, not a panic.
+- **Upload.** Validity is a new `Upload::Validity` kind. The first upload writes
+  every word; a tail write starts at the group that holds the first missing row,
+  rewriting its partial words. A chunk that grew gets a new buffer, written in
+  full from its CPU copy (an unfilled chunk always keeps one). The unit test
+  counts 16 B for the first 50 rows (2 groups × 2 planes), 24 B after growth to
+  70 rows, and 8 B for 5 more rows. That is 1/32 of a column per plane: a
+  100K-row, 3-column scatter would add 37,500 B to its 1,200,000 B.
+- **The vertex stage.** The glue (its signature ends in `with nulls`) reads the
+  row's group once. A null in a geometry column (any non-colour role) ANDs into
+  `drawn`, and the mark's output position is replaced with one point outside the
+  clip volume, a degenerate quad. The mark contract now names that member
+  `clip`; S6 can check it. A null in a numeric colour column draws in
+  `NULL_COLOR` through a `select` on its bit. Neither path tests the value.
+- **Proof.** A crate test clears one validity bit on a finite row, and the row
+  disappears. With the degenerate quad seeded off, that test fails. The image
+  test with NaN and ±∞ positions still passes with the seed, because Intel/Mesa
+  already culls NaN geometry. So the image test shows the outcome, and only the
+  bit test proves the mechanism. On Intel and on lavapipe, a plot with six null
+  positions equals, byte for byte, the plot with those rows removed.
+
+### Dictionaries and the key accessor
+
+- **Format.** `ColumnFormat::U32` holds codes, fetched as `Uint32`. Each `U32`
+  column has a `Dictionary` per store, append-only, in first-seen order;
+  `NULL_CODE` (`u32::MAX`) is a missing key. Stats count nulls in `non_finite`.
+  A missing key is a code, not a validity bit, so a store whose only nulls are
+  keys uploads no validity buffer.
+- **Entry points.** `ShaderFn::encode_key` takes `for<'a> Fn(&'a T) -> &'a str`,
+  and `encode_nullable_key` takes `for<'a> Fn(&'a T) -> Option<&'a str>`. Both
+  require `Self: ShaderFn<In = u32>`. The bound sits on the method's own type
+  parameter, which is what lets rustc infer a higher-ranked closure signature; a
+  bound behind a trait would not. gup-core hit risk 4 itself: a closure
+  returning a chunk's validity buffer had to become a `fn`.
+- **Trybuild.** The same closure through `encode` fails with the new
+  `on_unimplemented` message, "`&str` is not a column value; `encode` takes
+  accessors returning numbers", and a note pointing to `encode_key`. Through
+  `encode_key` it compiles and runs (`tests/compile_pass`).
+- **`Categorical`** (stand-in): a uniform array of 8 colours (Okabe-Ito, black
+  last), `colors[code % count]`, and `select(…, null_color, code == NULL_CODE)`.
+  It ignores the domain; codes cycle past 8. The golden
+  `gup_core/categorical_nulls` checks every unoverlapped point's centre against
+  its first-seen code's colour, with the five palette colours and the null
+  colour present. On lavapipe it is 0 of 324,000 pixels over ΔE 3 (max 0.8).
+
+### Retain
+
+| Policy    | Rows (`T`)       | CPU columns      | Another context       | Re-encode a channel |
+| --------- | ---------------- | ---------------- | --------------------- | ------------------- |
+| `Auto`    | ≤ 10M rows: kept | ≤ 10M rows: kept | works                 | works               |
+| `Rows`    | kept             | dropped          | re-evaluates the rows | works               |
+| `Columns` | dropped          | kept             | uploads the columns   | error               |
+| `GpuOnly` | dropped          | dropped          | error                 | error               |
+
+- **When.** `Plot::resolve` calls the layer's `release` after the scoped
+  `prepare` succeeds, so nothing is dropped before it is on the GPU. Natively
+  that is exact. In a browser, a GPU error can still arrive after the rows have
+  gone (GUP-410's asynchronous scopes).
+- **What stays.** Stats, origins, dictionaries and the last, unfilled chunk's
+  CPU copy all stay, so zooming writes uniforms only and appending works under
+  every policy. Full chunks lose their bytes and bits once both are uploaded.
+- **Proof.** The rows hold an `Arc<()>`. Under `GpuOnly` its strong count goes
+  from 151 to 1 after `resolve`, and from 21 to 1 after an append and resolve.
+  The render after release equals one from a plot that kept everything.
+- **Errors.** Resolving on another context gives "its columns must be evaluated
+  again (the columns are on another context and their CPU copy was dropped), but
+  its 170 rows were dropped after upload (Retain::GpuOnly)". A re-encoded
+  channel gives the same error with its own reason.
+
+### Browser, WASM, performance
+
+- **Browser.** `mask wasm-browser` adds a dictionary scene below the scatter: 4
+  keys through `encode_nullable_key`, missing keys, and one NaN x. On
+  SwiftShader the palette and null colours cover 652, 657, 651, 708 and 318 px.
+  Leaving the NaN row out changes 0 pixels, so vertex-stage storage reads work
+  on WebGPU. The scatter's counts are unchanged.
+- **WASM size** (`mask wasm-size`, same scatter-only harness): 242,380 → 248,806
+  B gz, +6.4 KB gz (+20.1 KB raw) for S4b. The dictionary scene adds 4.1 KB gz
+  more. gup-core over bare wgpu is now 211.2 KB gz, under the +400 KB budget.
+- **`zoom_bench`** (100K points, `Mailbox` uncapped): 0 column bytes over 600
+  frames, CPU work median 0.532 ms (S4a: 0.58–0.69 ms). The window frame is
+  still ΔE 0 against the `ImageTarget` and the golden.
+
+### Proposed adjustments to S5 and later
+
+- **S5 (scales).** Replace `Categorical` with the full scale. It needs the
+  dictionary, not `fit_domain`'s numeric extent: add a hook that hands the
+  layer's `Dictionary` to the function (keys for legends and Band positions,
+  `len()` for the domain). A new key is then a domain change (a uniform write),
+  with no column bytes. Palettes longer than 8 need a length-generic uniform or
+  a LUT texture.
+- **S5 (Band on X/Y).** A `U32` column has no validity plane, so a null key on a
+  position channel is not hidden today. Either give geometry `U32` columns a
+  plane or have the glue compare `NULL_CODE` (a reserved code, not a NaN test).
+- **S5 (other keys).** `Dictionary` holds strings. Integer and enum keys
+  (`Hash + Eq`) need owned keys and a `Display` for labels: a generic
+  `Dictionary<K>` behind the same `U32` format.
+- **S6 (`derive(Mark)`).** Check the `clip` position member. Validity takes no
+  vertex slot, so the 8-slot budget is all data columns.
+- **S7 (`Theme`).** `NULL_COLOR` becomes `theme.null_color`. The glue's literal
+  and `Categorical`'s `null_color` move into the theme's uniform.
+- **S9 (picking).** Under `Columns` and `GpuOnly`, `pick` must return a `RowId`,
+  since there is no `&T`. Under `Rows` it can return `&T`.
+- **S12 (append handles, `Window`).** Appends already work under every policy.
+  Evicting a released chunk loses nothing on the CPU.
+- **WebGPU compatibility mode** (`maxStorageBuffersInVertexStage = 0`) would
+  reject nullable layers with the configuration error above. If compatibility
+  mode matters, the fallback is a per-row validity attribute, which costs a
+  vertex slot and 4 bytes a row (vertex strides are multiples of 4).
