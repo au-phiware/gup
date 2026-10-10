@@ -328,6 +328,13 @@ fn user_modules_compose_against_the_library() {
     parse_wgsl("my::f", &lib.closure_wgsl("my::f")).unwrap_or_else(|e| panic!("{e}"));
     let e = lib.add_module(&user(ok), "my::f").unwrap_err();
     assert!(e.report.contains("already a module"), "{e}");
+    // Removed, the path is free again and the library composes as before.
+    lib.remove_module("my::f");
+    assert!(lib.module("my::f").is_none());
+    let again = lib
+        .add_module(&user(ok), "my::f")
+        .unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(again.wgsl, flat.wgsl);
 }
 
 /// Gup's own library, as gup-core's build script and `#[wgsl_function]`

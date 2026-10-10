@@ -303,6 +303,33 @@ fn load(wgsl: &Wgsl) -> syn::Result<Text> {
     }
 }
 
+thread_local! {
+    /// Gup's library, composed once per compiler thread: composing it takes
+    /// about a third of a second in a debug-built macro, and a crate may
+    /// declare many functions. Each expansion adds its module, reads it
+    /// and removes it again.
+    static LIBRARY: std::cell::RefCell<Option<Library>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Run `f` on the cached library.
+fn with_library<R>(
+    f: impl FnOnce(&mut Library) -> Result<R, gup_wgsl::compose::Error>,
+) -> Result<R, gup_wgsl::compose::Error> {
+    LIBRARY.with(|cell| {
+        let mut slot = cell.borrow_mut();
+        if slot.is_none() {
+            let lib = Library::new(&library()).map_err(|e| {
+                gup_wgsl::compose::Error::new(
+                    e.module.clone(),
+                    format!("gup's own WGSL library failed to compose (a gup bug):\n{e}"),
+                )
+            })?;
+            *slot = Some(lib);
+        }
+        f(slot.as_mut().expect("composed above"))
+    })
+}
+
 fn expand(attr: TokenStream2, item: TokenStream2) -> syn::Result<TokenStream2> {
     let args = parse_args(attr)?;
     let mut imp: ItemImpl = syn::parse2(item).map_err(|e| {
@@ -373,23 +400,23 @@ fn expand(attr: TokenStream2, item: TokenStream2) -> syn::Result<TokenStream2> {
     }
 
     // Compose and flatten, as gup-core's build script does the library.
-    let mut lib = Library::new(&library()).map_err(|e| {
-        at_wgsl(format!(
-            "gup's own WGSL library failed to compose (a gup bug):\n{e}"
-        ))
-    })?;
     let source = Source {
         file: text.label.clone(),
         text: text.text.clone(),
     };
-    let flat = lib.add_module(&source, &path).map_err(|e| {
+    let (flat, closure) = with_library(|lib| {
+        let flat = lib.add_module(&source, &path)?;
+        let closure = lib.closure_wgsl(&path);
+        lib.remove_module(&path);
+        Ok((flat, closure))
+    })
+    .map_err(|e| {
         at_wgsl(format!(
             "the WGSL of `{type_ident}` (module `{path}`) does not compose:\n{}{}",
             e.report.trim_end(),
             hint(&e.report)
         ))
     })?;
-    let closure = lib.closure_wgsl(&path);
     let (module, info) = validate_wgsl(&path, &closure).map_err(|e| {
         at_wgsl(format!(
             "the flattened WGSL of `{path}` does not validate (a gup bug):\n{}",

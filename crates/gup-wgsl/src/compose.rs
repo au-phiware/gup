@@ -494,6 +494,25 @@ impl Library {
         }
     }
 
+    /// Remove a module [`add_module`](Self::add_module) added, so that the
+    /// library composes the next one as if it had never seen it (a cached
+    /// library serves many `#[wgsl_function]`s).
+    pub fn remove_module(&mut self, import_path: &str) {
+        let Some(i) = self
+            .modules
+            .iter()
+            .position(|m| m.import_path == import_path)
+        else {
+            return;
+        };
+        let module = self.modules.remove(i);
+        self.composer.remove_composable_module(import_path);
+        for item in &module.items {
+            self.rename
+                .remove(&Composer::decorated_name(Some(import_path), item));
+        }
+    }
+
     /// The flattened modules, dependencies first.
     pub fn modules(&self) -> &[FlatModule] {
         &self.modules
