@@ -7,7 +7,9 @@
 //! plus its guides as SVG: everything a browser chart needs from gup-core
 //! today, and every pipeline kind (marks, rules, rects, gradients, text). A
 //! second scene colours points by a dictionary-encoded key, with nulls
-//! (RFC-001 S4b).
+//! (RFC-001 S4b). A third draws the numeric scales of RFC-001 S5a (`Time`,
+//! `Symlog`, `Sqrt` and a `then` chain) and checks them against their CPU
+//! mirrors.
 
 use gup_core::geom::Rect;
 use gup_core::prelude::*;
@@ -154,14 +156,142 @@ pub async fn render_categorical(
             Categorical::okabe_ito().encode_nullable_key(|p: &Place| p.key),
         )
         .attr(Circle::RADIUS, Px(4.5));
-    let resolved = plot
-        .resolve(&cx, width as f32, height as f32)
-        .map_err(js)?;
+    let resolved = plot.resolve(&cx, width as f32, height as f32).map_err(js)?;
     let image = ImageTarget::new(&cx, width, height)
         .map_err(js)?
         .render(&cx, &resolved.scene)
         .await
         .map_err(js)?;
+    Ok(image.into_raw())
+}
+
+/// The numeric scale family (RFC-001 S5a, GUP-418) on WebGPU: a day of
+/// hourly readings on a `Time` x axis (a hi/lo column), a signed quantity
+/// on a `Symlog` y axis, a `Sqrt` radius and a fill through a three-link
+/// chain, `Linear.then(Sqrt).then(viridis)`. Checks, in Rust, that every
+/// point's centre is drawn in the chain's colour (its links' CPU mirrors in
+/// order), then that a `Time` axis zoomed to one millisecond, 65,536
+/// seconds from its chunk's origin, draws each of eight points' discs
+/// within 0.25 px of the CPU mirror (the hi/lo arithmetic survives the
+/// browser's shader compiler). Returns the first plot's straight-alpha
+/// RGBA pixels.
+#[wasm_bindgen]
+pub async fn render_scales(width: u32, height: u32) -> Result<Vec<u8>, JsValue> {
+    std::panic::set_hook(Box::new(|info| web_error(&info.to_string())));
+    let cx = Context::new().await.map_err(js)?;
+    let t0 = 1.7e9;
+    // (time, signed value, size)
+    let rows: Vec<(f64, f64, f64)> = (0..24u32)
+        .map(|i| {
+            let h = f64::from(i) - 11.5;
+            (
+                t0 + f64::from(i) * 3_600.0,
+                h * h * h,
+                f64::from(i % 7 + 1) * 1e6,
+            )
+        })
+        .collect();
+    let mut plot = Plot::new();
+    let (x, y) = (plot.x(Time::new()), plot.y(Symlog::new()));
+    plot.title("Scales")
+        .add(Selection::<(f64, f64, f64), Circle>::new(rows.clone()))
+        .attr(Circle::X, x.encode(|r: &(f64, f64, f64)| r.0))
+        .attr(Circle::Y, y.encode(|r: &(f64, f64, f64)| r.1))
+        .attr(
+            Circle::RADIUS,
+            Pow::sqrt()
+                .domain(0.0, 7e6)
+                .range(Px(0.0), Px(5.0))
+                .encode(|r: &(f64, f64, f64)| r.2),
+        )
+        .attr(
+            Circle::FILL,
+            Linear::new()
+                .range(Px(0.0), Px(1.0))
+                .then(Pow::sqrt())
+                .then(Sequential::viridis())
+                .encode(|r: &(f64, f64, f64)| r.2),
+        );
+    let resolved = plot.resolve(&cx, width as f32, height as f32).map_err(js)?;
+    let image = ImageTarget::new(&cx, width, height)
+        .map_err(js)?
+        .render(&cx, &resolved.scene)
+        .await
+        .map_err(js)?;
+    // The fill chain fits Linear to [1e6, 7e6], then Sqrt and viridis to
+    // [0, 1]: a point's colour is viridis(sqrt((size - 1e6) / 6e6)).
+    let viridis = Sequential::viridis().domain(0.0, 1.0);
+    for r in &rows {
+        let (px, py) = (x.read().eval(r.0), y.read().eval(r.1));
+        let want = viridis.eval(((r.2 - 1e6) / 6e6).sqrt()).to_rgba8();
+        let got = image.get_pixel(px as u32, py as u32).0;
+        if (0..3).any(|k| got[k].abs_diff(want[k]) > 2) {
+            return Err(JsValue::from_str(&format!(
+                "scales: the point at {r:?} drew {got:?} at ({px:.1}, {py:.1}), not the \
+                 chain's {want:?}"
+            )));
+        }
+    }
+
+    // One millisecond across the plot, 65,536 s from the chunk's origin.
+    let window = (t0 - 0.4e-3, t0 + 0.6e-3);
+    let mut seconds: Vec<(f64, f64, f64)> = (0..65_536u32)
+        .map(|i| (t0 - f64::from(65_536 - i) + 0.37, 0.5, 0.0))
+        .collect();
+    let burst: Vec<(f64, f64, f64)> = (0..8u32)
+        .map(|k| {
+            let t = window.0 + (window.1 - window.0) * (f64::from(k) + 0.5) / 8.0;
+            (t, if k % 2 == 0 { 0.25 } else { 0.75 }, 0.0)
+        })
+        .collect();
+    seconds.extend(&burst);
+    let mut zoomed = Plot::new();
+    let (x, y) = (
+        zoomed.x(Time::new().domain(window.0, window.1)),
+        zoomed.y(Linear::new().domain(0.0, 1.0)),
+    );
+    zoomed
+        .add(Selection::<(f64, f64, f64), Circle>::new(seconds))
+        .attr(Circle::X, x.encode(|r: &(f64, f64, f64)| r.0))
+        .attr(Circle::Y, y.encode(|r: &(f64, f64, f64)| r.1))
+        .attr(Circle::RADIUS, Px(5.0))
+        .attr(Circle::FILL, Color::BLACK);
+    let resolved = zoomed
+        .resolve(&cx, width as f32, height as f32)
+        .map_err(js)?;
+    let deep = ImageTarget::new(&cx, width, height)
+        .map_err(js)?
+        .render(&cx, &resolved.scene)
+        .await
+        .map_err(js)?;
+    let mut worst = 0.0f64;
+    for r in &burst {
+        let (ex, ey) = (x.read().eval(r.0), y.read().eval(r.1));
+        // The coverage-weighted centre of the disc's ink (black on white).
+        let (mut sx, mut sy, mut sw) = (0.0, 0.0, 0.0);
+        for py in (ey - 9.0).max(0.0) as u32..((ey + 9.0) as u32).min(height) {
+            for px in (ex - 9.0).max(0.0) as u32..((ex + 9.0) as u32).min(width) {
+                let w = 1.0 - f64::from(deep.get_pixel(px, py).0[0]) / 255.0;
+                sx += w * (f64::from(px) + 0.5);
+                sy += w * (f64::from(py) + 0.5);
+                sw += w;
+            }
+        }
+        if sw < 10.0 {
+            return Err(JsValue::from_str(&format!(
+                "scales: no disc near ({ex:.1}, {ey:.1}) at a 1 ms zoom"
+            )));
+        }
+        worst = worst.max((sx / sw - ex).abs()).max((sy / sw - ey).abs());
+    }
+    web_log_text(&format!(
+        "GUP scales 1 ms zoom: max |drawn - mirror| = {worst:.3} px"
+    ));
+    if worst > 0.25 {
+        return Err(JsValue::from_str(&format!(
+            "scales: a 1 ms Time zoom drew points {worst:.3} px from the mirror"
+        )));
+    }
     Ok(image.into_raw())
 }
 

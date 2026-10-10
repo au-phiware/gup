@@ -11,7 +11,11 @@
   <body>
     <pre id="out">pending</pre>
     <script type="module">
-      import init, { render_scatter, render_categorical } from "./scatter.js";
+      import init, {
+        render_scatter,
+        render_categorical,
+        render_scales,
+      } from "./scatter.js";
       const out = document.getElementById("out");
       const [w, h] = [320, 200];
       let result;
@@ -92,8 +96,19 @@
           }
           return n;
         });
+        // The numeric scales (RFC-001 S5a): Time (a hi/lo column), Symlog,
+        // a Sqrt radius and a fill through `Linear.then(Sqrt).then(viridis)`.
+        // `render_scales` checks each point's colour against the chain's
+        // CPU mirrors and a 1 ms Time zoom against the mirror's positions
+        // itself, and throws on a mismatch.
+        const scales = await render_scales(w, h);
+        let scalesColoured = 0;
+        for (let i = 0; i < scales.length; i += 4) {
+          const [r, g, b] = [scales[i], scales[i + 1], scales[i + 2]];
+          if (Math.abs(r - g) >= 8 || Math.abs(g - b) >= 8) scalesColoured++;
+        }
         const c = document.createElement("canvas");
-        [c.width, c.height] = [w, 2 * h];
+        [c.width, c.height] = [w, 3 * h];
         const ctx = c.getContext("2d");
         ctx.putImageData(
           new ImageData(new Uint8ClampedArray(chunked), w, h),
@@ -105,7 +120,13 @@
           0,
           h
         );
-        // The PNG is the chunked render above the dictionary render.
+        ctx.putImageData(
+          new ImageData(new Uint8ClampedArray(scales), w, h),
+          0,
+          2 * h
+        );
+        // The PNG is the chunked render, the dictionary render and the
+        // scales render, top to bottom.
         console.log("GUPPNG " + c.toDataURL("image/png"));
         // The scatter covers a fraction of the plot; a flooded plot (a
         // uniform-layout bug) or an empty one fails.
@@ -116,8 +137,9 @@
           chunkDiff <= 64 &&
           chunkWorst <= 1 &&
           dictCounts.every(n => n >= 20) &&
-          dictDiff === 0;
-        result = `${ok ? "PASS" : "FAIL"} white=${white} grey=${grey} coloured=${coloured} chunked-diff=${chunkDiff}px/${chunkWorst} dict=${dictCounts.join(",")} dict-null-row-diff=${dictDiff}px`;
+          dictDiff === 0 &&
+          scalesColoured > 200;
+        result = `${ok ? "PASS" : "FAIL"} white=${white} grey=${grey} coloured=${coloured} chunked-diff=${chunkDiff}px/${chunkWorst} dict=${dictCounts.join(",")} dict-null-row-diff=${dictDiff}px scales=${scalesColoured}`;
       } catch (e) {
         result = "FAIL " + e;
       }

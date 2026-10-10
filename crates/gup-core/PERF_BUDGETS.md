@@ -74,8 +74,8 @@ X) or `info` (printed, never fails).
 | `pipeline.link_create.cold_ms`    | 1.04      | <= 10     | `pipeline_timings`, its first run                 |
 | `pipeline.link_create.max_ms`     | 1.06      | info      | `pipeline_timings`                                |
 | `wasm.wgpu.gz_bytes`              | 41,712    | info      | `scripts/wasm_size.sh`, bare wgpu                 |
-| `wasm.scatter.gz_bytes`           | 252,925   | +2%       | `scripts/wasm_size.sh`, the reference scatter     |
-| `wasm.over_wgpu.gz_bytes`         | 211,213   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10       |
+| `wasm.scatter.gz_bytes`           | 271,706   | +2%       | `scripts/wasm_size.sh`, the reference scatter     |
+| `wasm.over_wgpu.gz_bytes`         | 229,994   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10       |
 
 A legitimate change that moves a number (a new guide, a bigger feature) records
 the new value here, in the same commit, with the reason in the story.
@@ -145,12 +145,19 @@ mask wasm-size   # ./scripts/wasm_size.sh
 
 The reference scatter harness against bare wgpu, both release
 `wasm32-unknown-unknown`, `wasm-bindgen --target web` without name or producers
-sections, `gzip -9`. Recorded: scatter 252,925 B gz, bare wgpu 41,712 B gz, so
-**gup-core costs 211,213 B gz over bare wgpu** against RFC-001 §12 risk 10's
+sections, `gzip -9`. Recorded: scatter 271,706 B gz, bare wgpu 41,712 B gz, so
+**gup-core costs 229,994 B gz over bare wgpu** against RFC-001 §12 risk 10's
 ceiling of +400 KB gz, read as 400,000 B (the RFC's KB are 1,000 B). Sizes
 depend only on the tree and toolchain, so the scatter is held to +2% (about 5 KB
 gz, smaller than one story's typical growth: S4b added 6.4 KB) and the ceiling
 is enforced in CI.
+
+The harness is also the browser smoke test, so its scenes count: GUP-418 (S5a)
+re-recorded the scatter at 271,706 B (from 252,925). Its library changes (the
+chain-aware glue, `EncodeFn`, the hi/lo column format) cost 974 B (+0.4%,
+measured before the new scene), and the scene that draws `Time`, `Symlog`,
+`Sqrt` and a `then` chain, with its CPU-mirror checks, 17,807 B (+7.0%): code a
+chart using those scales pays, and the reference scatter alone does not.
 
 ## CI-side proxies
 
@@ -176,3 +183,8 @@ seeded violation (GUP-417 retrospective).
   median uncapped (+29%) and +1.7 ms under vsync at the clock floor (+56%). MSAA
   accounts for all of the S0b→S4a gap. Whether to keep 4× as the default is an
   owner decision recorded in RFC-001's GUP-417 findings.
+- **GUP-418 (S5a)** re-recorded the WASM scatter (+18,781 B gz, almost all of it
+  the new browser scene for `Time`, `Symlog`, `Sqrt` and `then`). Its
+  `perf-budget` run (GPU clock median 517 MHz) passed every other budget: GPU
+  pass 3.26 ms median, CPU 0.74 ms, 88 uniform bytes and 0 column bytes per
+  frame.
