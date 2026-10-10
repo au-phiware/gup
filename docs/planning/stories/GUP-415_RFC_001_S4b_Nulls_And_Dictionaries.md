@@ -367,3 +367,120 @@ on lavapipe.
 - `crates/gup-core/tests/fixtures/nulls_glue.wgsl`
 - `crates/gup-core/wasm-size/scatter/{src/lib.rs,index.html}`
 - `tests/golden/gup_core/categorical_nulls.png`
+
+## Retrospective
+
+**Completed**: 2026-10-10
+
+### Key Technical Learnings
+
+#### A NaN render test can pass without the mechanism
+
+- **Challenge**: AC1 asks for a render in which null positions draw nothing. On
+  Intel/Mesa a NaN position is culled by the hardware anyway. With the
+  degenerate quad seeded off, the NaN image test still passed.
+- **Solution**: a second test keeps the row's position finite and clears only
+  its validity bit through a test seam (`ColumnStore::clear_valid`). With the
+  seed, that test fails ("row 0 still drawn"). The image test stays, because it
+  shows what a user sees, and it is byte-exact against the plot with the null
+  rows removed.
+- **Pattern**: when the platform may already produce the right output, test the
+  mechanism with input the platform cannot fix on its own, and seed the bug to
+  see the test fail.
+
+#### Higher-ranked closures need the bound on the parameter itself
+
+- **Challenge**: RFC §12 risk 4. A closure returning a borrow of its argument
+  only gets a higher-ranked signature if rustc sees an `Fn` bound on that
+  closure's own type parameter.
+- **Solution**: `encode_key<T, A>(…) where A: for<'a> Fn(&'a T) -> &'a str`
+  wraps the closure in `Key<A>` and erases it behind `KeyAccessor<T>` only
+  afterwards. gup-core's own code hit the same error: a closure returning a
+  chunk's validity buffer had to become a `fn`.
+- **Pattern**: put the HRTB `Fn` bound on the entry point's generic, and do the
+  type erasure after it.
+
+#### Keep the clean path byte-identical
+
+- **Challenge**: every S0a/S4a test counts bytes and compares fixtures. An
+  always-on validity column would have changed all of them, and made every user
+  pay for nulls they don't have.
+- **Solution**: the store always keeps CPU bits (1/32 of a column), but the GPU
+  buffer, the binding and the glue's validity code appear only once the store
+  has a null. `scatter_glue.wgsl`, the S0a byte layout and the `columns.bytes`
+  assertions are untouched. The first null changes the glue signature, so the
+  layer rebuilds once.
+- **Pattern**: make an optional feature cost nothing until the data needs it,
+  and let the existing fixtures prove that.
+
+#### Interleave bit planes by row group
+
+- **Challenge**: a store has several planes, chunks grow, and tail writes should
+  be small.
+- **Solution**: put one word per plane in each 32-row group. Growth only extends
+  the array, a tail write is one contiguous range per chunk, and the shader
+  needs no per-chunk plane stride.
+
+### Architectural Decisions
+
+#### Validity in its own per-chunk storage buffer
+
+- **Decision**: validity bits live in a separate storage buffer per chunk, bound
+  in group 2 with one bind group per chunk, instead of a sub-range of the
+  chunk's column buffer.
+- **Reasoning**: data without nulls keeps the S0a layout and pays nothing. The
+  bits take no vertex slot, and a 1-bit stride cannot be an instance-rate vertex
+  attribute anyway.
+- **Trade-off**: nullable layers have one more buffer and bind group per chunk,
+  and need vertex-stage storage buffers, which WebGPU compatibility mode lacks
+  (a clear error today).
+- **Future**: S9's compute passes can bind the same bits.
+
+#### Two key entry points
+
+- **Decision**: `encode_key` (keys always present) and `encode_nullable_key`
+  (`Option<&str>`).
+- **Reasoning**: closure inference needs the exact `Fn` bound, and coherence
+  forbids two blanket impls that differ only in a closure's output.
+- **Trade-off**: two methods instead of one.
+- **Future**: owned `Hash + Eq` keys (S5) can be a third shape, or a generic
+  `Dictionary<K>`.
+
+#### `Retain` releases inside `Plot::resolve`
+
+- **Decision**: the layer releases data after the scoped `prepare` returns `Ok`.
+  `Rows` keeps the rows only, and `Columns` keeps the CPU columns only.
+- **Reasoning**: nothing is dropped before it is on the GPU, and each policy
+  keeps a different thing: rows for picking `&T`, columns for re-binding.
+- **Trade-off**: in a browser, a GPU error can be reported after the release
+  (GUP-410's asynchronous scopes).
+
+### Development Workflow Insights
+
+- **Lavapipe locally.** Running the gup-core suite with
+  `VK_ICD_FILENAMES=/run/opengl-driver/share/vulkan/icd.d/lvp_icd.x86_64.json`
+  and `WGPU_BACKEND=vulkan` before pushing confirmed that the byte-exact
+  null-row comparison holds on CI's rasteriser (golden max ΔE 0.8).
+- **WASM size needs the same harness.** The harness grew a second scene, so the
+  first delta (+10.5 KB gz) mixed library and harness cost. Measuring a
+  temporary worktree at the pre-story commit, and HEAD with the scene removed,
+  attributes +6.4 KB gz to S4b.
+- **Perl and JavaScript templates.** A `perl -0pi` edit interpolated `${white}`
+  and similar JavaScript template literals as empty Perl variables, and the
+  browser page timed out with a blank result line. Use the Edit tool, or a
+  quoted heredoc, for files with `$`.
+- **No Python** in this environment: Perl and sed only, or the Edit tool.
+
+### Follow-up Stories
+
+None written. Everything this story found belongs to RFC steps that have no
+story yet, and is recorded in RFC-001's "S4b findings" for whoever writes them:
+
+- **S5**: a dictionary hook for scales (keys for legends and Band), palettes
+  longer than 8, null keys on Band position channels, and generic `Hash + Eq`
+  keys.
+- **S6**: check the `clip` member.
+- **S7**: `NULL_COLOR` becomes `theme.null_color`.
+- **S9**: `pick` returns a `RowId` under `Columns`/`GpuOnly`.
+- **WebGPU compatibility mode**: the fallback and its cost are noted there, not
+  scheduled.
