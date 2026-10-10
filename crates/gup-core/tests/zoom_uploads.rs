@@ -110,7 +110,11 @@ fn zoom(max_chunk_rows: Option<u32>, budget: &Budget) {
             _ => None,
         })
         .unwrap();
-    assert_eq!(batch.chunks(), chunks);
+    assert_eq!(
+        batch.chunks(),
+        chunks,
+        "instanced mark draws (column chunks)"
+    );
     assert_eq!(batch.instances(), POINTS as u64);
     let first_draws = frame(&cx, &mut renderer, &first.scene, &mut target);
     assert_eq!(
