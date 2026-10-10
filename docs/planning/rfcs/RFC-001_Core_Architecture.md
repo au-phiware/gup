@@ -2647,3 +2647,180 @@ area or polygon items, matching §7's original design. That work is
 This supersedes the "GUP-417 findings" section's "Decision needed:
 `DEFAULT_SAMPLES`" options list above: option 3 is chosen, to be delivered by
 GUP-421, with option 1 (keep 4×) as the interim state until it lands.
+
+## S5b findings (2026-10-11, GUP-419)
+
+[GUP-419](../stories/GUP-419_RFC_001_S5b_Colour_Scales_And_Dictionary_Hook.md)
+completed the scale family: the dictionary hook, the full `Categorical`,
+`Diverging`, `Band` and `Point`, and the colour scales' legends. Same machine as
+S0a–S5a (Intel HD Graphics 630, Mesa 26.0.0 Vulkan, rustc 1.93.1), and lavapipe
+for the CI rasteriser. S5a's trait shapes held: every new scale is one
+`ShaderFn`, so each chains through `then` without new glue.
+
+### The dictionary hook
+
+- **Shape.** `ShaderFn::fit_keys(&mut self, keys: &[Arc<str>])` sits beside
+  `fit_domain`, defaulting to accepting anything. For a key channel
+  (`encode_key` and its siblings), the first link gets `fit_keys` with every key
+  seen so far, never `fit_domain`: a column of codes has a numeric extent, but
+  it says nothing about the keys. `EncodeFn::fit_dictionary` forwards it, and
+  `Then` fits each later link to the image of codes `0..len` through the links
+  before it. (The chain method is not also called `fit_keys`: with `ShaderFn`
+  and `EncodeFn` both in the prelude, one name on both traits is ambiguous to
+  callers.)
+- **Where dictionaries live.** S4b kept one `&str`-keyed `Dictionary` per `U32`
+  column in the store. A generic key type cannot live in a type-erased store, so
+  each key channel's encoding (`KeyEncoded`) now owns its `Dictionary<K>`, and
+  the store holds codes only (`ColumnData::Codes`). `K` is any
+  `Hash + Eq + Clone + Display` type (`DictionaryKey`). Keys are compared by
+  `Eq`, and a key's label (for ticks and legend swatches) is its `Display`.
+  String keys keep S4b's borrowed lookup: a key read from a row costs a hash
+  lookup, and an allocation only when it is new. New entry points:
+  `encode_owned_key` and `encode_nullable_owned_key`. Dictionaries stay
+  append-only, so codes never renumber, even when another context re-evaluates
+  the rows.
+- **Domain order.** `KeyEncoded::domain(keys)` seeds the dictionary, so the
+  listed keys take codes `0..` in that order: months in calendar order on a band
+  axis, or a fixed colour per key across charts. S5a had expected order to need
+  a `u32 → u32` remapping link and a new `Feeds` impl. Seeding the dictionary
+  needs neither, so `Feeds` still admits only numbers and the `wrong_chain`
+  trybuild case is unchanged.
+- **Proof (AC1).** Appending two rows with a new key to a resolved categorical
+  layer writes 24 column bytes (exactly the new rows' x, y and code), no texture
+  and no new program. The legend gains the key, and the new key's point draws in
+  palette colour 3, not in the null colour that a code outside the domain gets.
+  So the count uniform reached the GPU.
+
+### `Categorical`
+
+- **LUT, read by texel.** The palette is a one-row `Rgba8Unorm` texture
+  (`Resource::Lut`, as `Sequential` uses), read with `textureLoad` at
+  `code % width`. `Params` holds the null colour and the key count; a code at or
+  past the count, `NULL_CODE` included, draws in the null colour. A palette may
+  have up to 2,048 colours, the narrowest `max_texture_dimension_2d` a device
+  may report. A uniform array was rejected: its length is fixed in the WGSL
+  struct, and the `Encodings` uniform would grow by 16 B per colour.
+- **More keys than colours.** Okabe-Ito stays the default, black last. A domain
+  longer than the palette is not cycled. The palette is extended once, at
+  construction, to 64 colours. Each added colour is the candidate farthest in
+  OKLab from every earlier colour, from white and from the null colour, picked
+  greedily from in-gamut OKLCh colours at four lightnesses and 36 hues. Because
+  the extension does not depend on the key count, a new key never recolours an
+  earlier one, and a new key never writes a texture. The added colours are
+  distinct (the first 16 keys, white and the null colour are at least 0.118
+  apart in OKLab; the test holds them to 0.08) but not colour-blind safe. Past
+  64 keys, colours repeat.
+- **Legends.** `ColorScale: ShaderFn<Out = Color> + CpuMirror` has
+  `legend() -> Legend`. For `Categorical` that is `Swatches` (label and colour
+  in domain order); for `Sequential` and `Diverging` it is a `Ramp`, with its
+  LUT, a piecewise `t(value)` and ticks. `GradientBar::new(&Ramp, …)` replaces
+  `GradientBar::sequential`. Each swatch colour is the mirror's, which is the
+  LUT texel.
+
+### `Diverging`
+
+Two ramps meet at a midpoint (0 by default). The palette is a 257-entry LUT
+(11-class blue–white–red), so the midpoint's colour falls on a texel centre.
+Each side has its own slope (`0.5 / (mid − d0)`, `0.5 / (d1 − mid)`). The
+automatic domain is **symmetric** about the midpoint: equal distances get equal
+colour strength, and the far side of the legend may hold no data. An explicit
+`domain(d0, mid, d1)` may be asymmetric. `Linear.then(diverging)` type-checks
+and passes conformance. One finding for marks: the midpoint colour, `#f7f7f7`,
+almost disappears on a white plot. The goldens put a light neutral plot
+background behind diverging data. A stroke (S6) would be the general fix.
+
+### `Band` and `Point`
+
+- **One function.** Both call `gup::scale::band::map`, which returns
+  `offset + step · f32(code)`, with `offset` and `step` computed in f64 on the
+  CPU. Band uses inner padding (default 0.1) and outer padding (0.1). Point is a
+  band with inner padding 1, plus outer padding (0.5). Each maps a key to the
+  centre of its slot, so a circle sits mid-band and a future bar centres on it,
+  `band_width()` wide. `PositionScale` no longer requires an `f32` input.
+- **Ticks.** Band and Point put a tick on every key, labelled with the key.
+  Above twice the requested tick count, they keep every k-th key. Collision-
+  aware labels are S7's.
+- **Domain.** The domain is the keys, so `set_domain` is an error. Zooming a
+  plot with a band axis is therefore an error, not a silent no-op.
+- **Null keys on position.** The glue compares the code: for each `U32` column
+  on a non-colour channel it ANDs `u32(col.<ch> != 4294967295u)` into `drawn`,
+  next to the validity bits. A geometry `U32` column needs no validity plane, no
+  storage read and no vertex slot. S6's `clip` contract covers it already.
+  _Proof_: a `Band` with an empty range maps every code, the null code included,
+  to one pixel (the dispatch returns `[150, 150]`). The keyed rows draw there
+  and the null row does not, on x and on y. Removing the compare (a seeded
+  violation) draws the null row, and the test fails.
+
+### Conformance, pixels, browser
+
+| Scale (GPU vs mirror)                       | Intel                   | lavapipe                |
+| ------------------------------------------- | ----------------------- | ----------------------- |
+| `Diverging` (fitted, asymmetric, reversed)  | 2.97e-5 per channel     | 1.97e-3 per channel     |
+| `Linear.then(Diverging)`                    | 2.97e-5                 | 1.97e-3                 |
+| `Categorical`, 20 keys and 100-colour LUT   | 0                       | 5.96e-8                 |
+| `Band` and `Point`, 1 to 1,000 keys, ranges | 9.84e-5 px              | 1.05e-4 px              |
+| Budget                                      | 1/255 (3.9e-3), 0.25 px | 1/255 (3.9e-3), 0.25 px |
+
+lavapipe's colour error is its filtering precision, the same as `Sequential`'s
+there (1.96e-3).
+
+- **Goldens** go through the harness tolerance. All three are 0 of 324,000
+  pixels apart on lavapipe (max ΔE 1.6, 1.1, 1.7):
+  - `gup_core/categorical_species`: eleven species, Okabe-Ito plus three
+    generated colours, with a swatch legend. Each swatch's pixels equal its
+    species' drawn centre.
+  - `gup_core/diverging_anomaly`: a warming series in blue, white and red, with
+    a ramp legend whose ends are the data extremes' colours.
+  - `gup_core/band_months`: daily highs on a `Band` axis over an enum's keys,
+    with its `Display` as tick labels. Days without a month are checked absent.
+- **Tick labels** use U+2212 MINUS SIGN, not hyphen-minus (`−100k`, `2e−5`). The
+  bundled Inter subset already had the glyph. `symlog_signed` was re-blessed.
+- **Browser.** `mask wasm-browser` adds two scenes, checked against the mirrors
+  in wasm. The first has eleven keys on a band axis with a swatch legend (11
+  distinct colours, swatches and centres matching) and an empty-band null-key
+  proof (20 keyed rows drawn, 10 null-key rows hidden). The second is a
+  diverging scale with its ramp. `GUP PASS` on SwiftShader.
+- **WASM size.** 271,706 → 294,333 B gz. The library adds 7,985 B, measured
+  before the new scenes; the scenes add 14,642 B, including `Band`, `Point` and
+  `Diverging`. gup-core is 252,621 B over bare wgpu, against a 400,000 B
+  ceiling.
+- **`mask perf-budget`** passed every check at a GPU clock median of 583 MHz,
+  above the 350 MHz floor: GPU pass 3.14 ms, CPU 0.67 ms, 88 uniform bytes and 0
+  column bytes per frame. The reference scatter's glue is unchanged.
+
+### Proposed adjustments to S5c, S6, S7 and later
+
+- **S5c (`#[wgsl_function]` v2).** A user function over codes (`In = u32`)
+  should be able to implement `fit_keys`. The macro can let a user declare a key
+  domain the way it lets a user declare a numeric one.
+- **S6 (marks).**
+  - Fill opacity and a stroke. S5a's `sqrt_radius` discs are opaque and
+    unstroked, so big discs hide small ones, and a diverging midpoint vanishes
+    on white.
+  - Draw order. Bubble charts want size-descending z-order; today it is data
+    order.
+  - A `Rect` or bar mark needs a width that follows `Band::band_width()`. That
+    is a value from the scale, not from each row, so it should update with the
+    domain like any other uniform.
+  - The `clip` contract now also carries the `NULL_CODE` compare.
+- **S7 (guides, `Theme`, layers).**
+  - Legend guides: place `Legend::Swatches` and `Ramp`, with titles. The tests
+    place them by hand today (`tests/common/legend.rs`).
+  - `theme.null_color` replaces `NULL_COLOR` in the glue literal and in
+    `Categorical`'s `Params`.
+  - Axis titles. No chart has them yet.
+  - Typographic hierarchy for `Time` ticks: a year label (`2020`) should
+    outweigh a month label (`Jul`). That needs a second weight in the bundled
+    font.
+  - Collision-aware tick labels for `Band` and `Point`, to replace the
+    every-k-th heuristic.
+  - **Shared key scales across layers.** Each key channel owns its dictionary,
+    so two layers encoding through one `ScaleRef<Categorical>` give the same key
+    different codes, and the scale keeps whichever keys it was fitted to last.
+    Multi-layer plots need one dictionary per shared scale, the union of their
+    layers' keys, for example held by the `ScaleRef` and handed to each channel.
+    `KeyEncoded::domain` is the single-layer workaround.
+- **S9 (picking).** `Band::invert` and `Point::invert` return the nearest code.
+  The legend or `keys()` turns it into a label.
+- **S10 (bar builder).** It needs `Band::band_width()` and `KeyEncoded::domain`
+  for sorted categories, and S6's width-from-scale above.

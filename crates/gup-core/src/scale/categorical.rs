@@ -362,6 +362,7 @@ mod tests {
             }
             seen.push(p);
         }
+        eprintln!("closest pair of the first 16 keys, white and null: {min:.3}");
         assert!(min >= 0.08, "closest pair {min}");
         let small = fitted(12);
         for code in 0..12 {
