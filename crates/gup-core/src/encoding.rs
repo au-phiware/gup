@@ -136,7 +136,7 @@ pub trait EncodeFn: Clone + Send + Sync + 'static {
     /// column's `keys` (see [`ShaderFn::fit_keys`]): the first link's by
     /// its keys, each later link's to the image of codes `0..keys.len()`
     /// through the links before it.
-    fn fit_keys(&mut self, keys: &[Arc<str>]) -> Result<()>;
+    fn fit_dictionary(&mut self, keys: &[Arc<str>]) -> Result<()>;
 
     /// The extent of the chain's numeric output over column values in
     /// `extent`: each link's [`ShaderFn::image`] in turn.
@@ -343,7 +343,7 @@ impl<S: ShaderFn> EncodeFn for S {
         self.fit_domain(extent)
     }
 
-    fn fit_keys(&mut self, keys: &[Arc<str>]) -> Result<()> {
+    fn fit_dictionary(&mut self, keys: &[Arc<str>]) -> Result<()> {
         ShaderFn::fit_keys(self, keys)
     }
 
@@ -416,8 +416,8 @@ where
         self.next.fit((a.min(b), a.max(b)))
     }
 
-    fn fit_keys(&mut self, keys: &[Arc<str>]) -> Result<()> {
-        self.first.fit_keys(keys)?;
+    fn fit_dictionary(&mut self, keys: &[Arc<str>]) -> Result<()> {
+        self.first.fit_dictionary(keys)?;
         let Some(last) = keys.len().checked_sub(1) else {
             return Ok(());
         };
@@ -444,8 +444,9 @@ where
 /// A GPU resource argument of a shader function.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Resource {
-    /// A one-row palette lookup table of sRGB-encoded RGBA8 colours,
-    /// sampled with linear filtering between texel centres.
+    /// A one-row palette lookup table of sRGB-encoded RGBA8 colours, bound
+    /// with a linear-filtering sampler: continuous scales sample it between
+    /// texel centres, categorical ones read it by texel (`textureLoad`).
     Lut(Vec<[u8; 4]>),
 }
 
@@ -695,7 +696,7 @@ pub trait DynColumnEncoding<T>: Send + Sync {
     /// Fit the function's automatic domains to the column: a numeric
     /// column's `stats` ([`EncodeFn::fit`]; nothing to fit without a
     /// non-null value), or a key column's dictionary
-    /// ([`EncodeFn::fit_keys`]).
+    /// ([`EncodeFn::fit_dictionary`]).
     fn fit(&mut self, stats: Option<ColumnStats>) -> Result<()>;
     /// See [`EncodeFn::image`].
     fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)>;
@@ -751,7 +752,7 @@ where
     }
 
     fn fit(&mut self, _stats: Option<ColumnStats>) -> Result<()> {
-        self.func.fit_keys(self.dictionary.labels())
+        self.func.fit_dictionary(self.dictionary.labels())
     }
 
     fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)> {

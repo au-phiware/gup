@@ -4,12 +4,19 @@
 //! One scale family (RFC-001 §5): every scale is a [`ShaderFn`] with an
 //! exact f64 [`CpuMirror`], so axes, ticks and the GPU always agree.
 //!
-//! S0a implements [`Linear`], [`Log`] and [`Sequential`], and S4b a minimal
-//! [`Categorical`] colour scale over dictionary codes; the rest of the
-//! family (Pow/Sqrt, Symlog, Time, Band, Point, Diverging, the full
-//! Categorical) and `then` composition are RFC-001 S5.
+//! - **Position** ([`PositionScale`]): [`Linear`], [`Pow`] (and
+//!   [`Pow::sqrt`]), [`Log`], [`Symlog`] and [`Time`] over numbers;
+//!   [`Band`] and [`Point`] over dictionary codes (categorical axes).
+//! - **Colour** ([`ColorScale`], each with a [`Legend`]): [`Sequential`]
+//!   and [`Diverging`] over numbers (palette LUTs); [`Categorical`] over
+//!   dictionary codes.
+//!
+//! Any scale with a numeric output can feed another through
+//! [`then`](crate::EncodeFn::then). Scales over dictionary codes take
+//! their domain from the channel's keys ([`ShaderFn::fit_keys`]).
 
 mod categorical;
+mod legend;
 mod linear;
 mod log;
 mod pow;
@@ -20,7 +27,10 @@ mod time;
 #[cfg(test)]
 mod conformance;
 
-pub use categorical::{Categorical, CategoricalParams, NULL_COLOR, OKABE_ITO};
+pub use categorical::{
+    CATEGORICAL_COLORS, Categorical, CategoricalParams, MAX_PALETTE, NULL_COLOR, OKABE_ITO,
+};
+pub use legend::{ColorScale, Legend, Ramp, RampTick, Swatch};
 pub use linear::{Linear, LinearParams};
 pub use log::{Log, LogParams};
 pub use pow::{Pow, PowParams};
@@ -122,6 +132,10 @@ impl<S: ShaderFn> ShaderFn for ScaleRef<S> {
         self.write().fit_domain(extent)
     }
 
+    fn fit_keys(&mut self, keys: &[Arc<str>]) -> Result<()> {
+        self.write().fit_keys(keys)
+    }
+
     fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)> {
         self.read().image(extent)
     }
@@ -133,6 +147,15 @@ where
 {
     fn eval(&self, x: f64) -> <S::Out as crate::channel::GpuType>::Cpu {
         self.read().eval(x)
+    }
+}
+
+impl<S> ColorScale for ScaleRef<S>
+where
+    S: ColorScale + CpuMirror<Output = <S as ShaderFn>::Out>,
+{
+    fn legend(&self) -> Legend {
+        self.read().legend()
     }
 }
 

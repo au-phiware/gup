@@ -80,8 +80,8 @@ fn background_rect_and_gradient_legend() {
 fn reversed_scale_reverses_the_legend() {
     let fill = scatter::fill();
     let bar = |s: &Sequential| {
-        GradientBar::sequential(
-            s,
+        GradientBar::new(
+            &s.ramp(),
             Rect::new(0.0, 0.0, 10.0, 100.0),
             GradientDirection::Vertical,
         )

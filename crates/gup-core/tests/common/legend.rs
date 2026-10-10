@@ -65,8 +65,8 @@ pub fn scene(cx: &Context) -> LegendScene {
     scene.push(Item {
         z: Z_TITLE,
         clip: None,
-        kind: ItemKind::Gradient(GradientBar::sequential(
-            &fill,
+        kind: ItemKind::Gradient(GradientBar::new(
+            &fill.ramp(),
             bar,
             GradientDirection::Vertical,
         )),

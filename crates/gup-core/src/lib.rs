@@ -91,16 +91,17 @@ pub use channel::{Channel, ChannelDesc, Color, ConstValue, GpuType, Mark, Px, Ro
 pub use context::{Caps, Context, ContextId, ContextOptions, Upload, UploadStats, WriteCount};
 pub use encoding::{
     ColumnMarker, ColumnValue, ConstMarker, CpuMirror, DynColumnEncoding, DynShaderFn, EncodeFn,
-    Encoded, Encoding, Feeds, IntoEncoding, Key, KeyAccessor, KeyEncoded, KeyMarker, NullableKey,
-    Resource, ShaderFn, Then,
+    Encoded, Encoding, Feeds, IntoEncoding, Key, KeyAccessor, KeyEncoded, KeyMarker, KeySource,
+    NullableKey, NullableOwnedKey, OwnedKey, Resource, ShaderFn, Then,
 };
 pub use error::{Error, Result};
 pub use marks::Circle;
 pub use plot::{Layout, PlacedText, Plot, Resolved};
 pub use render::{PipelineStats, Prepared, Renderer, TargetDesc};
 pub use scale::{
-    Categorical, Linear, Log, NULL_COLOR, OKABE_ITO, PositionScale, Pow, ScaleRef, Sequential,
-    Symlog, Ticks, Time,
+    CATEGORICAL_COLORS, Categorical, ColorScale, Legend, Linear, Log, MAX_PALETTE, NULL_COLOR,
+    OKABE_ITO, PositionScale, Pow, Ramp, RampTick, ScaleRef, Sequential, Swatch, Symlog, Ticks,
+    Time,
 };
 pub use scene::Scene;
 pub use selection::{Retain, Selection};
@@ -115,7 +116,7 @@ pub use window::WindowTarget;
 /// The names most programs need.
 pub mod prelude {
     pub use crate::{
-        Categorical, Circle, Color, Context, CpuMirror, EncodeFn, Linear, Log, Plot, PositionScale,
-        Pow, Px, Retain, Selection, Sequential, ShaderFn, Symlog, Time,
+        Categorical, Circle, Color, ColorScale, Context, CpuMirror, EncodeFn, Linear, Log, Plot,
+        PositionScale, Pow, Px, Retain, ScaleRef, Selection, Sequential, ShaderFn, Symlog, Time,
     };
 }

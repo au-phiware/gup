@@ -1,6 +1,7 @@
 // Copyright (C) 2024 Corin Lawson
 // SPDX-License-Identifier: GPL-3.0-or-later
 
+use super::legend::{ColorScale, Legend, Ramp};
 use crate::channel::Color;
 use crate::column::ColumnFormat;
 use crate::encoding::{CpuMirror, Resource, ShaderFn};
@@ -137,10 +138,18 @@ impl CpuMirror for Sequential {
 }
 
 impl Sequential {
-    /// The palette LUT (shared, not copied) and whether it runs backwards:
-    /// what a colour legend for this scale draws.
-    pub(crate) fn palette(&self) -> (Arc<[[u8; 4]]>, bool) {
-        (Arc::clone(&self.lut), self.reverse)
+    /// The legend's ramp: the palette (shared, not copied) from the
+    /// domain's low end to its high end, with about 5 ticks. Draw it with
+    /// [`GradientBar::new`](crate::scene::GradientBar::new).
+    pub fn ramp(&self) -> Ramp {
+        let domain = self.domain.unwrap_or((0.0, 1.0));
+        Ramp::linear(Arc::clone(&self.lut), self.reverse, domain, 5)
+    }
+}
+
+impl ColorScale for Sequential {
+    fn legend(&self) -> Legend {
+        Legend::Ramp(self.ramp())
     }
 }
 

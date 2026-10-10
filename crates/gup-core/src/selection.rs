@@ -1171,7 +1171,7 @@ mod tests {
         assert_eq!(
             glue.signature,
             "Circle {x: f32rel→gup::scale::linear::map_rel, y: f32→gup::scale::log::map, \
-             radius: const f32, fill: u32→gup::color::categorical::map} with nulls"
+             radius: const f32, fill: u32→gup::color::categorical::map(lut)} with nulls"
         );
         assert_eq!(
             glue.columns,
@@ -1220,10 +1220,11 @@ mod tests {
         sel.prepare(&cx).unwrap();
     }
 
-    /// The categorical palette and null colour land at naga's offsets.
+    /// The categorical null colour and key count land at naga's offsets,
+    /// and the palette is its LUT resource (Okabe-Ito first).
     #[test]
     fn categorical_params_match_the_wgsl_layout() {
-        use crate::encoding::DynShaderFn;
+        use crate::encoding::{DynShaderFn, ShaderFn};
         use crate::scale::{NULL_COLOR, OKABE_ITO};
         use crate::shader::COLOR_CATEGORICAL;
         let module = parse(COLOR_CATEGORICAL.import_path, COLOR_CATEGORICAL.wgsl);
@@ -1232,20 +1233,20 @@ mod tests {
             &gup_wgsl::flat_name(COLOR_CATEGORICAL.import_path, "Params"),
         )
         .unwrap();
-        let bytes = DynShaderFn::params_bytes(&Categorical::okabe_ito()).unwrap();
-        let vec4 = |at: u32| -> [f32; 4] {
-            bytemuck::pod_read_unaligned(&bytes[at as usize..at as usize + 16])
-        };
-        let colors = layout.offset("colors").unwrap();
-        for (i, c) in OKABE_ITO.iter().enumerate() {
-            assert_eq!(vec4(colors + 16 * i as u32), c.to_array());
-        }
-        assert_eq!(
-            vec4(layout.offset("null_color").unwrap()),
-            NULL_COLOR.to_array()
-        );
+        let mut c = Categorical::okabe_ito();
+        let keys: Vec<std::sync::Arc<str>> = ["a", "b", "c"].map(Into::into).to_vec();
+        c.fit_keys(&keys).unwrap();
+        let bytes = DynShaderFn::params_bytes(&c).unwrap();
+        let at = layout.offset("null_color").unwrap() as usize;
+        let null: [f32; 4] = bytemuck::pod_read_unaligned(&bytes[at..at + 16]);
+        assert_eq!(null, NULL_COLOR.to_array());
         let count = layout.offset("count").unwrap() as usize;
-        assert_eq!(bytes[count..count + 4], 8u32.to_le_bytes());
+        assert_eq!(bytes[count..count + 4], 3u32.to_le_bytes());
+        let [Resource::Lut(lut)] = &ShaderFn::resources(&c)[..] else {
+            panic!("one LUT")
+        };
+        let rgba: Vec<[u8; 4]> = OKABE_ITO.iter().map(|c| c.to_rgba8()).collect();
+        assert_eq!(lut[..8], rgba[..]);
     }
 }
 

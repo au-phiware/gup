@@ -8,7 +8,7 @@
 use crate::channel::{Color, Px};
 use crate::geom::{Point, Rect};
 use crate::render::LayerGpu;
-use crate::scale::Sequential;
+use crate::scale::Ramp;
 use crate::scale::sequential::sample_lut;
 use std::sync::Arc;
 
@@ -189,10 +189,11 @@ pub enum GradientDirection {
     Vertical,
 }
 
-/// A colour-legend bar for a [`Sequential`] scale: the scale's own
-/// palette LUT, sampled by the same WGSL function that colours the data
-/// (`gup::color::sequential::map`), from the domain minimum at one end to
-/// the maximum at the other.
+/// A colour-legend bar for a continuous colour scale's [`Ramp`]
+/// ([`Sequential`](crate::Sequential), [`Diverging`](crate::Diverging)):
+/// the scale's own palette LUT, sampled as the WGSL that colours the data
+/// samples it (linear filtering between texel centres), from the ramp's
+/// low end at one end to its high end at the other.
 #[derive(Clone, Debug, PartialEq)]
 pub struct GradientBar {
     /// Where, in logical pixels.
@@ -206,19 +207,20 @@ pub struct GradientBar {
 }
 
 impl GradientBar {
-    /// A legend bar for `scale`, filling `rect`.
-    pub fn sequential(scale: &Sequential, rect: Rect, direction: GradientDirection) -> Self {
-        let (lut, reverse) = scale.palette();
+    /// A legend bar for `ramp` (a scale's [`ramp`](crate::Sequential::ramp)
+    /// or the [`Ramp`] of its legend), filling `rect`. A tick at `t` along
+    /// the ramp is at `t` along the bar.
+    pub fn new(ramp: &Ramp, rect: Rect, direction: GradientDirection) -> Self {
         Self {
             rect,
             direction,
-            lut,
-            reverse,
+            lut: Arc::clone(&ramp.lut),
+            reverse: ramp.reverse,
         }
     }
 
-    /// The colour at normalised position `t` (0 at the domain minimum, 1
-    /// at the maximum), interpolated between LUT entries as the GPU's
+    /// The colour at normalised position `t` (0 at the ramp's low end, 1
+    /// at its high end), interpolated between LUT entries as the GPU's
     /// linear filter does. Vector targets use it to place gradient stops.
     pub fn color_at(&self, t: f64) -> Color {
         let t = t.clamp(0.0, 1.0);

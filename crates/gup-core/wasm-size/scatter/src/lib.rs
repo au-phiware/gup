@@ -97,8 +97,8 @@ pub async fn render_scatter(
     scene.push(Item {
         z: Z_TITLE,
         clip: None,
-        kind: ItemKind::Gradient(GradientBar::sequential(
-            &Sequential::viridis().domain(50.0, 80.0),
+        kind: ItemKind::Gradient(GradientBar::new(
+            &Sequential::viridis().domain(50.0, 80.0).ramp(),
             Rect::from_edges(
                 right + 6.0,
                 plot_rect.top(),
