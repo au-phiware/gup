@@ -164,11 +164,33 @@ and revisit before building the hi/lo format, rather than building both.
 - [ ] `Time::ticks` produces calendar-aware tick positions and labels (for
       example, ticks that land on whole days, months or years depending on the
       domain span), not merely evenly spaced numeric ticks.
-- [ ] `ColumnStore` (or the `Time` scale's declared input format) caps a chunk's
-      value span so that `conformance::chunk_boundary`'s "full chunk of
-      one-per-second samples, one-second zoom" scenario, extended with the span
-      cap, now passes within 0.25 px (replacing or adding to the existing test
-      that documents the miss as a known limit).
+- [ ] **Precision approach chosen by a measured spike, not by argument**
+      (orchestrator amendment, 2026-10-10). The Context recommends value-span
+      capping, but the arithmetic is unfavourable at scale: with f32's 24-bit
+      mantissa, 0.25 px at a 1 s / 1000 px zoom allows a chunk span of only
+      about 0.25/1000 × 2²⁴ ≈ 4,200 s. Three years of one-per-second data would
+      then need about 22,500 chunks, so 22,500 draw calls per frame, and the cap
+      shrinks with zoom depth (≈4 s at 1 ms / 1000 px). S4a only measured 7
+      chunks. Before implementing either approach, spike both: 1.
+      value-span-capped chunks; 2. a hi/lo f32 pair column format
+      (double-single), a new `ColumnFormat` beside `F32Relative`, not a parallel
+      system.
+
+      Measure each on two scenarios:
+      - (a) three years of one-per-second samples at a 1 s / 1000 px zoom;
+      - (b) the same data at 1 ms / 1000 px.
+
+      Record the chunk/draw count, `zoom_bench` CPU and GPU frame time, column
+      bytes and WGSL cost, and precision against the CPU mirror. Choose the
+      approach that meets 0.25 px in both scenarios within the S0b frame
+      budget. If span capping needs more than about 64 chunks in scenario (a),
+      or fails (b), use the hi/lo format. Record the numbers and the decision
+      in RFC-001's findings.
+
+- [ ] The chosen approach makes `conformance::chunk_boundary`'s "full chunk of
+      one-per-second samples, one-second zoom" scenario pass within 0.25 px
+      (replacing or adding to the existing test that documents the miss as a
+      known limit), and a new 1 ms-zoom variant also passes.
 - [ ] The existing `conformance::chunk_boundary` tests
       (`relative_chunks_stay_within_a_quarter_pixel_at_the_boundary`,
       `absolute_f32_misses_at_the_boundary`,
