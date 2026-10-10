@@ -808,6 +808,75 @@ mod tests {
         assert_eq!(*after.get_pixel(x1, y1), *before.get_pixel(x1, y1));
     }
 
+    /// GUP-419 AC4: a null key on a band position is hidden by the glue's
+    /// `NULL_CODE` comparison, not by landing off-screen. The x channel is
+    /// a `Band` with an empty range (step 0), so the GPU maps every code,
+    /// the null code too, to x = 150, as the dispatch shows. Rows with a
+    /// key draw there; the row without one does not, on x and on y.
+    #[test]
+    fn a_null_band_key_is_hidden_not_placed() {
+        use crate::scale::Band;
+        let cx = Context::new_blocking().unwrap();
+        let on_screen = Band::new().range(Px(150.0), Px(150.0));
+        let gpu = crate::scale::conformance::dispatch(
+            &cx,
+            &on_screen,
+            &[0.0, f64::from(crate::column::NULL_CODE)],
+            None,
+        );
+        assert_eq!(gpu, [150.0, 150.0], "the null code maps on-screen");
+
+        type Row = (Option<&'static str>, f64);
+        let rows: Vec<Row> = vec![(Some("a"), 2.0), (None, 5.0), (Some("b"), 8.0)];
+        let mut plot = Plot::new();
+        let (x, y) = (
+            plot.x(Linear::new().domain(0.0, 10.0)),
+            plot.y(Linear::new().domain(0.0, 10.0)),
+        );
+        plot.add(Selection::<Row, Circle>::new(rows))
+            .attr(Circle::X, on_screen.encode_nullable_key(|r: &Row| r.0))
+            .attr(Circle::Y, y.encode(|r: &Row| r.1))
+            .attr(Circle::RADIUS, Px(8.0));
+        let resolved = plot.resolve(&cx, 300.0, 200.0).unwrap();
+        let glue = &plot.glue_sources()[0].1;
+        assert!(
+            glue.contains("let drawn = u32(col.x != 4294967295u);"),
+            "{glue}"
+        );
+        let image = ImageTarget::new(&cx, 300, 200)
+            .unwrap()
+            .render_blocking(&cx, &resolved.scene)
+            .unwrap();
+        let white = image::Rgba([255, 255, 255, 255]);
+        let at = |v: f64| *image.get_pixel(150, y.read().eval(v) as u32);
+        assert_ne!(at(2.0), white, "key a");
+        assert_ne!(at(8.0), white, "key b");
+        assert_eq!(at(5.0), white, "the null key was drawn");
+        let _ = x;
+
+        // The same on y, with the x column holding a null too: both
+        // compares AND together.
+        let rows: Vec<(f64, Option<&'static str>)> = vec![(2.0, Some("p")), (5.0, None)];
+        let mut plot = Plot::new();
+        let (x, _y) = (
+            plot.x(Linear::new().domain(0.0, 10.0)),
+            plot.y(Linear::new().domain(0.0, 10.0)),
+        );
+        plot.add(Selection::<(f64, Option<&'static str>), Circle>::new(rows))
+            .attr(Circle::X, x.encode(|r: &(f64, Option<&str>)| r.0))
+            .attr(
+                Circle::Y,
+                Band::new()
+                    .range(Px(100.0), Px(100.0))
+                    .encode_nullable_key(|r: &(f64, Option<&'static str>)| r.1),
+            )
+            .attr(Circle::RADIUS, Px(8.0));
+        let image = plot.render(&cx, 300, 200).unwrap();
+        let at = |v: f64| *image.get_pixel(x.read().eval(v) as u32, 100);
+        assert_ne!(at(2.0), white);
+        assert_eq!(at(5.0), white, "the null y key was drawn");
+    }
+
     /// S4b: a non-finite value driving a numeric colour scale draws the
     /// point in the null colour (a `select` on its validity bit), not a
     /// palette colour, and the point is still drawn.

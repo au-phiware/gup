@@ -8,7 +8,8 @@
 //! (colour).
 
 use super::{
-    Categorical, Diverging, Linear, Log, NULL_COLOR, PositionScale, Pow, Sequential, Symlog, Time,
+    Band, Categorical, Diverging, Linear, Log, NULL_COLOR, Point, PositionScale, Pow, Sequential,
+    Symlog, Time,
 };
 use crate::channel::{Color, Px};
 use crate::column::{ColumnFormat, NULL_CODE};
@@ -42,7 +43,12 @@ fn column_bytes(format: ColumnFormat, values: &[f64], origin: f64) -> Vec<u8> {
 /// its first link's column format relative to `origin` (default: the
 /// first value, as a chunk does). Returns the output floats (1 or 4 per
 /// input).
-fn dispatch(cx: &Context, f: &impl EncodeFn, inputs: &[f64], origin: Option<f64>) -> Vec<f32> {
+pub(crate) fn dispatch(
+    cx: &Context,
+    f: &impl EncodeFn,
+    inputs: &[f64],
+    origin: Option<f64>,
+) -> Vec<f32> {
     let links = f.links();
     let format = links[0].input_format();
     let origin = origin.unwrap_or(if format.is_relative() { inputs[0] } else { 0.0 });
@@ -449,6 +455,40 @@ fn categorical_gpu_matches_cpu_mirror() {
     let worst = max_color_error(&cx, &long, &inputs);
     assert_eq!(worst, 0.0);
     assert_eq!(long.eval(99.0), palette[99]);
+}
+
+/// GUP-419 AC4: `Band` and `Point` within 0.25 px of their mirrors for
+/// every code of dictionaries of 1 to 1000 keys, on forward and reversed
+/// (y axis) ranges, with several paddings. The null code has no position
+/// (the mirror gives NaN): the glue hides its row, which
+/// `plot::tests::a_null_band_key_is_hidden_not_placed` proves.
+#[test]
+fn band_and_point_gpu_match_cpu_mirror() {
+    let cx = Context::new_blocking().unwrap();
+    let mut worst = 0.0f64;
+    for n in [1usize, 2, 7, 12, 1000] {
+        let keys: Vec<Arc<str>> = (0..n).map(|i| format!("k{i}").into()).collect();
+        let codes: Vec<f64> = (0..n).map(|i| i as f64).collect();
+        for (r0, r1) in [(40.0, 1240.0), (780.0, 20.0)] {
+            let range = (Px(r0), Px(r1));
+            for (inner, outer) in [(0.0, 0.0), (0.1, 0.1), (0.35, 1.5), (1.0, 0.5)] {
+                let mut band = Band::new()
+                    .padding_inner(inner)
+                    .padding_outer(outer)
+                    .range(range.0, range.1);
+                band.fit_keys(&keys).unwrap();
+                worst = worst.max(max_position_error(&cx, &band, &codes, None));
+            }
+            for padding in [0.0, 0.5, 2.0] {
+                let mut point = Point::new().padding(padding).range(range.0, range.1);
+                point.fit_keys(&keys).unwrap();
+                worst = worst.max(max_position_error(&cx, &point, &codes, None));
+            }
+        }
+    }
+    eprintln!("band and point: max |gpu - cpu| = {worst:.2e} px");
+    assert!(worst <= 0.25, "max |gpu - cpu| = {worst} px");
+    assert!(Band::new().eval(f64::from(NULL_CODE)).is_nan());
 }
 
 /// GUP-418 AC2: `Pow` and `Sqrt` within 0.25 px, over domains that start

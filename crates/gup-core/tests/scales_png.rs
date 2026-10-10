@@ -276,7 +276,7 @@ fn time_zoomed_to_a_millisecond_draws_within_a_quarter_pixel() {
         .collect();
     rows.extend(&burst_rows);
 
-    fn render<S: PositionScale>(
+    fn render<S: PositionScale<In = f32>>(
         cx: &Context,
         rows: &[(f64, f64)],
         xs: S,

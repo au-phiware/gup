@@ -15,6 +15,7 @@
 //! [`then`](crate::EncodeFn::then). Scales over dictionary codes take
 //! their domain from the channel's keys ([`ShaderFn::fit_keys`]).
 
+mod band;
 mod categorical;
 mod diverging;
 mod legend;
@@ -26,8 +27,9 @@ mod symlog;
 mod time;
 
 #[cfg(test)]
-mod conformance;
+pub(crate) mod conformance;
 
+pub use band::{Band, BandParams, Point};
 pub use categorical::{
     CATEGORICAL_COLORS, Categorical, CategoricalParams, MAX_PALETTE, NULL_COLOR, OKABE_ITO,
 };
@@ -56,10 +58,11 @@ pub struct Ticks {
     pub labels: Vec<String>,
 }
 
-/// A scale from a numeric domain to a pixel range.
-pub trait PositionScale:
-    ShaderFn<In = f32, Out = Px> + EncodeFn<Input = f32, Output = Px> + CpuMirror
-{
+/// A scale from a domain to a pixel range: a numeric domain (`In = f32`:
+/// [`Linear`], [`Log`], …), or dictionary codes (`In = u32`: [`Band`],
+/// [`Point`]), whose domain values are the codes `0..len` and whose ticks
+/// are labelled by the keys.
+pub trait PositionScale: ShaderFn<Out = Px> + EncodeFn<Output = Px> + CpuMirror {
     /// The domain, if set or fitted.
     fn current_domain(&self) -> Option<(f64, f64)>;
     /// Whether the domain is data-driven (not set explicitly).

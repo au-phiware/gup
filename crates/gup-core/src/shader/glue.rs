@@ -22,7 +22,7 @@
 
 use super::{StructLayout, VIEW, WgslModule};
 use crate::channel::Role;
-use crate::column::ColumnFormat;
+use crate::column::{ColumnFormat, NULL_CODE};
 use crate::encoding::{DynShaderFn, Resource};
 use crate::scale::NULL_COLOR;
 use std::fmt::{self, Write as _};
@@ -253,6 +253,10 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
     // Validity planes (numeric columns, in column order) of channels that
     // position or size the mark: a null in any of them hides the row.
     let mut geometry_planes = Vec::new();
+    // Dictionary-code (`U32`) columns of channels that position or size
+    // the mark: a null key (`NULL_CODE`) hides the row. Codes have no
+    // validity plane; the reserved code is compared instead (RFC-001 S5b).
+    let mut geometry_keys = Vec::new();
     let mut planes = 0;
     let mut relative = Vec::new();
     let mut luts = Vec::new();
@@ -344,6 +348,9 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
                         };
                     }
                     Some(plane) => geometry_planes.push(plane),
+                    None if format == ColumnFormat::U32 && ch.role != Some(Role::Color) => {
+                        geometry_keys.push(ch.name);
+                    }
                     None => {}
                 }
                 exprs.push((ch.name, expr));
@@ -473,19 +480,27 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
     }
     let vertex =
         format!("{mark_alias}::vertex(m, vertex_index, chunk.row_base + instance_index, u_view)");
+    let mut drawn = Vec::new();
     if validity && !geometry_planes.is_empty() {
-        // A null position or size: every corner at one point outside the
-        // clip volume, a degenerate quad that is never rasterised. The mark
-        // contract names the position member `clip`.
         let words = geometry_planes
             .iter()
             .map(|p| format!("validity[valid_group + {p}u]"))
             .collect::<Vec<_>>()
             .join(" & ");
+        drawn.push(format!("(({words}) >> valid_bit) & 1u"));
+    }
+    for name in &geometry_keys {
+        drawn.push(format!("u32(col.{name} != {NULL_CODE}u)"));
+    }
+    if !drawn.is_empty() {
+        // A null position or size: every corner at one point outside the
+        // clip volume, a degenerate quad that is never rasterised. The mark
+        // contract names the position member `clip`.
+        let drawn = drawn.join(" & ");
         let _ = writeln!(
             w,
             "    var out = {vertex};\n    \
-             let drawn = (({words}) >> valid_bit) & 1u;\n    \
+             let drawn = {drawn};\n    \
              out.clip = select(vec4<f32>(2.0, 2.0, 2.0, 1.0), out.clip, drawn == 1u);\n    \
              return out;\n}}"
         );
