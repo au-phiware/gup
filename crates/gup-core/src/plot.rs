@@ -808,6 +808,80 @@ mod tests {
         assert_eq!(*after.get_pixel(x1, y1), *before.get_pixel(x1, y1));
     }
 
+    /// GUP-419 AC1: the dictionary hook end to end. Appending rows with a
+    /// new key grows the categorical domain and its legend; the GPU learns
+    /// of it through one uniform (the key count): the column writes are
+    /// exactly the appended rows' bytes, no texture (palette) is written,
+    /// and the layer's GPU state is kept. The new key draws in its palette
+    /// colour, not the null colour a code outside the domain gets, so the
+    /// uniform did reach the GPU.
+    #[test]
+    fn a_new_key_grows_the_domain_with_a_uniform_write_only() {
+        use crate::scale::{Categorical, ColorScale, OKABE_ITO};
+        type Row = (f64, f64, &'static str);
+        let cx = Context::new_blocking().unwrap();
+        let rows: Vec<Row> = (0..30)
+            .map(|i| {
+                (
+                    f64::from(i),
+                    f64::from(i % 5),
+                    ["a", "b", "c"][i as usize % 3],
+                )
+            })
+            .collect();
+        let mut plot = Plot::new();
+        let (x, y) = (
+            plot.x(Linear::new().domain(-1.0, 40.0)),
+            plot.y(Linear::new().domain(-1.0, 5.0)),
+        );
+        let colour = ScaleRef::new(Categorical::okabe_ito());
+        plot.add(Selection::<Row, Circle>::new(rows))
+            .attr(Circle::X, x.encode(|r: &Row| r.0))
+            .attr(Circle::Y, y.encode(|r: &Row| r.1))
+            .attr(Circle::RADIUS, Px(4.0))
+            .attr(Circle::FILL, colour.encode_key(|r: &Row| r.2));
+        let mut target = ImageTarget::new(&cx, 400, 300).unwrap();
+        let first = plot.resolve(&cx, 400.0, 300.0).unwrap();
+        target.render_blocking(&cx, &first.scene).unwrap();
+        let labels = |c: &ScaleRef<Categorical>| -> Vec<String> {
+            let legend = c.read().legend();
+            legend
+                .swatches()
+                .iter()
+                .map(|s| s.label.to_string())
+                .collect()
+        };
+        assert_eq!(labels(&colour), ["a", "b", "c"]);
+
+        let start = cx.upload_stats();
+        let linked = cx.pipelines().stats.programs_linked;
+        let layer: &mut Selection<Row, Circle> =
+            plot.layers[0].as_any_mut().downcast_mut().unwrap();
+        layer.append([(35.0, 2.0, "d"), (36.0, 3.0, "a")]).unwrap();
+        let second = plot.resolve(&cx, 400.0, 300.0).unwrap();
+        let image = target.render_blocking(&cx, &second.scene).unwrap();
+        let written = cx.upload_stats() - start;
+
+        assert_eq!(labels(&colour), ["a", "b", "c", "d"]);
+        assert_eq!(colour.read().legend().swatches()[3].color, OKABE_ITO[3]);
+        // x, y (4 bytes each) and the code (4 bytes) of 2 rows.
+        assert_eq!(written.columns.bytes, 2 * 12, "{written:?}");
+        assert_eq!(written.textures, Default::default(), "{written:?}");
+        // Same program and pipeline: the domain is a uniform, not WGSL.
+        assert_eq!(cx.pipelines().stats.programs_linked, linked);
+        assert_eq!(
+            batch(&first).program.glue.signature,
+            batch(&second).program.glue.signature
+        );
+        let at = |v: (f64, f64)| {
+            image
+                .get_pixel(x.read().eval(v.0) as u32, y.read().eval(v.1) as u32)
+                .0
+        };
+        assert_eq!(at((35.0, 2.0)), OKABE_ITO[3].to_rgba8(), "the new key");
+        assert_eq!(at((36.0, 3.0)), OKABE_ITO[0].to_rgba8(), "an old key");
+    }
+
     /// GUP-419 AC4: a null key on a band position is hidden by the glue's
     /// `NULL_CODE` comparison, not by landing off-screen. The x channel is
     /// a `Band` with an empty range (step 0), so the GPU maps every code,
