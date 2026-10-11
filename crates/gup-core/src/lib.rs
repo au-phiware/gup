@@ -91,7 +91,9 @@ pub mod target;
 #[cfg(feature = "window")]
 mod window;
 
-pub use channel::{Channel, ChannelDesc, Color, ConstValue, GpuType, Mark, Px, Role, Visual};
+pub use channel::{
+    Antialias, Channel, ChannelDesc, Color, ConstValue, GpuType, Mark, Px, Role, Visual,
+};
 pub use context::{Caps, Context, ContextId, ContextOptions, Upload, UploadStats, WriteCount};
 pub use encoding::{
     ColumnMarker, ColumnValue, ConstMarker, CpuMirror, DynColumnEncoding, DynShaderFn, EncodeFn,

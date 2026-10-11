@@ -5,7 +5,7 @@
 //! rectangles, colour-legend gradients and text runs, in logical pixels,
 //! drawn by a render target or written by a vector target.
 
-use crate::channel::{Color, Px};
+use crate::channel::{Antialias, Color, Px};
 use crate::geom::{Point, Rect};
 use crate::render::LayerGpu;
 use crate::scale::Ramp;
@@ -83,6 +83,22 @@ impl Scene {
         }
     }
 
+    /// The fewest MSAA samples per pixel this scene should be drawn with:
+    /// 4 if a data layer's mark antialiases with
+    /// [`Antialias::Msaa`] (areas, polygons; RFC-001 §7), else 1, since
+    /// every other item (circles, rules, rects, text) antialiases
+    /// analytically. [`Renderer::render`](crate::Renderer::render) draws
+    /// with at least this many on any target; a host drawing in its own
+    /// pass ([`Renderer::prepare`](crate::Renderer::prepare)) chooses its
+    /// pass's count and can read it here.
+    pub fn min_samples(&self) -> u32 {
+        let msaa = self
+            .items
+            .iter()
+            .any(|i| matches!(&i.kind, ItemKind::Marks(b) if b.antialias == Antialias::Msaa));
+        if msaa { crate::target::MSAA_SAMPLES } else { 1 }
+    }
+
     /// Every rule, in draw order.
     pub fn rules(&self) -> impl Iterator<Item = &Rule> {
         self.items.iter().flat_map(|i| match &i.kind {
@@ -126,6 +142,8 @@ pub enum ItemKind {
 #[derive(Clone, Debug)]
 pub struct MarkBatch {
     pub(crate) gpu: Arc<LayerGpu>,
+    /// The mark's [`Mark::ANTIALIAS`](crate::Mark::ANTIALIAS).
+    pub(crate) antialias: Antialias,
 }
 
 impl MarkBatch {
@@ -137,6 +155,11 @@ impl MarkBatch {
     /// Number of column chunks, each drawn by one instanced draw.
     pub fn chunks(&self) -> usize {
         self.gpu.chunks.len()
+    }
+
+    /// How the mark's edges are antialiased.
+    pub fn antialias(&self) -> Antialias {
+        self.antialias
     }
 
     /// The encoding signature (the pipeline cache key).

@@ -334,6 +334,7 @@ mod tests {
                 let bad = Arc::new(seed(cx, &batch.gpu.program));
                 *batch = MarkBatch {
                     gpu: Arc::new(batch.gpu.with_program(bad)),
+                    antialias: batch.antialias,
                 };
             }
         }

@@ -13,8 +13,11 @@
 //!
 //! Hosts that own the render pass itself skip targets altogether and use
 //! [`Renderer::prepare`] and [`Prepared::draw`](crate::Prepared::draw)
-//! (draw-in-pass). Gup-owned passes are multisampled (4× by default) and
-//! resolve into the frame's texture.
+//! (draw-in-pass). Gup-owned passes are single-sampled by default: points,
+//! rules, rects and text antialias analytically (RFC-001 §7, GUP-421).
+//! A target can opt into MSAA, and a scene with an area or polygon mark
+//! ([`Antialias::Msaa`](crate::Antialias::Msaa)) is drawn with 4 samples on
+//! any target; a multisampled pass resolves into the frame's texture.
 
 use crate::context::Context;
 use crate::error::{Error, Result};
@@ -33,9 +36,17 @@ pub trait RenderTarget {
     fn present(&mut self, cx: &Context, frame: Frame, commands: wgpu::CommandBuffer) -> Result<()>;
 }
 
-/// The MSAA sample count of Gup-owned targets (RFC-001 §7). WebGPU
-/// guarantees 1 and 4 for every renderable 8-bit format.
-pub const DEFAULT_SAMPLES: u32 = 4;
+/// The MSAA sample count of Gup-owned targets: 1. Circles, rules, rects
+/// and text antialias analytically, so MSAA would only add GPU time
+/// (GUP-417 measured +29% of the pass; GUP-421 made rules and rects
+/// analytic). Opt in with [`TargetOptions::with_samples`] or
+/// `WindowTarget::set_samples`; scenes that need MSAA get it anyway
+/// ([`Scene::min_samples`]).
+pub const DEFAULT_SAMPLES: u32 = 1;
+
+/// The sample count of a scene that needs MSAA. WebGPU guarantees 1 and 4
+/// for every renderable 8-bit format.
+pub(crate) const MSAA_SAMPLES: u32 = 4;
 
 /// Options of a target Gup draws into but whose size the caller chose
 /// ([`ImageTarget`], [`TextureTarget`]).
@@ -45,7 +56,8 @@ pub struct TargetOptions {
     /// in size fills the target when it is `w·dpr × h·dpr` physical
     /// pixels; text is rasterised at `size × dpr`.
     pub dpr: f32,
-    /// MSAA sample count: [`DEFAULT_SAMPLES`] (4) or 1.
+    /// MSAA sample count: [`DEFAULT_SAMPLES`] (1) or 4. A scene that
+    /// needs more ([`Scene::min_samples`]) is drawn with more.
     pub samples: u32,
 }
 
@@ -59,9 +71,11 @@ impl Default for TargetOptions {
 }
 
 impl TargetOptions {
-    /// Single-sampled (no MSAA): analytic antialiasing only.
-    pub fn single_sample(self) -> Self {
-        Self { samples: 1, ..self }
+    /// With `samples` MSAA samples per pixel: 1 (the default, analytic
+    /// antialiasing only) or 4. Other counts need adapter-specific
+    /// format support and are checked when the target is created.
+    pub fn with_samples(self, samples: u32) -> Self {
+        Self { samples, ..self }
     }
 
     /// With `dpr` physical pixels per logical pixel.
@@ -183,7 +197,19 @@ impl Frame {
     /// multisampled view if there is one and resolve it into
     /// [`view`](Self::view), else draw into `view` directly.
     pub fn color_attachment(&self, clear: wgpu::Color) -> wgpu::RenderPassColorAttachment<'_> {
-        let (view, resolve_target, store) = match &self.msaa {
+        self.attachment(self.msaa.as_ref(), clear)
+    }
+
+    /// Like [`color_attachment`](Self::color_attachment), drawing into
+    /// `msaa` (another multisampled view of the frame's size and format)
+    /// instead of the frame's own: a scene that needs more samples than
+    /// the target has.
+    pub(crate) fn attachment<'a>(
+        &'a self,
+        msaa: Option<&'a wgpu::TextureView>,
+        clear: wgpu::Color,
+    ) -> wgpu::RenderPassColorAttachment<'a> {
+        let (view, resolve_target, store) = match msaa {
             // The samples are only needed until they are resolved.
             Some(msaa) => (msaa, Some(&self.view), wgpu::StoreOp::Discard),
             None => (&self.view, None, wgpu::StoreOp::Store),
@@ -303,8 +329,8 @@ impl Readback {
 ///
 /// Renders into an `Rgba8Unorm` (non-sRGB) texture: colours are
 /// sRGB-encoded and blended in sRGB space, as browsers, SVG and PDF do
-/// (RFC-001 §7). The pass is 4× multisampled by default and resolves into
-/// that texture. The readback un-premultiplies alpha.
+/// (RFC-001 §7). The pass is single-sampled by default; a multisampled
+/// pass resolves into that texture. The readback un-premultiplies alpha.
 ///
 /// Reading back is `async` on every platform; native code can use
 /// [`render_blocking`](Self::render_blocking). In a browser, await
@@ -322,7 +348,7 @@ pub struct ImageTarget {
 
 impl ImageTarget {
     /// A `width × height` physical-pixel target with the default
-    /// [`TargetOptions`] (dpr 1, 4× MSAA).
+    /// [`TargetOptions`] (dpr 1, one sample).
     pub fn new(cx: &Context, width: u32, height: u32) -> Result<Self> {
         Self::with_options(cx, width, height, TargetOptions::default())
     }

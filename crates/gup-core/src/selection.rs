@@ -558,6 +558,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
                 gpu.write_uniforms(cx, &encodings, &chunks);
                 return Ok(MarkBatch {
                     gpu: Arc::clone(gpu),
+                    antialias: M::ANTIALIAS,
                 });
             }
             // Appended rows: new chunk draws and `Chunk` entries over the
@@ -573,7 +574,10 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             let grown = Arc::new(gpu.with_chunks(cx, &chunks, draws())?);
             grown.write_encodings(cx, &encodings);
             self.gpu = Some((Arc::clone(&grown), luts));
-            return Ok(MarkBatch { gpu: grown });
+            return Ok(MarkBatch {
+                gpu: grown,
+                antialias: M::ANTIALIAS,
+            });
         }
         #[cfg_attr(
             target_arch = "wasm32",
@@ -594,7 +598,10 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             .build(cx, draws(), M::VERTICES_PER_INSTANCE)?,
         );
         self.gpu = Some((Arc::clone(&gpu), luts));
-        Ok(MarkBatch { gpu })
+        Ok(MarkBatch {
+            gpu,
+            antialias: M::ANTIALIAS,
+        })
     }
 
     fn release(&mut self) {

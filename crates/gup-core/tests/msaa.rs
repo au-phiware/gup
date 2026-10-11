@@ -18,7 +18,10 @@ use common::vr::harness;
 use gup_core::geom::{Point, Rect};
 use gup_core::prelude::*;
 use gup_core::scene::{Item, ItemKind, RectPrim, Rule, Z_AXES};
-use gup_core::{ImageTarget, Scene, SvgTarget, TargetOptions, VectorTarget};
+use gup_core::{
+    Antialias, Channel, ChannelDesc, ImageTarget, Mark, Scene, SvgTarget, TargetOptions,
+    VectorTarget, WgslModule,
+};
 use gup_visual_regression::golden::default_artifact_dir;
 use gup_visual_regression::{LayoutMetadata, PxRect, Rgba8, RgbaImage};
 use std::path::Path;
@@ -68,11 +71,7 @@ fn scene(cx: &Context) -> Scene {
 }
 
 fn render(cx: &Context, scene: &Scene, samples: u32) -> image::RgbaImage {
-    let options = TargetOptions {
-        samples,
-        ..TargetOptions::default()
-    };
-    ImageTarget::with_options(cx, W, H, options)
+    ImageTarget::with_options(cx, W, H, TargetOptions::default().with_samples(samples))
         .unwrap()
         .render_blocking(cx, scene)
         .unwrap()
@@ -327,6 +326,76 @@ fn snapped_hairlines_and_whole_pixel_rects_stay_crisp() {
         assert_eq!(partial, 0, "{case}: {partial} partially covered pixels");
         assert_eq!(inked, area * dpr * dpr, "{case}: ink pixels");
     }
+}
+
+/// A stand-in for an area or polygon mark, none of which exists yet
+/// (RFC-001 S6, S11): the circle's WGSL, declared [`Antialias::Msaa`].
+enum StandInArea {}
+
+impl StandInArea {
+    const X: Channel<StandInArea, Px> = Channel::new(0, "x");
+    const Y: Channel<StandInArea, Px> = Channel::new(1, "y");
+}
+
+impl Mark for StandInArea {
+    const NAME: &'static str = Circle::NAME;
+    const MODULE: &'static WgslModule = Circle::MODULE;
+    const CHANNELS: &'static [ChannelDesc] = Circle::CHANNELS;
+    const VERTICES_PER_INSTANCE: u32 = Circle::VERTICES_PER_INSTANCE;
+    const ANTIALIAS: Antialias = Antialias::Msaa;
+}
+
+/// A scene with a mark that antialiases with MSAA is drawn with 4 samples
+/// even on a single-sampled target (RFC-001 §7, GUP-421 AC3); every
+/// other scene keeps the target's count.
+#[test]
+fn scenes_with_msaa_marks_draw_multisampled() {
+    let resolve = |cx: &Context| {
+        let mut plot = Plot::new();
+        let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
+        plot.add(Selection::<(f64, f64), StandInArea>::new(vec![
+            (0.0, 0.0),
+            (1.0, 1.0),
+        ]))
+        .attr(StandInArea::X, x.encode(|r: &(f64, f64)| r.0))
+        .attr(StandInArea::Y, y.encode(|r: &(f64, f64)| r.1));
+        plot.resolve(cx, W as f32, H as f32).unwrap().scene
+    };
+    let target = |cx: &Context, samples| {
+        ImageTarget::with_options(cx, W, H, TargetOptions::default().with_samples(samples)).unwrap()
+    };
+    let created = |cx: &Context| cx.pipeline_stats().pipelines_created;
+
+    // Pipelines are keyed by sample count, so drawing a scene on a 4×
+    // target creates none if it was already drawn with 4 samples.
+    let cx = Context::new_blocking().unwrap();
+    let area = resolve(&cx);
+    assert_eq!(area.min_samples(), 4);
+    let on_1x = target(&cx, 1).render_blocking(&cx, &area).unwrap();
+    let before = created(&cx);
+    let on_4x = target(&cx, 4).render_blocking(&cx, &area).unwrap();
+    assert_eq!(
+        created(&cx),
+        before,
+        "the 1× target did not draw with 4 samples"
+    );
+    assert!(
+        on_1x == on_4x,
+        "the area scene differs between 1× and 4× targets"
+    );
+
+    // Other scenes keep the target's count: the 4× target needs new
+    // pipelines.
+    let cx = Context::new_blocking().unwrap();
+    let circles = scene(&cx);
+    assert_eq!(circles.min_samples(), 1);
+    target(&cx, 1).render_blocking(&cx, &circles).unwrap();
+    let before = created(&cx);
+    target(&cx, 4).render_blocking(&cx, &circles).unwrap();
+    assert!(
+        created(&cx) > before,
+        "the 1× target drew the circles with 4 samples"
+    );
 }
 
 /// Vector output has no sample count and no coverage ramp: the comparison

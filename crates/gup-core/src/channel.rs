@@ -217,9 +217,25 @@ pub struct ChannelDesc {
     pub default: ConstValue,
 }
 
+/// How a mark's edges are antialiased (RFC-001 §7).
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub enum Antialias {
+    /// The mark's shader computes its own edge coverage (a signed distance
+    /// or the box coverage of `gup::coverage`), so it looks the same at
+    /// any sample count. Points, lines and rects.
+    #[default]
+    Analytic,
+    /// The mark relies on MSAA for its edges: a [`Scene`](crate::Scene)
+    /// holding it is drawn with 4 samples per pixel on any Gup-owned
+    /// target, whatever the target's own count
+    /// ([`Scene::min_samples`](crate::Scene::min_samples)). Areas and
+    /// polygons, whose edges are arbitrary triangles.
+    Msaa,
+}
+
 /// A mark: a WGSL module implementing the mark contract plus its channels.
 ///
-/// The contract (see `shaders/circle.wgsl`): the module defines
+/// The contract (see `crates/gup-wgsl/library/circle.wgsl`): the module defines
 /// `<NAME>In` with one field per channel, `Varyings`, a
 /// `vertex(m: <NAME>In, vertex_index: u32, row: u32, view: View) -> Varyings`
 /// function and a `shade(v: Varyings) -> vec4<f32>` function returning
@@ -237,6 +253,8 @@ pub trait Mark: Send + Sync + 'static {
     const CHANNELS: &'static [ChannelDesc];
     /// Vertices drawn per instance.
     const VERTICES_PER_INSTANCE: u32;
+    /// How the mark's edges are antialiased.
+    const ANTIALIAS: Antialias = Antialias::Analytic;
 }
 
 /// `[r, g, b, a]`: a WGSL `vec4<f32>` in a uniform.

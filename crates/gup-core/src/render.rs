@@ -10,7 +10,7 @@ use crate::error::{Error, Result};
 use crate::scene::{GradientDirection, ItemKind, Rule, Scene, TextRun};
 use crate::shader::glue::Glue;
 use crate::shader::{GRADIENT_SHADER, RECT_SHADER, RULE_SHADER, StructLayout, link};
-use crate::target::RenderTarget;
+use crate::target::{RenderTarget, check_samples, msaa_view};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -37,10 +37,11 @@ pub struct TargetDesc {
     /// Physical pixels per logical pixel. A scene `w` logical pixels wide
     /// fills a target `w × dpr` physical pixels wide.
     pub dpr: f32,
-    /// MSAA sample count of the pass's colour attachment: 4 by default on
+    /// MSAA sample count of the pass's colour attachment: 1 by default on
     /// Gup-owned targets, whatever the host's pass uses in draw-in-pass
-    /// mode. Points, lines and text antialias analytically at any count;
-    /// MSAA smooths the geometric edges of rects and diagonal rules.
+    /// mode. Circles, rules, rects and text antialias analytically and
+    /// look the same at any count; MSAA is for marks with
+    /// [`Antialias::Msaa`](crate::Antialias::Msaa) (areas, polygons).
     pub samples: u32,
 }
 
@@ -863,6 +864,10 @@ struct RendererGpu {
     /// Gradient LUT bind groups by palette (pointer identity of the
     /// scale's shared LUT), so a legend uploads its palette once.
     luts: Vec<(Arc<[[u8; 4]]>, wgpu::BindGroup)>,
+    /// The multisampled view a scene that needs MSAA draws into on a
+    /// target with fewer samples ([`Scene::min_samples`]), kept for the
+    /// target it was made for.
+    msaa: Option<(TargetDesc, wgpu::TextureView)>,
 }
 
 /// Turns a [`Scene`] into GPU draws (RFC-001 §7).
@@ -933,6 +938,7 @@ impl Renderer {
                 glyph_buffers: Vec::new(),
                 instances: Vec::new(),
                 luts: Vec::new(),
+                msaa: None,
             });
         }
         self.gpu.as_mut().expect("created above")
@@ -1074,8 +1080,10 @@ impl Renderer {
     /// Draw `scene` into `target` in one render pass and present it: the
     /// one render path every Gup-owned pass ([`ImageTarget`],
     /// [`TextureTarget`], `WindowTarget`) shares. The pass clears to the
-    /// scene's background and, on a multisampled target, resolves into the
-    /// frame's texture.
+    /// scene's background and, when multisampled, resolves into the
+    /// frame's texture. A scene that needs more samples than the target
+    /// has ([`Scene::min_samples`]: an area or polygon mark) is drawn into
+    /// a multisampled texture the renderer keeps for the target's size.
     ///
     /// [`ImageTarget`]: crate::ImageTarget
     /// [`TextureTarget`]: crate::TextureTarget
@@ -1085,7 +1093,16 @@ impl Renderer {
         scene: &Scene,
         target: &mut dyn RenderTarget,
     ) -> Result<()> {
-        let desc = target.desc();
+        let own = target.desc();
+        let wanted = scene.min_samples();
+        let desc = if wanted > own.samples && check_samples(cx, own.format, wanted).is_ok() {
+            TargetDesc {
+                samples: wanted,
+                ..own
+            }
+        } else {
+            own
+        };
         cx.take_gpu_errors()?;
         cx.scoped(
             || {
@@ -1097,15 +1114,21 @@ impl Renderer {
             || {
                 let frame = target.acquire(cx)?;
                 let prepared = self.prepare(cx, scene, &desc)?;
+                let msaa = (desc.samples != own.samples).then(|| self.msaa_view(cx, &desc));
                 let mut encoder =
                     cx.device()
                         .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                             label: Some("gup scene"),
                         });
                 {
+                    let clear = prepared.clear_color();
+                    let attachment = match &msaa {
+                        Some(view) => frame.attachment(Some(view), clear),
+                        None => frame.color_attachment(clear),
+                    };
                     let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                         label: Some("gup scene"),
-                        color_attachments: &[Some(frame.color_attachment(prepared.clear_color()))],
+                        color_attachments: &[Some(attachment)],
                         depth_stencil_attachment: None,
                         timestamp_writes: None,
                         occlusion_query_set: None,
@@ -1115,6 +1138,25 @@ impl Renderer {
                 target.present(cx, frame, encoder.finish())
             },
         )
+    }
+
+    /// A multisampled colour view for a target like `desc`, reused while
+    /// the target's size, format and the sample count stay the same.
+    fn msaa_view(&mut self, cx: &Context, desc: &TargetDesc) -> wgpu::TextureView {
+        let gpu = self.gpu(cx);
+        let same = |d: &TargetDesc| {
+            (d.format, d.width, d.height, d.samples)
+                == (desc.format, desc.width, desc.height, desc.samples)
+        };
+        match &gpu.msaa {
+            Some((d, view)) if same(d) => view.clone(),
+            _ => {
+                let view = msaa_view(cx, desc.format, desc.width, desc.height, desc.samples)
+                    .expect("only called with more than one sample");
+                gpu.msaa = Some((*desc, view.clone()));
+                view
+            }
+        }
     }
 }
 

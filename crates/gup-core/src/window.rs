@@ -116,12 +116,7 @@ impl WindowTarget {
                 vec![view_format]
             },
         };
-        // 4× MSAA where the device can, else analytic antialiasing only.
-        let samples = if check_samples(cx, view_format, DEFAULT_SAMPLES).is_ok() {
-            DEFAULT_SAMPLES
-        } else {
-            1
-        };
+        let samples = DEFAULT_SAMPLES;
         let msaa = cx.scoped(
             || {
                 format!(
@@ -207,7 +202,10 @@ impl WindowTarget {
         Ok(())
     }
 
-    /// The MSAA sample count (4 by default where the device supports it).
+    /// The MSAA sample count ([`DEFAULT_SAMPLES`], 1, unless
+    /// [`set_samples`](Self::set_samples) changed it). A scene that needs
+    /// MSAA is drawn with 4 samples whatever this says
+    /// ([`Scene::min_samples`](crate::Scene::min_samples)).
     pub fn samples(&self) -> u32 {
         self.samples
     }
