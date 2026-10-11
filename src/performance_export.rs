@@ -1059,7 +1059,7 @@ mod tests {
     fn test_export_json_file() {
         let profiler = make_test_profiler();
         let exporter = ProfileExporter::new(&profiler);
-        let dir = std::env::temp_dir().join("gup_test_export");
+        let dir = std::env::temp_dir().join(format!("gup_test_export-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("profile.json");
 
@@ -1075,7 +1075,7 @@ mod tests {
     fn test_export_csv_file() {
         let profiler = make_test_profiler();
         let exporter = ProfileExporter::new(&profiler);
-        let dir = std::env::temp_dir().join("gup_test_csv");
+        let dir = std::env::temp_dir().join(format!("gup_test_csv-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("profile.csv");
 
@@ -1091,7 +1091,7 @@ mod tests {
     fn test_export_chrome_trace_file() {
         let profiler = make_test_profiler();
         let exporter = ProfileExporter::new(&profiler);
-        let dir = std::env::temp_dir().join("gup_test_trace");
+        let dir = std::env::temp_dir().join(format!("gup_test_trace-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("trace.json");
 
@@ -1106,7 +1106,7 @@ mod tests {
     #[test]
     fn test_flame_graph_file() {
         let profiler = make_test_profiler();
-        let dir = std::env::temp_dir().join("gup_test_flame");
+        let dir = std::env::temp_dir().join(format!("gup_test_flame-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("flamegraph.svg");
 
@@ -1119,7 +1119,7 @@ mod tests {
     #[test]
     fn test_dashboard_file() {
         let profiler = make_test_profiler();
-        let dir = std::env::temp_dir().join("gup_test_dash");
+        let dir = std::env::temp_dir().join(format!("gup_test_dash-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("dashboard.html");
 

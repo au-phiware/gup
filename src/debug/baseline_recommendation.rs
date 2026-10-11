@@ -441,10 +441,10 @@ mod tests {
     use super::*;
     use std::path::PathBuf;
 
+    /// A baseline directory of this test process's own. These tests read
+    /// nothing from it, so it is not created.
     fn create_test_dir(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("gup_baseline_rec_{}", name));
-        let _ = std::fs::create_dir_all(&dir);
-        dir
+        std::env::temp_dir().join(format!("gup_baseline_rec_{name}-{}", std::process::id()))
     }
 
     #[test]

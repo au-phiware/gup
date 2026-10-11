@@ -13,7 +13,8 @@ use std::collections::HashMap;
 #[test]
 fn test_baseline_recommendation_workflow() -> GupResult<()> {
     // Setup test directory
-    let test_dir = std::env::temp_dir().join("gup_baseline_rec_workflow");
+    let test_dir =
+        std::env::temp_dir().join(format!("gup_baseline_rec_workflow-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&test_dir);
     std::fs::create_dir_all(&test_dir)?;
 
@@ -67,7 +68,7 @@ fn test_baseline_recommendation_workflow() -> GupResult<()> {
 #[test]
 fn test_batch_recommendation_analyzer() -> GupResult<()> {
     // Setup test directory
-    let test_dir = std::env::temp_dir().join("gup_batch_rec_test");
+    let test_dir = std::env::temp_dir().join(format!("gup_batch_rec_test-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&test_dir);
     std::fs::create_dir_all(&test_dir)?;
 
@@ -133,7 +134,7 @@ fn test_batch_recommendation_analyzer() -> GupResult<()> {
 
 #[test]
 fn test_confidence_scoring_factors() -> GupResult<()> {
-    let test_dir = std::env::temp_dir().join("gup_confidence_test");
+    let test_dir = std::env::temp_dir().join(format!("gup_confidence_test-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&test_dir);
     std::fs::create_dir_all(&test_dir)?;
 
@@ -208,7 +209,8 @@ fn test_confidence_scoring_factors() -> GupResult<()> {
 
 #[test]
 fn test_auto_update_threshold() -> GupResult<()> {
-    let test_dir = std::env::temp_dir().join("gup_auto_update_test");
+    let test_dir =
+        std::env::temp_dir().join(format!("gup_auto_update_test-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&test_dir);
     std::fs::create_dir_all(&test_dir)?;
 
@@ -260,7 +262,8 @@ fn test_auto_update_threshold() -> GupResult<()> {
 
 #[test]
 fn test_recommendation_report_formatting() -> GupResult<()> {
-    let test_dir = std::env::temp_dir().join("gup_report_format_test");
+    let test_dir =
+        std::env::temp_dir().join(format!("gup_report_format_test-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&test_dir);
     std::fs::create_dir_all(&test_dir)?;
 

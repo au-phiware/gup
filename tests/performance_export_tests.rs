@@ -192,7 +192,7 @@ fn dashboard_contains_all_sections() {
 fn file_export_round_trip() {
     let profiler = setup_profiler();
     let exporter = ProfileExporter::new(&profiler);
-    let dir = std::env::temp_dir().join("gup_integration_export");
+    let dir = std::env::temp_dir().join(format!("gup_integration_export-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
 
     // JSON

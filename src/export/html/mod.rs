@@ -631,7 +631,8 @@ mod tests {
 
     #[test]
     fn discover_wasm_artifact_finds_single_file() {
-        let dir = std::env::temp_dir().join("gup_wasm_discover_single");
+        let dir =
+            std::env::temp_dir().join(format!("gup_wasm_discover_single-{}", std::process::id()));
         let pkg = dir.join("pkg");
         std::fs::create_dir_all(&pkg).unwrap();
         let wasm_path = pkg.join("gup_bg.wasm");
@@ -646,7 +647,8 @@ mod tests {
 
     #[test]
     fn discover_wasm_artifact_errors_when_pkg_missing() {
-        let dir = std::env::temp_dir().join("gup_wasm_discover_nopkg");
+        let dir =
+            std::env::temp_dir().join(format!("gup_wasm_discover_nopkg-{}", std::process::id()));
         // Make sure it doesn't exist.
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
@@ -664,7 +666,8 @@ mod tests {
 
     #[test]
     fn discover_wasm_artifact_errors_when_no_wasm_file() {
-        let dir = std::env::temp_dir().join("gup_wasm_discover_empty");
+        let dir =
+            std::env::temp_dir().join(format!("gup_wasm_discover_empty-{}", std::process::id()));
         let pkg = dir.join("pkg");
         std::fs::create_dir_all(&pkg).unwrap();
         // Create a non-matching file.
@@ -683,7 +686,8 @@ mod tests {
 
     #[test]
     fn discover_wasm_artifact_errors_when_ambiguous() {
-        let dir = std::env::temp_dir().join("gup_wasm_discover_ambig");
+        let dir =
+            std::env::temp_dir().join(format!("gup_wasm_discover_ambig-{}", std::process::id()));
         let pkg = dir.join("pkg");
         std::fs::create_dir_all(&pkg).unwrap();
         std::fs::write(pkg.join("foo_bg.wasm"), b"\x00asm").unwrap();
@@ -702,7 +706,8 @@ mod tests {
 
     #[test]
     fn discover_wasm_artifact_ignores_non_bg_wasm() {
-        let dir = std::env::temp_dir().join("gup_wasm_discover_nonbg");
+        let dir =
+            std::env::temp_dir().join(format!("gup_wasm_discover_nonbg-{}", std::process::id()));
         let pkg = dir.join("pkg");
         std::fs::create_dir_all(&pkg).unwrap();
         // Only the _bg.wasm file should match; plain .wasm should not.
