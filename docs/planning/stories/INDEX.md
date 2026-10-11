@@ -87,7 +87,7 @@ survives into `gup-core`.
   per-checkout member `codegen-units` is worth its disk, and if so add it to
   `scripts/cargo_env.sh`. Deps: GUP-411 ✅. Related to GUP-427 (disk growth),
   not superseded by it.
-- [GUP-427](GUP-427_Bound_Build_Directory_Disk_Growth_Per_Commit.md) 📋 —
+- [GUP-427](GUP-427_Bound_Build_Directory_Disk_Growth_Per_Commit.md) 🚧 —
   Measure and bound the shared build directory's per-commit growth (GUP-419
   measured ~3.8 GB of incremental cache left per Rust-touching pre-commit hook
   run on a ~19 GB filesystem), with an automatic prune of superseded artifacts
