@@ -85,13 +85,17 @@ words).
 ### Story Document Structure
 
 ```markdown
+---
+implementer: sonnet # or haiku or opus; see "Choosing the implementer"
+implementer-reason: one line, e.g. "design settled in Decisions; follows Band"
+---
+
 # GUP-NNN: Full Story Title
 
 ## Story Overview
 
 **Initiative**: <Initiative name, or omit if standalone> **Status**: 📋 Planned
-**Created**: YYYY-MM-DD (from `date -I`; never guess) **Implementer**: sonnet |
-opus | haiku — one-line reason (see "Choosing the implementer")
+**Created**: YYYY-MM-DD (from `date -I`; never guess)
 
 ## Context
 
@@ -251,8 +255,12 @@ not design:
 
 ### Choosing the implementer
 
-Set **Implementer** in the overview. The orchestrator spawns the worker on that
-model.
+Set `implementer` and `implementer-reason` in the story's YAML frontmatter, the
+only frontmatter a story has. The orchestrator reads it with
+`grep -H "^implementer:" docs/planning/stories/GUP-*.md` and spawns the worker
+on that model. Prettier never re-wraps frontmatter into the overview paragraph,
+so the grep stays reliable. Don't repeat it in INDEX.md: the story is the one
+place it lives, and a copy would drift.
 
 - **haiku**: mechanical, fully specified work. Renames, moving docs, making test
   paths unique, lint sweeps. Every AC is a command that passes or fails, and
