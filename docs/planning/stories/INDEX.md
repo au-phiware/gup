@@ -236,7 +236,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   (new `gup-core-macros`), composed against the library (moved to
   `gup-wgsl/library`) and checked at compile time; automatic `Params` padding;
   15 trybuild cases; two goldens; a browser scene.
-- [GUP-421](GUP-421_Analytic_AA_Rules_Rects_1x_MSAA.md) 📋 — Give rules and
+- [GUP-421](GUP-421_Analytic_AA_Rules_Rects_1x_MSAA.md) 🚧 — Give rules and
   rects the same analytic edge coverage circles already have, then flip
   `DEFAULT_SAMPLES` to 1 with MSAA opt-in and auto-enabled for area/polygon
   marks (owner decision 2026-10-10, RFC-001), reusing the line-coverage math for
