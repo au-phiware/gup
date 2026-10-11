@@ -77,6 +77,19 @@ falls back to GUP-411's re-lint, still correct.
 - GUP-411 ✅: shared build directory, per-checkout member artifacts, clippy
   re-lint on switch.
 
+### Coordinate With
+
+- GUP-427 ✅: `scripts/prune_build_dir.sh` (run by the pre-commit hook) deletes
+  what a checkout built once the checkout is gone, using ownership recorded by
+  `scripts/rustc_workspace_wrapper.sh`. Clippy runs bypass that wrapper, so
+  per-checkout clippy units from this story would have no owner: the prune would
+  never delete them (it leaves unowned units alone, so it is safe), and every
+  removed worktree would leave its clippy units (rmeta, and incremental caches
+  until the 3-day idle rule) behind. If this story goes ahead, record their
+  owner too (for example from `scripts/cargo_env.sh`, keyed by the checkout's
+  codegen-units value) and extend `scripts/test_prune_build_dir.sh`. Both
+  stories edit `scripts/cargo_env.sh` and the hook's snapshot config.
+
 ### Enables Stories
 
 (none known)

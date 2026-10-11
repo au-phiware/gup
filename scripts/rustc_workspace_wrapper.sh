@@ -18,8 +18,18 @@
 # older commit, inherits the outer checkout's config and so this script's
 # path. Its members would then share the outer checkout's artifacts. Fail
 # loudly instead.
+#
+# Ownership (GUP-427): the unit this rustc invocation builds is this
+# checkout's alone, so record which checkout built it, in
+# <profile dir>/.gup-owners/<crate name><extra-filename> (the checkout's root,
+# then the output directory), and move its incremental cache into a directory
+# of this checkout's own, incremental/<checkout>-<hash>/ (named as
+# scripts/cargo_env.sh names its target directory), with the root in
+# .gup-checkout. scripts/prune_build_dir.sh deletes the units and caches of
+# checkouts that no longer exist. Clippy runs do not come through here; their
+# member artifacts are shared, and their caches are pruned by age and size.
+root=$(cd "${0%/*}/.." && pwd -P)
 if [ -n "${CARGO_MANIFEST_DIR:-}" ]; then
-  root=$(cd "${0%/*}/.." && pwd -P)
   dir=$(cd "$CARGO_MANIFEST_DIR" && pwd -P)
   case $dir/ in
   "$root"/*)
@@ -39,5 +49,39 @@ EOF
     done
     ;;
   esac
+fi
+id=${root##*/}-$(printf '%s' "$root" | sha256sum | cut -c1-8)
+crate='' extra='' outdir='' inc='' prev=''
+for arg in "$@"; do
+  shift
+  case $prev in
+  --crate-name) crate=$arg ;;
+  --out-dir) outdir=$arg ;;
+  -C)
+    case $arg in
+    extra-filename=*) extra=${arg#extra-filename=} ;;
+    incremental=*)
+      inc=${arg#incremental=}
+      arg=incremental=$inc/$id
+      ;;
+    esac
+    ;;
+  esac
+  prev=$arg
+  set -- "$@" "$arg"
+done
+if [ -n "$inc" ] && mkdir -p "$inc/$id" 2>/dev/null; then
+  printf '%s\n' "$root" >"$inc/$id/.gup-checkout" 2>/dev/null || :
+fi
+if [ -n "$crate" ] && [ -n "$extra" ]; then
+  case $outdir in
+  */deps | */examples) profile=${outdir%/*} ;;
+  */build/*) profile=${outdir%/build/*} ;;
+  *) profile='' ;;
+  esac
+  if [ -n "$profile" ] && mkdir -p "$profile/.gup-owners" 2>/dev/null; then
+    printf '%s\n%s\n' "$root" "$outdir" \
+      >"$profile/.gup-owners/$crate$extra" 2>/dev/null || :
+  fi
 fi
 exec "$@"

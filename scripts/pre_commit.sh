@@ -358,8 +358,19 @@ elif [[ $mode == workflows ]]; then
 fi
 [[ $plan_only -eq 1 ]] && exit 0
 
+# After Rust checks, prune what they superseded in the build directory
+# (GUP-427): their incremental caches would otherwise double, and units of
+# removed checkouts would stay forever. A prune failure never fails the hook.
+prune_build_dir() {
+  GUP_PRUNE_WAIT=${GUP_PRUNE_WAIT:-10} ./scripts/prune_build_dir.sh ||
+    echo "pre-commit: prune_build_dir.sh failed (ignored)" >&2
+}
+
 if [[ $mode == full ]]; then
-  exec mask all-check
+  status=0
+  mask all-check || status=$?
+  prune_build_dir
+  exit "$status"
 fi
 
 checks=(
@@ -418,4 +429,10 @@ if [[ $mode == scoped ]]; then
   fi
 fi
 
-exec concurrently --group --names "$names" "${checks[@]}"
+if [[ $names != *,rs* ]]; then
+  exec concurrently --group --names "$names" "${checks[@]}"
+fi
+status=0
+concurrently --group --names "$names" "${checks[@]}" || status=$?
+prune_build_dir
+exit "$status"

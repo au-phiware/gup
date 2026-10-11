@@ -90,6 +90,11 @@
             nixfmt
             statix
 
+            # The pre-commit hook and the build-directory prune (GUP-427):
+            # jq reads `cargo metadata`; flock takes cargo's build lock.
+            jq
+            util-linux
+
             # pyftsubset for `mask subset-inter` (GUP-407): the bundled
             # Inter subset is reproducible with this pinned fonttools.
             python3Packages.fonttools

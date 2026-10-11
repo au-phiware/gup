@@ -182,6 +182,13 @@ as the superseded state it prunes away.
   per-checkout `codegen-units`), not superseded by this story. If GUP-413 is
   adopted, this story's prune mechanism must treat its new per-checkout clippy
   artifacts as live, not stale; see the Technical Tasks cross-check item.
+  **Cross-checked (2026-10-11)**: GUP-413 has not landed. The prune is
+  hash-agnostic and deletes a unit only when the checkout recorded as its owner
+  is gone; clippy units have no recorded owner, so GUP-413's per-checkout clippy
+  units would never be pruned as stale (safe), but nor would a removed
+  checkout's. GUP-413's Dependencies now say so and what it must add (an owner
+  record for its clippy units and a case in `scripts/test_prune_build_dir.sh`);
+  both stories edit `scripts/cargo_env.sh` and the hook's snapshot config.
 
 ### Enables Stories
 
