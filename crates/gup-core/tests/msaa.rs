@@ -15,7 +15,7 @@ use common::vr::harness;
 use gup_core::geom::{Point, Rect};
 use gup_core::prelude::*;
 use gup_core::scene::{Item, ItemKind, RectPrim, Rule, Z_AXES};
-use gup_core::{ImageTarget, Scene, TargetOptions};
+use gup_core::{ImageTarget, Scene, SvgTarget, TargetOptions, VectorTarget};
 use gup_visual_regression::golden::default_artifact_dir;
 use gup_visual_regression::{LayoutMetadata, PxRect, Rgba8, RgbaImage};
 use std::path::Path;
@@ -172,5 +172,25 @@ fn circles_antialias_without_msaa() {
     assert!(
         max_diff <= 2,
         "circle edge differs by {max_diff} between 1× and 4×"
+    );
+}
+
+/// Vector output has no sample count and no coverage ramp: the comparison
+/// scene's guides (the axes, the rule fan, the fractional rect and the
+/// tick labels) are written as exactly the SVG they were before rules and
+/// rects gained analytic coverage on the GPU (GUP-421 AC6). The fixture
+/// was written by the tree before that change.
+#[test]
+fn svg_of_the_comparison_scene_is_unchanged() {
+    let cx = Context::new_blocking().unwrap();
+    let mut target = SvgTarget::new();
+    target.render(&scene(&cx).guides()).unwrap();
+    let artifacts =
+        default_artifact_dir(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")).join("gup_core");
+    target.save(artifacts.join("msaa_guides.svg")).unwrap();
+    assert!(
+        target.svg() == include_str!("fixtures/msaa_guides.svg"),
+        "the SVG of the comparison scene changed; compare {} with tests/fixtures/msaa_guides.svg",
+        artifacts.join("msaa_guides.svg").display()
     );
 }
