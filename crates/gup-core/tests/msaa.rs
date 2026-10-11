@@ -1,12 +1,15 @@
 // Copyright (C) 2024 Corin Lawson
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! MSAA on Gup-owned targets (RFC-001 §7, GUP-401 AC3). One scene with
-//! large circles (analytic antialiasing), a fan of diagonal rules and a
-//! rect on fractional coordinates (geometric edges), rendered at 1 and 4
-//! samples. Both renders are golden images, and a side-by-side, 8×
-//! enlarged crop is written to the artifact directory
-//! (`$CARGO_TARGET_DIR/visual-regression/gup_core/msaa_compare.png`) for
+//! Antialiasing on Gup-owned targets (RFC-001 §7). One scene with large
+//! circles, a fan of diagonal rules and a rect on fractional coordinates,
+//! rendered at 1 and 4 samples. Circles, rules and rects all antialias
+//! analytically (GUP-421), so one sample looks as smooth as four did when
+//! only MSAA smoothed rules and rects: `fixtures/msaa_4x_before_analytic.png`
+//! is that 4× render, kept as the reference. Both renders are golden
+//! images, and side-by-side, 8× enlarged crops (the reference, 1× and 4×)
+//! are written to the artifact directory
+//! (`$CARGO_TARGET_DIR/visual-regression/gup_core/msaa_compare*.png`) for
 //! looking at.
 
 mod common;
@@ -89,14 +92,28 @@ fn partial_pixels(img: &image::RgbaImage, area: [u32; 4]) -> usize {
         .count()
 }
 
-/// Nearest-neighbour enlargement of `crop` from both images, side by side.
-fn compare(one: &image::RgbaImage, four: &image::RgbaImage, crop: [u32; 4]) -> image::RgbaImage {
+/// How much ink `area` holds, in pixels' worth of full coverage: each
+/// pixel's red channel read as the fraction of the way from the white
+/// background to the ink colour (the scene blends in sRGB space).
+fn ink(img: &image::RgbaImage, area: [u32; 4]) -> f64 {
+    let ink_r = f64::from(INK.to_rgba8()[0]);
+    let [x0, y0, x1, y1] = area;
+    (y0..y1)
+        .flat_map(|y| (x0..x1).map(move |x| (x, y)))
+        .map(|(x, y)| (255.0 - f64::from(img.get_pixel(x, y).0[0])) / (255.0 - ink_r))
+        .sum()
+}
+
+/// Nearest-neighbour enlargement of `crop` from each image, side by side.
+fn compare(images: &[&image::RgbaImage], crop: [u32; 4]) -> image::RgbaImage {
     const SCALE: u32 = 8;
     const GAP: u32 = 8;
     let [x0, y0, x1, y1] = crop;
     let (cw, ch) = ((x1 - x0) * SCALE, (y1 - y0) * SCALE);
-    let mut out = image::RgbaImage::from_pixel(2 * cw + GAP, ch, image::Rgba([255, 0, 0, 255]));
-    for (i, img) in [one, four].into_iter().enumerate() {
+    let n = images.len() as u32;
+    let mut out =
+        image::RgbaImage::from_pixel(n * cw + (n - 1) * GAP, ch, image::Rgba([255, 0, 0, 255]));
+    for (i, img) in images.iter().enumerate() {
         for y in 0..ch {
             for x in 0..cw {
                 let p = *img.get_pixel(x0 + x / SCALE, y0 + y / SCALE);
@@ -107,37 +124,106 @@ fn compare(one: &image::RgbaImage, four: &image::RgbaImage, crop: [u32; 4]) -> i
     out
 }
 
+/// The 4× render of [`scene`] from before rules and rects antialiased
+/// analytically, when MSAA alone smoothed them (GUP-401's `msaa_4x`
+/// golden, as GUP-417 measured it).
+fn reference() -> image::RgbaImage {
+    image::load_from_memory(include_bytes!("fixtures/msaa_4x_before_analytic.png"))
+        .unwrap()
+        .to_rgba8()
+}
+
+/// The rule fan, away from the circles and axes.
+const FAN: [u32; 4] = [190, 20, 270, 140];
+/// The fractional rect's edges.
+const RECT: [u32; 4] = [86, 36, 125, 66];
+
+/// One sample now looks like four samples did when only MSAA smoothed
+/// rules and rects (GUP-421 AC1, AC2, AC4).
 #[test]
-fn four_samples_smooth_geometric_edges() {
+fn rules_and_rects_antialias_without_msaa() {
     let cx = Context::new_blocking().unwrap();
     let scene = scene(&cx);
     let one = render(&cx, &scene, 1);
     let four = render(&cx, &scene, 4);
+    let before = reference();
 
-    // The rule fan, away from the circles and axes.
-    let fan = [190, 20, 270, 140];
-    let (fan1, fan4) = (partial_pixels(&one, fan), partial_pixels(&four, fan));
-    // The fractional rect's edges.
-    let rect = [86, 36, 125, 66];
-    let (rect1, rect4) = (partial_pixels(&one, rect), partial_pixels(&four, rect));
-    eprintln!(
-        "partially covered pixels: rule fan 1× {fan1}, 4× {fan4}; rect 1× {rect1}, 4× {rect4}"
-    );
     let artifacts =
         default_artifact_dir(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")).join("gup_core");
     std::fs::create_dir_all(&artifacts).unwrap();
-    compare(&one, &four, [200, 40, 260, 100])
-        .save(artifacts.join("msaa_compare.png"))
-        .unwrap();
-    compare(&one, &four, [30, 128, 82, 178])
-        .save(artifacts.join("msaa_compare_circle.png"))
-        .unwrap();
-    // At one sample a pixel is either covered or not: rules and rects
-    // have hard, stair-stepped edges. At four, edge pixels blend.
-    assert_eq!(fan1, 0, "1× rules should have no partial pixels");
-    assert_eq!(rect1, 0, "1× rect should have no partial pixels");
-    assert!(fan4 > 200, "4× rules: only {fan4} partial pixels");
-    assert!(rect4 > 50, "4× rect: only {rect4} partial pixels");
+    for (name, crop) in [
+        ("msaa_compare.png", [200, 40, 260, 100]),
+        ("msaa_compare_rect.png", RECT),
+        ("msaa_compare_circle.png", [30, 128, 82, 178]),
+    ] {
+        compare(&[&before, &one, &four], crop)
+            .save(artifacts.join(name))
+            .unwrap();
+    }
+
+    // Partially covered pixels: GUP-417's counts for MSAA alone, and now
+    // at one sample. Analytic coverage also shades pixels that a sliver
+    // of the edge covers but none of MSAA's four sample points hit (the
+    // rect's bottom row is 10% covered, below every sample), so it finds
+    // more of them: at least as many, and at most half as many again.
+    let (fan_before, rect_before) = (partial_pixels(&before, FAN), partial_pixels(&before, RECT));
+    assert_eq!(
+        (fan_before, rect_before),
+        (597, 71),
+        "the reference changed"
+    );
+    let (fan1, rect1) = (partial_pixels(&one, FAN), partial_pixels(&one, RECT));
+    let (fan4, rect4) = (partial_pixels(&four, FAN), partial_pixels(&four, RECT));
+    eprintln!(
+        "partially covered pixels: rule fan {fan_before} before (4×), 1× {fan1}, 4× {fan4}; \
+         rect {rect_before} before (4×), 1× {rect1}, 4× {rect4}"
+    );
+    for (what, now, before) in [("rule fan", fan1, fan_before), ("rect", rect1, rect_before)] {
+        assert!(
+            now >= before && now * 2 <= before * 3,
+            "1× {what}: {now} partial pixels, against {before} at 4× before analytic coverage"
+        );
+    }
+
+    // The same amount of ink as MSAA's estimate of the fan's area: the
+    // ramp moves coverage between edge pixels, it does not thicken or
+    // thin the rules.
+    let (ink_before, ink1) = (ink(&before, FAN), ink(&one, FAN));
+    eprintln!("rule fan ink: {ink_before:.1} before (4×), 1× {ink1:.1}");
+    assert!(
+        (ink1 / ink_before - 1.0).abs() < 0.02,
+        "1× rule fan holds {ink1:.1} pixels of ink, against {ink_before:.1} at 4× before"
+    );
+
+    // An axis-aligned rect's coverage is exact: the area of each pixel
+    // inside it.
+    let overlap = |p: u32, lo: f32, hi: f32| (hi.min(p as f32 + 1.0) - lo.max(p as f32)).max(0.0);
+    let ink_rgb = INK.to_rgba8();
+    let [x0, y0, x1, y1] = RECT;
+    for y in y0..y1 {
+        for x in x0..x1 {
+            let coverage = overlap(x, 90.3, 120.7) * overlap(y, 40.6, 61.1);
+            let got = one.get_pixel(x, y).0;
+            for k in 0..3 {
+                let want = 255.0 + (f32::from(ink_rgb[k]) - 255.0) * coverage;
+                assert!(
+                    (f32::from(got[k]) - want).abs() <= 2.0,
+                    "rect pixel ({x}, {y}): {got:?}, want {want:.1} in channel {k} for coverage \
+                     {coverage:.3}"
+                );
+            }
+        }
+    }
+
+    // MSAA no longer changes rules and rects: every sample of a
+    // covered pixel is inside the quad, so 4× resolves to the 1× colour.
+    for area in [FAN, RECT] {
+        let max_diff = max_channel_diff(&one, &four, area);
+        assert!(
+            max_diff <= 2,
+            "{area:?} differs by {max_diff} between 1× and 4×"
+        );
+    }
 
     for (case, img) in [("gup_core/msaa_1x", one), ("gup_core/msaa_4x", four)] {
         let meta = LayoutMetadata::new(PxRect::new(0.0, 0.0, W as f32, H as f32))
@@ -146,6 +232,19 @@ fn four_samples_smooth_geometric_edges() {
         let vr = RgbaImage::new(W, H, img.into_raw()).unwrap();
         harness().run(case, Ok((vr, meta))).assert_ok();
     }
+}
+
+/// The largest difference of any colour channel between `a` and `b` in
+/// `area`.
+fn max_channel_diff(a: &image::RgbaImage, b: &image::RgbaImage, area: [u32; 4]) -> u8 {
+    (area[1]..area[3])
+        .flat_map(|y| (area[0]..area[2]).map(move |x| (x, y)))
+        .map(|(x, y)| {
+            let (a, b) = (a.get_pixel(x, y).0, b.get_pixel(x, y).0);
+            (0..3).map(|k| a[k].abs_diff(b[k])).max().unwrap()
+        })
+        .max()
+        .unwrap()
 }
 
 /// Circles antialias analytically, so MSAA barely changes them: the
@@ -161,18 +260,73 @@ fn circles_antialias_without_msaa() {
         partial > 30,
         "1× circle edge: only {partial} partial pixels"
     );
-    let max_diff = (area[1]..area[3])
-        .flat_map(|y| (area[0]..area[2]).map(move |x| (x, y)))
-        .map(|(x, y)| {
-            let (a, b) = (one.get_pixel(x, y).0, four.get_pixel(x, y).0);
-            (0..3).map(|k| a[k].abs_diff(b[k])).max().unwrap()
-        })
-        .max()
-        .unwrap();
+    let max_diff = max_channel_diff(&one, &four, area);
     assert!(
         max_diff <= 2,
         "circle edge differs by {max_diff} between 1× and 4×"
     );
+}
+
+/// Rules snapped to pixel centres and rects on whole pixels have every
+/// edge on a pixel boundary, so analytic coverage leaves them exactly as
+/// crisp as before (GUP-421 AC1, AC2): at one sample (dpr 1 and 2) and at
+/// four,
+/// every pixel is background or ink, and the ink covers exactly the
+/// shapes' area.
+#[test]
+fn snapped_hairlines_and_whole_pixel_rects_stay_crisp() {
+    let cx = Context::new_blocking().unwrap();
+    let (w, h) = (120.0, 80.0);
+    let rule = |x0, y0, x1, y1, width| Rule {
+        p0: Point::new(x0, y0),
+        p1: Point::new(x1, y1),
+        width: Px(width),
+        color: INK,
+    };
+    let rect = |x, y, w, h| RectPrim {
+        rect: Rect::new(x, y, w, h),
+        color: INK,
+    };
+    let mut scene = Scene::new(w, h, Color::WHITE);
+    scene.push(Item {
+        z: Z_AXES,
+        clip: None,
+        kind: ItemKind::Rules(vec![
+            // Hairlines on pixel centres, as guides draw axes and ticks:
+            // 51 × 1 and 1 × 31 pixels with their square caps.
+            rule(10.5, 10.5, 60.5, 10.5, 1.0),
+            rule(80.5, 5.5, 80.5, 35.5, 1.0),
+            // Even widths on pixel boundaries, odd widths on centres:
+            // 42 × 2 and 3 × 28.
+            rule(10.0, 20.0, 50.0, 20.0, 2.0),
+            rule(100.5, 5.5, 100.5, 30.5, 3.0),
+        ]),
+    });
+    scene.push(Item {
+        z: Z_AXES,
+        clip: None,
+        kind: ItemKind::Rects(vec![
+            rect(10.0, 40.0, 30.0, 20.0),
+            rect(60.0, 45.0, 1.0, 25.0),
+        ]),
+    });
+    let area = 51 + 31 + 84 + 84 + 600 + 25;
+    let ink = INK.to_rgba8();
+    for (dpr, samples) in [(1u32, 1), (2, 1), (1, 4)] {
+        let options = TargetOptions {
+            dpr: dpr as f32,
+            samples,
+        };
+        let img = ImageTarget::with_options(&cx, 120 * dpr, 80 * dpr, options)
+            .unwrap()
+            .render_blocking(&cx, &scene)
+            .unwrap();
+        let partial = partial_pixels(&img, [0, 0, img.width(), img.height()]);
+        let inked = img.pixels().filter(|p| p.0 == ink).count() as u32;
+        let case = format!("dpr {dpr}, {samples}×");
+        assert_eq!(partial, 0, "{case}: {partial} partially covered pixels");
+        assert_eq!(inked, area * dpr * dpr, "{case}: ink pixels");
+    }
 }
 
 /// Vector output has no sample count and no coverage ramp: the comparison
