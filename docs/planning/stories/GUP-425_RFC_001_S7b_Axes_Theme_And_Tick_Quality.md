@@ -138,6 +138,12 @@ example charts:
 - [ ] A unit test asserts the niced domain for a few representative data ranges
       (an exact decade, a sub-decade span, a multi-decade span) matches the new,
       tighter rule, not the old whole-decade rule.
+- [ ] SI-suffixed tick labels read naturally for counts:
+      `wgsl_function_highlight` labels a population axis "1G", where readers
+      expect "1B". Either the formatter takes a units hint (count vs physical
+      quantity) or the default for unitless counts uses K/M/B. The choice is
+      documented and covered by a test (orchestrator review of the GUP-420
+      goldens, 2026-10-11).
 
 ## Technical Tasks
 

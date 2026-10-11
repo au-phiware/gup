@@ -85,6 +85,12 @@ the chart title for the same plot-rect-shrinking budget.
       this story's implementation time), this sub-AC is marked deferred with a
       note, per the pattern GUP-421's AC3 used for its own not-yet-applicable
       case.
+- [ ] Chained encodings and user colour functions get legends.
+      `Linear.then(Pow::sqrt()).then(viridis)` and a `#[wgsl_function]` colour
+      function currently have no legend, so the GUP-420 aftershocks golden
+      places its ramp by hand. The legend for a chain comes from its last colour
+      link, with the domain mapped back through the CPU mirrors, and a user
+      colour function can supply one via a trait hook (RFC-001 "S5c findings").
 
 ## Technical Tasks
 

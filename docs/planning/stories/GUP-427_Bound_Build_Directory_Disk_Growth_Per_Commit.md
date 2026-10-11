@@ -27,6 +27,22 @@ and the superseded test binaries (this checkout's only) brought it back to 8.2
 GB. No `cargo clean`." That pruning was a one-off, by-hand intervention during
 GUP-419's own work, not a mechanism anyone else benefits from.
 
+GUP-420 measured it per commit: seven Rust commits' hook runs used 2,483 MB (the
+full `mask all-check`), then 2,113, 2,112, 2,175, 2,086, 2,192 and 2,071 MB,
+almost all of it debug incremental caches left by clippy over the root crate.
+Docs-only commits used nothing. Free space fell below 5 GB three times.
+
+On 2026-10-11 the owner freed space: the `~/.cache` pool now has about 160 GB
+free, and `/tmp` (the SSD pool that also holds the nix store) has about 75 GB.
+Disk is no longer a hard limit on builds, but growth is still unbounded, so this
+story still matters. Measured on 2026-10-11, cargo and rustc put only small,
+short-lived files in `TMPDIR` (`rustc*/symbols.o`, rlib `lib.rmeta` staging, the
+C linker driver's `cc*.res`). The past `/tmp` outages came from an explicit
+`CARGO_TARGET_DIR=/tmp/...`. Also in scope: about 32 tests write to fixed-name
+directories under `std::env::temp_dir()` (for example `gup_pdf_test`,
+`gup_html_test`). They are small, but two checkouts running the same test at
+once share the path, so give them unique per-run directories.
+
 This is not a one-time cost: the project's history shows disk exhaustion has
 stalled work "several times (`/tmp` filled twice, the ZFS pool hit 0 once)" per
 this story's brief. Each Rust-touching commit's pre-commit hook run flips

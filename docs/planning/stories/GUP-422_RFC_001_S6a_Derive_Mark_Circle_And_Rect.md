@@ -155,6 +155,11 @@ A second role also benefits:
       order alone.
 - [ ] A `sqrt_radius`-style golden is re-rendered and read by eye: larger
       bubbles no longer visually bury smaller ones that should be on top.
+- [ ] Emphasis draws on top too: when a categorical highlight (for example
+      GUP-420's `wgsl_function_highlight`, where the vermilion Asian countries
+      must not sit under grey ones) or an explicit `z` channel is bound, the
+      emphasised rows draw last. Document how this combines with size-descending
+      order (orchestrator review of the GUP-420 goldens, 2026-10-11).
 
 ### AC5: The `clip` contract documents both hiding mechanisms
 
