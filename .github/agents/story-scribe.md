@@ -8,7 +8,7 @@ argument-hint:
   Brief description of the story to write, e.g. "add touch gesture support for
   lasso selection"
 tools: Read, Write, Edit, Glob, Grep, Bash, WebSearch
-model: sonnet
+model: opus
 ---
 
 # Story Scribe
@@ -34,9 +34,10 @@ Before writing anything, build context:
 2. Read `docs/planning/STRATEGIC_REVIEW_2026-10.md` (or its successor) for the
    current direction and the list of parked work. Do not write stories that
    extend parked areas unless explicitly asked.
-3. Read `docs/planning/stories/INDEX.md` — understand what stories exist, which
-   are complete, which are planned, and what the current dependency landscape
-   looks like.
+3. Read the active sections of `docs/planning/stories/INDEX.md` ("Strategic
+   Review 2026-10", "RFC-001 Migration") to see what is planned and what depends
+   on what. The file is about 90 KB, mostly history, so search the rest with
+   `grep` instead of reading it.
 4. Identify the **next available GUP number**:
    - Find the highest existing GUP-NNN in `docs/planning/stories/` using:
      ```bash
@@ -89,7 +90,8 @@ words).
 ## Story Overview
 
 **Initiative**: <Initiative name, or omit if standalone> **Status**: 📋 Planned
-**Created**: YYYY-MM-DD (from `date -I`; never guess)
+**Created**: YYYY-MM-DD (from `date -I`; never guess) **Implementer**: sonnet |
+opus | haiku — one-line reason (see "Choosing the implementer")
 
 ## Context
 
@@ -97,6 +99,13 @@ words).
 What problem or gap does this address? What related work has already been done
 (reference prerequisite stories)? Keep this factual and grounded in the codebase
 — avoid speculation.
+
+## Read First
+
+The only documents the implementer needs beyond this story, each with the
+section or line range that matters, e.g. "RFC-001 \"S5b findings\" (lines
+2700–2790)", "`crates/gup-core/src/scale/band.rs` (`Band::image`)". Never "read
+RFC-001" or "read INDEX.md" whole.
 
 ## User Story
 
@@ -117,6 +126,27 @@ Use one clear User Story. If multiple roles benefit, write one per role.
 - [ ] ...
 
 (Add as many ACs as needed. Each AC should be independently verifiable.)
+
+## Decisions
+
+Every design choice the story depends on, already made, with a one-line reason:
+public API shape (signatures), data and file formats, which of several
+alternatives, where new code lives, what is deliberately left out. The
+implementer follows these and does not reopen them. If a choice cannot be made
+without a measurement, make the measurement the first AC (a spike) with an
+explicit decision rule, e.g. "if X needs more than 64 draws, use the hi/lo
+format", so the implementer applies a rule rather than exercising judgment.
+
+## Escalation Triggers
+
+Story-specific situations in which the implementer must stop and report instead
+of deciding, in addition to the standing triggers in `story-worker.md`. E.g.
+"the coverage ramp blurs whole-pixel hairlines at 1×" or "`Feeds` needs a new
+impl to make this compile". Write "None beyond the standing triggers" if so.
+
+## Out of Scope
+
+Adjacent work the implementer must not start, with the story that owns it.
 
 ## Technical Tasks
 
@@ -199,6 +229,43 @@ the Risk Assessment — that's valuable information for the implementer.
 **Avoid**: Phases, milestones, delivery dates, story points, priority scores.
 These are not used in this project.
 
+### Decision-complete stories
+
+You run on the strongest model so that the implementer doesn't have to make big
+decisions. Implementers usually run on a smaller model, which follows a clear
+plan well but is worse at noticing that a choice has wider consequences, and at
+knowing when to stop and ask. Write every story so that the work is execution,
+not design:
+
+- Read the code you are planning against. Name the types, functions and files to
+  change, and give the signatures of new public items in **Decisions**.
+- Settle every "pick one approach" before writing the story. "The story picks
+  one approach and documents why" is a sign the story isn't finished. If you
+  can't settle it, write a spike AC with a decision rule (see the template), or
+  split the decision into its own `opus` story that comes first.
+- Every AC must be checkable by a command or by reading a named image, with the
+  threshold stated (counts, ΔE, px error, ms). "Looks as good as" needs a
+  reference image and what to compare.
+- List the **Escalation Triggers** you can foresee: the places where the plan
+  rests on an assumption that might be false.
+
+### Choosing the implementer
+
+Set **Implementer** in the overview. The orchestrator spawns the worker on that
+model.
+
+- **haiku**: mechanical, fully specified work. Renames, moving docs, making test
+  paths unique, lint sweeps. Every AC is a command that passes or fails, and
+  nothing needs judgment.
+- **sonnet** (the default): the design is in **Decisions**, the work follows
+  patterns already in the codebase, and visual ACs have reference images or
+  thresholds.
+- **opus**: stories that are themselves design work, and so can't be made
+  decision-complete. Examples: a spike whose result changes later stories, a new
+  core trait or abstraction, cross-crate architecture, GPU numerical work with
+  no precedent in the codebase. Give the reason. Prefer splitting the design
+  part out over marking a whole large story `opus`.
+
 ---
 
 ## Step 4: Update the Index
@@ -252,7 +319,10 @@ Output a brief summary:
 - **File**: `docs/planning/stories/GUP-NNN_Short_Title_Words.md`
 - **Initiative**: name, or "standalone"
 - **Dependencies**: list or "none"
+- **Implementer**: model and reason
 - **Key ACs**: bullet the 2–3 most important acceptance criteria
+- **Decisions you could not settle**: anything the orchestrator must decide
+  before the story starts (should normally be none)
 - **Suggested next step**: which story to work on first if this unblocks a
   sequence, or a note if this story itself is immediately actionable
 
