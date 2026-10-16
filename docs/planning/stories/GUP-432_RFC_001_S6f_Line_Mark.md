@@ -210,8 +210,12 @@ point for the shader.
   (SwiftShader). The parent tree (main `692375f`) fails identically, so the
   failure predates this story.
 - The root-crate tests were left to CI, as the orchestrator asked.
-  `mask perf-budget` was not run: the load average stayed above 4. No `gup-core`
-  scatter path is affected beyond shared code.
+- `mask perf-budget`, with load average 3.2 (GPU clock 450 MHz). The first run
+  failed one timing check, `pipeline.link_create.median_ms` (1.080 against a
+  1.056 limit). The second run passed every check: GPU pass median 2.938 ms (p95
+  5.589), CPU median 0.708 ms (p95 0.889), link and create median 0.998 ms (cold
+  1.139), 136 uniform bytes in 3 writes per frame, 0 column bytes. WASM: scatter
+  321,457 B gz, gup-core 279,744 B gz over bare wgpu.
 
 ## Retrospective
 
