@@ -280,6 +280,41 @@ pub mod __private {
         pub use crate::shader::*;
     }
 
+    /// Autoref specialisation: `(&MirrorProbe(f)).sampled(extent)` is a
+    /// sampled ramp when the function's type has a colour CPU mirror, and
+    /// `None` when it has not (or is generic).
+    pub struct MirrorProbe<'a, T>(pub &'a T);
+
+    /// See [`MirrorProbe`].
+    pub trait MirrorSampled {
+        /// The sampled ramp over `extent`.
+        fn sampled(&self, extent: (f64, f64)) -> Option<crate::Legend>;
+    }
+
+    impl<T: crate::CpuMirror + crate::EncodeFn<Output = crate::Color>> MirrorSampled
+        for MirrorProbe<'_, T>
+    {
+        fn sampled(&self, extent: (f64, f64)) -> Option<crate::Legend> {
+            Some(crate::Legend::Ramp(crate::Ramp::sampled(
+                extent,
+                |x| self.0.eval(x),
+                5,
+            )))
+        }
+    }
+
+    /// See [`MirrorProbe`].
+    pub trait MirrorFallback {
+        /// No legend.
+        fn sampled(&self, extent: (f64, f64)) -> Option<crate::Legend>;
+    }
+
+    impl<T> MirrorFallback for &MirrorProbe<'_, T> {
+        fn sampled(&self, _extent: (f64, f64)) -> Option<crate::Legend> {
+            None
+        }
+    }
+
     /// See `scale::monotonic_image`.
     pub fn monotonic_image(f: impl Fn(f64) -> f64, extent: (f64, f64)) -> Option<(f64, f64)> {
         crate::scale::monotonic_image(f, extent)

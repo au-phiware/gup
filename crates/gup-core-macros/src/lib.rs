@@ -599,6 +599,20 @@ fn expand(attr: TokenStream2, item: TokenStream2) -> syn::Result<TokenStream2> {
             }
         }
     });
+    // A colour function with a CPU mirror gets a sampled ramp legend; one
+    // without (or a user-written `legend`) is unaffected.
+    let sampled = (conv.output == Output::Color).then(|| {
+        quote! {
+            fn sampled_legend(
+                &self,
+                extent: (f64, f64),
+            ) -> ::core::option::Option<#root::Legend> {
+                #[allow(unused_imports)]
+                use #private::{MirrorFallback as _, MirrorProbe, MirrorSampled as _};
+                (&MirrorProbe(self)).sampled(extent)
+            }
+        }
+    });
     let out_item = if user_out.is_some() {
         quote!()
     } else {
@@ -651,6 +665,8 @@ fn expand(attr: TokenStream2, item: TokenStream2) -> syn::Result<TokenStream2> {
                 }
 
                 #image
+
+                #sampled
 
                 #(#user_items)*
             }

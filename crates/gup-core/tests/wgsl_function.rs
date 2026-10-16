@@ -12,11 +12,9 @@
 mod common;
 
 use common::continents::{self, CONTINENTS, Place};
-use common::legend;
 use common::vr::{harness, layout_metadata, rgba8};
-use gup_core::geom::Rect;
 use gup_core::prelude::*;
-use gup_core::{Error, ImageTarget, Layout, Scene};
+use gup_core::{Error, ImageTarget, Layout};
 use gup_visual_regression::RgbaImage;
 use std::sync::Arc;
 
@@ -167,17 +165,6 @@ fn aftershocks() -> Vec<Quake> {
     quakes
 }
 
-/// The plot resolved `legend_width` narrower than the image, so a legend
-/// fits to its right.
-fn resolve(cx: &Context, plot: &mut Plot, legend_width: f32) -> (Scene, Layout) {
-    let resolved = plot
-        .resolve(cx, WIDTH as f32 - legend_width, HEIGHT as f32)
-        .unwrap();
-    let mut scene = resolved.scene;
-    scene.width = WIDTH as f32;
-    (scene, resolved.layout)
-}
-
 /// AC6: the motivating example. A user's transfer function (energy from
 /// magnitude, `monotonic` so its image comes from the mirror) starts a
 /// chain into the built-in `Pow::sqrt()`, so a disc's area grows with the
@@ -196,25 +183,21 @@ fn aftershocks_sized_by_energy() {
             .range(Px(1.5), Px(36.0)),
     );
     let depth = Sequential::viridis().domain(0.0, 40.0).reversed();
-    // The hand-placed legend stays until legends for chains (GUP-437).
-    plot.legends(false);
     plot.title("Aftershocks: area by energy released, colour by depth (km)")
         .add(Selection::<Quake, Circle>::new(quakes.clone()))
         .attr(Circle::X, x.encode(|q: &Quake| q.lon))
         .attr(Circle::Y, y.encode(|q: &Quake| q.lat))
         .attr(Circle::RADIUS, radius.encode(|q: &Quake| q.magnitude))
         .attr(Circle::FILL, depth.encode(|q: &Quake| q.depth));
-    let (mut scene, layout) = resolve(&cx, &mut plot, 60.0);
-    let bar = Rect::from_edges(
-        layout.plot.right() + 16.0,
-        layout.plot.top(),
-        layout.plot.right() + 30.0,
-        layout.plot.bottom(),
+    let resolved = plot.resolve(&cx, WIDTH as f32, HEIGHT as f32).unwrap();
+    let (scene, layout) = (resolved.scene, resolved.layout);
+    assert!(
+        layout.legend.is_some(),
+        "the depth ramp is placed by the plot"
     );
-    let placed = legend::ramp(&mut scene, &depth.ramp(), bar);
     let main = &quakes[0];
-    let meta = legend::with_legend(layout_metadata(&layout), &placed)
-        .with_expected_color("main shock", rgba8(depth.eval(main.depth)));
+    let meta =
+        layout_metadata(&layout).with_expected_color("main shock", rgba8(depth.eval(main.depth)));
     let image = ImageTarget::new(&cx, WIDTH, HEIGHT)
         .unwrap()
         .render_blocking(&cx, &scene)
