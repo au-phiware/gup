@@ -6,7 +6,7 @@ description:
   runs final validation, writes a retrospective, and updates the story index.
 argument-hint: Story ID or path to story markdown file.
 tools: Read, Write, Edit, Glob, Grep, Bash, Task, WebSearch, WebFetch, LSP
-model: opus
+model: sonnet
 ---
 
 # Story Worker Agent
@@ -21,18 +21,20 @@ phases below.
 
 ## Phase 0: Orient
 
-Before touching any code, build a mental model of the project:
+Read only what the story needs. `CLAUDE.md` and `CLAUDE.local.md` are already in
+your context. Every file you read stays in your context for the rest of the
+story, and big documents crowd out the code.
 
-1. Read `docs/README.md` and `docs/IMPLEMENTATION_STRATEGY.md` to understand the
-   project vision and architecture.
-2. Read `CLAUDE.md` for development environment and quick reminders.
-3. Read `CLAUDE.local.md` for coding guidelines (copyright headers, lint
-   commands, story management rules).
-4. Read `docs/planning/stories/INDEX.md` to understand the story landscape and
-   dependencies.
-5. Read `docs/planning/STRATEGIC_REVIEW_2026-10.md` (or its successor) for the
-   current direction, tracks and parked work. Where it conflicts with older
-   docs, the strategic review wins.
+1. Read the story. Then read every item in its **Read First** section, and only
+   the sections and line ranges it names.
+2. If the story has no Read First section (an older story), read
+   `docs/planning/STRATEGIC_REVIEW_2026-10.md`. Where it conflicts with older
+   docs, the strategic review wins. Find the parts of RFC-001 and other large
+   documents you need with `grep -n`, and read those parts with an offset and
+   limit.
+3. Never read `docs/planning/stories/INDEX.md` or
+   `docs/planning/rfcs/RFC-001_Core_Architecture.md` whole. They are about 90 KB
+   and 190 KB. Use `grep -n` for the lines you need.
 
 ---
 
@@ -44,11 +46,69 @@ Before touching any code, build a mental model of the project:
 2. Identify and read any **prerequisite stories** listed in the Dependencies
    section. Focus on their Implementation Results or Summary sections for
    context on what already exists.
-3. Understand the **Acceptance Criteria** — these are your success conditions.
+3. Understand the **Acceptance Criteria**: they are your success conditions.
+   Treat the **Decisions** section as fixed, and keep the **Escalation
+   Triggers** and **Out of Scope** sections in mind for the rest of the story.
 4. Note the **Testing Strategy** and **Definition of Done** sections.
 5. Update the story status to `🚧 In Progress` in both the story file header and
    `docs/planning/stories/INDEX.md`.
 6. Commit this status change: `"Start GUP-XXX: <story title>"`.
+7. Note the output of `date`, so that you can tell how long you have been
+   working. You cannot sense elapsed time otherwise.
+
+---
+
+## Decide or Escalate
+
+Stopping to ask is part of the job, not a failure. An orchestrator on a larger
+model reads your report, makes the call, and resumes you with your context
+intact. An hour of toil, or a big decision made quietly, costs far more than
+that round trip.
+
+### Decide yourself, record it in the retrospective, and continue
+
+- Anything the story's **Decisions** section already settles.
+- Private names, helper functions, module layout inside a file, test structure.
+- A choice between equivalent implementations that changes no public API, no
+  data or file format, no shader interface and no other story's plan.
+- A fix under about 30 minutes for a sibling with the same bug ("fix the
+  class").
+
+### Stop and report (the standing triggers)
+
+- An AC cannot be met as written, or meeting it means doing something the
+  **Decisions** section doesn't cover.
+- The change would alter a public API, trait, file or column format, shader
+  interface, or the plan of another story, beyond what the story specifies.
+- You want to weaken a gate. That means:
+  - marking a test `#[ignore]`;
+  - loosening a tolerance or raising a perf budget without a measured reason the
+    story anticipates;
+  - editing CI, the pre-commit hook or the clippy configuration;
+  - touching the frozen old path.
+- A test or check outside the story's scope fails, and it isn't obviously caused
+  by your change.
+- **You are stuck**, which you can recognise by any of these:
+  - the same error or failing assertion after 3 different fix attempts;
+  - abandoning an approach for the second time;
+  - about 45 minutes since your last commit (check `date`) with the build or the
+    tests still not passing;
+  - 2 hours in, with less than half the ACs done.
+- A story-specific **Escalation Trigger** fires.
+
+### How to stop
+
+1. Commit what you have on your branch, with `WIP` in the message, if it builds.
+   If it doesn't, gate the broken part with `#[cfg(any())]` and commit. Never
+   leave work uncommitted, and never use `--no-verify`.
+2. Append a `## Blocked (YYYY-MM-DD)` section to the story containing:
+   - the question;
+   - the options you see, with the evidence for each (error text, numbers, image
+     paths);
+   - your recommendation.
+3. End your turn with a final report whose first line is
+   `BLOCKED: <one-sentence question>`, followed by the same content. Keep it
+   short; the details are in the story.
 
 ---
 
@@ -256,27 +316,31 @@ Commit the retro and any new stories:
 
 ---
 
-## Phase 6: Recommend Next Story
+## Phase 6: Final Report
 
-As your final output, suggest which story should be worked on next. Consider:
+The orchestrator picks the next story. Your final output is a report of at most
+about 400 words, because the story file and the retrospective already hold the
+detail. Use this outline, and point to files rather than repeating them:
 
-- **Dependencies**: What is now unblocked by this story's completion?
-- **Momentum**: Are there related stories that would benefit from the context
-  you just built?
-- **Initiative coherence**: If this story belongs to an initiative, are there
-  remaining stories in that initiative that are now actionable?
-- **Standalone value**: Are there high-value standalone stories with all
-  dependencies satisfied?
-
-State your recommendation clearly with reasoning.
+1. **Status**: complete, or `BLOCKED: <question>` (see "Decide or Escalate").
+2. **Commits**: range and count.
+3. **ACs**: met, or met differently (one line each for anything not met as
+   written, with the reason).
+4. **Decisions you made** that the orchestrator should know about, in one line
+   each.
+5. **Evidence**: test counts, key numbers (perf, error bounds) and the paths of
+   new or re-blessed goldens.
+6. **Not run locally**, and why.
+7. **Follow-ups**: new story IDs, or "none".
 
 ---
 
 ## Important Rules
 
-- **Autonomous execution**: Do not ask the user questions mid-story. If you hit
-  a significant ambiguity, make a reasonable decision, document it in the retro,
-  and continue.
+- **Decide or escalate**: Do not ask the user questions mid-story. Settle small
+  choices yourself and record them in the retrospective. For anything on the
+  "Stop and report" list, stop and report as described in "Decide or Escalate".
+  Never quietly make a big decision.
 - **Copyright headers**: Every new `.rs` file must start with:
 
   ```rust
