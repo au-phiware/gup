@@ -133,17 +133,19 @@ one build directory (GUP-411):
   look). It deletes the units, incremental caches and target directory of
   checkouts that no longer exist (the workspace wrapper records which checkout
   built what), every incremental session but the newest per crate, caches idle
-  for 3 days, and the least recently compiled caches over 6 GB per profile. It
+  for 3 days, and the least recently compiled caches over 8 GB per profile. It
   holds cargo's build-directory lock while it works and skips a directory
   another build holds for more than 10 s. A deleted cache costs one
   non-incremental compile; a live checkout's artifacts are never touched.
-- **Bound**: measured on this repository (2026-10-11), a warm hook run grows the
-  build directory by 20–60 MB, and the prune then frees the superseded
-  incremental sessions (about 2 GB the first time). An agent worktree that runs
-  `cargo test` adds about 22 GB (tests and examples, per checkout); removing the
-  worktree and committing (or `mask prune-build`) reclaims it. Remove finished
-  worktrees promptly. `scripts/test_prune_build_dir.sh` (in `mask all-check`)
-  proves the bound on a seeded multi-commit history.
+- **Bound**: measured on this repository (2026-10-11), a warm hook run with a
+  root-crate change grows the build directory by 0–35 MB after the prune
+  (without it, the second run doubled every incremental cache: +1.7 GB). An
+  agent worktree that runs `cargo test -p gup` adds 21.8 GB of its own (tests,
+  examples, caches); once the worktree is removed, the next prune reclaims all
+  of it (9.5 s). Remove finished worktrees promptly. Units built before GUP-427
+  have no owner record and are never pruned; delete the build directory once,
+  when nothing is building, to drop them. `scripts/test_prune_build_dir.sh` (in
+  `mask all-check`) proves the bound on a seeded multi-commit history.
 - A commit older than GUP-411 has no `.cargo/config.toml`. In a worktree nested
   inside a checkout that has one, cargo uses the outer checkout's and the build
   stops with an explanation. Elsewhere, give it its own build directory.

@@ -87,12 +87,16 @@ survives into `gup-core`.
   per-checkout member `codegen-units` is worth its disk, and if so add it to
   `scripts/cargo_env.sh`. Deps: GUP-411 ✅. Related to GUP-427 (disk growth),
   not superseded by it.
-- [GUP-427](GUP-427_Bound_Build_Directory_Disk_Growth_Per_Commit.md) 🚧 —
+- [GUP-427](GUP-427_Bound_Build_Directory_Disk_Growth_Per_Commit.md) ✅ —
   Measure and bound the shared build directory's per-commit growth (GUP-419
   measured ~3.8 GB of incremental cache left per Rust-touching pre-commit hook
   run on a ~19 GB filesystem), with an automatic prune of superseded artifacts
   and idle incremental caches, never `cargo clean`, proved by a seeded
   multi-commit check. Deps: GUP-411 ✅, GUP-409 ✅.
+- [GUP-428](GUP-428_Prune_Superseded_Shared_Units.md) 💡 — Prune dependency and
+  clippy units nobody can use any more (left by `Cargo.lock` or toolchain bumps,
+  deleted targets, pre-GUP-427 checkouts), which GUP-427's owner-based prune
+  never touches. Deps: GUP-427 ✅.
 
 ## RFC-001 Migration
 

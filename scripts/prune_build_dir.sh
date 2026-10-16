@@ -35,8 +35,10 @@
 #   3. Idle incremental caches: a crate's whole cache when its newest session
 #      is older than GUP_PRUNE_IDLE_DAYS (default 3).
 #   4. Then, while a profile's incremental caches exceed
-#      GUP_PRUNE_INCREMENTAL_MB (default 6144), the least recently compiled
-#      crate's (the hard bound).
+#      GUP_PRUNE_INCREMENTAL_MB (default 8192), the least recently compiled
+#      crate's (the hard bound). Measured: the shared clippy caches take 1.8
+#      GB, and a checkout that has run `cargo test` 2.2 GB of its own, so the
+#      default keeps about three busy checkouts warm.
 #
 # A deleted incremental cache costs one non-incremental compile of its crate.
 # Cargo's freshness does not depend on it, so a warm checkout stays Fresh.
@@ -79,7 +81,7 @@ if ! command -v flock >/dev/null; then
 fi
 
 idle_days=${GUP_PRUNE_IDLE_DAYS:-3}
-cap_kb=$((${GUP_PRUNE_INCREMENTAL_MB:-6144} * 1024))
+cap_kb=$((${GUP_PRUNE_INCREMENTAL_MB:-8192} * 1024))
 wait_secs=${GUP_PRUNE_WAIT:-20}
 now=$(date +%s)
 idle_before=$((now - idle_days * 86400))
