@@ -11,6 +11,7 @@
 
 use super::scatter::{self, HEIGHT, WIDTH};
 use super::vr::{metadata, rect, rgba8, role};
+use gup_core::Ramp;
 use gup_core::geom::{Point, Rect};
 use gup_core::prelude::*;
 use gup_core::scene::{
@@ -18,7 +19,6 @@ use gup_core::scene::{
     TextRun, TextStyle, VAlign, Z_GRID, Z_TITLE,
 };
 use gup_core::{Layout, Scene};
-use gup_core::{Ramp, Swatch};
 use gup_visual_regression::LayoutMetadata;
 
 /// Logical width left for the plot; the legend takes the rest.
@@ -135,8 +135,6 @@ pub struct Placed {
 }
 
 const LEGEND_INK: Color = Color::hex(0x333333);
-const SWATCH: f32 = 12.0;
-const SWATCH_ROW: f32 = 20.0;
 
 fn legend_label(text: &str, at: Point, anchor: Anchor) -> TextRun {
     TextRun {
@@ -149,38 +147,6 @@ fn legend_label(text: &str, at: Point, anchor: Anchor) -> TextRun {
         },
         role: TextRole::Legend,
     }
-}
-
-/// A swatch legend: one `SWATCH`-pixel square per key, top-down from
-/// `at`, with the key's label to its right.
-pub fn swatches(scene: &mut Scene, swatches: &[Swatch], at: Point) -> Placed {
-    let mut rects = Vec::new();
-    let mut labels = Vec::new();
-    for (i, s) in swatches.iter().enumerate() {
-        let top = at.y + i as f32 * SWATCH_ROW;
-        let rect = Rect::new(at.x, top, SWATCH, SWATCH);
-        rects.push(RectPrim {
-            rect,
-            color: s.color,
-        });
-        labels.push(legend_label(
-            &s.label,
-            Point::new(at.x + SWATCH + 6.0, top + SWATCH / 2.0),
-            Anchor::new(HAlign::Start, VAlign::Middle),
-        ));
-    }
-    let guides = rects.iter().map(|r| r.rect).collect();
-    scene.push(Item {
-        z: Z_TITLE,
-        clip: None,
-        kind: ItemKind::Rects(rects),
-    });
-    scene.push(Item {
-        z: Z_TITLE,
-        clip: None,
-        kind: ItemKind::Text(labels.clone()),
-    });
-    Placed { guides, labels }
 }
 
 /// A vertical ramp legend in `bar`: the gradient (low end at the bottom),

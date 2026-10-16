@@ -341,7 +341,7 @@ pub async fn render_band_categorical(width: u32, height: u32) -> Result<Vec<u8>,
         .map_err(js)?;
     let mut scene = resolved.scene;
     scene.width = width as f32;
-    let swatches = colour.read().legend().swatches().to_vec();
+    let swatches = colour.read().legend().unwrap().swatches().to_vec();
     let left = width as f32 - legend_width + 6.0;
     let rects: Vec<RectPrim> = swatches
         .iter()

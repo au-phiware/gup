@@ -115,6 +115,9 @@ fn bubbles_with_translucent_fills_and_outlines() {
     plot.x(Linear::new().domain(0.0, 1.0));
     plot.y(Linear::new().domain(0.0, 1.0));
     plot.title("Overlapping bubbles");
+    // The fill is a stand-in colour per bubble, not a quantity to read off a
+    // legend (GUP-426 turns legends on for any colour scale).
+    plot.legends(false);
     // (x, y, radius, colour), in pixels.
     let bubbles: Vec<[f64; 4]> = (0..12u32)
         .map(|i| {

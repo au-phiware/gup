@@ -440,6 +440,9 @@ mod tests {
         let palette = Categorical::okabe_ito();
 
         let mut plot = Plot::new();
+        // Legends are on by default (GUP-426); their text atlas would upload on
+        // an append, and they are not this test's subject.
+        plot.legends(false);
         plot.x(Linear::new().domain(0.0, 1.0));
         plot.y(Linear::new().domain(0.0, 1.0));
         let layer = plot.add(Selection::<Disc, Circle>::new(rows.clone()));

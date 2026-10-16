@@ -69,6 +69,9 @@ pub fn plot_rows_chunked(
     let mut plot = Plot::new();
     let (x, y) = (plot.x(Linear::new()), plot.y(Log::new()));
     let heat = Sequential::viridis();
+    // The scatter tests draw their own legend or count uploads; legend
+    // placement has its own tests.
+    plot.legends(false);
     let layer = plot
         .title(TITLE)
         .add(Selection::<Country, Circle>::new(rows));

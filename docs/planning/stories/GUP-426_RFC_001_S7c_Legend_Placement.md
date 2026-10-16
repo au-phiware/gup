@@ -9,7 +9,8 @@ implementer-reason:
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 📋 Planned **Created**: 2026-10-11
+**Initiative**: RFC-001 Migration **Status**: ✅ Complete (2026-10-17)
+**Created**: 2026-10-11
 
 ## Context
 
@@ -54,38 +55,38 @@ user `#[wgsl_function]` colour functions moved to
 
 ### AC1: Automatic legends
 
-- [ ] `categorical_species` and `diverging_anomaly` no longer build legend items
+- [x] `categorical_species` and `diverging_anomaly` no longer build legend items
       or resolve narrower than the image: `Plot::resolve` places them. Both
       goldens are re-blessed and read by eye. Their existing data/legend colour
       assertions still pass, reading swatch and ramp positions from
       `layout.legend` and `layout.texts`.
-- [ ] `Layout` has `pub legend: Option<Rect>`; it is `Some` exactly when a
+- [x] `Layout` has `pub legend: Option<Rect>`; it is `Some` exactly when a
       legend is drawn, lies inside the canvas, and does not intersect
       `layout.plot`.
-- [ ] `Plot::legends(&mut self, on: bool) -> &mut Self` (default on); with
+- [x] `Plot::legends(&mut self, on: bool) -> &mut Self` (default on); with
       `false` no legend is drawn and the plot rect is as without legends.
 
 ### AC2: Titles
 
-- [ ] `Selection::legend_title(&mut self, channel: Channel<M, Color>, title:     impl Into<String>) -> &mut Self`;
+- [x] `Selection::legend_title(&mut self, channel: Channel<M, Color>, title:     impl Into<String>) -> &mut Self`;
       the title is drawn above its legend as a `TextRole::Legend` run.
-- [ ] Golden `gup_core/legend_guides` (720×450): chart title, x and y axis
+- [x] Golden `gup_core/legend_guides` (720×450): chart title, x and y axis
       titles, and a titled categorical legend. A test asserts all `layout.texts`
       ink boxes are pairwise disjoint and inside the canvas; read by eye.
 
 ### AC3: Long domains
 
-- [ ] A 60-key categorical legend on a 720×300 plot resolves; the legend shows
+- [x] A 60-key categorical legend on a 720×300 plot resolves; the legend shows
       as many swatch rows as fit and a final "+N more" row, where N is the
       number of keys not shown; nothing is drawn below the canvas (test on
       `layout.texts` and `layout.legend`).
 
 ### AC4: Several legends
 
-- [ ] Two layers, one with a `Categorical` fill and one with a `Sequential`
+- [x] Two layers, one with a `Categorical` fill and one with a `Sequential`
       fill, give two stacked legends that do not overlap (ink boxes and bars);
       two layers sharing one `ScaleRef<Categorical>` give one legend.
-- [ ] Golden `gup_core/legend_two_layers`, read by eye.
+- [x] Golden `gup_core/legend_two_layers`, read by eye.
 
 ## Decisions
 
@@ -133,10 +134,10 @@ user `#[wgsl_function]` colour functions moved to
 
 ## Technical Tasks
 
-- [ ] `legend()` hook on `ShaderFn`/`DynShaderFn`, overrides, `ScaleRef`.
-- [ ] `Layer::legends`, `Selection::legend_title`, `Plot::legends`.
-- [ ] `guide.rs` layout and drawing; `Layout::legend`; margin change.
-- [ ] Migrate the two ordinal goldens; tests and goldens for AC2–AC4.
+- [x] `legend()` hook on `ShaderFn`/`DynShaderFn`, overrides, `ScaleRef`.
+- [x] `Layer::legends`, `Selection::legend_title`, `Plot::legends`.
+- [x] `guide.rs` layout and drawing; `Layout::legend`; margin change.
+- [x] Migrate the two ordinal goldens; tests and goldens for AC2–AC4.
 
 ## Dependencies
 
@@ -167,7 +168,7 @@ user `#[wgsl_function]` colour functions moved to
 
 ## Success Metrics
 
-- [ ] No gup-core golden builds legend items by hand except
+- [x] No gup-core golden builds legend items by hand except
       `wgsl_function_aftershocks` (a chain, GUP-437).
 
 ## Risk Assessment
@@ -177,10 +178,90 @@ user `#[wgsl_function]` colour functions moved to
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (golden image or PNG read), if visual
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye (golden image or PNG read), if visual
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `ShaderFn::legend` (provided, `None`), forwarded by `DynShaderFn` and
+  `ScaleRef`; `Categorical`, `Sequential` and `Diverging` override it.
+  `Layer::legends`, `Selection::legend_title`, `Plot::legends(bool)`,
+  `Layout::legend`.
+- `crates/gup-core/src/guide.rs`: dedup, column width, stacking, swatch rows
+  with "+N more", ramp bars on whole pixels. `Plot::resolve` measures the
+  legends after the domains are fitted and shrinks the plot rect by
+  `width + 16`; swatches, bars and tick rules join `layout.guides`.
+- `categorical_species` and `diverging_anomaly` use automatic placement (and
+  gained legend titles); `tests/common/legend.rs` lost `swatches`.
+- New `tests/legend_png.rs` (4 tests) and goldens `legend_guides`,
+  `legend_two_layers`; unit tests in `guide.rs`.
+- Goldens re-blessed: `categorical_species`, `diverging_anomaly` (legend now
+  placed by the plot, titled "Species" and "Anomaly (°C)").
+
+## Retrospective
+
+**Completed**: 2026-10-17
+
+### Key Technical Learnings
+
+#### Legends on by default touch every coloured plot
+
+- **Challenge**: any plot with a colour scale now draws a legend, so every
+  golden or upload-counting test with a `Sequential`/`Categorical` fill changed
+  (scatter, scene_items, svg, sqrt_radius, band_months, zoom_uploads, targets,
+  the glyph-atlas test in `plot.rs`).
+- **Solution**: tests whose subject is not the legend call `plot.legends(false)`
+  (the shared scatter and continents helpers included), so their goldens did not
+  move; the `scene_items` and `svg` goldens are unchanged. Legend text writes
+  glyphs to the atlas, which broke a test that counts texture writes.
+- **Pattern**: new default-on guides need an opt-out in shared test helpers.
+
+#### `legend` name clash
+
+- **Challenge**: `ShaderFn::legend` (`Option`) and `ColorScale::legend`
+  (`Legend`) are both methods on the three colour scales, so `scale.legend()` is
+  ambiguous when both traits are in scope.
+- **Solution**: call `ColorScale::legend(&scale)` at the few sites (doctests,
+  tests). Worth deciding whether `ColorScale::legend` should be renamed or
+  folded into the hook before more callers appear.
+
+### Architectural Decisions
+
+#### Whole-pixel legend bodies
+
+- **Decision**: the body starts on a rounded y and the ramp bar is a whole
+  number of pixels tall.
+- **Reasoning**: the title height is fractional; blurred swatch and bar edges
+  and half-covered end rows broke the "bar end equals domain end colour" check.
+
+#### `wgsl_function_aftershocks` keeps its hand legend
+
+- **Decision**: it calls `legends(false)`. Its fill is a plain `Sequential`
+  (only the radius is a chain), so it could move to automatic placement; the
+  story said to keep it for GUP-437, so it stays.
+
+### Development Workflow Insights
+
+- `mask perf-budget` not run: load average was 4.6–8.9 throughout.
+- Worktree shells refuse compound commands (`cd .. &&`, heredocs with `git`
+  look-alikes); split them.
+
+### Follow-up Stories
+
+None. (GUP-437 covers chains; the `legend` name clash is noted above.)
+
+### Review fixes (2026-10-17)
+
+- A linear `Ramp` forced its centre in as a tick, so `legend_two_layers` showed
+  0, 2, 4, 5, 6, 8. Only a diverging scale's midpoint is marked now; the end
+  ticks sit inside the bar. A test checks the ramp's ticks against the CPU
+  mirror's colour at their rows and for even spacing. Goldens
+  `legend_two_layers` and `diverging_anomaly` re-blessed (the blessing only
+  rewrites a golden that fails: delete it to force a rewrite).
+- `ColorScale::legend` is gone: `ShaderFn::legend` is the one hook, so
+  `scale.legend()` is unambiguous (returns `Option<Legend>`).

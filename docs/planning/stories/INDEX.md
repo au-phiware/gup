@@ -262,7 +262,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   a `Theme` replacing the hard-coded `style` constants, a themable null colour
   in the glue and `Categorical`, and x/y axis titles with truncation. Deps:
   GUP-424 📋, GUP-419 ✅.
-- [GUP-426](GUP-426_RFC_001_S7c_Legend_Placement.md) 📋 — RFC-001 step S7c:
+- [GUP-426](GUP-426_RFC_001_S7c_Legend_Placement.md) ✅ — RFC-001 step S7c:
   `Plot::resolve` finds colour legends through a `ShaderFn::legend` hook and
   places them, titled, in a right-hand column with "+N more" overflow, replacing
   hand-built legend items. Deps: GUP-424 📋, GUP-425 📋, GUP-419 ✅; soft:

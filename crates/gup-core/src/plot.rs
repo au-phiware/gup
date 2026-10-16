@@ -5,10 +5,11 @@
 //! into a [`Layout`] and a [`Scene`] (RFC-001 §8–9, S0a subset).
 //!
 //! Any number of layers share the x/y scales, whose automatic domains
-//! union across layers and channels. S0a scope otherwise: left and bottom
-//! axes with tick labels, an
-//! optional title. Legends, grids,
-//! axis titles, themes and the object-safe `Chart` trait are RFC-001 S7.
+//! union across layers and channels. Left and bottom axes with tick
+//! labels, an optional title, axis titles, a [`Theme`](crate::Theme) and
+//! colour legends at the right (found through
+//! [`ShaderFn::legend`](crate::ShaderFn::legend)); grids and the
+//! object-safe `Chart` trait are later RFC-001 S7 steps.
 
 use crate::channel::{Mark, Px};
 use crate::context::Context;
@@ -51,6 +52,9 @@ pub struct Layout {
     pub x_ticks: Vec<(f64, f32)>,
     /// y tick values and their pixel positions.
     pub y_ticks: Vec<(f64, f32)>,
+    /// The legend column, `Some` exactly when a legend is drawn. Lies
+    /// inside the canvas, right of [`plot`](Self::plot).
+    pub legend: Option<Rect>,
 }
 
 /// A layout plus the scene drawn from it.
@@ -101,6 +105,8 @@ pub struct Plot {
     x_title: Option<String>,
     y_title: Option<String>,
     theme: Theme,
+    /// Set by `legends(false)`.
+    legends_off: bool,
 }
 
 impl crate::chart::Chart for Plot {
@@ -162,6 +168,14 @@ impl Plot {
     /// Set the y axis title: horizontal, left-aligned above the y axis.
     pub fn y_title(&mut self, title: impl Into<String>) -> &mut Self {
         self.y_title = Some(title.into());
+        self
+    }
+
+    /// Draw the colour legends beside the plot (default), or not: with
+    /// `false` the plot rect is as if there were none, for callers who
+    /// place their own.
+    pub fn legends(&mut self, on: bool) -> &mut Self {
+        self.legends_off = !on;
         self
     }
 
@@ -286,6 +300,13 @@ impl Plot {
             }
         }
 
+        // Legends read the fitted scales (a categorical's keys).
+        let legends = if self.legends_off {
+            Vec::new()
+        } else {
+            crate::guide::dedup(self.layers.iter().flat_map(|l| l.legends()))
+        };
+
         // 3. Ticks and label measurements give the margins.
         let tick_style = TextStyle {
             size: Px(th.tick_size.0),
@@ -293,6 +314,11 @@ impl Plot {
         };
         let x_ticks = x.ticks(((width / th.x_tick_spacing.0) as usize).max(2));
         let y_ticks = y.ticks(((height / th.y_tick_spacing.0) as usize).max(2));
+        let legend_w = if legends.is_empty() {
+            0.0
+        } else {
+            crate::guide::column_width(&cx.text(), &th, &legends) + crate::guide::COLUMN_GAP
+        };
         let (title_h, axis_title_h, y_label_w, x_label_h, last_x_label_w) = {
             let text = cx.text();
             let axis_title_h = {
@@ -341,7 +367,7 @@ impl Plot {
             0.0
         };
         let bottom = height - (th.pad.0 + x_label_h + th.label_gap.0 + th.tick_len.0 + x_title_h);
-        let right = width - th.pad.0.max(last_x_label_w / 2.0 + 2.0);
+        let right = width - th.pad.0.max(last_x_label_w / 2.0 + 2.0) - legend_w;
         let plot = Rect::from_edges(left.round(), top.round(), right.round(), bottom.round());
         if plot.width < 10.0 || plot.height < 10.0 {
             return Err(Error::config(
@@ -464,19 +490,31 @@ impl Plot {
             (title, axis_titles)
         };
 
+        let legend = (!legends.is_empty()).then(|| {
+            crate::guide::place(
+                &cx.text(),
+                &th,
+                &legends,
+                plot.right() + crate::guide::COLUMN_GAP,
+                plot,
+            )
+        });
+        let legend_texts: &[TextRun] = legend.as_ref().map_or(&[], |l| &l.texts);
         let texts = {
             let text = cx.text();
             labels
                 .iter()
                 .chain(&title)
                 .chain(&axis_titles)
+                .chain(legend_texts)
                 .map(|run| PlacedText {
                     run: run.clone(),
                     bounds: text.ink_bounds(&run.layout_run()).into(),
                 })
                 .collect()
         };
-        let guides = rules.iter().map(Rule::bounds).collect();
+        let mut guides: Vec<Rect> = rules.iter().map(Rule::bounds).collect();
+        guides.extend(legend.iter().flat_map(|l| l.guides.iter().copied()));
 
         let clip = scene.add_clip(plot);
         // Insertion order; `Scene::push` breaks z ties by it.
@@ -506,6 +544,13 @@ impl Plot {
             });
         }
 
+        let legend_bounds = legend.as_ref().map(|l| l.bounds);
+        if let Some(l) = legend {
+            for item in l.items {
+                scene.push(item);
+            }
+        }
+
         Ok(Resolved {
             layout: Layout {
                 width,
@@ -516,6 +561,7 @@ impl Plot {
                 mark_overhang,
                 x_ticks: x_placed,
                 y_ticks: y_placed,
+                legend: legend_bounds,
             },
             scene,
         })
@@ -987,7 +1033,8 @@ mod tests {
     /// uniform did reach the GPU.
     #[test]
     fn a_new_key_grows_the_domain_with_a_uniform_write_only() {
-        use crate::scale::{Categorical, ColorScale, OKABE_ITO};
+        use crate::ShaderFn;
+        use crate::scale::{Categorical, OKABE_ITO};
         type Row = (f64, f64, &'static str);
         let cx = Context::new_blocking().unwrap();
         let rows: Vec<Row> = (0..30)
@@ -1005,6 +1052,9 @@ mod tests {
             plot.y(Linear::new().domain(-1.0, 5.0)),
         );
         let colour = ScaleRef::new(Categorical::okabe_ito());
+        // No legend: a new key's label would write glyphs to the atlas,
+        // and this test counts texture writes.
+        plot.legends(false);
         plot.add(Selection::<Row, Circle>::new(rows))
             .attr(Circle::X, x.encode(|r: &Row| r.0))
             .attr(Circle::Y, y.encode(|r: &Row| r.1))
@@ -1014,7 +1064,7 @@ mod tests {
         let first = plot.resolve(&cx, 400.0, 300.0).unwrap();
         target.render_blocking(&cx, &first.scene).unwrap();
         let labels = |c: &ScaleRef<Categorical>| -> Vec<String> {
-            let legend = c.read().legend();
+            let legend = c.read().legend().unwrap();
             legend
                 .swatches()
                 .iter()
@@ -1033,7 +1083,10 @@ mod tests {
         let written = cx.upload_stats() - start;
 
         assert_eq!(labels(&colour), ["a", "b", "c", "d"]);
-        assert_eq!(colour.read().legend().swatches()[3].color, OKABE_ITO[3]);
+        assert_eq!(
+            colour.read().legend().unwrap().swatches()[3].color,
+            OKABE_ITO[3]
+        );
         // x, y (4 bytes each) and the code (4 bytes) of 2 rows.
         assert_eq!(written.columns.bytes, 2 * 12, "{written:?}");
         assert_eq!(written.textures, Default::default(), "{written:?}");

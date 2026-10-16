@@ -152,6 +152,10 @@ impl<S: ShaderFn> ShaderFn for ScaleRef<S> {
         Some(&self.0.keys)
     }
 
+    fn legend(&self) -> Option<Legend> {
+        ShaderFn::legend(&*self.read())
+    }
+
     fn begin_fit(&self) {
         *self.0.fit.lock().unwrap_or_else(|p| p.into_inner()) = None;
     }
@@ -194,14 +198,7 @@ where
     }
 }
 
-impl<S> ColorScale for ScaleRef<S>
-where
-    S: ColorScale + CpuMirror<Output = <S as ShaderFn>::Out>,
-{
-    fn legend(&self) -> Legend {
-        self.read().legend()
-    }
-}
+impl<S> ColorScale for ScaleRef<S> where S: ColorScale + CpuMirror<Output = <S as ShaderFn>::Out> {}
 
 /// Object-safe position-scale operations the plot needs for its x and y
 /// slots.

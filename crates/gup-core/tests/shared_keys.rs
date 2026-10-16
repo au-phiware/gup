@@ -37,6 +37,7 @@ fn shared_categorical_gives_a_key_one_colour_in_every_layer() {
     let swatches: Vec<_> = colour
         .read()
         .legend()
+        .unwrap()
         .swatches()
         .iter()
         .map(|s| s.label.to_string())

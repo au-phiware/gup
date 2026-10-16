@@ -165,6 +165,10 @@ impl ShaderFn for Diverging {
     const MODULE: &'static WgslModule = &COLOR_DIVERGING;
     const ENTRY: &'static str = "map";
 
+    fn legend(&self) -> Option<Legend> {
+        Some(Legend::Ramp(self.ramp()))
+    }
+
     fn params(&self) -> DivergingParams {
         let (mid, inv_lo, inv_hi) = self.slopes();
         DivergingParams {
@@ -209,11 +213,7 @@ impl CpuMirror for Diverging {
     }
 }
 
-impl ColorScale for Diverging {
-    fn legend(&self) -> Legend {
-        Legend::Ramp(self.ramp())
-    }
-}
+impl ColorScale for Diverging {}
 
 #[cfg(test)]
 mod tests {
