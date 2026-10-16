@@ -9,8 +9,8 @@ implementer-reason:
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 🚧 In Progress **Created**:
-2026-10-16
+**Initiative**: RFC-001 Migration **Status**: ✅ Complete (2026-10-17)
+**Created**: 2026-10-16
 
 ## Context
 
@@ -55,16 +55,16 @@ image is computable.
 
 ### AC1: Chains
 
-- [ ] `Then<A, B>::legend()` returns a ramp when `B`'s legend is a ramp: a unit
+- [x] `Then<A, B>::legend()` returns a ramp when `B`'s legend is a ramp: a unit
       test on `Linear.then(Pow::sqrt()).then(viridis)` over data 0..4e7 gives
       tick values that are 1-2-5 nice values in 0..4e7, labels formatted with
       `format_with_step`, and each `t` equal to the normalised position of the
       tick's image in the viridis stops, within 1e-9.
-- [ ] A chain ending in a swatch legend (`Categorical`) returns `None`.
+- [x] A chain ending in a swatch legend (`Categorical`) returns `None`.
 
 ### AC2: User colour functions
 
-- [ ] A `#[wgsl_function]` colour type (`Out = Color`) with `CpuMirror` and no
+- [x] A `#[wgsl_function]` colour type (`Out = Color`) with `CpuMirror` and no
       `legend` gets a sampled ramp: 256 LUT entries from its mirror over its
       fitted extent, five nice ticks. A user who writes
       `fn legend(&self) ->     Option<Legend>` in the impl block overrides it
@@ -72,7 +72,7 @@ image is computable.
 
 ### AC3: The aftershock golden
 
-- [ ] `wgsl_function_aftershocks` uses `Plot`'s automatic legend instead of its
+- [x] `wgsl_function_aftershocks` uses `Plot`'s automatic legend instead of its
       hand-placed ramp; re-blessed and read by eye: tick labels are in the
       data's units.
 
@@ -104,9 +104,9 @@ image is computable.
 
 ## Technical Tasks
 
-- [ ] `EncodeFn::legend`, `Then`'s ramp rewrite, `Ramp::sampled`.
-- [ ] `#[wgsl_function]`'s default `legend`.
-- [ ] Tests for AC1–AC2; migrate the aftershock golden.
+- [x] `EncodeFn::legend`, `Then`'s ramp rewrite, `Ramp::sampled`.
+- [x] `#[wgsl_function]`'s default `legend`.
+- [x] Tests for AC1–AC2; migrate the aftershock golden.
 
 ## Dependencies
 
@@ -124,7 +124,7 @@ image is computable.
 
 ## Success Metrics
 
-- [ ] No gup-core golden places a legend by hand.
+- [x] No gup-core golden places a legend by hand.
 
 ## Risk Assessment
 
@@ -134,10 +134,74 @@ image is computable.
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (golden image or PNG read), if visual
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye (golden image or PNG read), if visual
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `EncodeFn::encode_legend` (named apart from `ShaderFn::legend`: a scale
+  implements both traits, so one name made `scale.legend()` ambiguous) and a
+  hidden `encode_legend_over(extent)`; `Then` stores the extent it was fitted
+  to, takes its last link's ramp and re-ticks it in data units
+  (`Ramp::with_data_ticks`, 1-2-5 values of the extent, `t` through the earlier
+  links' mirrors). `Then::legend()` is an inherent alias. A swatch legend, a
+  right-nested chain, or an unfitted chain gives `None`.
+- `Ramp::sampled(domain, f, ticks)`; hidden `ShaderFn::sampled_legend(extent)`,
+  which `#[wgsl_function]` implements for `Out = Color` types as a sampled ramp
+  when the type has a colour `CpuMirror` (autoref specialisation in
+  `__private::MirrorProbe`; none for a generic impl or a type without a mirror).
+  A user-written `legend` wins: it is asked first.
+- `DynColumnEncoding::legend` (a column encoding keeps the extent it was fitted
+  to), used by `Layer::legends`.
+- Aftershocks golden: automatic legend; hand-placed helpers deleted from
+  `tests/common/legend.rs`. Re-blessed and read: ramp 0..40 km at the right.
+- Tests: `tests/chain_legend.rs` (3). One doctest on `EncodeFn::then` turns
+  legends off (the legend narrowed the plot so one disc covered a pixel the
+  doctest reads).
+
+## Retrospective
+
+**Completed**: 2026-10-17
+
+### Key Technical Learnings
+
+#### Two `legend` methods on one type
+
+- **Challenge**: `EncodeFn::legend` (story) clashes with `ShaderFn::legend` for
+  every scale: both traits are in the prelude.
+- **Solution**: rename the `EncodeFn` method `encode_legend`.
+- **Pattern**: a blanket impl's method names must differ from the wrapped
+  trait's when both traits are in scope.
+
+#### The default legend needs an extent
+
+- **Challenge**: the macro cannot see a user's `CpuMirror` impl, nor the fitted
+  extent, from `legend(&self)`.
+- **Solution**: autoref specialisation picks the mirror at the call site;
+  `sampled_legend(extent)` takes the extent from whoever fitted it (`Then`, or
+  the column encoding).
+- **Pattern**: ask `legend()` first, `sampled_legend` second.
+
+### Architectural Decisions
+
+#### Hidden `sampled_legend` instead of a macro-emitted `legend`
+
+- **Decision**: user-written `legend` overrides by being a different method, not
+  by the macro detecting it.
+- **Trade-off**: one more (hidden) `ShaderFn` method.
+
+### Development Workflow Insights
+
+- The doctest on `then` failed only because default legends narrow the plot.
+- `mask perf-budget` not run: machine load was above 4.
+- scene_items/svg goldens still place a gradient by hand: they test scene items,
+  not legends.
+
+### Follow-up Stories
+
+None.

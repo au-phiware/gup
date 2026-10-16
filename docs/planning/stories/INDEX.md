@@ -296,7 +296,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   S7g: bundle Inter SemiBold, add text weights to `gup-text`, and draw `Time`
   year ticks heavier than month ticks within the WASM budget. Deps: GUP-425 📋,
   GUP-407 ✅, GUP-418 ✅.
-- [GUP-437](GUP-437_RFC_001_S7h_Legends_For_Chains.md) 📋 — RFC-001 step S7h:
+- [GUP-437](GUP-437_RFC_001_S7h_Legends_For_Chains.md) ✅ — RFC-001 step S7h:
   ramp legends for `then` chains (ticks in data units) and sampled or
   user-supplied legends for `#[wgsl_function]` colour functions. Deps: GUP-426
   📋, GUP-420 ✅.

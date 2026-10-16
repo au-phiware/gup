@@ -349,6 +349,9 @@ pub trait EncodeFn: Clone + Send + Sync + 'static {
     ///
     /// let cx = Context::new_blocking()?;
     /// let mut plot = Plot::new();
+    /// // The legend would narrow the plot until Amsterdam's disc covers
+    /// // London's centre, which the pixel check below reads.
+    /// plot.legends(false);
     /// let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
     /// let area = Pow::sqrt().domain(0.0, 4e7);
     /// plot.add(Selection::<City, Circle>::new(cities.clone()))
