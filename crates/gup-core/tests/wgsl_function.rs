@@ -268,24 +268,34 @@ fn aftershocks_sized_by_energy() {
 /// S5b's adjustment for S5c: a user function over dictionary codes takes
 /// its key domain through `fit_keys`. One continent is highlighted;
 /// every other, and every missing continent, is grey.
+///
+/// GUP-431: the highlighted rows draw above the others by the emphasis
+/// recipe: they are a second layer, over the same scales, with a higher
+/// `z`. Each layer's function sees only its own keys, so the grey layer
+/// highlights nothing.
 #[test]
 fn one_key_highlighted_by_a_user_function() {
     let cx = Context::new_blocking().unwrap();
     let rows = continents::places();
+    let is_asia = |p: &Place| p.continent.as_deref() == Some("Asia");
+    let (asia, rest): (Vec<Place>, Vec<Place>) = rows.iter().cloned().partition(is_asia);
     let mut plot = Plot::new();
     let (x, y) = (
         plot.x(Linear::new().domain(0.0, 60_000.0)),
         plot.y(Log::new().domain(1e5, 1e9)),
     );
-    plot.title("Asia among the world's countries")
-        .add(Selection::<Place, Circle>::new(rows.clone()))
-        .attr(Circle::X, x.encode(|p: &Place| p.gdp_per_capita))
-        .attr(Circle::Y, y.encode(|p: &Place| p.population))
-        .attr(Circle::RADIUS, Px(continents::RADIUS))
-        .attr(
-            Circle::FILL,
-            Highlight::new("Asia").encode_nullable_key(|p: &Place| p.continent.as_deref()),
-        );
+    plot.title("Asia among the world's countries");
+    for (layer, z) in [(rest.clone(), 0), (asia.clone(), 1)] {
+        plot.add(Selection::<Place, Circle>::new(layer))
+            .attr(Circle::X, x.encode(|p: &Place| p.gdp_per_capita))
+            .attr(Circle::Y, y.encode(|p: &Place| p.population))
+            .attr(Circle::RADIUS, Px(continents::RADIUS))
+            .attr(
+                Circle::FILL,
+                Highlight::new("Asia").encode_nullable_key(|p: &Place| p.continent.as_deref()),
+            )
+            .z(z);
+    }
     let (image, layout) = plot.render_resolved(&cx, WIDTH, HEIGHT).unwrap();
 
     // Each centre is the accent colour exactly when its continent is Asia
@@ -293,37 +303,46 @@ fn one_key_highlighted_by_a_user_function() {
     for c in CONTINENTS {
         assert!(rows.iter().any(|p| p.continent.as_deref() == Some(c)));
     }
-    let centres: Vec<(f64, f64)> = rows
-        .iter()
-        .map(|p| (x.read().eval(p.gdp_per_capita), y.read().eval(p.population)))
-        .collect();
-    let (mut asia, mut checked) = (0, 0);
-    for (i, (p, &(px, py))) in rows.iter().zip(&centres).enumerate() {
-        let want = if p.continent.as_deref() == Some("Asia") {
-            asia += 1;
-            ACCENT
-        } else {
-            REST
-        };
-        // Discs draw in data order: skip a centre a later disc covers.
+    // Draw order: the grey layer, then the highlighted one (indices into
+    // `rows`).
+    let (asian, grey): (Vec<usize>, Vec<usize>) = (0..rows.len()).partition(|&i| is_asia(&rows[i]));
+    let drawn: Vec<usize> = grey.iter().chain(&asian).copied().collect();
+    let centre = |i: usize| {
+        let p = &rows[i];
+        (x.read().eval(p.gdp_per_capita), y.read().eval(p.population))
+    };
+    let (mut checked, mut lifted) = (0, 0);
+    for (k, &i) in drawn.iter().enumerate() {
+        let (px, py) = centre(i);
+        let want = if is_asia(&rows[i]) { ACCENT } else { REST };
+        // Skip a centre a disc drawn later covers.
         let reach = f64::from(continents::RADIUS) + 1.5;
-        if centres[i + 1..]
-            .iter()
-            .any(|&(qx, qy)| (qx - px).hypot(qy - py) < reach)
-        {
+        let covers = |j: usize| {
+            let (qx, qy) = centre(j);
+            (qx - px).hypot(qy - py) < reach
+        };
+        if drawn[k + 1..].iter().any(|&j| covers(j)) {
             continue;
+        }
+        // An Asian centre a grey disc would have covered in data order.
+        if is_asia(&rows[i]) && (i + 1..rows.len()).any(|j| !is_asia(&rows[j]) && covers(j)) {
+            lifted += 1;
         }
         let got = image.get_pixel(px as u32, py as u32).0;
         let w = want.to_rgba8();
         assert!(
             (0..3).all(|k| got[k].abs_diff(w[k]) <= 2),
             "{:?} drawn {got:?}",
-            p.continent
+            rows[i].continent
         );
         checked += 1;
     }
-    assert!(asia >= 20, "{asia} Asian countries");
+    assert!(asia.len() >= 20, "{} Asian countries", asia.len());
     assert!(checked >= 80, "{checked} centres checked");
+    assert!(
+        lifted > 0,
+        "no Asian centre was under a grey disc in data order"
+    );
 
     check(
         "gup_core/wgsl_function_highlight",

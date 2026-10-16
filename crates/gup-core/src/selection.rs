@@ -10,7 +10,10 @@ use crate::column::{ColumnFormat, ColumnStore};
 use crate::context::Context;
 use crate::encoding::{Encoding, IntoEncoding, Resource};
 use crate::error::{Error, Result};
-use crate::render::{ChunkDraw, LayerGpu, LayerUniforms, chunk_uniform_offset, chunk_uniforms};
+use crate::order::{DrawOrder, chunk_spans};
+use crate::render::{
+    ChunkDraw, Draws, LayerGpu, LayerUniforms, chunk_uniform_offset, chunk_uniforms,
+};
 use crate::scene::MarkBatch;
 use crate::shader::glue::{self, ChannelSource, ChunkBase, Glue, GlueChannel, GlueSpec};
 use crate::theme::Theme;
@@ -106,6 +109,9 @@ pub struct Selection<T, M: Mark> {
     encodings: Vec<Option<Encoding<T>>>,
     /// Evaluated columns, one per column-encoded channel in channel order.
     columns: Option<ColumnStore>,
+    /// The size-descending draw order of the stored rows, when the mark's
+    /// size channel is a column (GUP-431).
+    order: Option<DrawOrder>,
     /// A cap on rows per chunk below the device's (a test seam).
     max_chunk_rows: Option<u32>,
     /// GPU state from the last `prepare` and the LUTs it holds. Later
@@ -137,6 +143,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             z: 0,
             encodings: M::CHANNELS.iter().map(|_| None).collect(),
             columns: None,
+            order: None,
             max_chunk_rows: None,
             gpu: None,
             _mark: PhantomData,
@@ -171,7 +178,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         if let Some(store) = &mut self.columns {
             let new = &self.rows[start..];
             // The same columns, in the same order, as `column_encodings`.
-            let values = self
+            let mut values = self
                 .encodings
                 .iter_mut()
                 .filter_map(|e| match e {
@@ -179,7 +186,16 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
                     _ => None,
                 })
                 .collect::<Result<Vec<_>>>()?;
+            if let Some(order) = &mut self.order {
+                order.push_batch(&mut values);
+            }
             store.append(new.len(), &values)?;
+            // Appends interleaved with the stored rows into many draws:
+            // evaluate every row again, in one sorted run (while the rows
+            // are kept).
+            if self.released == 0 && self.order.as_ref().is_some_and(DrawOrder::needs_compaction) {
+                self.columns = None;
+            }
         }
         Ok(())
     }
@@ -204,6 +220,11 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
     /// Set the layer's draw order in a [`Plot`](crate::Plot) (default 0,
     /// within `-99..=99`): higher draws on top; equal `z` draws in the
     /// order the layers were added.
+    ///
+    /// Within a layer, rows draw in data order, or largest first when the
+    /// mark's size is encoded from a column. To draw emphasised rows (a
+    /// highlighted category, say) above the rest, give them a layer of
+    /// their own, over the same scales, with a higher `z`.
     pub fn z(&mut self, z: i32) -> &mut Self {
         self.z = z;
         self
@@ -286,7 +307,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
                 ));
             }
             let rows = &self.rows;
-            let values = self
+            let mut values = self
                 .encodings
                 .iter_mut()
                 .filter_map(|e| match e {
@@ -294,11 +315,51 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
                     _ => None,
                 })
                 .collect::<Result<Vec<_>>>()?;
+            self.order = self.size_order(&values);
+            if let Some(order) = &mut self.order {
+                order.push_batch(&mut values);
+            }
             let mut store = ColumnStore::new(formats, chunk_rows)?;
             store.append(self.rows.len(), &values)?;
             self.columns = Some(store);
         }
         Ok(self.columns.as_mut().expect("evaluated above"))
+    }
+
+    /// The draw order for columns `values`, when the mark's size channel
+    /// is one of them: largest first, by value, or by negated value when
+    /// the encoding maps a larger value to a smaller size (its image of
+    /// the values' extent, end by end; an encoding without an image is
+    /// taken as increasing).
+    fn size_order(&self, values: &[crate::column::ColumnData]) -> Option<DrawOrder> {
+        let mut column = 0;
+        for (d, e) in M::CHANNELS.iter().zip(&self.encodings) {
+            let Some(Encoding::Column(c)) = e else {
+                continue;
+            };
+            if d.role == Some(Role::Size) {
+                let (lo, hi) = match &values[column] {
+                    crate::column::ColumnData::Values(v) => v
+                        .iter()
+                        .filter(|v| v.is_finite())
+                        .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), &v| {
+                            (lo.min(v), hi.max(v))
+                        }),
+                    crate::column::ColumnData::Codes(_) => (0.0, 1.0),
+                };
+                let end = |v: f64| c.image((v, v)).map(|(a, _)| a);
+                let reversed = matches!((end(lo), end(hi)), (Some(a), Some(b)) if a > b);
+                return Some(DrawOrder::new(column, reversed));
+            }
+            column += 1;
+        }
+        None
+    }
+
+    /// The draw order of the stored rows, for tests.
+    #[cfg(test)]
+    pub(crate) fn draw_order(&self) -> Option<&DrawOrder> {
+        self.order.as_ref()
     }
 
     /// Two different shader functions with one WGSL import path (two
@@ -589,7 +650,13 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
                 .iter()
                 .map(|c| (c.buffer(cx).expect("uploaded above"), validity(c), c.rows()))
         };
-        let draws = || -> Vec<ChunkDraw> {
+        // Largest first when the size is a column; else each chunk in
+        // upload order.
+        let spans = match &self.order {
+            Some(order) => order.spans(store.chunks()),
+            None => chunk_spans(store.chunks()),
+        };
+        let chunk_draws = || -> Vec<ChunkDraw> {
             store
                 .chunks()
                 .iter()
@@ -612,7 +679,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         {
             // Zoom, pan and resize land here every frame: write the new
             // uniform values into the existing buffers.
-            if gpu.draws_chunks(uploaded()) {
+            if gpu.draws_chunks(uploaded(), &spans) {
                 gpu.write_uniforms(cx, &encodings, &chunks);
                 return Ok(MarkBatch {
                     gpu: Arc::clone(gpu),
@@ -621,6 +688,10 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             }
             // Appended rows: new chunk draws and `Chunk` entries over the
             // same encodings, which take their new values in place.
+            let draws = Draws {
+                chunks: chunk_draws(),
+                spans,
+            };
             #[cfg_attr(
                 target_arch = "wasm32",
                 expect(
@@ -629,7 +700,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
                               native; on wasm32 wgpu's handles are neither"
                 )
             )]
-            let grown = Arc::new(gpu.with_chunks(cx, &chunks, draws())?);
+            let grown = Arc::new(gpu.with_chunks(cx, &chunks, draws)?);
             grown.write_encodings(cx, &encodings);
             self.gpu = Some((Arc::clone(&grown), luts));
             return Ok(MarkBatch {
@@ -653,7 +724,14 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
                 chunks,
                 luts: luts.iter().map(Vec::as_slice).collect(),
             }
-            .build(cx, draws(), M::VERTICES_PER_INSTANCE)?,
+            .build(
+                cx,
+                Draws {
+                    chunks: chunk_draws(),
+                    spans,
+                },
+                M::VERTICES_PER_INSTANCE,
+            )?,
         );
         self.gpu = Some((Arc::clone(&gpu), luts));
         Ok(MarkBatch {

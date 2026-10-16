@@ -105,7 +105,9 @@ fn unit_is_an_f32_constant() {
     assert_eq!(<Unit as gup_core::GpuType>::WGSL, "f32");
 }
 
-/// AC3: twelve overlapping translucent bubbles with a thin stroke.
+/// AC3: twelve overlapping translucent bubbles with a thin stroke, in
+/// one layer whose radius is a column, so they draw largest first
+/// (GUP-431): every small bubble's outline is whole, on top.
 #[test]
 fn bubbles_with_translucent_fills_and_outlines() {
     let cx = Context::new_blocking().unwrap();
@@ -113,21 +115,31 @@ fn bubbles_with_translucent_fills_and_outlines() {
     plot.x(Linear::new().domain(0.0, 1.0));
     plot.y(Linear::new().domain(0.0, 1.0));
     plot.title("Overlapping bubbles");
-    let viridis = Sequential::viridis().domain(0.0, 1.0);
-    for i in 0..12u32 {
-        let t = f64::from(i) / 11.0;
-        let radius = 20.0 + 40.0 * ((i * 7) % 12) as f32 / 11.0;
-        let x = 130.0 + 460.0 * halton(i + 1, 2) as f32;
-        let y = 130.0 + 220.0 * halton(i + 1, 3) as f32;
-        plot.add(Selection::<(), Circle>::new(vec![()]))
-            .attr(Circle::X, Px(x))
-            .attr(Circle::Y, Px(y))
-            .attr(Circle::RADIUS, Px(radius))
-            .attr(Circle::FILL, viridis.eval(t))
-            .attr(Circle::FILL_OPACITY, Unit(0.6))
-            .attr(Circle::STROKE, Color::hex(0x333333))
-            .attr(Circle::STROKE_WIDTH, Px(1.5));
-    }
+    // (x, y, radius, colour), in pixels.
+    let bubbles: Vec<[f64; 4]> = (0..12u32)
+        .map(|i| {
+            [
+                130.0 + 460.0 * halton(i + 1, 2),
+                130.0 + 220.0 * halton(i + 1, 3),
+                20.0 + 40.0 * f64::from((i * 7) % 12) / 11.0,
+                f64::from(i) / 11.0,
+            ]
+        })
+        .collect();
+    let pixels = || Linear::new().domain(0.0, 1.0).range(Px(0.0), Px(1.0));
+    plot.add(Selection::<[f64; 4], Circle>::new(bubbles))
+        .attr(Circle::X, pixels().encode(|b: &[f64; 4]| b[0]))
+        .attr(Circle::Y, pixels().encode(|b: &[f64; 4]| b[1]))
+        .attr(Circle::RADIUS, pixels().encode(|b: &[f64; 4]| b[2]))
+        .attr(
+            Circle::FILL,
+            Sequential::viridis()
+                .domain(0.0, 1.0)
+                .encode(|b: &[f64; 4]| b[3]),
+        )
+        .attr(Circle::FILL_OPACITY, Unit(0.6))
+        .attr(Circle::STROKE, Color::hex(0x333333))
+        .attr(Circle::STROKE_WIDTH, Px(1.5));
     let resolved = plot.resolve(&cx, WIDTH as f32, HEIGHT as f32).unwrap();
     let image = ImageTarget::new(&cx, WIDTH, HEIGHT)
         .unwrap()

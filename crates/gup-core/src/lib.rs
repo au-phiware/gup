@@ -78,6 +78,7 @@ mod encoding;
 mod error;
 pub mod geom;
 pub mod marks;
+mod order;
 pub mod plot;
 mod render;
 pub mod scale;

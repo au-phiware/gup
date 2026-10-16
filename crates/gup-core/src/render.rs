@@ -84,6 +84,23 @@ pub(crate) struct ChunkDraw {
     pub validity: Option<wgpu::Buffer>,
 }
 
+/// One instanced draw: rows `rows` of chunk `chunk`. A layer draws its
+/// spans in order; one span per chunk draws rows in upload order, and a
+/// layer ordered by size draws them largest first (GUP-431).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct Span {
+    pub chunk: u32,
+    pub rows: std::ops::Range<u32>,
+}
+
+/// A layer's draws: its chunks' buffers and the spans of rows to draw,
+/// in draw order.
+#[derive(Clone, Debug)]
+pub(crate) struct Draws {
+    pub chunks: Vec<ChunkDraw>,
+    pub spans: Vec<Span>,
+}
+
 /// The `Encodings` uniform and LUTs (group 1): shared by every
 /// [`LayerGpu`] built for one program, so appending rows (new chunks)
 /// rebuilds only the chunk half.
@@ -104,6 +121,8 @@ pub(crate) struct LayerGpu {
     /// when the program reads validity bits (each chunk binds its own).
     chunk_bind_groups: Vec<wgpu::BindGroup>,
     pub chunks: Vec<ChunkDraw>,
+    /// The instanced draws, in order, over `chunks`.
+    pub spans: Vec<Span>,
     pub vertices_per_instance: u32,
 }
 
@@ -112,6 +131,7 @@ impl std::fmt::Debug for LayerGpu {
         f.debug_struct("LayerGpu")
             .field("signature", &self.program.glue.signature)
             .field("chunks", &self.chunks.len())
+            .field("spans", &self.spans.len())
             .field("instances", &self.instances())
             .finish_non_exhaustive()
     }
@@ -535,22 +555,17 @@ impl LayerUniforms<'_> {
     pub(crate) fn build(
         self,
         cx: &Context,
-        chunks: Vec<ChunkDraw>,
+        draws: Draws,
         vertices_per_instance: u32,
     ) -> Result<LayerGpu> {
         let signature = self.program.glue.signature.clone();
         cx.scoped(
             || format!("layer `{signature}` (uniforms and bind groups)"),
-            || Ok(self.build_unscoped(cx, chunks, vertices_per_instance)),
+            || Ok(self.build_unscoped(cx, draws, vertices_per_instance)),
         )
     }
 
-    fn build_unscoped(
-        self,
-        cx: &Context,
-        chunks: Vec<ChunkDraw>,
-        vertices_per_instance: u32,
-    ) -> LayerGpu {
+    fn build_unscoped(self, cx: &Context, draws: Draws, vertices_per_instance: u32) -> LayerGpu {
         let device = cx.device();
         let enc = cx.buffer_with_data(
             Upload::Uniform,
@@ -597,7 +612,7 @@ impl LayerUniforms<'_> {
             self.program,
             encodings,
             &self.chunks,
-            chunks,
+            draws,
             vertices_per_instance,
         )
     }
@@ -652,7 +667,7 @@ impl LayerGpu {
         program: Arc<GlueProgram>,
         encodings: Arc<EncodingsGpu>,
         chunk_bytes: &[u8],
-        chunks: Vec<ChunkDraw>,
+        Draws { chunks, spans }: Draws,
         vertices_per_instance: u32,
     ) -> Self {
         let chunk_buffer = cx.buffer_with_data(
@@ -696,6 +711,7 @@ impl LayerGpu {
             chunk_buffer,
             chunk_bind_groups,
             chunks,
+            spans,
             vertices_per_instance,
         }
     }
@@ -717,13 +733,15 @@ impl LayerGpu {
     }
 
     /// Whether the chunk draws are exactly `chunks` (same column and
-    /// validity buffers and instance counts), so a frame needs only
-    /// uniform writes.
+    /// validity buffers and instance counts) drawn as `spans`, so a frame
+    /// needs only uniform writes.
     pub(crate) fn draws_chunks<'a>(
         &self,
         mut chunks: impl ExactSizeIterator<Item = (&'a wgpu::Buffer, Option<&'a wgpu::Buffer>, u32)>,
+        spans: &[Span],
     ) -> bool {
-        chunks.len() == self.chunks.len()
+        self.spans == spans
+            && chunks.len() == self.chunks.len()
             && self
                 .chunks
                 .iter()
@@ -748,7 +766,7 @@ impl LayerGpu {
         &self,
         cx: &Context,
         chunk_bytes: &[u8],
-        chunks: Vec<ChunkDraw>,
+        draws: Draws,
     ) -> Result<Self> {
         let signature = &self.program.glue.signature;
         cx.scoped(
@@ -759,7 +777,7 @@ impl LayerGpu {
                     Arc::clone(&self.program),
                     Arc::clone(&self.encodings),
                     chunk_bytes,
-                    chunks,
+                    draws,
                     self.vertices_per_instance,
                 ))
             },
@@ -1272,14 +1290,16 @@ impl Prepared {
         self.clear
     }
 
-    /// Number of draw calls [`draw`](Self::draw) records: one per column
-    /// chunk of each data layer and one per guide or text batch. Tests pin
+    /// Number of draw calls [`draw`](Self::draw) records: one per span of
+    /// rows of each data layer (one per column chunk, unless the layer is
+    /// ordered by size and rows were appended) and one per guide or text
+    /// batch. Tests pin
     /// it as a deterministic proxy for GPU cost (`PERF_BUDGETS.md`).
     pub fn draw_calls(&self) -> usize {
         self.draws
             .iter()
             .map(|(_, draw)| match draw {
-                Draw::Marks { layer, .. } => layer.chunks.len(),
+                Draw::Marks { layer, .. } => layer.spans.len(),
                 Draw::Instanced { .. } | Draw::Text(_) => 1,
             })
             .sum()
@@ -1295,14 +1315,28 @@ impl Prepared {
                     pass.set_pipeline(pipeline);
                     pass.set_bind_group(0, &self.view_bind_group, &[]);
                     pass.set_bind_group(1, layer.enc_bind_group(), &[]);
-                    // One instanced draw per column chunk, with its own
-                    // `Chunk` entry (row base, relative bases).
-                    for (k, chunk) in layer.chunks.iter().enumerate() {
-                        pass.set_bind_group(2, layer.chunk_bind_group(k), &[chunk.dynamic_offset]);
-                        for (slot, range) in chunk.column_ranges.iter().enumerate() {
-                            pass.set_vertex_buffer(slot as u32, chunk.columns.slice(range.clone()));
+                    // One instanced draw per span of a chunk's rows, with
+                    // the chunk's `Chunk` entry (row base, relative bases)
+                    // and columns bound when the chunk changes.
+                    let mut bound = None;
+                    for span in &layer.spans {
+                        let k = span.chunk as usize;
+                        if bound != Some(k) {
+                            let chunk = &layer.chunks[k];
+                            pass.set_bind_group(
+                                2,
+                                layer.chunk_bind_group(k),
+                                &[chunk.dynamic_offset],
+                            );
+                            for (slot, range) in chunk.column_ranges.iter().enumerate() {
+                                pass.set_vertex_buffer(
+                                    slot as u32,
+                                    chunk.columns.slice(range.clone()),
+                                );
+                            }
+                            bound = Some(k);
                         }
-                        pass.draw(0..layer.vertices_per_instance, 0..chunk.instances);
+                        pass.draw(0..layer.vertices_per_instance, span.rows.clone());
                     }
                 }
                 Draw::Instanced {
@@ -1362,6 +1396,7 @@ impl LayerGpu {
             chunk_buffer: self.chunk_buffer.clone(),
             chunk_bind_groups: self.chunk_bind_groups.clone(),
             chunks: self.chunks.clone(),
+            spans: self.spans.clone(),
             vertices_per_instance: self.vertices_per_instance,
         }
     }
