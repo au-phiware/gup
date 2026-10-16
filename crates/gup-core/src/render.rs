@@ -71,17 +71,24 @@ impl std::fmt::Debug for GlueProgram {
     }
 }
 
-/// One column chunk's instanced draw.
+/// One draw entry's instanced draw: a column chunk's, or a polyline's
+/// bridge between two chunks (`order::draw_entries`).
 #[derive(Clone, Debug)]
 pub(crate) struct ChunkDraw {
-    /// The chunk's buffer and each vertex column's byte range in it.
+    /// The buffer of the chunk the entry's rows are in.
     pub columns: wgpu::Buffer,
-    pub column_ranges: Vec<std::ops::Range<u64>>,
+    /// Each vertex buffer slot's buffer and byte range, by slot: the
+    /// columns from the entry's first row, then a polyline's next-row
+    /// columns (in the same chunk, or in the next one for a bridge).
+    pub slots: Vec<(wgpu::Buffer, std::ops::Range<u64>)>,
     pub instances: u32,
-    /// Offset of the chunk's entry in the `Chunk` uniform buffer.
+    /// Offset of the entry in the `Chunk` uniform buffer.
     pub dynamic_offset: u32,
     /// The chunk's validity bits, if the program reads them.
     pub validity: Option<wgpu::Buffer>,
+    /// A polyline's next-row validity bits (the next chunk's for a
+    /// bridge), if the program reads them.
+    pub next_validity: Option<wgpu::Buffer>,
 }
 
 /// One instanced draw: rows `rows` of chunk `chunk`. A layer draws its
@@ -293,6 +300,9 @@ impl Context {
                 let mut chunk_entries = vec![uniform_entry(0, true)];
                 if glue.validity {
                     chunk_entries.push(validity_entry(1));
+                    if glue.polyline {
+                        chunk_entries.push(validity_entry(2));
+                    }
                 }
                 let chunk_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                     label: Some("gup chunk"),
@@ -357,10 +367,12 @@ impl Context {
                         label: Some(signature),
                         source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(&program.wgsl)),
                     });
-                let attributes: Vec<wgpu::VertexAttribute> = program
-                    .glue
+                let glue = &program.glue;
+                // The columns, then a polyline's next-row columns.
+                let attributes: Vec<wgpu::VertexAttribute> = glue
                     .columns
                     .iter()
+                    .chain(glue.successors.iter().map(|&c| &glue.columns[c]))
                     .enumerate()
                     .map(|(loc, (_, f))| wgpu::VertexAttribute {
                         format: f.vertex_format(),
@@ -684,11 +696,14 @@ impl LayerGpu {
                 size: wgpu::BufferSize::new(u64::from(program.chunk.span)),
             }),
         };
-        let bind_group = |validity: Option<&wgpu::Buffer>| {
+        let bind_group = |c: Option<&ChunkDraw>| {
             let mut entries = vec![uniform.clone()];
-            entries.extend(validity.map(|v| wgpu::BindGroupEntry {
-                binding: 1,
-                resource: v.as_entire_binding(),
+            let validity = c.into_iter().flat_map(|c| [&c.validity, &c.next_validity]);
+            entries.extend(validity.zip(1..).filter_map(|(v, binding)| {
+                v.as_ref().map(|v| wgpu::BindGroupEntry {
+                    binding,
+                    resource: v.as_entire_binding(),
+                })
             }));
             cx.device().create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("gup chunk"),
@@ -697,10 +712,7 @@ impl LayerGpu {
             })
         };
         let chunk_bind_groups = if program.glue.validity {
-            chunks
-                .iter()
-                .map(|c| bind_group(c.validity.as_ref()))
-                .collect()
+            chunks.iter().map(|c| bind_group(Some(c))).collect()
         } else {
             vec![bind_group(None)]
         };
@@ -1328,11 +1340,8 @@ impl Prepared {
                                 layer.chunk_bind_group(k),
                                 &[chunk.dynamic_offset],
                             );
-                            for (slot, range) in chunk.column_ranges.iter().enumerate() {
-                                pass.set_vertex_buffer(
-                                    slot as u32,
-                                    chunk.columns.slice(range.clone()),
-                                );
+                            for (slot, (buffer, range)) in chunk.slots.iter().enumerate() {
+                                pass.set_vertex_buffer(slot as u32, buffer.slice(range.clone()));
                             }
                             bound = Some(k);
                         }

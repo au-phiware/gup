@@ -17,6 +17,7 @@
 
 use std::ops::Range;
 
+use crate::channel::Geometry;
 use crate::column::{Chunk, ColumnData, NULL_CODE};
 use crate::render::Span;
 
@@ -201,6 +202,76 @@ pub(crate) fn chunk_spans(chunks: &[Chunk]) -> Vec<Span> {
             rows: 0..c.rows(),
         })
         .collect()
+}
+
+/// One of a layer's instanced draw entries: what one `Chunk` uniform entry
+/// and one set of bound columns describe.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct DrawEntry {
+    /// The chunk the instance's own row is in.
+    pub this: usize,
+    /// That row for instance 0, within the chunk.
+    pub first: u32,
+    /// The chunk a polyline's next row is in.
+    pub next: usize,
+    /// The next row for instance 0, within that chunk.
+    pub next_first: u32,
+    /// Instances the entry can draw.
+    pub instances: u32,
+}
+
+/// A layer's draw entries: one per chunk, its rows from the first; for a
+/// [`Geometry::Polyline`], one segment per row but the chunk's last (whose
+/// successor is in the next chunk), then one **bridge** per chunk boundary,
+/// the segment from chunk `k`'s last row to chunk `k + 1`'s first. A
+/// bridge binds the two rows' columns from their two buffers and takes
+/// each chunk's own origin, so the column store needs no overlap rows
+/// (RFC-001 "GUP-432 findings").
+pub(crate) fn draw_entries(geometry: Geometry, chunks: &[Chunk]) -> Vec<DrawEntry> {
+    let own = chunks.iter().enumerate().map(|(k, c)| DrawEntry {
+        this: k,
+        first: 0,
+        next: k,
+        next_first: 1,
+        instances: match geometry {
+            Geometry::Quad => c.rows(),
+            Geometry::Polyline => c.rows().saturating_sub(1),
+        },
+    });
+    match geometry {
+        Geometry::Quad => own.collect(),
+        Geometry::Polyline => own
+            .chain(chunks.windows(2).enumerate().map(|(k, pair)| DrawEntry {
+                this: k,
+                first: pair[0].rows() - 1,
+                next: k + 1,
+                next_first: 0,
+                instances: 1,
+            }))
+            .collect(),
+    }
+}
+
+/// A polyline's spans over [`draw_entries`], in data order: each chunk's
+/// own segments, then the bridge to the next chunk.
+pub(crate) fn polyline_spans(chunks: &[Chunk]) -> Vec<Span> {
+    let n = chunks.len();
+    let mut spans = Vec::with_capacity(2 * n);
+    for (k, c) in chunks.iter().enumerate() {
+        if c.rows() > 1 {
+            spans.push(Span {
+                chunk: k as u32,
+                rows: 0..c.rows() - 1,
+            });
+        }
+        if k + 1 < n {
+            spans.push(Span {
+                chunk: (n + k) as u32,
+                rows: 0..1,
+            });
+        }
+    }
+    spans
 }
 
 /// `k`'s bits as a `u32` whose order is `k`'s (`total_cmp`'s) order.

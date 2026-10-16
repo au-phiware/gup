@@ -282,6 +282,23 @@ pub enum Antialias {
     Msaa,
 }
 
+/// How a mark's instances map to rows (RFC-001 §3, GUP-432).
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub enum Geometry {
+    /// One quad per row: points, rects, segments.
+    #[default]
+    Quad,
+    /// One quad per pair of consecutive rows: a polyline, `N - 1` instances
+    /// for `N` rows. Each position (`X`, `Y` role) channel is read twice, at
+    /// the instance's row and at the next row: the mark's input struct ends
+    /// with one `<channel>_next` member per position channel, in channel
+    /// order, after the channels. Other channels are read at the instance's
+    /// row only. A null position on either row hides the instance, so a
+    /// null row breaks the line. Rows always draw in data order: a
+    /// polyline never sorts by size (GUP-431).
+    Polyline,
+}
+
 /// A mark: a WGSL module implementing the mark contract plus its channels.
 ///
 /// The contract (see `crates/gup-wgsl/library/circle.wgsl`): the module defines
@@ -309,6 +326,8 @@ pub trait Mark: Send + Sync + 'static {
     const VERTICES_PER_INSTANCE: u32;
     /// How the mark's edges are antialiased.
     const ANTIALIAS: Antialias = Antialias::Analytic;
+    /// How instances map to rows.
+    const GEOMETRY: Geometry = Geometry::Quad;
 }
 
 /// `[r, g, b, a]`: a WGSL `vec4<f32>` in a uniform.

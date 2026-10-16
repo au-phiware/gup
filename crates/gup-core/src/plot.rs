@@ -1024,6 +1024,65 @@ mod tests {
         assert_eq!(*after.get_pixel(x1, y1), *before.get_pixel(x1, y1));
     }
 
+    /// GUP-432 (AC4): a line hides both segments touching a row by its
+    /// validity bit, including across chunk boundaries (the bridge reads
+    /// the next chunk's bits). Rows 3 (the last of chunk 0), 5 (mid-chunk
+    /// in chunk 1) and 8 (the first of chunk 2) keep finite positions but
+    /// have their y bits cleared; the NaN in row 11 makes the store upload
+    /// bits.
+    #[test]
+    fn a_cleared_validity_bit_breaks_a_line() {
+        use crate::Line;
+        let cx = Context::new_blocking().unwrap();
+        let mut plot = Plot::new();
+        let (x, y) = (
+            plot.x(Linear::new().domain(-1.0, 12.0)),
+            plot.y(Linear::new().domain(0.0, 10.0)),
+        );
+        let mut rows: Vec<Pt> = (0..12)
+            .map(|i| (f64::from(i), if i % 2 == 0 { 2.0 } else { 8.0 }))
+            .collect();
+        rows[11].1 = f64::NAN;
+        plot.add(Selection::<Pt, Line>::new(rows.clone()))
+            .attr(Line::X, x.encode(|r: &Pt| r.0))
+            .attr(Line::Y, y.encode(|r: &Pt| r.1))
+            .attr(Line::WIDTH, Px(3.0))
+            .max_chunk_rows(4);
+        let white = image::Rgba([255, 255, 255, 255]);
+        let mid = |i: usize| {
+            let (a, b) = (rows[i], rows[i + 1]);
+            (
+                x.read().eval((a.0 + b.0) / 2.0) as u32,
+                y.read().eval((a.1 + b.1) / 2.0) as u32,
+            )
+        };
+        let (before, _) = plot.render_resolved(&cx, 400, 300).unwrap();
+        for i in 0..10 {
+            let (px, py) = mid(i);
+            assert_ne!(*before.get_pixel(px, py), white, "segment {i} not drawn");
+        }
+
+        let layer: &mut Selection<Pt, Line> = plot.layers[0].as_any_mut().downcast_mut().unwrap();
+        let store = layer.store_mut().unwrap();
+        for row in [3, 5, 8] {
+            store.clear_valid(row, 1);
+        }
+        let (after, _) = plot.render_resolved(&cx, 400, 300).unwrap();
+        for i in 0..10 {
+            let (px, py) = mid(i);
+            let hidden = [2, 3, 4, 5, 7, 8].contains(&i);
+            if hidden {
+                assert_eq!(*after.get_pixel(px, py), white, "segment {i} still drawn");
+            } else {
+                assert_eq!(
+                    *after.get_pixel(px, py),
+                    *before.get_pixel(px, py),
+                    "segment {i}"
+                );
+            }
+        }
+    }
+
     /// GUP-419 AC1: the dictionary hook end to end. Appending rows with a
     /// new key grows the categorical domain and its legend; the GPU learns
     /// of it through one uniform (the key count): the column writes are

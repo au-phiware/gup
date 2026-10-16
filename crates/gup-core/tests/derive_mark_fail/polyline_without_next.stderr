@@ -1,0 +1,5 @@
+error: `Segment`'s next-row position `x_next` is missing from `SegmentIn` in the WGSL of `gup::marks::segment`, which has: x, y, x_end, y_end, width, color
+  --> tests/derive_mark_fail/polyline_without_next.rs:12:5
+   |
+12 |     x: Px,
+   |     ^
