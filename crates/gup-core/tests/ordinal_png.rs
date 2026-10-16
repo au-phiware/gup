@@ -11,9 +11,8 @@
 
 mod common;
 
-use common::legend;
 use common::vr::{harness, layout_metadata, rgba8};
-use gup_core::geom::{self, Rect};
+use gup_core::geom::Rect;
 use gup_core::prelude::*;
 use gup_core::scene::{Item, ItemKind, RectPrim, Z_GRID};
 use gup_core::{ImageTarget, Layout, OKABE_ITO, Scene};
@@ -48,15 +47,21 @@ fn check(cx: &Context, case: &str, scene: &Scene, meta: LayoutMetadata) -> image
     image
 }
 
-/// The plot resolved `legend_width` narrower than the image, so a legend
-/// fits to its right.
-fn resolve(cx: &Context, plot: &mut Plot, legend_width: f32) -> (Scene, Layout) {
-    let resolved = plot
-        .resolve(cx, WIDTH as f32 - legend_width, HEIGHT as f32)
-        .unwrap();
-    let mut scene = resolved.scene;
-    scene.width = WIDTH as f32;
-    (scene, resolved.layout)
+/// The plot resolved at the image's size; it places its own legend.
+fn resolve(cx: &Context, plot: &mut Plot) -> (Scene, Layout) {
+    let resolved = plot.resolve(cx, WIDTH as f32, HEIGHT as f32).unwrap();
+    (resolved.scene, resolved.layout)
+}
+
+/// The legend's guide rectangles of `width` pixels, top-down.
+fn legend_guides(layout: &Layout, width: f32) -> Vec<Rect> {
+    let legend = layout.legend.expect("the plot placed a legend");
+    layout
+        .guides
+        .iter()
+        .copied()
+        .filter(|g| g.width == width && legend.contains_rect(g))
+        .collect()
 }
 
 #[derive(Clone)]
@@ -109,20 +114,18 @@ fn categorical_scatter_with_eleven_keys_and_a_legend() {
         .attr(Circle::X, x.encode(|b: &Bird| b.mass_g))
         .attr(Circle::Y, y.encode(|b: &Bird| b.span_cm))
         .attr(Circle::RADIUS, Px(4.5))
-        .attr(Circle::FILL, colour.encode_key(|b: &Bird| b.species));
-    let (mut scene, layout) = resolve(&cx, &mut plot, 110.0);
-    let swatches = colour.read().legend().swatches().to_vec();
+        .attr(Circle::FILL, colour.encode_key(|b: &Bird| b.species))
+        .legend_title(Circle::FILL, "Species");
+    let (scene, layout) = resolve(&cx, &mut plot);
+    let swatches = ColorScale::legend(&*colour.read()).swatches().to_vec();
     assert_eq!(swatches.len(), 11);
     assert_eq!(&*swatches[10].label, "Swan");
     for (s, c) in swatches.iter().zip(OKABE_ITO) {
         assert_eq!(s.color, c, "{}: the first 8 are Okabe-Ito", s.label);
     }
-    let placed = legend::swatches(
-        &mut scene,
-        &swatches,
-        geom::Point::new(layout.plot.right() + 24.0, layout.plot.top()),
-    );
-    let mut meta = legend::with_legend(layout_metadata(&layout), &placed);
+    let guides = legend_guides(&layout, 12.0);
+    assert_eq!(guides.len(), 11);
+    let mut meta = layout_metadata(&layout);
     for s in &swatches {
         meta = meta.with_expected_color(format!("{} swatch", s.label), rgba8(s.color));
     }
@@ -136,7 +139,7 @@ fn categorical_scatter_with_eleven_keys_and_a_legend() {
         .iter()
         .map(|b| (x.read().eval(b.mass_g), y.read().eval(b.span_cm)))
         .collect();
-    for (s, rect) in swatches.iter().zip(&placed.guides) {
+    for (s, rect) in swatches.iter().zip(&guides) {
         let last = rows.iter().rposition(|b| b.species == &*s.label).unwrap();
         let (px, py) = centres[last];
         let covered = centres[last + 1..]
@@ -188,23 +191,18 @@ fn diverging_temperature_anomaly_with_a_ramp_legend() {
         // Near-midpoint colours are near-white: an outline keeps them
         // visible on the white plot.
         .attr(Circle::STROKE, Color::hex(0x555555))
-        .attr(Circle::STROKE_WIDTH, Px(1.0));
-    let (mut scene, layout) = resolve(&cx, &mut plot, 70.0);
+        .attr(Circle::STROKE_WIDTH, Px(1.0))
+        .legend_title(Circle::FILL, "Anomaly (°C)");
+    let (scene, layout) = resolve(&cx, &mut plot);
     let [lo, mid, hi] = colour.read().current_domain().unwrap();
     assert_eq!(mid, 0.0);
     assert_eq!(lo, -hi, "the fitted domain is symmetric");
     let ramp = colour.read().ramp();
-    let bar = Rect::from_edges(
-        layout.plot.right() + 20.0,
-        layout.plot.top(),
-        layout.plot.right() + 34.0,
-        layout.plot.bottom(),
-    );
-    let placed = legend::ramp(&mut scene, &ramp, bar);
+    let bar = legend_guides(&layout, 14.0)[0];
     let (coldest, warmest) = rows.iter().fold((rows[0], rows[0]), |(c, w), &r| {
         (if r.1 < c.1 { r } else { c }, if r.1 > w.1 { r } else { w })
     });
-    let meta = legend::with_legend(layout_metadata(&layout), &placed)
+    let meta = layout_metadata(&layout)
         .with_expected_color("plot background", rgba8(Color::WHITE))
         .with_expected_color("coldest year", rgba8(colour.read().eval(coldest.1)))
         .with_expected_color("warmest year", rgba8(colour.read().eval(warmest.1)));
@@ -343,6 +341,7 @@ fn band_axis_labelled_by_enum_keys() {
     let cx = Context::new_blocking().unwrap();
     let rows = days();
     let mut plot = Plot::new();
+    plot.legends(false); // the band axis is the subject, not the fill
     let (x, y) = (plot.x(Band::new().padding(0.15)), plot.y(Linear::new()));
     plot.title("Daily highs by month (°C)")
         .add(Selection::<Day, Circle>::new(rows.clone()))

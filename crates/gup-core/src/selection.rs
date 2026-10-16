@@ -11,6 +11,7 @@ use crate::context::Context;
 use crate::encoding::{Encoding, IntoEncoding, Resource};
 use crate::error::{Error, Result};
 use crate::render::{ChunkDraw, LayerGpu, LayerUniforms, chunk_uniform_offset, chunk_uniforms};
+use crate::scale::Legend;
 use crate::scene::MarkBatch;
 use crate::shader::glue::{self, ChannelSource, ChunkBase, Glue, GlueChannel, GlueSpec};
 use crate::theme::Theme;
@@ -104,6 +105,8 @@ pub struct Selection<T, M: Mark> {
     /// Draw order among the plot's items (default 0).
     z: i32,
     encodings: Vec<Option<Encoding<T>>>,
+    /// Legend titles, by channel slot.
+    legend_titles: Vec<Option<String>>,
     /// Evaluated columns, one per column-encoded channel in channel order.
     columns: Option<ColumnStore>,
     /// A cap on rows per chunk below the device's (a test seam).
@@ -136,6 +139,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             retain: Retain::Auto,
             z: 0,
             encodings: M::CHANNELS.iter().map(|_| None).collect(),
+            legend_titles: vec![None; M::CHANNELS.len()],
             columns: None,
             max_chunk_rows: None,
             gpu: None,
@@ -237,6 +241,18 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         // S0a re-evaluates every column; per-column invalidation is S4.
         self.columns = None;
         self.gpu = None;
+        self
+    }
+
+    /// Title the legend of the colour encoded on `channel`, drawn above it
+    /// when the plot places the legend. Without a title, the legend has
+    /// none.
+    pub fn legend_title(
+        &mut self,
+        channel: Channel<M, crate::channel::Color>,
+        title: impl Into<String>,
+    ) -> &mut Self {
+        self.legend_titles[usize::from(channel.slot())] = Some(title.into());
         self
     }
 
@@ -437,6 +453,10 @@ pub(crate) trait Layer: wgpu::WasmNotSendSync {
     /// a successful [`prepare`](Self::prepare), so everything dropped is
     /// on the GPU.
     fn release(&mut self);
+    /// The legends of the layer's colour encodings, with their titles
+    /// (RFC-001 S7): each `Color`-role channel encoded by a column of one
+    /// link that has a legend. Chains have none.
+    fn legends(&self) -> Vec<(Option<String>, Legend)>;
     /// The generated glue (for tests and diagnostics).
     fn glue_source(&self) -> Glue;
     fn as_any_mut(&mut self) -> &mut dyn Any;
@@ -502,6 +522,22 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             overhang = overhang.max(r);
         }
         overhang
+    }
+
+    fn legends(&self) -> Vec<(Option<String>, Legend)> {
+        let mut out = Vec::new();
+        for (i, enc) in self.encodings.iter().enumerate() {
+            if M::CHANNELS[i].role != Some(Role::Color) {
+                continue;
+            }
+            if let Some(Encoding::Column(c)) = enc
+                && let [link] = c.links().as_slice()
+                && let Some(legend) = link.legend()
+            {
+                out.push((self.legend_titles[i].clone(), legend));
+            }
+        }
+        out
     }
 
     fn apply_theme(&mut self, theme: &Theme) {

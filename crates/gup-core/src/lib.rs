@@ -76,6 +76,7 @@ mod context;
 mod encoding;
 mod error;
 pub mod geom;
+mod guide;
 pub mod marks;
 pub mod plot;
 mod render;

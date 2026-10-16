@@ -152,6 +152,10 @@ impl<S: ShaderFn> ShaderFn for ScaleRef<S> {
         Some(&self.0.keys)
     }
 
+    fn legend(&self) -> Option<Legend> {
+        ShaderFn::legend(&*self.read())
+    }
+
     fn begin_fit(&self) {
         *self.0.fit.lock().unwrap_or_else(|p| p.into_inner()) = None;
     }
@@ -199,7 +203,7 @@ where
     S: ColorScale + CpuMirror<Output = <S as ShaderFn>::Out>,
 {
     fn legend(&self) -> Legend {
-        self.read().legend()
+        ColorScale::legend(&*self.read())
     }
 }
 

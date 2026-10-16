@@ -95,6 +95,10 @@ impl ShaderFn for Sequential {
     const MODULE: &'static WgslModule = &COLOR_SEQUENTIAL;
     const ENTRY: &'static str = "map";
 
+    fn legend(&self) -> Option<Legend> {
+        Some(ColorScale::legend(self))
+    }
+
     fn params(&self) -> SequentialParams {
         let (d0, inv) = self.norm();
         SequentialParams {

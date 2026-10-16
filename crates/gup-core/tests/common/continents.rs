@@ -46,6 +46,7 @@ pub fn places() -> Vec<Place> {
 /// The plot over `rows`, with its x and y scale handles.
 pub fn plot(rows: Vec<Place>) -> (Plot, ScaleRef<Linear>, ScaleRef<Log>) {
     let mut plot = Plot::new();
+    plot.legends(false);
     let (x, y) = (
         plot.x(Linear::new().domain(0.0, 60_000.0)),
         plot.y(Log::new().domain(1e5, 1e9)),

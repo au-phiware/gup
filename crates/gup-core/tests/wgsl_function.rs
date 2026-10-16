@@ -196,6 +196,8 @@ fn aftershocks_sized_by_energy() {
             .range(Px(1.5), Px(36.0)),
     );
     let depth = Sequential::viridis().domain(0.0, 40.0).reversed();
+    // The hand-placed legend stays until legends for chains (GUP-437).
+    plot.legends(false);
     plot.title("Aftershocks: area by energy released, colour by depth (km)")
         .add(Selection::<Quake, Circle>::new(quakes.clone()))
         .attr(Circle::X, x.encode(|q: &Quake| q.lon))

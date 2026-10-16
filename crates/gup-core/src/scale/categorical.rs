@@ -94,7 +94,7 @@ pub const MAX_PALETTE: usize = 2048;
 /// assert_eq!(centre(2.0), OKABE_ITO[1].to_rgba8());
 /// assert_eq!(centre(3.0), NULL_COLOR.to_rgba8());
 /// // The legend lists the keys, with the colours drawn.
-/// let legend = colour.read().legend();
+/// let legend = ColorScale::legend(&*colour.read());
 /// let swatches = legend.swatches();
 /// assert_eq!((&*swatches[1].label, swatches[1].color), ("Europe", OKABE_ITO[1]));
 /// # Ok::<(), gup_core::Error>(())
@@ -259,6 +259,10 @@ impl ShaderFn for Categorical {
     const MODULE: &'static WgslModule = &COLOR_CATEGORICAL;
     const ENTRY: &'static str = "map";
 
+    fn legend(&self) -> Option<Legend> {
+        Some(ColorScale::legend(self))
+    }
+
     fn params(&self) -> CategoricalParams {
         CategoricalParams {
             null_color: self.null_color,
@@ -395,7 +399,7 @@ mod tests {
         let mut c = Categorical::okabe_ito();
         let keys: Vec<Arc<str>> = ["Asia", "Europe", "Africa"].map(Arc::from).to_vec();
         c.fit_keys(&keys).unwrap();
-        let legend = c.legend();
+        let legend = ColorScale::legend(&c);
         let s = legend.swatches();
         assert_eq!(s.len(), 3);
         assert_eq!((&*s[2].label, s[2].color), ("Africa", OKABE_ITO[2]));

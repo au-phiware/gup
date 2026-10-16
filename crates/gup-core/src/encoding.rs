@@ -92,6 +92,13 @@ pub trait ShaderFn: Clone + Send + Sync + 'static {
         None
     }
 
+    /// The legend a plot draws for a colour encoding through this
+    /// function, if it has one: the colour scales override it. A chain
+    /// has none (see [`DynShaderFn::legend`]).
+    fn legend(&self) -> Option<crate::Legend> {
+        None
+    }
+
     /// Adopt the plot's theme (RFC-001 S7): a function that draws a
     /// theme colour (a [`Categorical`](crate::Categorical)'s null colour)
     /// takes it here, unless it was set explicitly. Called on every layer
@@ -257,7 +264,7 @@ pub trait EncodeFn: Clone + Send + Sync + 'static {
     /// // order; so is each legend swatch.
     /// let labels: Vec<_> = layout.texts.iter().map(|t| &*t.run.text).collect();
     /// assert!(labels.starts_with(&["2021", "2019", "2020"]), "{labels:?}");
-    /// let legend = colour.read().legend();
+    /// let legend = ColorScale::legend(&*colour.read());
     /// let swatches: Vec<_> = legend.swatches().iter().map(|s| &*s.label).collect();
     /// assert_eq!(swatches, ["mid", "high", "low"]);
     /// # Ok::<(), gup_core::Error>(())
@@ -983,6 +990,8 @@ pub trait DynShaderFn: Send + Sync {
     /// See [`ShaderFn::dictionary_slot`].
     #[doc(hidden)]
     fn dictionary_slot(&self) -> Option<&DictionarySlot>;
+    /// See [`ShaderFn::legend`].
+    fn legend(&self) -> Option<crate::Legend>;
     /// A stable description used in the pipeline cache key: everything
     /// that changes the generated WGSL, nothing that only changes uniforms.
     fn signature(&self) -> String;
@@ -1035,6 +1044,10 @@ impl<S: ShaderFn> DynShaderFn for S {
 
     fn begin_fit(&self) {
         ShaderFn::begin_fit(self);
+    }
+
+    fn legend(&self) -> Option<crate::Legend> {
+        ShaderFn::legend(self)
     }
 
     fn type_name(&self) -> &'static str {

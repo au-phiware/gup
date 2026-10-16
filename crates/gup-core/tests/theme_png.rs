@@ -129,6 +129,7 @@ fn a_categorical_null_colour_overrides_the_theme() {
 fn scatter(rows: Vec<Country>) -> Plot {
     let max_pop = rows.iter().map(|c| c.population).fold(0.0, f64::max);
     let mut plot = Plot::new();
+    plot.legends(false);
     let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
     let area = Pow::sqrt().domain(0.0, max_pop).range(Px(0.0), Px(28.0));
     plot.add(Selection::<Country, Circle>::new(rows))

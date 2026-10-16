@@ -34,9 +34,7 @@ fn shared_categorical_gives_a_key_one_colour_in_every_layer() {
     dot_layer(&mut plot, (&x, &y), &colour, a.clone());
     dot_layer(&mut plot, (&x, &y), &colour, b.clone());
     let (image, _) = plot.render_resolved(&cx, 600, 400).unwrap();
-    let swatches: Vec<_> = colour
-        .read()
-        .legend()
+    let swatches: Vec<_> = ColorScale::legend(&*colour.read())
         .swatches()
         .iter()
         .map(|s| s.label.to_string())
