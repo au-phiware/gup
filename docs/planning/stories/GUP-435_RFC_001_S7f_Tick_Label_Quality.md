@@ -95,6 +95,22 @@ Three tick-label problems recorded during S5, split out of
 
 (Orchestrator review of the GUP-429 `rect_bars` golden, 2026-10-16.)
 
+### AC5: Ticks span the axis when marks overhang
+
+- [ ] When marks overhang the plot (an encoded or constant `Size` channel, since
+      GUP-418), an automatic domain is widened in data units to cover the
+      overhang _before_ `nice()`, instead of only insetting the range. Ticks and
+      labels then run to both ends of each axis line. `bubble_stroke` (ticks
+      0.0–1.0 drawn across the middle, with long bare stretches of axis line
+      either side) and `sqrt_radius` are re-blessed and read by eye.
+- [ ] A domain the user fixed explicitly is never widened. The range inset
+      stays, and the axis line is drawn only over the range, so no bare stretch
+      appears.
+- [ ] A test checks that the first and last tick on each axis of `bubble_stroke`
+      lie within one tick step of the axis line's ends.
+
+(Orchestrator review of the GUP-430 `bubble_stroke` golden, 2026-10-16.)
+
 ## Decisions
 
 - **Log nice (base 10 only)**: `lo` = the largest of {1, 2, 5} × 10^k not above
