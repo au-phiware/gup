@@ -1,11 +1,13 @@
 // Copyright (C) 2024 Corin Lawson
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! `Plot`: shared x/y scales, one data layer, axes and a title, resolved
+//! `Plot`: shared x/y scales, data layers, axes and a title, resolved
 //! into a [`Layout`] and a [`Scene`] (RFC-001 §8–9, S0a subset).
 //!
-//! S0a scope: exactly one layer, left and bottom axes with tick labels, an
-//! optional title. Multiple layers with unioned domains, legends, grids,
+//! Any number of layers share the x/y scales, whose automatic domains
+//! union across layers and channels. S0a scope otherwise: left and bottom
+//! axes with tick labels, an
+//! optional title. Legends, grids,
 //! axis titles, themes and the object-safe `Chart` trait are RFC-001 S7.
 
 use crate::channel::{Mark, Px};
@@ -15,7 +17,7 @@ use crate::geom::{Point, Rect};
 use crate::scale::{DynPositionScale, PositionScale, ScaleRef};
 use crate::scene::{
     Anchor, HAlign, Item, ItemKind, Rule, Scene, TextRole, TextRun, TextStyle, VAlign, Z_AXES,
-    Z_TITLE,
+    Z_GRID, Z_TITLE,
 };
 use crate::selection::{Layer, Selection};
 #[cfg(not(target_arch = "wasm32"))]
@@ -207,19 +209,35 @@ impl Plot {
                 ));
             }
         };
-        let [layer] = self.layers.as_mut_slice() else {
+        if self.layers.is_empty() {
             return Err(Error::config(
                 "plot layers",
-                format!(
-                    "{} layers; S0a resolves exactly one (shared domains across layers arrive \
-                     in RFC-001 S7)",
-                    self.layers.len()
-                ),
+                "the plot has no layers; add one with `plot.add(..)`",
             ));
-        };
+        }
+        for (i, layer) in self.layers.iter().enumerate() {
+            if !(Z_GRID + 1..Z_AXES).contains(&layer.z()) {
+                return Err(Error::config(
+                    "layer z",
+                    format!(
+                        "layer {i} has z {}; marks must stay between the grid and the axes, \
+                         so z is in {}..={}",
+                        layer.z(),
+                        Z_GRID + 1,
+                        Z_AXES - 1
+                    ),
+                ));
+            }
+        }
 
         // 1–2. Domains from column stats, then nice.
-        layer.fit_domains(cx)?;
+        // Every scale clears its union once, then every layer fits into it.
+        for layer in &self.layers {
+            layer.begin_fit();
+        }
+        for layer in &mut self.layers {
+            layer.fit_domains(cx)?;
+        }
         for s in [x, y] {
             if s.is_auto() {
                 s.nice();
@@ -271,19 +289,23 @@ impl Plot {
         }
 
         // 5. Ranges, inset so marks on the domain edge stay inside.
-        let mark_overhang = layer.overhang();
+        let mark_overhang = self.layers.iter().map(|l| l.overhang()).fold(0.0, f32::max);
         let inset = mark_overhang + 1.0;
         x.set_range(Px(plot.left() + inset), Px(plot.right() - inset));
         y.set_range(Px(plot.bottom() - inset), Px(plot.top() + inset));
 
         // 6. Uniforms and columns, inside a GPU error scope (GUP-410).
-        let batch = cx.scoped(
-            || "layer resolution (column upload, uniforms)".to_owned(),
-            || layer.prepare(cx),
-        )?;
-        // Only after the upload succeeded: CPU data the layer's `Retain`
-        // policy does not keep.
-        layer.release();
+        let mut batches = Vec::with_capacity(self.layers.len());
+        for layer in &mut self.layers {
+            let batch = cx.scoped(
+                || "layer resolution (column upload, uniforms)".to_owned(),
+                || layer.prepare(cx),
+            )?;
+            // Only after the upload succeeded: CPU data the layer's
+            // `Retain` policy does not keep.
+            layer.release();
+            batches.push((layer.z(), batch));
+        }
 
         // 7. The scene.
         let mut scene = Scene::new(width, height, style::BACKGROUND);
@@ -364,11 +386,14 @@ impl Plot {
         let guides = rules.iter().map(Rule::bounds).collect();
 
         let clip = scene.add_clip(plot);
-        scene.push(Item {
-            z: 0,
-            clip: Some(clip),
-            kind: ItemKind::Marks(batch),
-        });
+        // Insertion order; `Scene::push` breaks z ties by it.
+        for (z, batch) in batches {
+            scene.push(Item {
+                z,
+                clip: Some(clip),
+                kind: ItemKind::Marks(batch),
+            });
+        }
         scene.push(Item {
             z: Z_AXES,
             clip: None,
@@ -624,7 +649,7 @@ mod tests {
         plot.x(Linear::new());
         plot.y(Log::new());
         let err = plot.resolve(&cx, 300.0, 200.0).unwrap_err();
-        assert!(err.to_string().contains("0 layers"), "{err}");
+        assert!(err.to_string().contains("plot.add(..)"), "{err}");
     }
 
     /// A row that counts its live copies through a shared token.

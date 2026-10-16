@@ -75,6 +75,12 @@ pub trait ShaderFn: Clone + Send + Sync + 'static {
         Vec::new()
     }
 
+    /// Start a fit pass: the next fits union from scratch. A function that
+    /// several channels or layers share (a [`ScaleRef`](crate::ScaleRef))
+    /// unions every extent fitted in a pass; the plot starts a pass on
+    /// every link before fitting any layer.
+    fn begin_fit(&self) {}
+
     /// Adopt `extent`, the extent of this function's input (the encoded
     /// column's data, or its image through the links before it), if this
     /// function has an automatic (data-driven) domain. Functions without
@@ -826,6 +832,8 @@ pub trait DynShaderFn: Send + Sync {
     fn chunk_base(&self, origin: f64) -> f64;
     /// See [`ShaderFn::resources`].
     fn resources(&self) -> Vec<Resource>;
+    /// See [`ShaderFn::begin_fit`].
+    fn begin_fit(&self);
     /// A stable description used in the pipeline cache key: everything
     /// that changes the generated WGSL, nothing that only changes uniforms.
     fn signature(&self) -> String;
@@ -870,6 +878,10 @@ impl<S: ShaderFn> DynShaderFn for S {
 
     fn resources(&self) -> Vec<Resource> {
         ShaderFn::resources(self)
+    }
+
+    fn begin_fit(&self) {
+        ShaderFn::begin_fit(self);
     }
 
     fn type_name(&self) -> &'static str {
