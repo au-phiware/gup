@@ -1,7 +1,7 @@
 // Copyright (C) 2024 Corin Lawson
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Marks. S0a has one: [`Circle`]. Rect, Rule and Segment/Line are RFC-001 S6.
+//! Marks: [`Circle`], [`Rect`] and [`Segment`] (RFC-001 S6). `Line` is GUP-432.
 
 use crate::channel::{Color, Px};
 
@@ -118,6 +118,64 @@ pub struct Rect {
 impl Rect {
     /// The default fill (`#0072B2`).
     pub const DEFAULT_FILL: Color = Color::hex(0x0072b2);
+}
+
+/// A straight line from `(x, y)` to `(x_end, y_end)` in logical pixels, with a
+/// real width and square caps (it extends `width / 2` past each end), edges
+/// antialiased analytically.
+///
+/// A reference rule is a segment with constant endpoints. A zero-length segment
+/// draws as a `width` square. Error bars:
+///
+/// ```
+/// use gup_core::prelude::*;
+///
+/// # fn main() -> gup_core::Result<()> {
+/// struct Obs {
+///     year: f64,
+///     lo: f64,
+///     hi: f64,
+/// }
+/// let rows = vec![Obs { year: 2020.0, lo: 1.0, hi: 3.0 }, Obs { year: 2021.0, lo: 2.0, hi: 5.0 }];
+///
+/// let mut plot = Plot::new();
+/// let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
+/// plot.add(Selection::<Obs, Segment>::new(rows))
+///     .attr(Segment::X, x.encode(|o: &Obs| o.year))
+///     .attr(Segment::X_END, x.encode(|o: &Obs| o.year))
+///     .attr(Segment::Y, y.encode(|o: &Obs| o.lo))
+///     .attr(Segment::Y_END, y.encode(|o: &Obs| o.hi));
+/// let cx = Context::new_blocking()?;
+/// let _ = plot.resolve(&cx, 400.0, 300.0)?;
+/// # Ok(())
+/// # }
+/// ```
+#[derive(Debug, gup_core_macros::Mark)]
+#[mark(module = "gup::marks::segment", geometry = Quad)]
+pub struct Segment {
+    /// Start x (logical pixels).
+    #[channel(role = X)]
+    x: Px,
+    /// Start y (logical pixels).
+    #[channel(role = Y)]
+    y: Px,
+    /// End x (logical pixels).
+    #[channel(role = X)]
+    x_end: Px,
+    /// End y (logical pixels).
+    #[channel(role = Y)]
+    y_end: Px,
+    /// Line width (logical pixels).
+    #[channel(default = Px(1.0))]
+    width: Px,
+    /// Colour, its alpha the opacity. Default Okabe-Ito blue.
+    #[channel(role = Color, default = Segment::DEFAULT_COLOR)]
+    color: Color,
+}
+
+impl Segment {
+    /// The default colour (`#0072B2`).
+    pub const DEFAULT_COLOR: Color = Color::hex(0x0072b2);
 }
 
 #[cfg(test)]

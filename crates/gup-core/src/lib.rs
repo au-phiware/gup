@@ -101,7 +101,7 @@ pub use encoding::{
     KeyMarker, KeySource, NullableKey, NullableOwnedKey, OwnedKey, Resource, ShaderFn, Then,
 };
 pub use error::{Error, Result};
-pub use marks::{Circle, CircleAttrs, Rect, RectAttrs};
+pub use marks::{Circle, CircleAttrs, Rect, RectAttrs, Segment, SegmentAttrs};
 pub use plot::{Layout, PlacedText, Plot, Resolved};
 pub use render::{PipelineStats, Prepared, Renderer, TargetDesc};
 pub use scale::{
@@ -257,7 +257,8 @@ pub mod prelude {
     pub use crate::{
         Band, Categorical, Circle, CircleAttrs, Color, ColorScale, Context, CpuMirror, Derived,
         Diverging, EncodeFn, Linear, Log, Mark, Plot, Point, PositionScale, Pow, Px, Rect,
-        RectAttrs, Retain, ScaleRef, Selection, Sequential, ShaderFn, Symlog, Time, wgsl_function,
+        RectAttrs, Retain, ScaleRef, Segment, SegmentAttrs, Selection, Sequential, ShaderFn,
+        Symlog, Time, wgsl_function,
     };
 }
 

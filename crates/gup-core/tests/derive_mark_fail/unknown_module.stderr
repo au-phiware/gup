@@ -1,4 +1,4 @@
-error: `gup::marks::nope` is not a module of Gup's library; its marks are: gup::marks::circle, gup::marks::rect
+error: `gup::marks::nope` is not a module of Gup's library; its marks are: gup::marks::circle, gup::marks::rect, gup::marks::segment
  --> tests/derive_mark_fail/unknown_module.rs:8:17
   |
 8 | #[mark(module = "gup::marks::nope", geometry = Quad)]
