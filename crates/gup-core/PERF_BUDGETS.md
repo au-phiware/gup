@@ -19,16 +19,17 @@ a target picked in advance.
 
 ## The development machine
 
-All timings were measured on 2026-10-10 (GUP-417) on:
+All timings were measured on 2026-10-10 (GUP-417) and, for the GPU pass at the
+new 1-sample default, on 2026-10-16 (GUP-421), on:
 
-| Part           | Value                                                           |
-| -------------- | --------------------------------------------------------------- |
-| GPU            | Intel HD Graphics 630 (KBL GT2), integrated, 350–1100 MHz       |
-| Driver         | Mesa 26.0.0, Vulkan (wgpu 27), Mesa's on-disk shader cache on   |
-| CPU            | Intel Core i7-7700HQ, 4 cores / 8 threads                       |
-| OS and display | Linux 6.18.54, niri (Wayland), 1920×1080 at 60.02 Hz, scale 1   |
-| Toolchain      | rustc 1.93.1 (`rust-toolchain.toml`), release profile           |
-| Story          | GUP-417; tree after GUP-415 (S4b), `DEFAULT_SAMPLES` = 4 (MSAA) |
+| Part           | Value                                                            |
+| -------------- | ---------------------------------------------------------------- |
+| GPU            | Intel HD Graphics 630 (KBL GT2), integrated, 350–1100 MHz        |
+| Driver         | Mesa 26.0.0, Vulkan (wgpu 27), Mesa's on-disk shader cache on    |
+| CPU            | Intel Core i7-7700HQ, 4 cores / 8 threads                        |
+| OS and display | Linux 6.18.54–55, niri (Wayland), 1920×1080 at 60.02 Hz, scale 1 |
+| Toolchain      | rustc 1.93.1 (`rust-toolchain.toml`), release profile            |
+| Story          | GUP-421; `DEFAULT_SAMPLES` = 1 (analytic antialiasing, no MSAA)  |
 
 On another machine the timing budgets do not apply: measure there first and
 compare against your own numbers, not these.
@@ -55,12 +56,12 @@ X) or `info` (printed, never fails).
 | Metric                            | Recorded  | Check     | Measured by                                       |
 | --------------------------------- | --------- | --------- | ------------------------------------------------- |
 | `zoom.size`                       | 1920x1080 | exact     | `zoom_bench` (fullscreen; other sizes: re-record) |
-| `zoom.samples`                    | 4         | exact     | `zoom_bench` (`DEFAULT_SAMPLES`)                  |
+| `zoom.samples`                    | 1         | exact     | `zoom_bench` (`DEFAULT_SAMPLES`)                  |
 | `zoom.gpu_clock.median_mhz`       | 350       | info      | `scripts/perf_budget.sh` (i915 sysfs)             |
-| `zoom.gpu_pass.median_ms`         | 3.89      | +20%      | `zoom_bench`, timestamp queries                   |
-| `zoom.gpu_pass.p95_ms`            | 6.30      | +25%      | `zoom_bench`, timestamp queries                   |
-| `zoom.cpu.median_ms`              | 0.76      | +20%      | `zoom_bench`, resolve + prepare + submit          |
-| `zoom.cpu.p95_ms`                 | 1.13      | +25%      | `zoom_bench`, resolve + prepare + submit          |
+| `zoom.gpu_pass.median_ms`         | 2.95      | +20%      | `zoom_bench`, timestamp queries                   |
+| `zoom.gpu_pass.p95_ms`            | 5.60      | +25%      | `zoom_bench`, timestamp queries                   |
+| `zoom.cpu.median_ms`              | 0.69      | +20%      | `zoom_bench`, resolve + prepare + submit          |
+| `zoom.cpu.p95_ms`                 | 0.86      | +25%      | `zoom_bench`, resolve + prepare + submit          |
 | `zoom.interval.median_ms`         | 4.91      | info      | `zoom_bench` (GPU-bound: follows the GPU pass)    |
 | `zoom.columns.bytes`              | 0         | exact     | `zoom_bench`, over the 600 measured frames        |
 | `zoom.columns.writes`             | 0         | exact     | `zoom_bench`                                      |
@@ -74,8 +75,8 @@ X) or `info` (printed, never fails).
 | `pipeline.link_create.cold_ms`    | 1.04      | <= 10     | `pipeline_timings`, its first run                 |
 | `pipeline.link_create.max_ms`     | 1.06      | info      | `pipeline_timings`                                |
 | `wasm.wgpu.gz_bytes`              | 41,712    | info      | `scripts/wasm_size.sh`, bare wgpu                 |
-| `wasm.scatter.gz_bytes`           | 300,913   | +2%       | `scripts/wasm_size.sh`, the reference scatter     |
-| `wasm.over_wgpu.gz_bytes`         | 259,201   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10       |
+| `wasm.scatter.gz_bytes`           | 302,929   | +2%       | `scripts/wasm_size.sh`, the reference scatter     |
+| `wasm.over_wgpu.gz_bytes`         | 261,217   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10       |
 
 A legitimate change that moves a number (a new guide, a bigger feature) records
 the new value here, in the same commit, with the reason in the story.
@@ -90,24 +91,28 @@ cargo run -p gup-core --release --example zoom_bench -- --present mailbox --unca
 
 100,000 points (linear x, log y, viridis fill, radius 3 px) in a borderless
 fullscreen window, both domains zoomed every frame, 60 warm-up and 600 measured
-frames; the render pass is timed with `TIMESTAMP_QUERY`. Recorded: the median of
-six alternating runs' medians (3.73–4.14 ms) and p95s (5.97–6.79 ms) at the
-default 4× MSAA. Tolerance +20% on the median and +25% on the p95, whose runs
-spread by up to 15% between sessions; that still catches a regression the size
-of S0b→S4a's (+30%, which [GUP-417](#history) traced to MSAA).
+frames; the render pass is timed with `TIMESTAMP_QUERY`. Recorded (GUP-421): the
+median of six runs' medians (2.61–3.00 ms) and p95s (4.67–5.88 ms) at the
+default single sample, at the clock floor (350–417 MHz), close to GUP-417's 1×
+figures (3.02 / 5.87 ms). Four runs at `--samples 4` alternating with them
+measured 4.52–4.60 ms median and 8.50–8.87 ms p95 (clock 367–400 MHz). Tolerance
++20% on the median and +25% on the p95, whose runs spread by up to 15% between
+sessions; that still catches a regression the size of S0b→S4a's (+30%, which
+[GUP-417](#history) traced to MSAA).
 
 | Configuration (same machine, Mailbox uncapped, 6 runs each) | GPU pass median (ms) | GPU pass p95 (ms) |
 | ----------------------------------------------------------- | -------------------: | ----------------: |
 | S0b's tree (`e6bba47`, before MSAA)                         |          2.76 – 3.01 |       5.36 – 6.36 |
 | this tree, `--samples 1`                                    |          2.94 – 3.04 |       4.62 – 6.38 |
-| this tree, `--samples 4` (the default)                      |          3.73 – 4.14 |       5.97 – 6.79 |
+| this tree, `--samples 4` (the default until GUP-421)        |          3.73 – 4.14 |       5.97 – 6.79 |
 
 ### CPU time per frame
 
 The same `zoom_bench` run: `Plot::resolve` + `Renderer::prepare` + encode,
-submit and present, without the wait for a swapchain image. Recorded 0.76 ms
-median, 1.13 ms p95 (six runs: 0.75–0.77 and 1.10–1.15). The CPU is mostly idle:
-the loop is GPU-bound.
+submit and present, without the wait for a swapchain image. Recorded 0.69 ms
+median, 0.86 ms p95: GUP-417's six runs at one sample, which GUP-421 made the
+default (at 4×: 0.76 and 1.13 ms). GUP-421's `perf-budget` runs measured 0.58
+and 0.70 ms. The CPU is mostly idle: the loop is GPU-bound.
 
 ### Uploads per frame during a steady zoom
 
@@ -176,6 +181,9 @@ The scene, a user transfer function chained into `Pow::sqrt()` and a user colour
 function whose `Params` hold colours, written with `#[wgsl_function]` and
 checked against their mirrors, costs 4,866 B (+1.6%).
 
+GUP-421 re-recorded it at 302,929 B (from 300,913): the `gup::coverage` library
+module and the rule and rect shaders that use it (+2,016 B, +0.7%).
+
 ## CI-side proxies
 
 Deterministic checks that run on every push (the Tests and Visual regression
@@ -219,3 +227,9 @@ seeded violation (GUP-417 retrospective).
   ms, 88 uniform bytes and 0 column bytes per frame, link and create 0.94 ms
   median (cold 1.08 ms). A third, complete run passed every check with the clock
   boosted (750 MHz). The reference scatter's glue is unchanged.
+- **GUP-421** made rules and rects antialias analytically and `DEFAULT_SAMPLES`
+  1, and re-recorded the GPU pass (2.95 ms median, 5.60 ms p95, from 3.89 and
+  6.30 at 4×), the CPU time (GUP-417's 1× figures) and the WASM scatter (+2,016
+  B gz). Two complete `perf-budget` runs (GPU clock median 367 MHz) passed every
+  check: GPU pass 3.00 and 2.95 ms median, CPU 0.58 ms, 88 uniform bytes and 0
+  column bytes per frame, link and create 1.04 and 0.96 ms median.
