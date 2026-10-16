@@ -74,8 +74,17 @@ impl DrawOrder {
                 .collect(),
         };
         let n = keys.len();
-        let mut perm: Vec<u32> = (0..n as u32).collect();
-        perm.sort_by(|&a, &b| keys[b as usize].total_cmp(&keys[a as usize]));
+        // Largest first and, for equal keys, data order: sort each row's
+        // inverted, order-preserving key bits above its index (an unstable
+        // sort of `u64`s is several times faster than a stable sort by
+        // `f32`).
+        let mut packed: Vec<u64> = keys
+            .iter()
+            .enumerate()
+            .map(|(i, &k)| (u64::from(!ordered_bits(k)) << 32) | i as u64)
+            .collect();
+        packed.sort_unstable();
+        let perm: Vec<u32> = packed.into_iter().map(|p| p as u32).collect();
         if perm.iter().enumerate().any(|(i, &p)| i as u32 != p) {
             for column in columns.iter_mut() {
                 permute(column, &perm);
@@ -192,6 +201,16 @@ pub(crate) fn chunk_spans(chunks: &[Chunk]) -> Vec<Span> {
             rows: 0..c.rows(),
         })
         .collect()
+}
+
+/// `k`'s bits as a `u32` whose order is `k`'s (`total_cmp`'s) order.
+fn ordered_bits(k: f32) -> u32 {
+    let bits = k.to_bits();
+    if bits >> 31 == 1 {
+        !bits
+    } else {
+        bits | 1 << 31
+    }
 }
 
 fn permute(column: &mut ColumnData, perm: &[u32]) {

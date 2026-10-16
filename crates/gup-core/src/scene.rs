@@ -152,7 +152,9 @@ impl MarkBatch {
         self.gpu.instances()
     }
 
-    /// Number of column chunks, each drawn by one instanced draw.
+    /// Number of column chunks. Each is one instanced draw, unless the
+    /// layer draws its rows largest first and appended rows interleave
+    /// with the stored ones (see [`Prepared::draw_calls`](crate::Prepared::draw_calls)).
     pub fn chunks(&self) -> usize {
         self.gpu.chunks.len()
     }
