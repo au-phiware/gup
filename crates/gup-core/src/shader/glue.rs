@@ -24,7 +24,6 @@ use super::{StructLayout, VIEW, WgslModule};
 use crate::channel::Role;
 use crate::column::{ColumnFormat, NULL_CODE};
 use crate::encoding::{DynShaderFn, Resource};
-use crate::scale::NULL_COLOR;
 use std::fmt::{self, Write as _};
 
 /// Where a channel's value comes from.
@@ -176,16 +175,19 @@ impl fmt::Display for Expr {
                 f.write_str(")")
             }
             Expr::OrNull { expr, plane } => {
-                let [r, g, b, a] = NULL_COLOR.to_array();
                 write!(
                     f,
-                    "select(vec4<f32>({r:?}, {g:?}, {b:?}, {a:?}), {expr}, {})",
+                    "select(enc.{NULL_COLOR_FIELD}, {expr}, {})",
                     valid(*plane)
                 )
             }
         }
     }
 }
+
+/// The `Encodings` field that holds the theme's null colour, present
+/// when any channel is an [`Expr::OrNull`].
+pub(crate) const NULL_COLOR_FIELD: &str = "null_color";
 
 /// Whether validity plane `plane` is set for this row.
 fn valid(plane: usize) -> String {
@@ -358,6 +360,11 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
                 signature_parts.push(format!("{}: {}", ch.name, chain.join(" then ")));
             }
         }
+    }
+    // A null colour input reads the theme's colour from a uniform field,
+    // so the source never depends on the colour.
+    if exprs.iter().any(|(_, e)| matches!(e, Expr::OrNull { .. })) {
+        fields.push((NULL_COLOR_FIELD.to_string(), "vec4<f32>".to_string(), 16));
     }
     // Validity bits only when the columns have a null (and only numeric
     // columns have bits).

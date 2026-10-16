@@ -61,39 +61,39 @@ for `Time` year ticks to
 
 ### AC1: `Theme` reproduces today's styling
 
-- [ ] `gup_core::Theme` (crate root and prelude) exists with the fields in
+- [x] `gup_core::Theme` (crate root and prelude) exists with the fields in
       Decisions; `Theme::default()` equals the old `style` values and
       `NULL_COLOR` (unit test, field by field).
-- [ ] The `style` module is deleted; `resolve` reads `self.theme`.
-- [ ] Every existing gup-core golden passes without re-blessing.
+- [x] The `style` module is deleted; `resolve` reads `self.theme`.
+- [x] Every existing gup-core golden passes without re-blessing.
 
 ### AC2: Themed null colour
 
-- [ ] `Plot::theme(&mut self, theme: Theme) -> &mut Self`. With
+- [x] `Plot::theme(&mut self, theme: Theme) -> &mut Self`. With
       `null_color = #FF00FF`: a `Sequential` fill with a NaN row draws that
       row's centre in `#FF00FF` within 2/255, and a `Categorical`
       `encode_nullable_key` fill with a `None` row draws in `#FF00FF` within
       2/255.
-- [ ] `Categorical::null_color(self, c: Color) -> Self` overrides the theme for
+- [x] `Categorical::null_color(self, c: Color) -> Self` overrides the theme for
       that scale (test: theme `#FF00FF`, scale `#00FF00`, the categorical null
       row draws `#00FF00`).
 
 ### AC3: Axis titles
 
-- [ ] `Plot::x_title(&mut self, t: impl Into<String>) -> &mut Self` and
+- [x] `Plot::x_title(&mut self, t: impl Into<String>) -> &mut Self` and
       `Plot::y_title(..)`, placed as in Decisions.
-- [ ] Golden `gup_core/axis_titles` (720×450): the `sqrt_radius` scatter with
+- [x] Golden `gup_core/axis_titles` (720×450): the `sqrt_radius` scatter with
       title "Wealth and health", x title "GDP per capita (US$)" and y title
       "Life expectancy (years)". A test asserts every pair of `layout.texts` ink
       boxes is disjoint, every box lies inside the canvas, and no axis title box
       intersects `layout.plot`.
-- [ ] Read by eye: titles legible, the x title centred under the x tick labels,
+- [x] Read by eye: titles legible, the x title centred under the x tick labels,
       the y title above the y axis, left-aligned. The retrospective describes
       the PNG.
 
 ### AC4: Long titles are truncated
 
-- [ ] A 300-character x title on a 320×200 plot resolves without error; its
+- [x] A 300-character x title on a 320×200 plot resolves without error; its
       run's text ends in "…" and its ink box fits within the plot width. The
       chart title and y title follow the same rule (test each).
 
@@ -152,12 +152,12 @@ for `Time` year ticks to
 
 ## Technical Tasks
 
-- [ ] Add `theme.rs`; replace `style` with `Plot::theme`.
-- [ ] Glue `null_color` field; `Layer::prepare` takes the theme.
-- [ ] `apply_theme` through `ShaderFn`, `EncodeFn`, `Then`, `DynColumnEncoding`,
+- [x] Add `theme.rs`; replace `style` with `Plot::theme`.
+- [x] Glue `null_color` field; `Layer::prepare` takes the theme.
+- [x] `apply_theme` through `ShaderFn`, `EncodeFn`, `Then`, `DynColumnEncoding`,
       `KeyEncoded`, `ScaleRef`, `Layer`; `Categorical`'s field and builder.
-- [ ] Axis titles, truncation helper, `TextRole::AxisTitle`.
-- [ ] Tests for AC1–AC4; golden `axis_titles`.
+- [x] Axis titles, truncation helper, `TextRole::AxisTitle`.
+- [x] Tests for AC1–AC4; golden `axis_titles`.
 
 ## Dependencies
 
@@ -182,7 +182,7 @@ for `Time` year ticks to
 
 ## Success Metrics
 
-- [ ] No hard-coded style constants remain in `plot.rs`.
+- [x] No hard-coded style constants remain in `plot.rs`.
 
 ## Risk Assessment
 
@@ -191,10 +191,60 @@ for `Time` year ticks to
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (golden image or PNG read), if visual
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye (golden image or PNG read), if visual
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `theme.rs`: `Theme` (crate root, prelude); `plot::style` deleted;
+  `Plot::theme`, `x_title`, `y_title`; `TextRole::AxisTitle`; `fit_text`.
+- Null colour: the glue declares `null_color: vec4<f32>` in `Encodings` only
+  when it emits an `OrNull` (programs without nulls keep their layout);
+  `Layer::prepare(cx, theme)` writes it. `apply_theme` runs through `ShaderFn`
+  (provided), `EncodeFn`, `Then`, `DynColumnEncoding`, `KeyEncoded`, `ScaleRef`,
+  `Layer`; `Categorical::null_color` overrides the theme.
+- Tests: `tests/theme_png.rs` (5: both null colours, override, axis-title
+  placement and golden, truncation), `theme::tests`, `plot::tests` `fit_text`.
+  New golden `tests/golden/gup_core/axis_titles.png`; no existing golden
+  changed. gup-core: all tests pass; `mask old-path-loc` 28,910.
+
+## Retrospective
+
+**Completed**: 2026-10-16
+
+### Key Technical Learnings
+
+#### Null colour as a uniform, not a literal
+
+- **Challenge**: the glue printed `NULL_COLOR` as a WGSL literal.
+- **Solution**: a conditional `null_color` field in `Encodings`; only programs
+  with an `OrNull` gain it, so no existing layout moved.
+- **Pattern**: theme values reach shaders through uniforms so glue text (and the
+  pipeline cache key) stays independent of them.
+
+#### Axis titles
+
+- Rendered `axis_titles.png` (720x450): "Wealth and health" centred at the top;
+  "Life expectancy (years)" left-aligned at the left edge just above the y axis;
+  "GDP per capita (US$)" centred under the x tick labels. All legible and
+  disjoint; the y title clears the top tick label.
+
+### Architectural Decisions
+
+- Theme application happens once per resolve before fitting, so a `Categorical`
+  adopts the theme unless `null_color` was set explicitly.
+- Trade-off: `Plot::resolve` clones the `Theme` (small, cheap).
+
+### Development Workflow Insights
+
+- The worktree sandbox rejects compound commands with heredocs plus `cd`; write
+  scripts with the Write tool and run them separately.
+
+### Follow-up Stories
+
+None.

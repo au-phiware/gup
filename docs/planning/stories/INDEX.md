@@ -258,7 +258,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   RFC-001 step S7a: `Plot::resolve` over several layers, with a per-resolve fit
   pass on `ScaleRef` that unions domains across every channel and layer, and
   per-layer `.z()`. Deps: GUP-419 ✅, GUP-414 ✅, GUP-401 ✅.
-- [GUP-425](GUP-425_RFC_001_S7b_Theme_And_Axis_Titles.md) 📋 — RFC-001 step S7b:
+- [GUP-425](GUP-425_RFC_001_S7b_Theme_And_Axis_Titles.md) ✅ — RFC-001 step S7b:
   a `Theme` replacing the hard-coded `style` constants, a themable null colour
   in the glue and `Categorical`, and x/y axis titles with truncation. Deps:
   GUP-424 📋, GUP-419 ✅.

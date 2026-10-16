@@ -13,6 +13,7 @@ use crate::error::{Error, Result};
 use crate::render::{ChunkDraw, LayerGpu, LayerUniforms, chunk_uniform_offset, chunk_uniforms};
 use crate::scene::MarkBatch;
 use crate::shader::glue::{self, ChannelSource, ChunkBase, Glue, GlueChannel, GlueSpec};
+use crate::theme::Theme;
 use std::any::Any;
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -427,7 +428,11 @@ pub(crate) trait Layer: wgpu::WasmNotSendSync {
     /// radius), in pixels.
     fn overhang(&self) -> f32;
     /// Generate the glue, link it (cached), write uniforms and upload.
-    fn prepare(&mut self, cx: &Context) -> Result<MarkBatch>;
+    fn prepare(&mut self, cx: &Context, theme: &Theme) -> Result<MarkBatch>;
+    /// Apply the plot's theme to every column encoding (see
+    /// [`ShaderFn::apply_theme`](crate::ShaderFn::apply_theme)). Called
+    /// before fitting.
+    fn apply_theme(&mut self, theme: &Theme);
     /// Drop the CPU data the [`Retain`] policy does not keep. Called after
     /// a successful [`prepare`](Self::prepare), so everything dropped is
     /// on the GPU.
@@ -498,7 +503,15 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         overhang
     }
 
-    fn prepare(&mut self, cx: &Context) -> Result<MarkBatch> {
+    fn apply_theme(&mut self, theme: &Theme) {
+        for enc in self.encodings.iter_mut().flatten() {
+            if let Encoding::Column(c) = enc {
+                c.apply_theme(theme);
+            }
+        }
+    }
+
+    fn prepare(&mut self, cx: &Context, theme: &Theme) -> Result<MarkBatch> {
         self.check_module_paths()?;
         let glue = self.glue();
         let program = cx.program(&glue)?;
@@ -525,6 +538,16 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
                     write_field(&mut encodings, &program.encodings, desc.name, &bytes)?;
                 }
             }
+        }
+        // The theme's null colour, when the glue reads one.
+        if program.encodings.offset(glue::NULL_COLOR_FIELD).is_some() {
+            let bytes = bytemuck::bytes_of(&theme.null_color);
+            write_field(
+                &mut encodings,
+                &program.encodings,
+                glue::NULL_COLOR_FIELD,
+                bytes,
+            )?;
         }
         // The LUTs, in binding order.
         for lut in &glue.luts {
@@ -795,7 +818,7 @@ mod tests {
         }
         assert!(bases[0] < bases[1] && bases[1] < bases[2], "{bases:?}");
 
-        let batch = sel.prepare(&cx).unwrap();
+        let batch = sel.prepare(&cx, &Theme::default()).unwrap();
         let offsets: Vec<_> = batch.gpu.chunks.iter().map(|c| c.dynamic_offset).collect();
         assert_eq!(offsets, [0, 256, 512]);
         assert_eq!(batch.instances(), 20);
@@ -810,7 +833,7 @@ mod tests {
         let mut sel = reference();
         sel.max_chunk_rows(16);
         sel.fit_domains(&cx).unwrap();
-        let first = sel.prepare(&cx).unwrap();
+        let first = sel.prepare(&cx, &Theme::default()).unwrap();
         let start = cx.upload_stats();
         sel.append((21..=40).map(|i| {
             let i = f64::from(i);
@@ -822,7 +845,7 @@ mod tests {
         }))
         .unwrap();
         sel.fit_domains(&cx).unwrap();
-        let grown = sel.prepare(&cx).unwrap();
+        let grown = sel.prepare(&cx, &Theme::default()).unwrap();
         let written = cx.upload_stats() - start;
         // Three columns of 20 rows.
         assert_eq!(written.columns.bytes, 20 * 3 * 4, "{written:?}");
@@ -835,7 +858,7 @@ mod tests {
         assert!(Arc::ptr_eq(first.gpu.encodings(), grown.gpu.encodings()));
 
         let start = cx.upload_stats();
-        let again = sel.prepare(&cx).unwrap();
+        let again = sel.prepare(&cx, &Theme::default()).unwrap();
         let written = cx.upload_stats() - start;
         assert!(Arc::ptr_eq(&grown.gpu, &again.gpu));
         assert_eq!(written.columns, Default::default());
@@ -1148,7 +1171,7 @@ mod tests {
         // The radius chain ends in `Sqrt` onto 2..12 px: marks overhang
         // their positions by up to 12 px.
         assert!((sel.overhang() - 12.0).abs() < 1e-4, "{}", sel.overhang());
-        let batch = sel.prepare(&cx).unwrap();
+        let batch = sel.prepare(&cx, &Theme::default()).unwrap();
         assert_eq!(batch.instances(), 20);
     }
 
@@ -1262,7 +1285,7 @@ mod tests {
         assert_eq!(Some(glue.chunk.clone()), struct_layout(&linked, "Chunk"));
         // Two planes (x, y); the dictionary column has none.
         assert!(glue.source.contains("(instance_index / 32u) * 2u"));
-        let batch = sel.prepare(&cx).unwrap();
+        let batch = sel.prepare(&cx, &Theme::default()).unwrap();
         assert_eq!(batch.instances(), 40);
         assert!(batch.gpu.chunks.iter().all(|c| c.validity.is_some()));
     }
@@ -1276,7 +1299,7 @@ mod tests {
         sel.fit_domains(&cx).unwrap();
         let glue = sel.glue();
         assert!(glue.source.contains(
-            "m.fill = select(vec4<f32>(0.6, 0.6, 0.6, 1.0), sequential::map(col.fill, enc.fill, \
+            "m.fill = select(enc.null_color, sequential::map(col.fill, enc.fill, \
              fill_lut, fill_smp), ((validity[valid_group + 2u] >> valid_bit) & 1u) == 1u);"
         ));
         assert!(glue.source.contains(
@@ -1286,7 +1309,7 @@ mod tests {
             &glue.signature,
             &link(&glue.signature, &glue.source, &glue.modules).unwrap(),
         );
-        sel.prepare(&cx).unwrap();
+        sel.prepare(&cx, &Theme::default()).unwrap();
     }
 
     /// The categorical null colour and key count land at naga's offsets,

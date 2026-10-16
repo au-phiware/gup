@@ -17,6 +17,7 @@ use crate::channel::{ConstValue, GpuType, Px, Visual};
 use crate::column::{ColumnData, ColumnFormat, ColumnStats, Dictionary, DictionaryKey, NULL_CODE};
 use crate::error::{Error, Result};
 use crate::shader::WgslModule;
+use crate::theme::Theme;
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -80,6 +81,14 @@ pub trait ShaderFn: Clone + Send + Sync + 'static {
     /// unions every extent fitted in a pass; the plot starts a pass on
     /// every link before fitting any layer.
     fn begin_fit(&self) {}
+
+    /// Adopt the plot's theme (RFC-001 S7): a function that draws a
+    /// theme colour (a [`Categorical`](crate::Categorical)'s null colour)
+    /// takes it here, unless it was set explicitly. Called on every layer
+    /// before fitting.
+    fn apply_theme(&mut self, theme: &Theme) {
+        let _ = theme;
+    }
 
     /// Adopt `extent`, the extent of this function's input (the encoded
     /// column's data, or its image through the links before it), if this
@@ -147,6 +156,9 @@ pub trait EncodeFn: Clone + Send + Sync + 'static {
     /// The extent of the chain's numeric output over column values in
     /// `extent`: each link's [`ShaderFn::image`] in turn.
     fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)>;
+
+    /// Apply the plot's theme to every link (see [`ShaderFn::apply_theme`]).
+    fn apply_theme(&mut self, theme: &Theme);
 
     /// Encode a field of each row through (a clone of) this function:
     /// `scale.encode(|r: &Row| r.value)`. Taking `&self` keeps shared
@@ -353,6 +365,10 @@ impl<S: ShaderFn> EncodeFn for S {
         ShaderFn::fit_keys(self, keys)
     }
 
+    fn apply_theme(&mut self, theme: &Theme) {
+        ShaderFn::apply_theme(self, theme);
+    }
+
     fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)> {
         ShaderFn::image(self, extent)
     }
@@ -434,6 +450,11 @@ where
         };
         let (a, b) = (self.first.eval(0.0), self.first.eval(last as f64));
         self.next.fit((a.min(b), a.max(b)))
+    }
+
+    fn apply_theme(&mut self, theme: &Theme) {
+        self.first.apply_theme(theme);
+        self.next.apply_theme(theme);
     }
 
     fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)> {
@@ -753,6 +774,8 @@ pub trait DynColumnEncoding<T>: Send + Sync {
     fn fit(&mut self, stats: Option<ColumnStats>) -> Result<()>;
     /// See [`EncodeFn::image`].
     fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)>;
+    /// See [`EncodeFn::apply_theme`].
+    fn apply_theme(&mut self, theme: &Theme);
 }
 
 struct ColumnEncoding<A, S, D> {
@@ -784,6 +807,10 @@ where
     fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)> {
         self.func.image(extent)
     }
+
+    fn apply_theme(&mut self, theme: &Theme) {
+        self.func.apply_theme(theme);
+    }
 }
 
 impl<T, K, S> DynColumnEncoding<T> for KeyEncoded<K, S>
@@ -810,6 +837,10 @@ where
 
     fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)> {
         self.func.image(extent)
+    }
+
+    fn apply_theme(&mut self, theme: &Theme) {
+        self.func.apply_theme(theme);
     }
 }
 /// Object-safe view of a [`ShaderFn`], used by the glue emitter and the
