@@ -8,8 +8,8 @@ implementer-reason: macro syntax, generated items and checks settled in
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 🚧 In Progress **Created**:
-2026-10-11
+**Initiative**: RFC-001 Migration **Status**: ✅ Complete 2026-10-16
+**Created**: 2026-10-11
 
 ## Context
 
@@ -71,51 +71,51 @@ exactly.
 
 ### AC1: The derive reproduces `Circle` exactly
 
-- [ ] `Circle` in `crates/gup-core/src/marks.rs` is a `#[derive(Debug, Mark)]`
+- [x] `Circle` in `crates/gup-core/src/marks.rs` is a `#[derive(Debug, Mark)]`
       struct (Decisions, "Circle") with no hand-written `impl Mark`.
-- [ ] A new unit test asserts `Circle::CHANNELS` equals the pre-story table
+- [x] A new unit test asserts `Circle::CHANNELS` equals the pre-story table
       field by field (name, role, wgsl_type, default; copied into the test as
       literals), and `NAME == "Circle"`, `VERTICES_PER_INSTANCE == 6`,
       `ANTIALIAS == Antialias::Analytic`.
-- [ ] The existing tests `channel_consts_index_the_descriptor_table` and
+- [x] The existing tests `channel_consts_index_the_descriptor_table` and
       `wgsl_input_struct_matches_channels` pass unchanged.
-- [ ] Every gup-core golden passes without re-blessing:
+- [x] Every gup-core golden passes without re-blessing:
       `cargo test -p gup-core -- --test-threads=1`.
 
 ### AC2: Generated attribute-setter trait
 
-- [ ] `CircleAttrs<T>` is generated and implemented for `Selection<T, Circle>`:
+- [x] `CircleAttrs<T>` is generated and implemented for `Selection<T, Circle>`:
       a doctest on `Circle` builds a plot with
       `.x(..).y(..).radius(Px(4.0)).fill(..)` (trait in scope via the prelude)
       and renders it.
 
 ### AC3: A user-defined mark works end to end
 
-- [ ] An integration test `crates/gup-core/tests/derive_mark.rs` defines a
+- [x] An integration test `crates/gup-core/tests/derive_mark.rs` defines a
       `Square` mark with inline WGSL (`#[mark(wgsl = r#"…"#, geometry = Quad)]`,
       channels `x`, `y`, `size: Px`, `fill: Color`), drawn with
       `gup::coverage::rect_quad`/`box_coverage`, adds it to a `Plot` with
       explicit domains, and renders 320×200.
-- [ ] For each of three squares (size 20 px, fills `#0072B2`, `#D55E00`,
+- [x] For each of three squares (size 20 px, fills `#0072B2`, `#D55E00`,
       `#009E73`), the pixel at its centre equals its fill within 2/255 per
       channel, and the pixel 3 px outside its right edge is the white background
       within 2/255.
 
 ### AC4: Mismatches fail at compile time
 
-- [ ] `crates/gup-core/tests/derive_mark_fail/` holds trybuild cases, run by a
+- [x] `crates/gup-core/tests/derive_mark_fail/` holds trybuild cases, run by a
       new `derive_mark_mistakes_do_not_compile` test in `compile_fail.rs`:
       `missing_field.rs` (a channel the WGSL `<NAME>In` lacks),
       `wrong_order.rs`, `wrong_type.rs` (a `Color` field where WGSL has `f32`),
       `unknown_module.rs` (`module = "gup::marks::nope"`),
       `selection_method_clash.rs` (a field named `len`).
-- [ ] Each `.stderr` names the mark and the mismatch, e.g. "`Square`'s channel
+- [x] Each `.stderr` names the mark and the mismatch, e.g. "`Square`'s channel
       `fill` is `Color` (WGSL `vec4<f32>`) but `SquareIn.fill` is `f32`"; the
       unknown-module message lists the library's `gup::marks::*` modules.
 
 ### AC5: The `clip` contract documents both hiding mechanisms
 
-- [ ] The `Mark` trait doc comment (`crates/gup-core/src/channel.rs`, lines
+- [x] The `Mark` trait doc comment (`crates/gup-core/src/channel.rs`, lines
       236–246) describes both ways a row is hidden: a null numeric non-colour
       channel via validity bits (RFC-001 S4b), and a key-encoded non-colour
       channel equal to `NULL_CODE` (RFC-001 S5b; `glue.rs`, the `geometry_keys`
@@ -232,16 +232,16 @@ exactly.
 
 ## Technical Tasks
 
-- [ ] Make the shared helpers in `gup-core-macros/src/lib.rs` `pub(crate)`; add
+- [x] Make the shared helpers in `gup-core-macros/src/lib.rs` `pub(crate)`; add
       `mark.rs` with attribute parsing, composition and checks.
-- [ ] Add `Px::const_value`, `Color::const_value` and `Visual::ZERO` in
+- [x] Add `Px::const_value`, `Color::const_value` and `Visual::ZERO` in
       `channel.rs`.
-- [ ] Emit the consts, `Mark` impl, `…Attrs` trait and impl, field reader,
+- [x] Emit the consts, `Mark` impl, `…Attrs` trait and impl, field reader,
       module static (user modules) and type assertions.
-- [ ] Rewrite `Circle`; add the CHANNELS-equality test; add `CircleAttrs` to the
+- [x] Rewrite `Circle`; add the CHANNELS-equality test; add `CircleAttrs` to the
       prelude; re-export the derive.
-- [ ] Update the `Mark` trait doc (AC5) and `marks.rs`' module doc.
-- [ ] Add `tests/derive_mark.rs` (AC3) and `tests/derive_mark_fail/` (AC4).
+- [x] Update the `Mark` trait doc (AC5) and `marks.rs`' module doc.
+- [x] Add `tests/derive_mark.rs` (AC3) and `tests/derive_mark_fail/` (AC4).
 
 ## Dependencies
 
@@ -268,8 +268,8 @@ exactly.
 
 ## Success Metrics
 
-- [ ] `marks.rs` has no hand-written `impl Mark`.
-- [ ] A user mark compiles and draws from an external crate (the integration
+- [x] `marks.rs` has no hand-written `impl Mark`.
+- [x] A user mark compiles and draws from an external crate (the integration
       test) with only a struct, its WGSL and the derive.
 
 ## Risk Assessment
@@ -283,10 +283,59 @@ exactly.
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (golden image or PNG read), if visual
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye (golden image or PNG read), if visual
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `crates/gup-core-macros/src/mark.rs`: `#[derive(Mark)]` (parsing, composition
+  via `with_library`, field-for-field check, consts, `Mark` impl, `<Name>Attrs`
+  trait, user-module static, per-field type assertions).
+- `channel.rs`: `Px::const_value`, `Color::const_value`, `Visual::ZERO`; `Mark`
+  doc describes both hiding mechanisms (AC5).
+- `marks.rs`: `Circle` derived (struct, private fields); CHANNELS-equality test;
+  doctest for `CircleAttrs`. Prelude gains `CircleAttrs` and the `Mark` derive.
+- Tests: `tests/derive_mark.rs` (2, pixels within 2/255; PNG read by eye),
+  `tests/derive_mark_fail/` (5 cases). All gup-core tests pass (124 unit + all
+  integration), no golden re-blessed. `mask perf-budget` passes;
+  `mask old-path-loc` 28,910.
+
+## Retrospective
+
+**Completed**: 2026-10-16
+
+### Key Technical Learnings
+
+#### Plot domains are padded
+
+- **Challenge**: The test assumed domain 0..10 maps linearly onto the plot rect;
+  the scale pads the domain.
+- **Solution**: Look up pixel positions of tick values in `Layout::x_ticks` and
+  `y_ticks` and place squares on ticks.
+- **Pattern**: Never derive pixel positions from an explicit domain in tests.
+
+### Architectural Decisions
+
+#### Type mismatch is reported by a const assertion
+
+- **Decision**: Names and order are checked in the macro (spanned at the field);
+  member types by `const` assert, as `#[wgsl_function]` does.
+- **Trade-off**: The message names the Rust type and the WGSL type of the
+  member, but not the WGSL spelling of the Rust type, as a const `assert!` takes
+  only a literal message.
+
+### Development Workflow Insights
+
+- `Channel::new` slots are `u8`, so a mark has at most 256 channels.
+- `mask all-fix` and the pre-commit hook each take 2 to 4 minutes on a cold
+  build directory.
+- The `Square` mark needed no glue changes: user-module marks link as is.
+
+### Follow-up Stories
+
+None.
