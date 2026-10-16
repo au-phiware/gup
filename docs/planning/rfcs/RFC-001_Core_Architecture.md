@@ -3012,3 +3012,44 @@ function is written twice (WGSL and its f64 mirror), and constants live in
   read another expansion's WGSL.
 - **Tutorials.** `docs/tutorials/03_custom_shader_functions.md` still describes
   the old path's macro; rewrite it at the S14 flip.
+
+## GUP-421 findings (2026-10-16)
+
+[GUP-421](../stories/GUP-421_Analytic_AA_Rules_Rects_1x_MSAA.md) delivered the
+"Decisions (2026-10-10)" option: rules and rects antialias analytically and
+`DEFAULT_SAMPLES` is 1. Same machine as S0a–S5c (Intel HD Graphics 630, Mesa
+26.0.0 Vulkan).
+
+- **`gup::coverage`** (`crates/gup-wgsl/library/coverage.wgsl`) treats a rect
+  and a line alike, as a box in its own frame. `rect_quad` and
+  `line_quad(start, stop, width, cap, …)` expand the instance quad by one
+  physical pixel and return `local` (offset from the box's centre along its
+  axes) and `half` (its half extents), in physical pixels; `box_coverage` is the
+  fraction of a one-pixel footprint inside the box along each axis,
+  `clamp(min(t + 0.5, h) - max(t - 0.5, -h), 0, 1)` per axis. For edges more
+  than a pixel apart that is the circle's `clamp(0.5 - d, 0, 1)`; an edge on a
+  pixel boundary covers its pixel fully and the next not at all, so snapped
+  hairlines and whole-pixel rects are byte-identical to before; a box thinner
+  than a pixel draws at its width's strength. For axis-aligned boxes it is the
+  exact pixel area. S6b's `Line`/`Segment`/`Rule` marks import it (`cap` is
+  `width / 2` for square caps, 0 for butt caps).
+- **Against MSAA.** On the comparison scene, 1× now has 831 partially covered
+  pixels on the rule fan and 102 on the fractional rect, against MSAA 4×'s 597
+  and 71 before: analytic coverage also shades pixels a sliver of an edge covers
+  but no sample point hits (the rect's 10%-covered bottom row). The fan holds
+  the same ink (617.9 pixels' worth against 618.5). 1× and 4× renders now agree
+  within 2/255.
+- **Goldens.** Every gup-core golden other than `msaa_1x`/`msaa_4x` was within
+  tolerance; scatter, the categorical, scale and `#[wgsl_function]` scenes and
+  `scene_items` are byte-identical to before at 1× and 4×. `band_months`' bands
+  differ from the old 4× by at most 3/255, and the ramp legends' tick ends by at
+  most 1/255.
+- **MSAA for areas and polygons** (§7): `Mark::ANTIALIAS` (`Analytic` by
+  default, or `Msaa`) travels on `MarkBatch`; `Scene::min_samples` is 4 when any
+  layer needs MSAA, and `Renderer::render` then draws with 4 samples on any
+  target, into a multisampled texture the renderer keeps, resolving into the
+  frame. No such mark exists yet; a stand-in (the circle declared `Msaa`) tests
+  it. Draw-in-pass hosts choose their own count and can read `min_samples`.
+- **Performance.** GPU pass 2.95 ms median, 5.60 ms p95 at 1× (six runs at the
+  clock floor), against 4.52–4.60 / 8.50–8.87 ms at 4× in the same session.
+  WASM: +2,016 B gz.

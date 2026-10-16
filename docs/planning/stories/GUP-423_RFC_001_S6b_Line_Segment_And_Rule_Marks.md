@@ -47,6 +47,14 @@ _n+1_'s start, requiring the previous/next column-binding trick above. The three
 marks share one coverage module and differ mainly in how their vertex shader
 derives each instance's two endpoints.
 
+**GUP-421 landed the module as `gup::coverage`**
+(`crates/gup-wgsl/library/coverage.wgsl`):
+`line_quad(start, stop, width, cap, vertex_index, dpr)` returns the quad
+corner's position plus `local`/`half` in physical pixels, and
+`box_coverage(local, half)` the edge coverage; `cap` is `width / 2` for square
+caps and 0 for butt caps. `rule.wgsl` is the reference use. A mark declares
+`Mark::ANTIALIAS` (`Analytic` by default).
+
 ## User Story
 
 > "As a visualization developer, I want `Line`, `Segment` and `Rule` marks with

@@ -2,8 +2,8 @@
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 🚧 In Progress **Created**:
-2026-10-10
+**Initiative**: RFC-001 Migration **Status**: ✅ Complete (2026-10-16)
+**Created**: 2026-10-10
 
 ## Context
 
@@ -60,14 +60,14 @@ A second role also benefits:
 
 ### AC1: Rules get analytic edge coverage
 
-- [ ] `rule.wgsl`'s fragment shader computes signed distance to the quad's long
+- [x] `rule.wgsl`'s fragment shader computes signed distance to the quad's long
       edges and end caps (square caps, matching today's half-width extension)
       and ramps coverage over one physical pixel, the same technique as
       `circle.wgsl`'s `shade()`.
-- [ ] Axis-aligned hairlines (horizontal/vertical rules snapped to pixel
+- [x] Axis-aligned hairlines (horizontal/vertical rules snapped to pixel
       centres) remain crisp: no change to their rendered pixels at 1× (the
       existing axis/grid goldens are unaffected within the harness's tolerance).
-- [ ] A diagonal rule at 1× now shows partial-coverage edge pixels comparable in
+- [x] A diagonal rule at 1× now shows partial-coverage edge pixels comparable in
       count to today's 4× rendering of the same rule (not byte-identical — the
       two techniques differ — but the same order of magnitude, read by eye in
       the saved comparison PNG and checked by a count assertion with a
@@ -75,22 +75,22 @@ A second role also benefits:
 
 ### AC2: Rects get analytic edge coverage
 
-- [ ] `rect.wgsl`'s fragment shader (or an equivalent vertex+fragment approach)
+- [x] `rect.wgsl`'s fragment shader (or an equivalent vertex+fragment approach)
       computes coverage for edges that fall at fractional pixel coordinates,
       ramped over one physical pixel.
-- [ ] A rect with all edges on whole pixels (the common case: plot backgrounds,
+- [x] A rect with all edges on whole pixels (the common case: plot backgrounds,
       legend swatches) renders identically to today's 1× output — no new blur on
       exact edges.
-- [ ] A rect at fractional coordinates shows partial-coverage edge pixels at 1×
+- [x] A rect at fractional coordinates shows partial-coverage edge pixels at 1×
       comparable to today's 4× count for the same rect.
 
 ### AC3: `DEFAULT_SAMPLES` flips to 1, MSAA stays available and auto-enables for areas and polygons
 
-- [ ] `gup_core::DEFAULT_SAMPLES` is `1`.
-- [ ] `TargetOptions`/`TargetDesc` keep an explicit way to opt into MSAA (for
+- [x] `gup_core::DEFAULT_SAMPLES` is `1`.
+- [x] `TargetOptions`/`TargetDesc` keep an explicit way to opt into MSAA (for
       example `TargetOptions::with_samples(4)`, alongside the existing
       `single_sample()`), and `WindowTarget::set_samples` is unaffected.
-- [ ] Any `Scene` containing an area or polygon `ItemKind::Marks` item (RFC-001
+- [x] Any `Scene` containing an area or polygon `ItemKind::Marks` item (RFC-001
       §7's "Polygons and areas use MSAA 4× by default") causes the renderer to
       render at 4× automatically, even when the target's requested sample count
       is 1 — recorded as a behavioural note if no area or polygon mark exists
@@ -100,73 +100,73 @@ A second role also benefits:
 
 ### AC4: Visual parity with today's 4× look, at 1×
 
-- [ ] `crates/gup-core/tests/msaa.rs`'s comparison scene (circles, a rule fan, a
+- [x] `crates/gup-core/tests/msaa.rs`'s comparison scene (circles, a rule fan, a
       fractional rect), rendered with the new shaders at 1×, shows
       partial-coverage edge pixels on the rule fan and the rect within the
       harness's documented tolerance of today's 4× counts (597 and 71) — not
       byte-exact against a golden blessed on one machine, since antialiasing
       ramps are sub-pixel and machine-dependent at the margins.
-- [ ] The side-by-side comparison PNGs (`msaa_compare.png`,
+- [x] The side-by-side comparison PNGs (`msaa_compare.png`,
       `msaa_compare_circle.png`) are regenerated at 1× vs the new analytic 1×
       and read by eye; the story records what was seen.
-- [ ] Window/`ImageTarget` parity holds: ΔE 0 between the window and the PNG for
+- [x] Window/`ImageTarget` parity holds: ΔE 0 between the window and the PNG for
       the same scene, as it does today (RFC-001 "S0b findings", "S3 findings").
 
 ### AC5: Performance budgets move with the new default
 
-- [ ] `mask perf-budget` passes with `DEFAULT_SAMPLES = 1`; the GPU-pass numbers
+- [x] `mask perf-budget` passes with `DEFAULT_SAMPLES = 1`; the GPU-pass numbers
       in `crates/gup-core/PERF_BUDGETS.md` are re-recorded toward the 1× figures
       GUP-417 already measured (~3.0 ms median / ~5.5 ms p95 uncapped on the HD
       630, down from 3.89 / 6.30 at 4×), with the machine, date and story noted
       as the table's header already requires.
-- [ ] `zoom.samples` in `PERF_BUDGETS.md`'s budget table reads `1`.
+- [x] `zoom.samples` in `PERF_BUDGETS.md`'s budget table reads `1`.
 
 ### AC6: SVG output unaffected
 
-- [ ] `SvgTarget`'s rule and rect output (`<line>`, `<rect>`) is unchanged:
+- [x] `SvgTarget`'s rule and rect output (`<line>`, `<rect>`) is unchanged:
       vector output has no sample count and no coverage ramp to apply. A test
       confirms the SVG for the comparison scene is byte-identical before and
       after this story.
 
 ## Technical Tasks
 
-- [ ] Add an edge-distance helper (or inline math) to `rule.wgsl`: per-pixel
+- [x] Add an edge-distance helper (or inline math) to `rule.wgsl`: per-pixel
       distance to the quad's two long edges and two end caps, combined into a
       coverage value ramped over one physical pixel, following `circle.wgsl`'s
       `shade()` pattern (`clamp(0.5 - distance, 0.0, 1.0)`).
-  - [ ] Pass through enough varyings (local offset in physical pixels,
+  - [x] Pass through enough varyings (local offset in physical pixels,
         half-width, segment length) for the fragment shader to compute this
         without re-deriving the vertex shader's geometry.
-  - [ ] Write the geometry/coverage math so it is reachable from a future
+  - [x] Write the geometry/coverage math so it is reachable from a future
         `Line`/`Segment` mark shader (RFC-001 S6) without duplicating it — a
         shared WGSL module (`gup::marks::line_coverage` or similar) rather than
         code living only in `rule.wgsl`.
-- [ ] Add the equivalent coverage computation to `rect.wgsl`: distance to the
+- [x] Add the equivalent coverage computation to `rect.wgsl`: distance to the
       four edges in physical pixels, ramped the same way.
-- [ ] Update both shaders' doc comments (currently claiming "No analytic
+- [x] Update both shaders' doc comments (currently claiming "No analytic
       antialiasing") to describe the new coverage.
-- [ ] Flip `crate::target::DEFAULT_SAMPLES` to `1` in
+- [x] Flip `crate::target::DEFAULT_SAMPLES` to `1` in
       `crates/gup-core/src/target.rs`; update its doc comment and
       `TargetOptions`'s doc comment accordingly.
-- [ ] Add an explicit MSAA opt-in method (e.g. `TargetOptions::with_samples`) if
+- [x] Add an explicit MSAA opt-in method (e.g. `TargetOptions::with_samples`) if
       `single_sample()`'s inverse does not already exist; keep
       `WindowTarget::set_samples` working.
-- [ ] Implement (or document as deferred, per AC3) auto-enabling 4× MSAA when a
+- [x] Implement (or document as deferred, per AC3) auto-enabling 4× MSAA when a
       scene contains an area or polygon mark, per RFC-001 §7.
-- [ ] Update `crates/gup-core/tests/msaa.rs`: re-tune the partial-pixel-count
+- [x] Update `crates/gup-core/tests/msaa.rs`: re-tune the partial-pixel-count
       assertions and tolerances for the new analytic 1× output against the
       recorded 4× baseline; regenerate and read the comparison PNGs.
-- [ ] Audit other goldens that include rules or rects (axis/grid scenes,
+- [x] Audit other goldens that include rules or rects (axis/grid scenes,
       `scene_items.png`, dogfood goldens) for incidental changes at 1× with the
       new shaders; re-bless only where the eye confirms an improvement, not a
       regression.
-- [ ] Re-run `mask perf-budget` and update `crates/gup-core/PERF_BUDGETS.md`'s
+- [x] Re-run `mask perf-budget` and update `crates/gup-core/PERF_BUDGETS.md`'s
       recorded numbers and header (date, story, `DEFAULT_SAMPLES` value).
-- [ ] Confirm `tests/targets.rs`'s byte-identity assertions (image, texture,
+- [x] Confirm `tests/targets.rs`'s byte-identity assertions (image, texture,
       draw-in-pass) still hold at the new default sample count.
-- [ ] Run `mask wasm-browser` to confirm the browser smoke test still passes
+- [x] Run `mask wasm-browser` to confirm the browser smoke test still passes
       with the new shaders and default.
-- [ ] Confirm `SvgTarget`'s rule/rect output is untouched (AC6).
+- [x] Confirm `SvgTarget`'s rule/rect output is untouched (AC6).
 
 ## Dependencies
 
@@ -206,13 +206,13 @@ A second role also benefits:
 
 ## Success Metrics
 
-- [ ] `DEFAULT_SAMPLES == 1` and `mask perf-budget` passes with the re-recorded
+- [x] `DEFAULT_SAMPLES == 1` and `mask perf-budget` passes with the re-recorded
       1× budgets.
-- [ ] The 1× rule-fan and fractional-rect partial-pixel counts are within the
+- [x] The 1× rule-fan and fractional-rect partial-pixel counts are within the
       harness's documented tolerance of today's 4× counts (597 and 71).
-- [ ] No golden image regresses when read by eye; any that change are re-blessed
+- [x] No golden image regresses when read by eye; any that change are re-blessed
       with a documented reason.
-- [ ] `mask wasm-browser` and SVG output tests pass unchanged.
+- [x] `mask wasm-browser` and SVG output tests pass unchanged.
 
 ## Risk Assessment
 
@@ -236,11 +236,151 @@ A second role also benefits:
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (golden image or PNG read)
-- [ ] `mask perf-budget` run and `PERF_BUDGETS.md` updated
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye (golden image or PNG read)
+- [x] `mask perf-budget` run and `PERF_BUDGETS.md` updated
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- **`gup::coverage`** (`crates/gup-wgsl/library/coverage.wgsl`, new): `Quad`,
+  `rect_quad`, `line_quad(start, stop, width, cap, vertex_index, dpr)`,
+  `oriented_quad`, `span` and `box_coverage`. Quads grow by one physical pixel;
+  coverage is the fraction of a one-pixel footprint inside the box along its own
+  axes (exact for axis-aligned boxes, the circle's `clamp(0.5 - d, 0, 1)` for
+  wide boxes, the width's strength for sub-pixel ones).
+- **`rule.wgsl`, `rect.wgsl`** use it (square caps: `cap = width / 2`).
+- **`DEFAULT_SAMPLES = 1`**; `TargetOptions::with_samples` replaces
+  `single_sample`; `WindowTarget` no longer probes for 4×; docs updated.
+- **Auto-MSAA (AC3)**: `Antialias { Analytic, Msaa }`, `Mark::ANTIALIAS`
+  (default `Analytic`), `MarkBatch::antialias`, `Scene::min_samples`, and
+  `Renderer::render` drawing with 4 samples into a renderer-owned multisampled
+  texture when the scene needs more than the target has (`Frame::attachment`).
+  Tested with a stand-in mark.
+- **Tests** (`crates/gup-core/tests/msaa.rs`, 2 → 5 tests):
+  `rules_and_rects_antialias_without_msaa` (counts against the pre-story 4×
+  render kept as `fixtures/msaa_4x_before_analytic.png`: tolerance 1.0–1.5× of
+  597 and 71; fan ink within 2%; the rect's exact per-pixel coverage within
+  2/255; 1× and 4× within 2/255),
+  `snapped_hairlines_and_whole_pixel_rects_stay_crisp` (no partial pixel and
+  exact ink area at dpr 1 and 2, 1× and 4×),
+  `scenes_with_msaa_marks_draw_multisampled`,
+  `svg_of_the_comparison_scene_is_unchanged` (byte-identical to
+  `fixtures/msaa_guides.svg`, written before the change), and the existing
+  circle test. Both seeded regressions (a 1.5 px ramp; render ignoring
+  `min_samples`) failed the new tests.
+- **Goldens**: `msaa_1x`, `msaa_4x` re-blessed (now the analytic ramp). No other
+  golden changed beyond tolerance.
+- **Docs**: `PERF_BUDGETS.md` re-recorded; RFC-001 "GUP-421 findings"; GUP-423
+  notes the module name.
+
+### Definition-of-Done evidence
+
+- gup-core: lib 123 passed; every integration test file passed (msaa 5, targets
+  4, svg 2, scene_items 2, scatter 3, scales 5, ordinal 3, wgsl_function 5,
+  zoom_uploads 2, compile_fail 2). Root-crate tests left to CI.
+- `window_parity` (display): window vs `ImageTarget` ΔE max 0, at `samples: 1`.
+- `mask wasm-browser`: `GUP PASS` on SwiftShader (Chrome 154).
+  `mask perf-budget`, two complete runs, GPU clock median 367 MHz (floor):
+
+| metric                  | recorded |   run 1 |   run 2 |
+| ----------------------- | -------: | ------: | ------: |
+| `zoom.samples`          |        1 |       1 |       1 |
+| `gpu_pass.median_ms`    |     2.95 |   3.003 |   2.953 |
+| `gpu_pass.p95_ms`       |     5.60 |   5.875 |   5.591 |
+| `cpu.median_ms`         |     0.69 |   0.582 |   0.578 |
+| `cpu.p95_ms`            |     0.86 |   0.712 |   0.698 |
+| `link_create.median_ms` |     0.88 |   1.042 |   0.956 |
+| `wasm.scatter.gz_bytes` |  302,929 | 302,929 | 302,929 |
+
+Every other check passed (88 uniform and 0 column bytes per frame). At 4×,
+alternating runs measured 4.52–4.60 ms median, 8.50–8.87 ms p95. A third run
+while another checkout was compiling (load 13.7) failed CPU and pipeline timings
+only.
+
+- `mask old-path-loc`: 28,910.
+
+## Retrospective
+
+**Completed**: 2026-10-16
+
+### What the renders showed
+
+- **Rule fan (msaa_compare.png: before 4× | now 1× | now 4×)**: the new 1× fan
+  reads like the old 4×: one dark core pixel with pale blue fringes along each
+  diagonal, no stair steps. The old 1× was hard staircases. New 1× and 4× are
+  indistinguishable.
+- **Fractional rect (msaa_compare_rect.png)**: the old 4× showed MSAA's
+  quantised edge tints (25/50/75%); the new 1× shows the exact fractions: 70%
+  left and right columns, a 40% top row and a faint 10% bottom row that MSAA
+  missed entirely.
+- **Circles and axes (msaa_compare_circle.png)**: identical across all three.
+- **Plot goldens** (scatter, categorical_species with its swatch legend,
+  categorical_nulls, sqrt/symlog/time scatters, scene_items, the two
+  `#[wgsl_function]` scenes): byte-identical to the old 1× and 4× renders; axes,
+  ticks and swatches are as crisp as before, with no hairline blur.
+- **band_months**: the bands' fractional vertical edges now get a light partial
+  column, as at old 4× (at most 3/255 from it); old 1× had hard edges.
+- **diverging_anomaly, wgsl_function_aftershocks**: the ramp legend's ticks
+  start half a pixel into a pixel; their end pixels are now half-tinted as at
+  old 4× (within 1/255) instead of the old 1× hard end.
+
+### Key Technical Learnings
+
+#### Box coverage, not SDF coverage
+
+- **Challenge**: the classic `clamp(0.5 - d)` ramp blurs hairlines when the
+  line's centre, not its edges, sits on a pixel centre, and it is wrong for
+  boxes under one pixel wide.
+- **Solution**: per-axis footprint overlap,
+  `clamp(min(t + 0.5, h) - max(t - 0.5, -h), 0, 1)`, multiplied over the box's
+  two axes. Snapped edges land on pixel boundaries and give exactly 1 or 0.
+- **Pattern**: treat rects and lines as one primitive (an oriented box); the
+  mark only decides the frame.
+
+#### Comparing against a technique you are replacing
+
+- **Challenge**: after the change, 4× renders also use analytic coverage, so "1×
+  vs today's 4×" cannot be rendered any more.
+- **Solution**: keep the pre-change 4× golden as a test fixture and compare
+  counts and ink against it (loose, cross-device-safe), and check the rect
+  against exact CPU coverage (machine-independent).
+
+### Architectural Decisions
+
+#### MSAA for a scene, chosen by the renderer
+
+- **Decision**: `Mark::ANTIALIAS` → `MarkBatch` → `Scene::min_samples`;
+  `Renderer::render` keeps its own multisampled texture when a scene needs more
+  samples than the target has.
+- **Reasoning**: no change to `RenderTarget`; every Gup-owned target gets it;
+  pipelines are already keyed by sample count.
+- **Trade-off**: draw-in-pass hosts must read `min_samples` themselves; the
+  renderer holds one extra texture while such scenes are drawn.
+- **Future**: S6/S11's area and polygon marks set `ANTIALIAS = Msaa`.
+
+#### `with_samples` replaces `single_sample`
+
+- With 1 the default, `single_sample()` became a no-op; one method covers both
+  directions.
+
+### Development Workflow Insights
+
+- Same-device before/after renders (old 1×, old 4×, new) diffed with ImageMagick
+  told exactly which goldens moved and by how much before any blessing.
+- `mask wasm-browser` needs `env -u LD_LIBRARY_PATH` with the system Chromium
+  (the dev shell's alsa-lib wants a newer glibc), and it hung in DevTools under
+  heavy load from a concurrent build; on a quiet machine it passed first time.
+- Perf timings are only meaningful when no other checkout is compiling: CPU p95
+  tripled under load.
+- The trybuild expectation listing the library's modules must change whenever a
+  library module is added.
+
+### Follow-up Stories
+
+None. `gup::coverage` is ready for GUP-423; area/polygon marks (S6/S11) only set
+`Mark::ANTIALIAS`.

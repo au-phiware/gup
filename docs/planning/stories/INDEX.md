@@ -236,7 +236,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   (new `gup-core-macros`), composed against the library (moved to
   `gup-wgsl/library`) and checked at compile time; automatic `Params` padding;
   15 trybuild cases; two goldens; a browser scene.
-- [GUP-421](GUP-421_Analytic_AA_Rules_Rects_1x_MSAA.md) 🚧 — Give rules and
+- [GUP-421](GUP-421_Analytic_AA_Rules_Rects_1x_MSAA.md) ✅ — Give rules and
   rects the same analytic edge coverage circles already have, then flip
   `DEFAULT_SAMPLES` to 1 with MSAA opt-in and auto-enabled for area/polygon
   marks (owner decision 2026-10-10, RFC-001), reusing the line-coverage math for
@@ -246,12 +246,12 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   impl and a naga-checked WGSL-matches-channels proof; rewrites `Circle` onto it
   and adds `Rect` with a `Band::band_width()`-derived width, plus fill opacity,
   a stroke channel and size-descending draw order on both marks. Deps: GUP-419
-  ✅, GUP-401 ✅; soft: GUP-420 📋, GUP-421 📋.
+  ✅, GUP-401 ✅; soft: GUP-420 ✅, GUP-421 ✅.
 - [GUP-423](GUP-423_RFC_001_S6b_Line_Segment_And_Rule_Marks.md) 📋 — RFC-001
   step S6b: `Rule`, `Segment` and `Line` marks (quad-expanded, real widths,
   joins and caps) sharing GUP-421's line-coverage WGSL module; `Line` binds its
   position column twice, offset by one row, for the previous/next pair, and
-  breaks at a null row. Deps: GUP-421 📋, GUP-422 📋.
+  breaks at a null row. Deps: GUP-421 ✅, GUP-422 📋.
 - [GUP-424](GUP-424_RFC_001_S7a_Multi_Layer_Plot_And_Shared_Scales.md) 📋 —
   RFC-001 step S7a: lift `Plot::resolve`'s one-layer limit, union domains across
   layers, add the object-safe `Chart`/`ChartExt` trait, and fix the bug where
