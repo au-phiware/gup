@@ -66,7 +66,7 @@ X) or `info` (printed, never fails).
 | `zoom.columns.bytes`              | 0         | exact     | `zoom_bench`, over the 600 measured frames        |
 | `zoom.columns.writes`             | 0         | exact     | `zoom_bench`                                      |
 | `zoom.validity.bytes`             | 0         | exact     | `zoom_bench`                                      |
-| `zoom.uniforms.bytes_per_frame`   | 88        | exact     | `zoom_bench`                                      |
+| `zoom.uniforms.bytes_per_frame`   | 136       | exact     | `zoom_bench`                                      |
 | `zoom.uniforms.writes_per_frame`  | 3         | exact     | `zoom_bench`                                      |
 | `zoom.instances.bytes`            | 5,629,476 | exact     | `zoom_bench`, over the 600 measured frames        |
 | `zoom.instances.writes_per_frame` | 3         | exact     | `zoom_bench`                                      |
@@ -119,8 +119,8 @@ and 0.70 ms. The CPU is mostly idle: the loop is GPU-bound.
 The same `zoom_bench` run counts every GPU write by `Upload` kind
 (`Context::upload_stats`). Over the 600 zoomed frames: **0 column bytes in 0
 writes** and 0 validity bytes (the columns were uploaded once, 1,200,000 B in 3
-writes, before the zoom); **88 uniform bytes in 3 writes per frame**
-(`Encodings` 64 B, `Chunk` 8 B, view 16 B); **3 guide-instance writes per
+writes, before the zoom); **136 uniform bytes in 3 writes per frame**
+(`Encodings` 112 B, `Chunk` 8 B, view 16 B); **3 guide-instance writes per
 frame**, 5,629,476 B in all (axis rules and glyph quads, rebuilt because the
 ticks move; exact at 1920×1080, other sizes differ); 0 texture bytes (every
 glyph is in the atlas after warm-up). Deterministic, so checked exactly.
@@ -190,13 +190,13 @@ Deterministic checks that run on every push (the Tests and Visual regression
 workflows) and do not depend on the GPU's speed. Each was seen to fail on a
 seeded violation (GUP-417 retrospective).
 
-| Proxy                  | What it pins                                                                                                                                                                                                                                | Enforced by                                                                             |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| No extra upload        | 300 zoomed frames of 100K points: 0 column and validity bytes; exactly 3 uniform writes and 88 B (1 chunk) or 1,624 B (7 chunks) per frame; one instance write per guide draw and no more guide bytes than recorded; < 128 KB of atlas rows | `tests/zoom_uploads.rs` (`zooming_100k_points_writes_no_column_bytes`, `…_in_chunks_…`) |
-| No extra draw          | one instanced draw per column chunk (`MarkBatch::chunks`), and the same number of draw calls (`Prepared::draw_calls`) every frame: 4 for 1 chunk, 10 for 7                                                                                  | `tests/zoom_uploads.rs`, same tests                                                     |
-| No extra pipeline      | no glue program linked and no pipeline created (`Context::pipeline_stats`) after the first of 301 frames with an unchanged encoding                                                                                                         | `tests/zoom_uploads.rs`, same tests; `plot::tests` for one zoom                         |
-| Every write is counted | no source file writes to the GPU except through the counted `Context` methods                                                                                                                                                               | `context::tests::every_gpu_write_is_counted`                                            |
-| WASM size              | gup-core ≤ 400,000 B gz over bare wgpu                                                                                                                                                                                                      | `scripts/wasm_size.sh`, Visual regression workflow's browser job                        |
+| Proxy                  | What it pins                                                                                                                                                                                                                                 | Enforced by                                                                             |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| No extra upload        | 300 zoomed frames of 100K points: 0 column and validity bytes; exactly 3 uniform writes and 136 B (1 chunk) or 1,672 B (7 chunks) per frame; one instance write per guide draw and no more guide bytes than recorded; < 128 KB of atlas rows | `tests/zoom_uploads.rs` (`zooming_100k_points_writes_no_column_bytes`, `…_in_chunks_…`) |
+| No extra draw          | one instanced draw per column chunk (`MarkBatch::chunks`), and the same number of draw calls (`Prepared::draw_calls`) every frame: 4 for 1 chunk, 10 for 7                                                                                   | `tests/zoom_uploads.rs`, same tests                                                     |
+| No extra pipeline      | no glue program linked and no pipeline created (`Context::pipeline_stats`) after the first of 301 frames with an unchanged encoding                                                                                                          | `tests/zoom_uploads.rs`, same tests; `plot::tests` for one zoom                         |
+| Every write is counted | no source file writes to the GPU except through the counted `Context` methods                                                                                                                                                                | `context::tests::every_gpu_write_is_counted`                                            |
+| WASM size              | gup-core ≤ 400,000 B gz over bare wgpu                                                                                                                                                                                                       | `scripts/wasm_size.sh`, Visual regression workflow's browser job                        |
 
 ## History
 
@@ -208,6 +208,10 @@ seeded violation (GUP-417 retrospective).
   median uncapped (+29%) and +1.7 ms under vsync at the clock floor (+56%). MSAA
   accounts for all of the S0b→S4a gap. Whether to keep 4× as the default is an
   owner decision recorded in RFC-001's GUP-417 findings.
+- **GUP-430 (S6d)** re-recorded `zoom.uniforms.bytes_per_frame` 88 → 136: the
+  reference `Circle` gained three constant channels (`fill_opacity`, `stroke`,
+  `stroke_width`), so `Encodings` grew 64 → 112 B. Measured 136 B; timings
+  within budget.
 - **GUP-418 (S5a)** re-recorded the WASM scatter (+18,781 B gz, almost all of it
   the new browser scene for `Time`, `Symlog`, `Sqrt` and `then`). Its
   `perf-budget` run (GPU clock median 517 MHz) passed every other budget: GPU

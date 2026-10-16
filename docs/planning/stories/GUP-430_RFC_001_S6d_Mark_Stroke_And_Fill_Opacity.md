@@ -9,8 +9,8 @@ implementer-reason:
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 🚧 In Progress **Created**:
-2026-10-16
+**Initiative**: RFC-001 Migration **Status**: ✅ Complete (2026-10-16)
+**Created**: 2026-10-16
 
 ## Context
 
@@ -57,45 +57,45 @@ and is the natural type for an opacity.
 
 ### AC1: `Unit` and the new channels
 
-- [ ] `gup_core::Unit(pub f32)` exists (crate root and prelude), a `Visual` with
+- [x] `gup_core::Unit(pub f32)` exists (crate root and prelude), a `Visual` with
       WGSL type `f32`, `const_value` and `ZERO` as GUP-422 defined for `Px`.
-- [ ] `Circle` and `Rect` each gain, after `fill`: `fill_opacity: Unit` (default
+- [x] `Circle` and `Rect` each gain, after `fill`: `fill_opacity: Unit` (default
       `Unit(1.0)`), `stroke: Color` (default `Color::TRANSPARENT`),
       `stroke_width: Px` (default `Px(0.0)`); their WGSL input structs match
       (the derive's check enforces it).
-- [ ] With the defaults, every existing gup-core golden passes without
+- [x] With the defaults, every existing gup-core golden passes without
       re-blessing.
 
 ### AC2: Compositing is exact at known pixels
 
-- [ ] A render test draws, on white with explicit domains, circle A (r 60, fill
+- [x] A render test draws, on white with explicit domains, circle A (r 60, fill
       `#0072B2`, `fill_opacity 0.5`) then circle B (r 60, fill `#D55E00`,
       `fill_opacity 0.5`) 60 px to its right, both with stroke `#000000` width 3
       px. At the midpoint between the centres (inside both, away from both
       rings) the pixel equals B over A over white, computed on the CPU in sRGB
       with premultiplied "over", within 3/255 per channel.
-- [ ] The pixel 1.5 px inside A's leftmost edge (centre of the ring) equals the
+- [x] The pixel 1.5 px inside A's leftmost edge (centre of the ring) equals the
       stroke colour within 3/255, and the pixel 2 px outside it is white.
-- [ ] The same two checks pass for two `Rect`s with the same styling.
+- [x] The same two checks pass for two `Rect`s with the same styling.
 
 ### AC3: Golden `bubble_stroke`
 
-- [ ] Golden `gup_core/bubble_stroke` (720×450): 12 deterministic overlapping
+- [x] Golden `gup_core/bubble_stroke` (720×450): 12 deterministic overlapping
       circles, radii 20–60 px, fills from `Sequential::viridis()`,
       `fill_opacity Unit(0.6)`, stroke `#333333` width `Px(1.5)`.
-- [ ] Read by eye: every circle's outline is visible where it overlaps another,
+- [x] Read by eye: every circle's outline is visible where it overlaps another,
       and fills visibly blend. The retrospective describes the PNG.
 
 ### AC4: `diverging_anomaly` without the tint
 
-- [ ] `diverging_temperature_anomaly_with_a_ramp_legend` sets stroke `#555555`,
+- [x] `diverging_temperature_anomaly_with_a_ramp_legend` sets stroke `#555555`,
       `stroke_width Px(1.0)` on its circles and no longer pushes the `PLOT_TINT`
       rect; its `"plot background"` expected colour becomes white. The golden is
       re-blessed.
-- [ ] For the row whose anomaly is closest to 0, the darkest pixel on a
+- [x] For the row whose anomaly is closest to 0, the darkest pixel on a
       horizontal line through its centre, within its radius, has every channel ≤
       0x99 (the outline is visible on white).
-- [ ] Read by eye: the near-white discs are visible by their outlines.
+- [x] Read by eye: the near-white discs are visible by their outlines.
 
 ## Decisions
 
@@ -177,10 +177,64 @@ and is the natural type for an opacity.
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (golden image or PNG read), if visual
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye (golden image or PNG read), if visual
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `Unit` (`channel.rs`, crate root and prelude); `fill_opacity`, `stroke`,
+  `stroke_width` on `Circle` and `Rect`; `circle.wgsl` and `rect.wgsl` gain
+  inside-edge ring coverage and a shared `compose` (premultiplied, fill under
+  stroke).
+- Tests: `tests/stroke_png.rs` (AC2 for both marks, `Unit`, `bubble_stroke`
+  golden); `diverging_anomaly` re-blessed with the AC4 outline check.
+- Existing fixtures that list `Circle`'s channels changed because the channel
+  list did: glue fixtures and signatures in `selection.rs`, `Encodings` span 64
+  to 112, derive-mark compile-fail sources, `zoom_uploads` uniform budget 88 to
+  136 B per frame (also re-recorded in `PERF_BUDGETS.md`). No existing golden
+  changed with default values.
+- `mask perf-budget`: all pass after re-recording uniforms (measured 136 B;
+  gpu_pass median 3.18 ms vs 3.54 limit; scatter wasm 305,529 B gz vs 308,988).
+
+## Retrospective
+
+**Completed**: 2026-10-16
+
+### Key Technical Learnings
+
+#### Adding channels ripples through glue fixtures
+
+- **Challenge**: three const channels on `Circle` changed the glue signature,
+  fixtures, `Encodings` size and the uniform-bytes budget.
+- **Solution**: `GUP_BLESS=1` for the WGSL fixtures; hand-updated the asserted
+  strings and sizes; re-recorded the budget with the measured 48 B reason.
+- **Pattern**: a channel on the reference mark is a perf-budget event.
+
+#### Stroke as a coverage difference
+
+- **Challenge**: thin strokes could double-antialias.
+- **Solution**: `ring = outer - inner` stays in 0..1; the AC2 pixel checks hit
+  the CPU "over" within 3/255 first time, so the blend state matches `shade`.
+
+### Visual verification
+
+- `bubble_stroke`: twelve overlapping viridis bubbles, radii 20-60 px; every
+  outline (1.5 px dark grey) is visible through overlaps and fills blend
+  visibly. New golden.
+- `diverging_anomaly`: re-blessed because the grey plot tint is gone: the plot
+  is white and near-white discs are visible by their #555555 outlines.
+
+### Architectural Decisions
+
+- `stroke` has `role = Color` (a colour channel, so dictionary/null handling
+  applies); `fill_opacity` and `stroke_width` have no role.
+- `PLOT_TINT` stays in `ordinal_png.rs`: the band-shade test still uses it.
+
+### Follow-up Stories
+
+None.

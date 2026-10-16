@@ -271,10 +271,10 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   — RFC-001 step S6c: a `Rect` mark (centre-and-extent or two edges per axis)
   and `Derived<V>` channel values re-evaluated each resolve, so a bar's width
   follows `ScaleRef<Band>::band_width_px()`. Deps: GUP-422 ✅, GUP-421 ✅.
-- [GUP-430](GUP-430_RFC_001_S6d_Mark_Stroke_And_Fill_Opacity.md) 🚧 — RFC-001
+- [GUP-430](GUP-430_RFC_001_S6d_Mark_Stroke_And_Fill_Opacity.md) ✅ — RFC-001
   step S6d: `fill_opacity` (new `Unit` type), `stroke` and `stroke_width` on
   `Circle` and `Rect`, stroke inside the edge; `diverging_anomaly` drops its
-  tinted background. Deps: GUP-429 📋, GUP-422 📋.
+  tinted background. Deps: GUP-429 ✅, GUP-422 ✅.
 - [GUP-431](GUP-431_RFC_001_S6e_Mark_Draw_Order.md) 📋 — RFC-001 step S6e
   (design): size-descending and emphasis-last draw order that stays
   append-friendly and correct with translucent fills. Deps: GUP-430 📋; soft:
