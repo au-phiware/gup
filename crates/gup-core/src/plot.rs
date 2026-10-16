@@ -20,12 +20,8 @@ use crate::scene::{
     Z_GRID, Z_TITLE,
 };
 use crate::selection::{Layer, Selection};
-#[cfg(not(target_arch = "wasm32"))]
-use crate::target::{ImageTarget, save_png};
 use crate::theme::Theme;
 use gup_text::TextSystem;
-#[cfg(not(target_arch = "wasm32"))]
-use std::path::Path;
 
 /// A text run placed by layout, with its ink box.
 #[derive(Clone, Debug, PartialEq)]
@@ -105,6 +101,18 @@ pub struct Plot {
     x_title: Option<String>,
     y_title: Option<String>,
     theme: Theme,
+}
+
+impl crate::chart::Chart for Plot {
+    fn resolve(&mut self, cx: &Context, width: f32, height: f32) -> Result<Resolved> {
+        Plot::resolve(self, cx, width, height)
+    }
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+    fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+        self
+    }
 }
 
 impl std::fmt::Debug for Plot {
@@ -192,6 +200,13 @@ impl Plot {
             .last_mut()
             .and_then(|l| l.as_any_mut().downcast_mut())
             .expect("the layer just pushed has this type")
+    }
+
+    /// The first layer of type `Selection<T, M>`, or `None`.
+    pub fn layer_mut<T: Send + Sync + 'static, M: Mark>(&mut self) -> Option<&mut Selection<T, M>> {
+        self.layers
+            .iter_mut()
+            .find_map(|l| l.as_any_mut().downcast_mut())
     }
 
     /// Zoom both position scales by `factor` about the logical-pixel point
@@ -506,37 +521,6 @@ impl Plot {
         })
     }
 
-    /// Resolve and render to an image of `width × height` pixels (dpr 1).
-    #[cfg(not(target_arch = "wasm32"))]
-    pub fn render(&mut self, cx: &Context, width: u32, height: u32) -> Result<image::RgbaImage> {
-        Ok(self.render_resolved(cx, width, height)?.0)
-    }
-
-    /// Like [`render`](Self::render), also returning the layout.
-    #[cfg(not(target_arch = "wasm32"))]
-    pub fn render_resolved(
-        &mut self,
-        cx: &Context,
-        width: u32,
-        height: u32,
-    ) -> Result<(image::RgbaImage, Layout)> {
-        let resolved = self.resolve(cx, width as f32, height as f32)?;
-        let image = ImageTarget::new(cx, width, height)?.render_blocking(cx, &resolved.scene)?;
-        Ok((image, resolved.layout))
-    }
-
-    /// Resolve, render and write a PNG.
-    #[cfg(not(target_arch = "wasm32"))]
-    pub fn save_png(
-        &mut self,
-        cx: &Context,
-        path: impl AsRef<Path>,
-        width: u32,
-        height: u32,
-    ) -> Result<()> {
-        save_png(&self.render(cx, width, height)?, path)
-    }
-
     /// The generated glue WGSL of each layer (diagnostics).
     pub fn glue_sources(&self) -> Vec<(String, String)> {
         self.layers
@@ -552,11 +536,13 @@ impl Plot {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::chart::ChartExt;
     use crate::encoding::{CpuMirror, EncodeFn};
     use crate::marks::Circle;
     use crate::scale::{Linear, Log, ScaleRef};
     use crate::scene::ItemKind;
     use crate::selection::Retain;
+    use crate::target::ImageTarget;
     use std::sync::Arc;
 
     #[test]
@@ -731,6 +717,30 @@ mod tests {
         let (mut fresh, _) = chunked(points(0..end));
         let expected = fresh.render(&cx, 400, 300).unwrap();
         assert!(after == expected, "appending differs from building at once");
+    }
+
+    /// GUP-434: `layer_mut` finds a layer by its row and mark types.
+    #[test]
+    fn layer_mut_matches_layers_by_type() {
+        type A = (f64, f64);
+        type B = [f64; 2];
+        let mut plot = Plot::new();
+        let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
+        plot.add(Selection::<A, Circle>::new(vec![(1.0, 2.0)]))
+            .attr(Circle::X, x.encode(|r: &A| r.0))
+            .attr(Circle::Y, y.encode(|r: &A| r.1));
+        plot.add(Selection::<B, Circle>::new(vec![[3.0, 4.0]]))
+            .attr(Circle::X, x.encode(|r: &B| r[0]))
+            .attr(Circle::Y, y.encode(|r: &B| r[1]));
+        assert!(plot.layer_mut::<A, Circle>().is_some());
+        assert!(plot.layer_mut::<B, Circle>().is_some());
+        assert!(plot.layer_mut::<A, crate::marks::Rect>().is_none());
+        assert!(plot.layer_mut::<u8, Circle>().is_none());
+        plot.layer_mut::<B, Circle>()
+            .unwrap()
+            .attr(Circle::X, x.encode(|r: &B| r[1]));
+        let cx = Context::new_blocking().unwrap();
+        plot.resolve(&cx, 300.0, 200.0).unwrap();
     }
 
     /// RFC-001 S7d (GUP-433): `DictionarySlot` hands every user the same

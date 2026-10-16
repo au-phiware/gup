@@ -71,6 +71,7 @@
 pub use wgpu;
 
 pub mod channel;
+mod chart;
 pub mod column;
 mod context;
 mod encoding;
@@ -95,6 +96,7 @@ mod window;
 pub use channel::{
     Antialias, Channel, ChannelDesc, Color, ConstValue, GpuType, Mark, Px, Role, Unit, Visual,
 };
+pub use chart::{Chart, ChartExt};
 pub use context::{Caps, Context, ContextId, ContextOptions, Upload, UploadStats, WriteCount};
 pub use encoding::{
     ColumnMarker, ColumnValue, ConstMarker, CpuMirror, Derived, DerivedMarker, DynColumnEncoding,
@@ -257,10 +259,10 @@ pub use gup_core_macros::Mark;
 /// The names most programs need.
 pub mod prelude {
     pub use crate::{
-        Band, Categorical, Circle, CircleAttrs, Color, ColorScale, Context, CpuMirror, Derived,
-        Diverging, EncodeFn, Linear, Log, Mark, Plot, Point, PositionScale, Pow, Px, Rect,
-        RectAttrs, Retain, ScaleRef, Segment, SegmentAttrs, Selection, Sequential, ShaderFn,
-        Symlog, Theme, Time, Unit, wgsl_function,
+        Band, Categorical, Chart, ChartExt, Circle, CircleAttrs, Color, ColorScale, Context,
+        CpuMirror, Derived, Diverging, EncodeFn, Linear, Log, Mark, Plot, Point, PositionScale,
+        Pow, Px, Rect, RectAttrs, Retain, ScaleRef, Segment, SegmentAttrs, Selection, Sequential,
+        ShaderFn, Symlog, Theme, Time, Unit, wgsl_function,
     };
 }
 

@@ -20,7 +20,7 @@
 mod common;
 
 use common::scatter::{self, HEIGHT, WIDTH};
-use gup_core::Context;
+use gup_core::{ChartExt, Context};
 use gup_visual_regression::golden::default_artifact_dir;
 use gup_visual_regression::{Rgba8, RgbaImage};
 use std::path::{Path, PathBuf};
