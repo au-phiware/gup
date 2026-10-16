@@ -250,6 +250,9 @@ not design:
 - Every AC must be checkable by a command or by reading a named image, with the
   threshold stated (counts, ΔE, px error, ms). "Looks as good as" needs a
   reference image and what to compare.
+- Check new names and signatures against the limitations the RFC findings
+  already record. For example, WGSL composable identifiers cannot end in a digit
+  (RFC-001 "S5c findings"), which made GUP-429's `x2`/`y2` channels unbuildable.
 - List the **Escalation Triggers** you can foresee: the places where the plan
   rests on an assumption that might be false.
 

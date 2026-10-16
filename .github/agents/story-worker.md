@@ -99,8 +99,11 @@ that round trip.
 ### How to stop
 
 1. Commit what you have on your branch, with `WIP` in the message, if it builds.
-   If it doesn't, gate the broken part with `#[cfg(any())]` and commit. Never
-   leave work uncommitted, and never use `--no-verify`.
+   Then confirm with `git log -1 --oneline` that the commit exists. The
+   pre-commit hook can refuse a commit, and an unverified "committed" in a
+   report is a false report. If it doesn't, gate the broken part with
+   `#[cfg(any())]` and commit. Never leave work uncommitted, and never use
+   `--no-verify`.
 2. Append a `## Blocked (YYYY-MM-DD)` section to the story containing:
    - the question;
    - the options you see, with the evidence for each (error text, numbers, image
@@ -155,10 +158,11 @@ Work iteratively in small, focused increments. For each increment:
   missing from PATH, run it via `nix develop -c`.
 - **Build output**: run every cargo and mask command, and every `git commit`
   (the hook builds), through your checkout's wrapper, by absolute path:
-  `/path/to/checkout/scripts/with_cargo_env.sh cargo test -p gup-core`. Your
-  shell starts fresh for each command and inherits the environment of the
-  checkout that started you, and that checkout's `CARGO_TARGET_DIR` is not
-  yours. The wrapper needs no `eval` or `cd`.
+  `scripts/with_cargo_env.sh cargo test -p gup-core`, run from your checkout's
+  root (the script finds its checkout from its own path). Your shell starts
+  fresh for each command and inherits the environment of the checkout that
+  started you, and that checkout's `CARGO_TARGET_DIR` is not yours. The wrapper
+  needs no `eval` or `cd`.
 - **Long commands**: the shell tool times out after 2 minutes by default. Pass a
   timeout of up to 600000 ms for builds, `mask all-fix`, `mask all-check` and
   `mask perf-budget`, or run them in the background. A timeout is not a failure
@@ -365,6 +369,8 @@ detail. Use this outline, and point to files rather than repeating them:
   Lint workflow runs `mask all-check` and the Tests workflow runs every test, on
   every push, never scoped.
 - **Small commits**: Commit after each logical increment, not one big commit.
+  After every commit, check `git log -1 --oneline`: a commit the hook refused
+  did not happen.
 - **Other agents share this machine**: other workers may be building, testing or
   committing in other checkouts at the same time. Never kill processes by a
   broad pattern (`pkill -f pre_commit.sh`, `pkill cargo`); kill only PIDs you

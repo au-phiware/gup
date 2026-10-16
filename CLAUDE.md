@@ -117,9 +117,9 @@ one build directory (GUP-411):
 - **Agents**: an agent's shell starts fresh for every command and inherits the
   environment of the checkout that started it, so it runs cargo and mask through
   the wrapper, by its own checkout's path:
-  `<checkout>/scripts/with_cargo_env.sh cargo test -p gup-core`. The wrapper
-  sets the same environment as the `eval` line above, without `eval` or `cd`,
-  which an agent's sandbox may refuse.
+  `scripts/with_cargo_env.sh cargo test -p gup-core`, run from the checkout's
+  root. The wrapper sets the same environment as the `eval` line above, without
+  `eval` or `cd`, which an agent's sandbox may refuse.
 - **Concurrency**: safe. Cargo locks the build directory while it compiles, so
   builds from different checkouts take turns; tests and `cargo run` programs run
   after the lock is released. No checkout uses another's member artifacts.

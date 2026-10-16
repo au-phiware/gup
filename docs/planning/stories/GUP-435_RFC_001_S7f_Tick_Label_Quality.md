@@ -79,6 +79,22 @@ Three tick-label problems recorded during S5, split out of
 - [ ] Goldens whose labels did not overlap before are unchanged by the thinning
       (it is a no-op when nothing collides).
 
+### AC4: Bar charts breathe
+
+- [ ] `Band`'s default padding gives visibly separate bars: inner padding 0.2
+      and outer padding 0.1 (today the gaps are about 5% of a band). `rect_bars`
+      is re-blessed and read by eye.
+- [ ] A linear domain that `nice()` rounds to exactly the data maximum, such as
+      `rect_bars`' 60, keeps the top mark off the plot's edge. The tallest bar
+      currently touches the top. Either extend `nice()` by one step when the
+      maximum lands on the boundary, or let the plot inset the range by
+      `theme.plot_padding`. Decision: inset by `theme.plot_padding` (default 4
+      px), so that tick values stay round and the rule also covers dots and
+      lines. A test checks that the top bar ends at least 4 px below the plot
+      rect.
+
+(Orchestrator review of the GUP-429 `rect_bars` golden, 2026-10-16.)
+
 ## Decisions
 
 - **Log nice (base 10 only)**: `lo` = the largest of {1, 2, 5} × 10^k not above
