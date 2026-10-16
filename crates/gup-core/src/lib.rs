@@ -101,7 +101,7 @@ pub use encoding::{
     NullableKey, NullableOwnedKey, OwnedKey, Resource, ShaderFn, Then,
 };
 pub use error::{Error, Result};
-pub use marks::Circle;
+pub use marks::{Circle, CircleAttrs};
 pub use plot::{Layout, PlacedText, Plot, Resolved};
 pub use render::{PipelineStats, Prepared, Renderer, TargetDesc};
 pub use scale::{
@@ -248,12 +248,16 @@ extern crate self as gup_core;
 #[doc(inline)]
 pub use gup_core_macros::wgsl_function;
 
+/// The derive for [`Mark`]; see its documentation.
+#[doc(inline)]
+pub use gup_core_macros::Mark;
+
 /// The names most programs need.
 pub mod prelude {
     pub use crate::{
-        Band, Categorical, Circle, Color, ColorScale, Context, CpuMirror, Diverging, EncodeFn,
-        Linear, Log, Plot, Point, PositionScale, Pow, Px, Retain, ScaleRef, Selection, Sequential,
-        ShaderFn, Symlog, Time, wgsl_function,
+        Band, Categorical, Circle, CircleAttrs, Color, ColorScale, Context, CpuMirror, Diverging,
+        EncodeFn, Linear, Log, Mark, Plot, Point, PositionScale, Pow, Px, Retain, ScaleRef,
+        Selection, Sequential, ShaderFn, Symlog, Time, wgsl_function,
     };
 }
 

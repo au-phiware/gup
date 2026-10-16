@@ -1,0 +1,5 @@
+error[E0080]: evaluation panicked: #[derive(Mark)]: `Circle`'s channel `fill` is `Px` but `CircleIn.fill` is `vec4<f32>` in the WGSL of `gup::marks::circle`
+  --> tests/derive_mark_fail/wrong_type.rs:13:5
+   |
+13 |     fill: Px,
+   |     ^^^^ evaluation of `_::_` failed here

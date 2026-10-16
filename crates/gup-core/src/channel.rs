@@ -79,6 +79,11 @@ impl GpuType for u32 {
 /// A post-encoding value that a mark consumes. Constants of a visual type
 /// become uniform fields rather than columns.
 pub trait Visual: GpuType + Copy + Send + Sync {
+    /// The zero value as uniform data: the default of a channel that
+    /// `#[derive(Mark)]` gives no `default`. An associated constant because
+    /// trait methods cannot be called in `const` context.
+    const ZERO: ConstValue;
+
     /// The value as uniform data.
     fn to_const(self) -> ConstValue;
 }
@@ -92,7 +97,17 @@ impl GpuType for Px {
     type Cpu = f64;
 }
 
+impl Px {
+    /// The value as uniform data, in `const` context (what
+    /// `#[derive(Mark)]` calls for a channel default).
+    pub const fn const_value(self) -> ConstValue {
+        ConstValue::F32(self.0)
+    }
+}
+
 impl Visual for Px {
+    const ZERO: ConstValue = ConstValue::F32(0.0);
+
     fn to_const(self) -> ConstValue {
         ConstValue::F32(self.0)
     }
@@ -165,7 +180,17 @@ impl GpuType for Color {
     type Cpu = Color;
 }
 
+impl Color {
+    /// The colour as uniform data, in `const` context (what
+    /// `#[derive(Mark)]` calls for a channel default).
+    pub const fn const_value(self) -> ConstValue {
+        ConstValue::Vec4(self.to_array())
+    }
+}
+
 impl Visual for Color {
+    const ZERO: ConstValue = ConstValue::Vec4([0.0; 4]);
+
     fn to_const(self) -> ConstValue {
         ConstValue::Vec4(self.to_array())
     }
@@ -242,8 +267,13 @@ pub enum Antialias {
 /// premultiplied sRGB colour. `Varyings`' `@builtin(position)` member is
 /// named `clip`: for a row with a null position or size, the glue moves
 /// every vertex to one point outside the clip volume, a degenerate quad
-/// (RFC-001 S4b). Hand-written for now; RFC-001 S6 generates this impl
-/// with `#[derive(Mark)]`, which can check the member.
+/// (RFC-001 S4b). Two things hide a row: a null numeric non-colour channel
+/// (validity bits, RFC-001 S4b) and a key-encoded non-colour channel equal
+/// to `NULL_CODE` (RFC-001 S5b; the `geometry_keys` loop in `glue.rs`).
+/// Either way every vertex moves to the same point outside the clip volume.
+///
+/// Implement it with `#[derive(Mark)]` (RFC-001 S6), which also checks the
+/// module's input struct against the channels at compile time.
 pub trait Mark: Send + Sync + 'static {
     /// Mark name, also the prefix of its WGSL input struct (`CircleIn`).
     const NAME: &'static str;

@@ -13,8 +13,13 @@
 //! `input_format`, and `image` for a `monotonic` function), a `Params`
 //! twin with an `encase::ShaderType` impl, and the module's `WgslModule`
 //! static. Every failure is a compile error at the user's code.
+//!
+//! `#[derive(Mark)]` (RFC-001 §4, GUP-422) reuses the same machinery to
+//! generate a mark's channels and `Mark` impl and to check its WGSL input
+//! struct against them.
 
 mod convention;
+mod mark;
 
 use convention::{Convention, Input, Member, Output};
 use gup_wgsl::compose::{Library, PAD_PREFIX, Source, library, validate_wgsl};
@@ -35,6 +40,16 @@ pub fn wgsl_function(attr: TokenStream, item: TokenStream) -> TokenStream {
             out.extend(stub(attr, item));
             out.into()
         }
+    }
+}
+
+/// See `gup_core::Mark`.
+#[proc_macro_derive(Mark, attributes(mark, channel))]
+pub fn derive_mark(input: TokenStream) -> TokenStream {
+    let input = syn::parse_macro_input!(input as syn::DeriveInput);
+    match mark::expand(&input) {
+        Ok(tokens) => tokens.into(),
+        Err(e) => e.to_compile_error().into(),
     }
 }
 
@@ -147,7 +162,7 @@ fn hint(report: &str) -> String {
 }
 
 /// Where the WGSL comes from.
-enum Wgsl {
+pub(crate) enum Wgsl {
     /// `wgsl = "…"`.
     Inline(LitStr),
     /// `file = "…"`, relative to the crate's manifest directory.
@@ -204,7 +219,7 @@ fn parse_args(attr: TokenStream2) -> syn::Result<Args> {
 }
 
 /// `EnergyScale` → `energy_scale`, `HSLColor` → `hsl_color`.
-fn snake_case(ident: &str) -> String {
+pub(crate) fn snake_case(ident: &str) -> String {
     let chars: Vec<char> = ident.chars().collect();
     let mut out = String::new();
     for (i, &c) in chars.iter().enumerate() {
@@ -225,7 +240,7 @@ fn snake_case(ident: &str) -> String {
 
 /// `gup::scale::linear` → `SCALE_LINEAR`, as gup-core's build script
 /// names the library statics.
-fn static_name(import_path: &str) -> String {
+pub(crate) fn static_name(import_path: &str) -> String {
     import_path
         .strip_prefix("gup::")
         .unwrap_or(import_path)
@@ -233,7 +248,7 @@ fn static_name(import_path: &str) -> String {
         .to_uppercase()
 }
 
-fn is_ident(s: &str) -> bool {
+pub(crate) fn is_ident(s: &str) -> bool {
     let mut chars = s.chars();
     chars
         .next()
@@ -242,17 +257,17 @@ fn is_ident(s: &str) -> bool {
 }
 
 /// The WGSL text, the label its reports use, and the span errors point at.
-struct Text {
-    label: String,
+pub(crate) struct Text {
+    pub(crate) label: String,
     /// The WGSL, preceded by whitespace so that naga_oil's line and column
     /// numbers are the Rust file's (inline WGSL).
-    text: String,
-    span: Span,
+    pub(crate) text: String,
+    pub(crate) span: Span,
     /// `include_str!` of a `file`, so cargo rebuilds when it changes.
-    track: Option<String>,
+    pub(crate) track: Option<String>,
 }
 
-fn load(wgsl: &Wgsl) -> syn::Result<Text> {
+pub(crate) fn load(wgsl: &Wgsl) -> syn::Result<Text> {
     match wgsl {
         Wgsl::Inline(lit) => {
             let span = lit.span().unwrap();
@@ -312,7 +327,7 @@ thread_local! {
 }
 
 /// Run `f` on the cached library.
-fn with_library<R>(
+pub(crate) fn with_library<R>(
     f: impl FnOnce(&mut Library) -> Result<R, gup_wgsl::compose::Error>,
 ) -> Result<R, gup_wgsl::compose::Error> {
     LIBRARY.with(|cell| {

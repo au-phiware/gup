@@ -1,66 +1,93 @@
 // Copyright (C) 2024 Corin Lawson
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Marks. S0a has one: [`Circle`]. Rect, Rule and Segment/Line and the
-//! `#[derive(Mark)]` generator are RFC-001 S6.
+//! Marks. S0a has one: [`Circle`]. Rect, Rule and Segment/Line are RFC-001 S6.
 
-use crate::channel::{Channel, ChannelDesc, Color, ConstValue, Mark, Px, Role};
-use crate::shader::{MARKS_CIRCLE, WgslModule};
+use crate::channel::{Color, Px};
 
 /// A filled disc centred on `(X, Y)`, sized in logical pixels so it stays
 /// round on any aspect ratio.
-#[derive(Debug)]
-pub enum Circle {}
-
-impl Circle {
+///
+/// The `#[derive(Mark)]` generates the channel constants
+/// ([`Circle::X`], [`Circle::Y`], [`Circle::RADIUS`], [`Circle::FILL`]), the
+/// `Mark` impl and the [`CircleAttrs`] setters, which the prelude brings
+/// into scope:
+///
+/// ```
+/// use gup_core::prelude::*;
+///
+/// # fn main() -> gup_core::Result<()> {
+/// struct Row {
+///     x: f64,
+///     y: f64,
+/// }
+/// let rows = vec![Row { x: 1.0, y: 2.0 }, Row { x: 3.0, y: 1.0 }];
+///
+/// let x = Linear::new().domain(0.0, 4.0);
+/// let y = Linear::new().domain(0.0, 4.0);
+/// let mut points = Selection::<Row, Circle>::new(rows);
+/// points
+///     .x(x.encode(|r: &Row| r.x))
+///     .y(y.encode(|r: &Row| r.y))
+///     .radius(Px(4.0))
+///     .fill(Color::hex(0xd55e00));
+/// # let _ = points;
+/// # Ok(())
+/// # }
+/// ```
+#[derive(Debug, gup_core_macros::Mark)]
+#[mark(module = "gup::marks::circle", geometry = Quad)]
+pub struct Circle {
     /// Centre x (logical pixels).
-    pub const X: Channel<Circle, Px> = Channel::new(0, "x");
+    #[channel(role = X)]
+    x: Px,
     /// Centre y (logical pixels, y down).
-    pub const Y: Channel<Circle, Px> = Channel::new(1, "y");
+    #[channel(role = Y)]
+    y: Px,
     /// Radius (logical pixels). Default 3.5.
-    pub const RADIUS: Channel<Circle, Px> = Channel::new(2, "radius");
+    #[channel(role = Size, default = Px(3.5))]
+    radius: Px,
     /// Fill colour. Default Okabe-Ito blue.
-    pub const FILL: Channel<Circle, Color> = Channel::new(3, "fill");
-
-    /// The default fill (`#0072B2`).
-    pub const DEFAULT_FILL: Color = Color::hex(0x0072b2);
+    #[channel(role = Color, default = Circle::DEFAULT_FILL)]
+    fill: Color,
 }
 
-impl Mark for Circle {
-    const NAME: &'static str = "Circle";
-    const MODULE: &'static WgslModule = &MARKS_CIRCLE;
-    const CHANNELS: &'static [ChannelDesc] = &[
-        ChannelDesc {
-            name: "x",
-            role: Some(Role::X),
-            wgsl_type: "f32",
-            default: ConstValue::F32(0.0),
-        },
-        ChannelDesc {
-            name: "y",
-            role: Some(Role::Y),
-            wgsl_type: "f32",
-            default: ConstValue::F32(0.0),
-        },
-        ChannelDesc {
-            name: "radius",
-            role: Some(Role::Size),
-            wgsl_type: "f32",
-            default: ConstValue::F32(3.5),
-        },
-        ChannelDesc {
-            name: "fill",
-            role: Some(Role::Color),
-            wgsl_type: "vec4<f32>",
-            default: ConstValue::Vec4(Circle::DEFAULT_FILL.to_array()),
-        },
-    ];
-    const VERTICES_PER_INSTANCE: u32 = 6;
+impl Circle {
+    /// The default fill (`#0072B2`).
+    pub const DEFAULT_FILL: Color = Color::hex(0x0072b2);
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::channel::{Antialias, ConstValue, Mark, Role};
+    use crate::shader::MARKS_CIRCLE;
+
+    /// The derive reproduces the table Circle had when it was hand-written.
+    #[test]
+    fn derive_reproduces_the_hand_written_table() {
+        let expected = [
+            ("x", Role::X, "f32", ConstValue::F32(0.0)),
+            ("y", Role::Y, "f32", ConstValue::F32(0.0)),
+            ("radius", Role::Size, "f32", ConstValue::F32(3.5)),
+            (
+                "fill",
+                Role::Color,
+                "vec4<f32>",
+                ConstValue::Vec4(Color::hex(0x0072b2).to_array()),
+            ),
+        ];
+        assert_eq!(Circle::CHANNELS.len(), expected.len());
+        for (desc, (name, role, wgsl_type, default)) in Circle::CHANNELS.iter().zip(expected) {
+            assert_eq!(desc.name, name);
+            assert_eq!(desc.role, Some(role));
+            assert_eq!(desc.wgsl_type, wgsl_type);
+            assert_eq!(desc.default, default);
+        }
+        assert_eq!(Circle::NAME, "Circle");
+        assert_eq!(Circle::VERTICES_PER_INSTANCE, 6);
+        assert_eq!(Circle::ANTIALIAS, Antialias::Analytic);
+    }
 
     #[test]
     fn channel_consts_index_the_descriptor_table() {

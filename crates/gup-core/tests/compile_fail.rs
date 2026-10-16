@@ -24,3 +24,11 @@ fn wgsl_function_mistakes_do_not_compile() {
     let t = trybuild::TestCases::new();
     t.compile_fail("tests/wgsl_function_fail/*.rs");
 }
+
+/// `#[derive(Mark)]` checks a mark's WGSL input struct against its channels
+/// at compile time, and names the mark and the mismatch (GUP-422).
+#[test]
+fn derive_mark_mistakes_do_not_compile() {
+    let t = trybuild::TestCases::new();
+    t.compile_fail("tests/derive_mark_fail/*.rs");
+}

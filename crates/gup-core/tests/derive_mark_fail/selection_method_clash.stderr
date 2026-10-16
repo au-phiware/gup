@@ -1,0 +1,5 @@
+error: a channel cannot be named `len`: the generated setter would clash with `Selection::len`
+  --> tests/derive_mark_fail/selection_method_clash.rs:12:5
+   |
+12 |     len: Px,
+   |     ^^^

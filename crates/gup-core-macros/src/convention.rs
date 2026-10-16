@@ -85,7 +85,7 @@ fn expected(entry: &str) -> String {
 }
 
 /// `ty` as WGSL, with the module's own items unqualified.
-fn type_name(module: &Module, ty: Handle<Type>, prefix: &str) -> String {
+pub(crate) fn type_name(module: &Module, ty: Handle<Type>, prefix: &str) -> String {
     let scalar = |s: Scalar| match (s.kind, s.width) {
         (ScalarKind::Float, 4) => "f32".to_string(),
         (ScalarKind::Float, 2) => "f16".to_string(),
