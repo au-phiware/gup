@@ -254,7 +254,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   per-row `Segment` mark (two endpoints, real width, square caps) on
   `gup::coverage::line_quad`, with per-row width and colour. Deps: GUP-422 📋,
   GUP-424 📋, GUP-421 ✅.
-- [GUP-424](GUP-424_RFC_001_S7a_Multi_Layer_Plot_And_Shared_Scales.md) 🚧 —
+- [GUP-424](GUP-424_RFC_001_S7a_Multi_Layer_Plot_And_Shared_Scales.md) ✅ —
   RFC-001 step S7a: `Plot::resolve` over several layers, with a per-resolve fit
   pass on `ScaleRef` that unions domains across every channel and layer, and
   per-layer `.z()`. Deps: GUP-419 ✅, GUP-414 ✅, GUP-401 ✅.

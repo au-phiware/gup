@@ -9,8 +9,8 @@ implementer-reason:
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 🚧 In Progress **Created**:
-2026-10-11
+**Initiative**: RFC-001 Migration **Status**: ✅ Complete (2026-10-16)
+**Created**: 2026-10-11
 
 ## Context
 
@@ -64,47 +64,47 @@ resolve caching is deferred to RFC-001 S8.
 
 ### AC1: Fit passes union domains
 
-- [ ] Unit test on `ScaleRef<Linear>`: `begin_fit`, `fit_domain((0, 10))`,
+- [x] Unit test on `ScaleRef<Linear>`: `begin_fit`, `fit_domain((0, 10))`,
       `fit_domain((5, 30))` gives domain `(0, 30)`; a second pass with
       `begin_fit`, `fit_domain((2, 3))` gives `(2, 3)` (a domain can shrink when
       data does).
-- [ ] An explicit domain (`Linear::new().domain(..)`) is unaffected by fits, as
+- [x] An explicit domain (`Linear::new().domain(..)`) is unaffected by fits, as
       today.
 
 ### AC2: Several layers resolve
 
-- [ ] Two `Circle` layers sharing `x`/`y`, x data 0..10 and 5..30: after
+- [x] Two `Circle` layers sharing `x`/`y`, x data 0..10 and 5..30: after
       `resolve`, `x.read().current_domain()` covers 0..30 and every disc of both
       layers lies inside `layout.plot` (the `sqrt_radius_scatter` assertion,
       lines 70–82 of `tests/scales_png.rs`).
-- [ ] The plot inset uses the largest overhang across layers:
+- [x] The plot inset uses the largest overhang across layers:
       `layout.mark_overhang` equals the larger layer's radius.
-- [ ] A plot with no layers fails with `Error::config("plot layers", …)` saying
+- [x] A plot with no layers fails with `Error::config("plot layers", …)` saying
       to add one with `plot.add(..)`.
 
 ### AC3: Per-layer z-order
 
-- [ ] `Selection::z(&mut self, z: i32) -> &mut Self` (default 0). A test
+- [x] `Selection::z(&mut self, z: i32) -> &mut Self` (default 0). A test
       overlaps two opaque discs from two layers at one pixel: with default z the
       second-added layer's colour shows; with the first layer at `z(1)` the
       first layer's colour shows.
-- [ ] `z` outside `-99..=99` fails `resolve` with
+- [x] `z` outside `-99..=99` fails `resolve` with
       `Error::config("layer z",     …)` naming the allowed range (marks must
       stay between the grid and the axes).
 
 ### AC4: Golden `composite_two_layers`
 
-- [ ] Golden `gup_core/composite_two_layers` (720×450): a "forecast" layer of
+- [x] Golden `gup_core/composite_two_layers` (720×450): a "forecast" layer of
       small grey circles (r 2, every 0.25 on x) and an "observed" layer of
       larger blue circles (r 5) at `z(1)`, sharing `x` and `y`, auto domains.
-- [ ] Read by eye: both layers visible, correctly placed relative to each other,
+- [x] Read by eye: both layers visible, correctly placed relative to each other,
       observed points on top, all inside the plot rect. The retrospective
       describes the PNG.
 
 ### AC5: One-layer charts are unchanged
 
-- [ ] Every existing gup-core golden passes without re-blessing.
-- [ ] `plot.rs`' module doc no longer says "exactly one layer".
+- [x] Every existing gup-core golden passes without re-blessing.
+- [x] `plot.rs`' module doc no longer says "exactly one layer".
 
 ## Decisions
 
@@ -148,11 +148,11 @@ resolve caching is deferred to RFC-001 S8.
 
 ## Technical Tasks
 
-- [ ] `ScaleRef` → `Arc<Shared<S>>`; `begin_fit` on `ShaderFn`, `DynShaderFn`,
+- [x] `ScaleRef` → `Arc<Shared<S>>`; `begin_fit` on `ShaderFn`, `DynShaderFn`,
       `ScaleRef`, `Layer`.
-- [ ] Rewrite `Plot::resolve`'s steps 1, 5, 6, 7 as loops; zero-layer error.
-- [ ] `Selection::z`, `Layer::z`, range check.
-- [ ] Tests for AC1–AC3; golden `composite_two_layers`; update the module doc.
+- [x] Rewrite `Plot::resolve`'s steps 1, 5, 6, 7 as loops; zero-layer error.
+- [x] `Selection::z`, `Layer::z`, range check.
+- [x] Tests for AC1–AC3; golden `composite_two_layers`; update the module doc.
 
 ## Dependencies
 
@@ -178,7 +178,7 @@ resolve caching is deferred to RFC-001 S8.
 
 ## Success Metrics
 
-- [ ] A two-layer chart resolves with one unioned domain per shared scale.
+- [x] A two-layer chart resolves with one unioned domain per shared scale.
 
 ## Risk Assessment
 
@@ -187,10 +187,67 @@ resolve caching is deferred to RFC-001 S8.
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (golden image or PNG read), if visual
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye (golden image or PNG read), if visual
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `ScaleRef<S>` is now `Arc<Shared<S>>` (scale lock plus a fit-pass mutex).
+  `ShaderFn::begin_fit` (provided no-op, forwarded by `DynShaderFn`) starts a
+  pass; `ScaleRef::fit_domain` unions every finite extent in the pass before
+  fitting. `Layer::begin_fit` and `Layer::z`; `Selection::z`.
+- `Plot::resolve` fits, prepares and releases every layer, insets by the maximum
+  overhang, and pushes one marks item per layer at its `z`. Zero layers and `z`
+  outside `-99..=99` are `Error::config`.
+- Tests: `fit_passes_union_domains` (unit), `tests/multi_layer_png.rs` (5 tests,
+  golden `gup_core/composite_two_layers`). gup-core suite passes with no
+  existing golden changed; `mask old-path-loc` 28910; `mask perf-budget`: every
+  check passed (zoom cpu median 0.674 ms, gpu pass 2.989 ms, wasm scatter 304361
+  B gz).
+- Non-finite extents bypass the union so the scale still reports them.
+
+## Retrospective
+
+**Completed**: 2026-10-16
+
+### Key Technical Learnings
+
+#### Union lives in the shared handle
+
+- **Challenge**: `fit_domain` replaces the domain, so shared scales were
+  last-wins.
+- **Solution**: a fit-pass accumulator inside `ScaleRef`, cleared by `begin_fit`
+  once per resolve before any layer fits.
+- **Pattern**: shared mutable state with an explicit pass boundary beats
+  teaching every scale to union.
+
+### Architectural Decisions
+
+#### Non-finite extents skip the union
+
+- **Decision**: a NaN/inf extent goes straight to the scale.
+- **Reasoning**: `f64::min/max` ignore NaN and would hide the scale's error.
+- **Trade-off**: none visible.
+
+### Verification
+
+`composite_two_layers.png` (720x450, title "Forecast and observed"): a grey
+dotted sinusoid-plus-trend (small r 2 forecast circles every 0.25 on x) with 13
+larger blue r 5 observed points scattered about it, drawn on top. Both layers
+share one x axis 0..12 and y axis 6..24; all marks sit inside the plot rect.
+
+### Development Workflow Insights
+
+- The agent sandbox refuses compound shell commands (heredocs with python,
+  `eval`); write scripts with the Write tool and run them plainly.
+- `CARGO_TARGET_DIR` could not be exported via `eval`; builds went to the
+  inherited directory, which the per-checkout member artifacts keep safe.
+
+### Follow-up Stories
+
+None.
