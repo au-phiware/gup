@@ -212,3 +212,79 @@ point for the shader.
 - The root-crate tests were left to CI, as the orchestrator asked.
   `mask perf-budget` was not run: the load average stayed above 4. No `gup-core`
   scatter path is affected beyond shared code.
+
+## Retrospective
+
+**Completed**: 2026-10-17
+
+### Key Technical Learnings
+
+#### A vertex buffer slot is per buffer, so a successor can live elsewhere
+
+- **Challenge**: the last row of a chunk has its successor in another buffer,
+  stored against another origin.
+- **Solution**: a bridge draw of one instance. It binds its row columns from one
+  chunk at `(len − 1) × stride` and its next-row columns from the next chunk
+  at 0. Its own `Chunk` uniform entry carries each side's base and the two
+  validity offsets.
+- **Pattern**: `set_vertex_buffer` takes any buffer and any 4-aligned offset per
+  slot, and dynamic-offset uniform entries are cheap (256 B). An instance that
+  spans two storage units is an extra entry, not a storage change.
+
+#### NaN culling hides missing validity logic
+
+- **Challenge**: the AC4 image tests passed with the next-row validity check
+  removed, because Mesa culls NaN vertices.
+- **Solution**: a crate test clears validity bits on finite rows (S4b's
+  `clear_valid` seam), at a chunk's last row, mid-chunk and a chunk's first row.
+- **Pattern**: for every null path, seed the mechanism off and make sure some
+  test fails. The image of a NaN is not evidence.
+
+#### Pixel-centre sampling in join tests
+
+- **Challenge**: a first "outer edge" probe at 2.5 px from the apex landed on a
+  pixel whose centre was 3.0 px away, so it read 0.75.
+- **Solution**: test every pixel whose centre lies within a radius of the apex,
+  measured from the pixel centre.
+
+### Architectural Decisions
+
+#### `Geometry::Polyline` on the `Mark` trait
+
+- **Decision**: a `GEOMETRY` constant (default `Quad`). Each `X`/`Y` channel is
+  read again at the next row as `<channel>_next`, and the derive checks the
+  input struct for it.
+- **Reasoning**: the binding belongs to the mark, and every polyline-like mark
+  (areas later) needs the same thing. Reading only positions twice keeps a fully
+  column-encoded line at 6 of 8 slots.
+- **Trade-off**: width and colour come from a segment's first row, so there are
+  no per-vertex gradients.
+- **Future**: areas can reuse the geometry and the bridges.
+
+#### Bridges, not overlap rows or storage reads
+
+- **Decision**: one extra draw and `Chunk` entry per chunk boundary.
+- **Reasoning**: overlap rows change the chunk format (an escalation trigger),
+  and storage reads need a second glue path and vertex-stage storage.
+- **Trade-off**: `2n − 1` draws for `n` chunks instead of `n`.
+
+#### Capsules for round joins
+
+- **Decision**: round caps and joins from the two endpoints.
+- **Trade-off**: translucent joins blend twice (documented; GUP-438).
+
+### Development Workflow Insights
+
+- Seeding each mechanism off (no bridges, wrong bridge origin, butt ends, no
+  next-row validity) and re-running took about a minute each. It found the NaN
+  culling blind spot.
+- The isolated-worktree guard refused some compound shell commands (heredocs
+  after `cd`, `git -C`). Writing edit scripts to `/tmp` and running them by
+  absolute path worked.
+- `mask wasm-browser` fails on the diverging check on the parent tree too. The
+  failure is outside this story.
+
+### Follow-up Stories
+
+1. **GUP-438: Translucent Lines Without Double-Blended Joins**: even opacity
+   along translucent lines, using a per-layer coverage pass.
