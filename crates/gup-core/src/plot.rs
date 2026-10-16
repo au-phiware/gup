@@ -765,6 +765,50 @@ mod tests {
         assert!(after == expected, "appending differs from building at once");
     }
 
+    /// GUP-432: appending to a line extends it, through the last chunk's
+    /// tail and across new chunks (new bridges), writing only the new rows'
+    /// bytes, and renders what a line built from every row at once does.
+    #[test]
+    fn appended_rows_extend_a_line() {
+        use crate::Line;
+        let line = |rows: Vec<Pt>| {
+            let mut plot = Plot::new();
+            let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
+            plot.add(Selection::<Pt, Line>::new(rows))
+                .attr(Line::X, x.encode(|r: &Pt| r.0))
+                .attr(Line::Y, y.encode(|r: &Pt| r.1))
+                .attr(Line::WIDTH, Px(2.0))
+                .max_chunk_rows(8);
+            plot
+        };
+        let cx = Context::new_blocking().unwrap();
+        let mut plot = line(points(0..10));
+        let mut target = ImageTarget::new(&cx, 400, 300).unwrap();
+        plot.resolve(&cx, 400.0, 300.0).unwrap();
+        let start = cx.upload_stats();
+        let mut end = 10;
+        for n in [3, 8, 1] {
+            let layer: &mut Selection<Pt, Line> =
+                plot.layers[0].as_any_mut().downcast_mut().unwrap();
+            layer.append(points(end..end + n)).unwrap();
+            end += n;
+            let resolved = plot.resolve(&cx, 400.0, 300.0).unwrap();
+            assert_eq!(batch(&resolved).instances(), u64::from(end - 1));
+        }
+        let written = cx.upload_stats() - start;
+        assert_eq!(
+            written.columns.bytes,
+            u64::from(end - 10) * 8,
+            "{written:?}"
+        );
+        let resolved = plot.resolve(&cx, 400.0, 300.0).unwrap();
+        // Chunks of 8, 8 and 6 rows, and two bridges.
+        assert_eq!(batch(&resolved).chunks.len(), 5);
+        let after = target.render_blocking(&cx, &resolved.scene).unwrap();
+        let expected = line(points(0..end)).render(&cx, 400, 300).unwrap();
+        assert!(after == expected, "appending differs from building at once");
+    }
+
     /// GUP-434: `layer_mut` finds a layer by its row and mark types.
     #[test]
     fn layer_mut_matches_layers_by_type() {
