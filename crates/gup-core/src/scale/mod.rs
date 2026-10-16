@@ -44,7 +44,7 @@ pub use time::Time;
 
 use crate::channel::Px;
 use crate::column::ColumnFormat;
-use crate::encoding::{CpuMirror, EncodeFn, Resource, ShaderFn};
+use crate::encoding::{CpuMirror, DictionarySlot, EncodeFn, Resource, ShaderFn};
 use crate::error::Result;
 use crate::shader::WgslModule;
 use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
@@ -93,6 +93,8 @@ struct Shared<S> {
     scale: RwLock<S>,
     /// The union of the extents fitted since [`ShaderFn::begin_fit`].
     fit: Mutex<Option<(f64, f64)>>,
+    /// The key dictionary of the layers that encode keys through the scale.
+    keys: DictionarySlot,
 }
 
 impl<S> Clone for ScaleRef<S> {
@@ -107,6 +109,7 @@ impl<S> ScaleRef<S> {
         Self(Arc::new(Shared {
             scale: RwLock::new(scale),
             fit: Mutex::new(None),
+            keys: DictionarySlot::default(),
         }))
     }
 
@@ -142,6 +145,10 @@ impl<S: ShaderFn> ShaderFn for ScaleRef<S> {
 
     fn resources(&self) -> Vec<Resource> {
         self.read().resources()
+    }
+
+    fn dictionary_slot(&self) -> Option<&DictionarySlot> {
+        Some(&self.0.keys)
     }
 
     fn begin_fit(&self) {

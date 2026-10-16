@@ -282,7 +282,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
 - [GUP-432](GUP-432_RFC_001_S6f_Line_Mark.md) 📋 — RFC-001 step S6f (design): a
   `Line` mark binding each row with its successor across column chunks, with
   joins and breaks at null rows. Deps: GUP-423 📋, GUP-424 📋.
-- [GUP-433](GUP-433_RFC_001_S7d_Shared_Key_Dictionaries.md) 📋 — RFC-001 step
+- [GUP-433](GUP-433_RFC_001_S7d_Shared_Key_Dictionaries.md) ✅ — RFC-001 step
   S7d: one key dictionary per shared `ScaleRef`, so layers sharing a categorical
   or band scale give each key one code. Deps: GUP-424 📋, GUP-419 ✅.
 - [GUP-434](GUP-434_RFC_001_S7e_Chart_Trait.md) 📋 — RFC-001 step S7e:
