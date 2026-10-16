@@ -46,7 +46,7 @@ fn zooming_100k_points_writes_no_column_bytes() {
         None,
         &Budget {
             chunks: 1,
-            uniform_bytes: 88,
+            uniform_bytes: 136,
             instance_bytes: 1_387_872,
             draw_calls: 4,
         },
@@ -61,7 +61,7 @@ fn zooming_100k_points_in_chunks_writes_no_column_bytes() {
         Some(16_384),
         &Budget {
             chunks: 7,
-            uniform_bytes: 64 + 16 + 6 * 256 + 8,
+            uniform_bytes: 112 + 16 + 6 * 256 + 8,
             instance_bytes: 1_387_872,
             draw_calls: 10,
         },

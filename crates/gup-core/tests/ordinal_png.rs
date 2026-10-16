@@ -184,7 +184,11 @@ fn diverging_temperature_anomaly_with_a_ramp_legend() {
         .attr(Circle::X, x.encode(|r: &(f64, f64)| r.0))
         .attr(Circle::Y, y.encode(|r: &(f64, f64)| r.1))
         .attr(Circle::RADIUS, Px(5.5))
-        .attr(Circle::FILL, colour.encode(|r: &(f64, f64)| r.1));
+        .attr(Circle::FILL, colour.encode(|r: &(f64, f64)| r.1))
+        // Near-midpoint colours are near-white: an outline keeps them
+        // visible on the white plot.
+        .attr(Circle::STROKE, Color::hex(0x555555))
+        .attr(Circle::STROKE_WIDTH, Px(1.0));
     let (mut scene, layout) = resolve(&cx, &mut plot, 70.0);
     let [lo, mid, hi] = colour.read().current_domain().unwrap();
     assert_eq!(mid, 0.0);
@@ -197,22 +201,11 @@ fn diverging_temperature_anomaly_with_a_ramp_legend() {
         layout.plot.bottom(),
     );
     let placed = legend::ramp(&mut scene, &ramp, bar);
-    // Near-midpoint colours are near-white: a tinted plot background keeps
-    // them visible (circles have no stroke until RFC-001 S6).
-    let clip = scene.add_clip(layout.plot);
-    scene.push(Item {
-        z: Z_GRID,
-        clip: Some(clip),
-        kind: ItemKind::Rects(vec![RectPrim {
-            rect: layout.plot,
-            color: PLOT_TINT,
-        }]),
-    });
     let (coldest, warmest) = rows.iter().fold((rows[0], rows[0]), |(c, w), &r| {
         (if r.1 < c.1 { r } else { c }, if r.1 > w.1 { r } else { w })
     });
     let meta = legend::with_legend(layout_metadata(&layout), &placed)
-        .with_expected_color("plot background", rgba8(PLOT_TINT))
+        .with_expected_color("plot background", rgba8(Color::WHITE))
         .with_expected_color("coldest year", rgba8(colour.read().eval(coldest.1)))
         .with_expected_color("warmest year", rgba8(colour.read().eval(warmest.1)));
     let image = check(&cx, "gup_core/diverging_anomaly", &scene, meta);
@@ -243,6 +236,26 @@ fn diverging_temperature_anomaly_with_a_ramp_legend() {
             );
         }
     }
+    // The row nearest the midpoint is near-white, yet its outline is
+    // visible on the white plot: the darkest pixel on a line through its
+    // centre is no lighter than #999999.
+    let nearest = rows
+        .iter()
+        .copied()
+        .min_by(|a, b| a.1.abs().total_cmp(&b.1.abs()))
+        .unwrap();
+    let (cx_px, cy_px) = (
+        x.read().eval(nearest.0).round() as i64,
+        y.read().eval(nearest.1).round() as i64,
+    );
+    let darkest = (cx_px - 5..=cx_px + 5)
+        .map(|px| image.get_pixel(px as u32, cy_px as u32).0)
+        .min_by_key(|p| u32::from(p[0]) + u32::from(p[1]) + u32::from(p[2]))
+        .unwrap();
+    assert!(
+        darkest[..3].iter().all(|&c| c <= 0x99),
+        "{nearest:?}: darkest {darkest:?}"
+    );
     let (top, bottom) = (bar_at(1.0), bar_at(0.0));
     // The edge rows sample half a pixel inside the ends.
     for (got, want, end) in [
