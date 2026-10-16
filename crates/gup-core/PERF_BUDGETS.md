@@ -75,8 +75,8 @@ X) or `info` (printed, never fails).
 | `pipeline.link_create.cold_ms`    | 1.04      | <= 10     | `pipeline_timings`, its first run                 |
 | `pipeline.link_create.max_ms`     | 1.06      | info      | `pipeline_timings`                                |
 | `wasm.wgpu.gz_bytes`              | 41,712    | info      | `scripts/wasm_size.sh`, bare wgpu                 |
-| `wasm.scatter.gz_bytes`           | 302,929   | +2%       | `scripts/wasm_size.sh`, the reference scatter     |
-| `wasm.over_wgpu.gz_bytes`         | 261,217   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10       |
+| `wasm.scatter.gz_bytes`           | 312,306   | +2%       | `scripts/wasm_size.sh`, the reference scatter     |
+| `wasm.over_wgpu.gz_bytes`         | 270,593   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10       |
 
 A legitimate change that moves a number (a new guide, a bigger feature) records
 the new value here, in the same commit, with the reason in the story.
@@ -184,6 +184,13 @@ checked against their mirrors, costs 4,866 B (+1.6%).
 GUP-421 re-recorded it at 302,929 B (from 300,913): the `gup::coverage` library
 module and the rule and rect shaders that use it (+2,016 B, +0.7%).
 
+GUP-431 re-recorded it at 312,306 B (from 302,929). At the commit GUP-431
+started from, the scatter was already 308,740 B (+1.9%, within the +2%): the
+stories merged since GUP-421 (Segment, Rect, stroke and opacity, theme, chart
+traits, overhang domains) had not re-recorded it. GUP-431's size-descending draw
+order (`order.rs`: the batch sort, the run merge, compaction, and draws over
+instance ranges) adds 3,566 B (+1.2%).
+
 ## CI-side proxies
 
 Deterministic checks that run on every push (the Tests and Visual regression
@@ -193,7 +200,7 @@ seeded violation (GUP-417 retrospective).
 | Proxy                  | What it pins                                                                                                                                                                                                                                 | Enforced by                                                                             |
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | No extra upload        | 300 zoomed frames of 100K points: 0 column and validity bytes; exactly 3 uniform writes and 136 B (1 chunk) or 1,672 B (7 chunks) per frame; one instance write per guide draw and no more guide bytes than recorded; < 128 KB of atlas rows | `tests/zoom_uploads.rs` (`zooming_100k_points_writes_no_column_bytes`, `…_in_chunks_…`) |
-| No extra draw          | one instanced draw per column chunk (`MarkBatch::chunks`), and the same number of draw calls (`Prepared::draw_calls`) every frame: 4 for 1 chunk, 10 for 7                                                                                   | `tests/zoom_uploads.rs`, same tests                                                     |
+| No extra draw          | one instanced draw per column chunk (`MarkBatch::chunks`) for a layer without appends, and the same number of draw calls (`Prepared::draw_calls`) every frame: 4 for 1 chunk, 10 for 7                                                       | `tests/zoom_uploads.rs`, same tests                                                     |
 | No extra pipeline      | no glue program linked and no pipeline created (`Context::pipeline_stats`) after the first of 301 frames with an unchanged encoding                                                                                                          | `tests/zoom_uploads.rs`, same tests; `plot::tests` for one zoom                         |
 | Every write is counted | no source file writes to the GPU except through the counted `Context` methods                                                                                                                                                                | `context::tests::every_gpu_write_is_counted`                                            |
 | WASM size              | gup-core ≤ 400,000 B gz over bare wgpu                                                                                                                                                                                                       | `scripts/wasm_size.sh`, Visual regression workflow's browser job                        |
