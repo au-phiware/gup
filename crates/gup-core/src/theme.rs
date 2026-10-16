@@ -36,6 +36,9 @@ pub struct Theme {
     pub tick_len: Px,
     /// Gap between a tick and its label, and between labels and titles.
     pub label_gap: Px,
+    /// Inset of the axis ranges, so marks on the domain edge stay off the
+    /// plot rect's edge.
+    pub plot_padding: Px,
     /// Margin around the chart.
     pub pad: Px,
     /// Target spacing between x ticks.
@@ -60,6 +63,7 @@ impl Default for Theme {
             tick_size: Px(12.0),
             tick_len: Px(5.0),
             label_gap: Px(4.0),
+            plot_padding: Px(4.0),
             pad: Px(12.0),
             x_tick_spacing: Px(80.0),
             y_tick_spacing: Px(45.0),

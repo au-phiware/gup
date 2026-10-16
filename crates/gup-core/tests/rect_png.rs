@@ -191,6 +191,13 @@ fn monthly_bars_are_as_wide_as_their_band() {
         .run("gup_core/rect_bars", Ok((vr, meta)))
         .assert_ok();
 
+    // GUP-435: the tallest bar stops short of the plot rect's edge.
+    let top = y.read().eval(60.0) as f32;
+    assert!(
+        top >= resolved.layout.plot.top() + 4.0,
+        "top bar at {top}, plot top {}",
+        resolved.layout.plot.top()
+    );
     let band = x.read().band_width();
     let floor = y.read().eval(0.0);
     for (k, sale) in sales().iter().enumerate() {

@@ -33,7 +33,11 @@ const INK: Color = Color::hex(0x1f3a93);
 /// Large circles from a plot, plus diagonal rules and a fractional rect.
 fn scene(cx: &Context) -> Scene {
     let mut plot = Plot::new();
-    let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
+    let (x, y) = (
+        plot.x(Linear::new().domain(0.0, 2.0)),
+        plot.y(Linear::new().domain(0.0, 1.0)),
+    );
+
     plot.add(Selection::<(f64, f64), Circle>::new(vec![
         (0.0, 0.0),
         (1.0, 1.0),

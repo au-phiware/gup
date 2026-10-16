@@ -318,7 +318,7 @@ pub trait EncodeFn: Clone + Send + Sync + 'static {
     ///     City { lon: -0.1, lat: 51.5, population: 9.0e6 },
     ///     City { lon: 151.2, lat: -33.9, population: 5.3e6 },
     ///     City { lon: -70.7, lat: -33.4, population: 6.8e6 },
-    ///     City { lon: 4.9, lat: 52.4, population: 1.1e6 },
+    ///     City { lon: 13.4, lat: 52.5, population: 3.7e6 },
     /// ];
     ///
     /// let cx = Context::new_blocking()?;

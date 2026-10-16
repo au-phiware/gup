@@ -15,7 +15,7 @@ use crate::channel::{Mark, Px};
 use crate::context::Context;
 use crate::error::{Error, Result};
 use crate::geom::{Point, Rect};
-use crate::scale::{DynPositionScale, PositionScale, ScaleRef};
+use crate::scale::{DynPositionScale, PositionScale, ScaleRef, Ticks};
 use crate::scene::{
     Anchor, HAlign, Item, ItemKind, Rule, Scene, TextRole, TextRun, TextStyle, VAlign, Z_AXES,
     Z_GRID, Z_TITLE,
@@ -145,6 +145,14 @@ fn fit_text(text: &TextSystem, s: &str, size: f32, max: f32) -> String {
         }
     }
     "…".to_owned()
+}
+
+/// Ticks and the plot rect they leave room for.
+struct TickLayout {
+    x_ticks: Ticks,
+    y_ticks: Ticks,
+    y_label_w: f32,
+    plot: Rect,
 }
 
 impl Plot {
@@ -312,14 +320,12 @@ impl Plot {
             size: Px(th.tick_size.0),
             color: th.label,
         };
-        let x_ticks = x.ticks(((width / th.x_tick_spacing.0) as usize).max(2));
-        let y_ticks = y.ticks(((height / th.y_tick_spacing.0) as usize).max(2));
         let legend_w = if legends.is_empty() {
             0.0
         } else {
             crate::guide::column_width(&cx.text(), &th, &legends) + crate::guide::COLUMN_GAP
         };
-        let (title_h, axis_title_h, y_label_w, x_label_h, last_x_label_w) = {
+        let (title_h, axis_title_h, x_label_h) = {
             let text = cx.text();
             let axis_title_h = {
                 let m = text.measure("0", th.axis_title_size.0);
@@ -329,58 +335,140 @@ impl Plot {
                 let m = text.measure(t, th.title_size.0);
                 m.cap_height + m.descent
             });
+            let m = text.measure("0", th.tick_size.0);
+            (title_h, axis_title_h, m.cap_height + m.descent)
+        };
+        let (has_title, has_x_title, has_y_title) = (
+            self.title.is_some(),
+            self.x_title.is_some(),
+            self.y_title.is_some(),
+        );
+        // 4. The plot rect, on whole pixels, from the ticks' label sizes.
+        let layout = |x_count: usize, y_count: usize| -> Result<TickLayout> {
+            let x_ticks = x.ticks(x_count);
+            let y_ticks = y.ticks(y_count);
+            let text = cx.text();
             let y_label_w = y_ticks
                 .labels
                 .iter()
                 .map(|l| text.measure(l, th.tick_size.0).width)
                 .fold(0.0, f32::max);
-            let m = text.measure("0", th.tick_size.0);
-            let last = x_ticks
+            let last_x_label_w = x_ticks
                 .labels
                 .last()
                 .map_or(0.0, |l| text.measure(l, th.tick_size.0).width);
-            (
-                title_h,
-                axis_title_h,
-                y_label_w,
-                m.cap_height + m.descent,
-                last,
-            )
-        };
-
-        // 4. The plot rect, on whole pixels.
-        let top = th.pad.0
-            + if self.title.is_some() {
-                title_h + th.pad.0
-            } else {
-                0.0
-            }
-            + if self.y_title.is_some() {
+            let top = th.pad.0
+                + if has_title { title_h + th.pad.0 } else { 0.0 }
+                + if has_y_title {
+                    axis_title_h + th.label_gap.0
+                } else {
+                    0.0
+                };
+            let left = th.pad.0 + y_label_w + th.label_gap.0 + th.tick_len.0;
+            let x_title_h = if has_x_title {
                 axis_title_h + th.label_gap.0
             } else {
                 0.0
             };
-        let left = th.pad.0 + y_label_w + th.label_gap.0 + th.tick_len.0;
-        let x_title_h = if self.x_title.is_some() {
-            axis_title_h + th.label_gap.0
-        } else {
-            0.0
+            let bottom =
+                height - (th.pad.0 + x_label_h + th.label_gap.0 + th.tick_len.0 + x_title_h);
+            let right = width - th.pad.0.max(last_x_label_w / 2.0 + 2.0) - legend_w;
+            let plot = Rect::from_edges(left.round(), top.round(), right.round(), bottom.round());
+            if plot.width < 10.0 || plot.height < 10.0 {
+                return Err(Error::config(
+                    "plot size",
+                    format!("{width}×{height} leaves no room for the plot area"),
+                ));
+            }
+            Ok(TickLayout {
+                x_ticks,
+                y_ticks,
+                y_label_w,
+                plot,
+            })
         };
-        let bottom = height - (th.pad.0 + x_label_h + th.label_gap.0 + th.tick_len.0 + x_title_h);
-        let right = width - th.pad.0.max(last_x_label_w / 2.0 + 2.0) - legend_w;
-        let plot = Rect::from_edges(left.round(), top.round(), right.round(), bottom.round());
-        if plot.width < 10.0 || plot.height < 10.0 {
-            return Err(Error::config(
-                "plot size",
-                format!("{width}×{height} leaves no room for the plot area"),
-            ));
-        }
-
         // 5. Ranges, inset so marks on the domain edge stay inside.
         let mark_overhang = self.layers.iter().map(|l| l.overhang()).fold(0.0, f32::max);
-        let inset = mark_overhang + 1.0;
-        x.set_range(Px(plot.left() + inset), Px(plot.right() - inset));
-        y.set_range(Px(plot.bottom() - inset), Px(plot.top() + inset));
+        let inset = mark_overhang + th.plot_padding.0;
+        // A widened axis already holds the inset in its domain, so its
+        // range is the whole plot rect.
+        let set_ranges = |plot: Rect, widened: (bool, bool)| {
+            let (ix, iy) = (
+                if widened.0 { 0.0 } else { inset },
+                if widened.1 { 0.0 } else { inset },
+            );
+            x.set_range(Px(plot.left() + ix), Px(plot.right() - ix));
+            y.set_range(Px(plot.bottom() - iy), Px(plot.top() + iy));
+        };
+        let mut counts = (
+            ((width / th.x_tick_spacing.0) as usize).max(2),
+            ((height / th.y_tick_spacing.0) as usize).max(2),
+        );
+        let mut lay = layout(counts.0, counts.1)?;
+        // Automatic domains grow in data units to cover the overhang and
+        // padding, so the ticks run to both ends of each axis (GUP-435).
+        let widened = (
+            x.widen(lay.plot.left(), lay.plot.right(), inset),
+            y.widen(lay.plot.bottom(), lay.plot.top(), inset),
+        );
+        if widened.0 || widened.1 {
+            for s in [x, y] {
+                if s.is_auto() {
+                    s.nice();
+                }
+            }
+            // The range keeps the inset until the domain is final.
+            lay = layout(counts.0, counts.1)?;
+        }
+        set_ranges(lay.plot, widened);
+        // Thin ticks until no two labels collide; relayout at most once.
+        let gap = th.label_gap.0;
+        let thin = |lay: &mut TickLayout, counts: &mut (usize, usize)| {
+            let text = cx.text();
+            let collides = |ticks: &Ticks, s: &dyn DynPositionScale, vertical: bool| {
+                let mut boxes: Vec<(f32, f32)> = ticks
+                    .values
+                    .iter()
+                    .zip(&ticks.labels)
+                    .map(|(v, l)| {
+                        let c = s.eval(*v) as f32;
+                        let h = if vertical {
+                            x_label_h
+                        } else {
+                            text.measure(l, th.tick_size.0).width
+                        } / 2.0;
+                        (c - h, c + h)
+                    })
+                    .collect();
+                boxes.sort_by(|a, b| a.0.total_cmp(&b.0));
+                boxes.windows(2).any(|w| w[1].0 - w[0].1 < gap)
+            };
+            while counts.0 > 1 && collides(&lay.x_ticks, &**x, false) {
+                counts.0 -= 1;
+                lay.x_ticks = x.ticks(counts.0);
+            }
+            while counts.1 > 1 && collides(&lay.y_ticks, &**y, true) {
+                counts.1 -= 1;
+                lay.y_ticks = y.ticks(counts.1);
+            }
+        };
+        let before = counts;
+        thin(&mut lay, &mut counts);
+        if counts != before {
+            let reserved = lay.y_label_w;
+            let again = layout(counts.0, counts.1)?;
+            if again.y_label_w != reserved || again.plot != lay.plot {
+                lay = again;
+                set_ranges(lay.plot, widened);
+                thin(&mut lay, &mut counts);
+            }
+        }
+        let TickLayout {
+            x_ticks,
+            y_ticks,
+            plot,
+            ..
+        } = lay;
 
         // 6. Uniforms and columns, inside a GPU error scope (GUP-410).
         let mut batches = Vec::with_capacity(self.layers.len());
@@ -407,14 +495,20 @@ impl Plot {
         };
         // Axis lines just outside the plot rect, on pixel centres.
         let (ax_y, ay_x) = (plot.bottom() + 0.5, plot.left() - 0.5);
-        rules.push(axis(
-            Point::new(ay_x, ax_y),
-            Point::new(plot.right() - 0.5, ax_y),
-        ));
-        rules.push(axis(
-            Point::new(ay_x, plot.top() + 0.5),
-            Point::new(ay_x, ax_y),
-        ));
+        // A domain the user fixed is not widened, so its axis line covers
+        // only the range (no bare stretch past the end ticks).
+        let (x_from, x_to) = if x.is_auto() {
+            (ay_x, plot.right() - 0.5)
+        } else {
+            (plot.left() + inset, plot.right() - inset)
+        };
+        let (y_from, y_to) = if y.is_auto() {
+            (plot.top() + 0.5, ax_y)
+        } else {
+            (plot.top() + inset, plot.bottom() - inset)
+        };
+        rules.push(axis(Point::new(x_from, ax_y), Point::new(x_to, ax_y)));
+        rules.push(axis(Point::new(ay_x, y_from), Point::new(ay_x, y_to)));
         let mut x_placed = Vec::new();
         for (v, label) in x_ticks.values.iter().zip(&x_ticks.labels) {
             let px = x.eval(*v) as f32;
@@ -637,7 +731,8 @@ mod tests {
         let before = cx.pipelines().stats;
         let uploads = cx.upload_stats();
 
-        x.write().set_domain(2.0, 3.0).unwrap();
+        // Tick labels reuse the first render's glyphs, so no atlas texels are written.
+        x.write().set_domain(0.5, 2.0).unwrap();
         let second = plot.resolve(&cx, 300.0, 200.0).unwrap();
         let zoomed = target.render_blocking(&cx, &second.scene).unwrap();
         let after = cx.pipelines().stats;
@@ -753,7 +848,7 @@ mod tests {
         // Two f32 columns: exactly the appended rows' bytes.
         assert_eq!(written.columns.bytes, appended * 8, "{written:?}");
         let grown = x.read().current_domain().unwrap();
-        assert_eq!(grown.0, domain.0);
+        assert!(grown.0 <= domain.0, "{domain:?} → {grown:?}");
         assert!(grown.1 > domain.1 + 1000.0, "{domain:?} → {grown:?}");
 
         let resolved = plot.resolve(&cx, 400.0, 300.0).unwrap();

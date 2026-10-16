@@ -111,7 +111,7 @@ fn check_padding(what: &str, p: f64, max: f64) {
 /// wide) is centred on it.
 ///
 /// `padding_inner` is the gap between bands as a fraction of the step
-/// (band plus gap; default 0.1), and `padding_outer` the space before the
+/// (band plus gap; default 0.2), and `padding_outer` the space before the
 /// first band and after the last, in steps (default 0.1). The axis has a
 /// tick per key, labelled by the key.
 ///
@@ -143,9 +143,9 @@ impl Default for Band {
 }
 
 impl Band {
-    /// A band scale with 0.1 inner and outer padding.
+    /// A band scale with 0.2 inner and 0.1 outer padding.
     pub fn new() -> Self {
-        Self(Slots::new(0.1, 0.1))
+        Self(Slots::new(0.2, 0.1))
     }
 
     /// Set both paddings (`padding_inner` must be in `0..=1`).

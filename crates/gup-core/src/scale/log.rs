@@ -155,9 +155,19 @@ impl PositionScale for Log {
         (d0.log2() + t * (d1.log2() - d0.log2())).exp2()
     }
 
-    /// Extend the domain to whole powers of the base.
+    /// Extend the domain outwards. Base 10 rounds to the 1-2-5 series;
+    /// other bases round to whole powers.
     fn nice(&mut self) {
         let (d0, d1) = self.resolved_domain();
+        if self.base == 10.0 {
+            let lo = round_125(d0, false);
+            let mut hi = round_125(d1, true);
+            if hi <= lo {
+                hi = lo * 10.0;
+            }
+            self.domain = Some((lo, hi));
+            return;
+        }
         let b = self.base.ln();
         let lo = self.base.powf((d0.ln() / b - 1e-9).floor());
         let mut hi = self.base.powf((d1.ln() / b + 1e-9).ceil());
@@ -191,7 +201,25 @@ impl PositionScale for Log {
     }
 }
 
-/// Plain decimals from 0.001 to 999, SI suffixes (k, M, G, T) from 1000 up
+/// The nearest of {1, 2, 5} x 10^k at or below `v` (`up == false`) or at or
+/// above it (`up == true`), with a relative tolerance of 1e-9.
+fn round_125(v: f64, up: bool) -> f64 {
+    let k = v.log10().floor() as i32;
+    let candidates = (k - 1..=k + 1)
+        .flat_map(|e| [1.0, 2.0, 5.0].map(|m| m * 10f64.powi(e)))
+        .collect::<Vec<_>>();
+    if up {
+        candidates.into_iter().find(|&c| c >= v * (1.0 - 1e-9))
+    } else {
+        candidates
+            .into_iter()
+            .rev()
+            .find(|&c| c <= v * (1.0 + 1e-9))
+    }
+    .unwrap_or(v)
+}
+
+/// Plain decimals from 0.001 to 999, count suffixes (k, M, B, T) from 1000 up
 /// and exponent form below 0.001, so one axis never mixes notations.
 pub(super) fn format_log_tick(v: f64) -> String {
     // Round away binary noise from powi (e.g. 0.30000000000000004).
@@ -202,7 +230,7 @@ pub(super) fn format_log_tick(v: f64) -> String {
     if v < 1e-3 {
         return super::typographic(format!("{v:e}"));
     }
-    for (div, suffix) in [(1e12, "T"), (1e9, "G"), (1e6, "M"), (1e3, "k")] {
+    for (div, suffix) in [(1e12, "T"), (1e9, "B"), (1e6, "M"), (1e3, "k")] {
         if v >= div {
             return format!("{}{suffix}", clean(v / div));
         }
@@ -246,11 +274,37 @@ mod tests {
     }
 
     #[test]
-    fn nice_extends_to_powers_of_ten() {
+    fn nice_rounds_to_one_two_five() {
+        for ((a, b), want) in [
+            ((3.2, 870.0), (2.0, 1000.0)),
+            ((1.0, 1000.0), (1.0, 1000.0)),
+            ((8.0, 12000.0), (5.0, 20000.0)),
+            ((0.03, 4e6), (0.02, 5e6)),
+        ] {
+            let mut s = Log::new();
+            s.fit_domain((a, b)).unwrap();
+            s.nice();
+            let (lo, hi) = s.current_domain().unwrap();
+            assert!(
+                (lo / want.0 - 1.0).abs() < 1e-9 && (hi / want.1 - 1.0).abs() < 1e-9,
+                "{a},{b} -> {lo},{hi}"
+            );
+        }
+    }
+
+    #[test]
+    fn nice_base_two_keeps_whole_powers() {
         let mut s = Log::new();
+        s.base = 2.0;
         s.fit_domain((3.2, 870.0)).unwrap();
         s.nice();
-        assert_eq!(s.current_domain(), Some((1.0, 1000.0)));
+        assert_eq!(s.current_domain(), Some((2.0, 1024.0)));
+    }
+
+    #[test]
+    fn billion_is_b() {
+        assert_eq!(format_log_tick(1e9), "1B");
+        assert_eq!(format_log_tick(2.5e9), "2.5B");
     }
 
     #[test]
@@ -267,7 +321,7 @@ mod tests {
         assert_eq!(wide.ticks(5).labels[10], "100M");
         let pop = Log::new().domain(1e5, 1e9).ticks(8).labels;
         assert_eq!(pop[..4], ["100k", "200k", "500k", "1M"]);
-        assert_eq!(pop.last().unwrap(), "1G");
+        assert_eq!(pop.last().unwrap(), "1B");
         assert_eq!(format_log_tick(2e-5), "2e\u{2212}5");
     }
 
