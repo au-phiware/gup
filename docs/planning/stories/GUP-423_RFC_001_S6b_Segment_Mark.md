@@ -9,7 +9,8 @@ implementer-reason:
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 📋 Planned **Created**: 2026-10-11
+**Initiative**: RFC-001 Migration **Status**: ✅ Complete (2026-10-16)
+**Created**: 2026-10-11
 
 ## Context
 
@@ -60,36 +61,36 @@ on GUP-424.
 
 ### AC1: `Segment` mark
 
-- [ ] `gup_core::Segment` (crate root and prelude, with `SegmentAttrs`) is
+- [x] `gup_core::Segment` (crate root and prelude, with `SegmentAttrs`) is
       defined with `#[derive(Mark)]` over `crates/gup-wgsl/library/segment.wgsl`
       (`gup::marks::segment`), with the channels in Decisions.
-- [ ] `Segment`'s doc comment has a doctest drawing error bars
+- [x] `Segment`'s doc comment has a doctest drawing error bars
       (`x = x_end = year`, `y = lo`, `y_end = hi`) that renders.
 
 ### AC2: Geometry is exact at known pixels
 
-- [ ] A render test (explicit domains, white background) draws a horizontal
+- [x] A render test (explicit domains, white background) draws a horizontal
       segment 100 px long, width 4 px, its endpoints computed with the scales'
       `eval` after `resolve`. Its box is the segment extended 2 px past each end
       (square caps) and 2 px to each side. Every pixel whose centre lies at
       least 0.5 px inside the box equals the colour within 2/255; every pixel
       whose centre lies at least 1.5 px outside it is white within 2/255.
-- [ ] A diagonal segment (45°, length 100 px, width 3 px) holds 309 ± 6 pixels'
+- [x] A diagonal segment (45°, length 100 px, width 3 px) holds 309 ± 6 pixels'
       worth of ink (sum of coverage from one colour channel): the length plus
       both 1.5 px caps, times the width.
 
 ### AC3: Golden `segment_mark`
 
-- [ ] Golden `gup_core/segment_mark` (720×450): 20 vertical error bars from a
+- [x] Golden `gup_core/segment_mark` (720×450): 20 vertical error bars from a
       deterministic series, width 1.5 px, plus a fan of 8 diagonal segments at
       widths 0.5, 1, 2 and 4 px.
-- [ ] Read by eye: edges are smooth at 1×, not stair-stepped; ends are square;
+- [x] Read by eye: edges are smooth at 1×, not stair-stepped; ends are square;
       the 0.5 px segments are visible at reduced strength. The retrospective
       describes the PNG.
 
 ### AC4: Per-row width and colour
 
-- [ ] A render test encodes `width` through `Linear` (range `Px(1.0)..Px(6.0)`)
+- [x] A render test encodes `width` through `Linear` (range `Px(1.0)..Px(6.0)`)
       and `color` through `Categorical`; the measured perpendicular ink width of
       the thinnest and thickest horizontal segments matches their encoded widths
       within 0.5 px, and each segment's centre pixel is its category's colour
@@ -97,9 +98,9 @@ on GUP-424.
 
 ### AC5: Nulls and domains
 
-- [ ] A row whose `x_end` is NaN is not drawn (no ink within 10 px of its other
+- [x] A row whose `x_end` is NaN is not drawn (no ink within 10 px of its other
       endpoint) and the rest draw.
-- [ ] With auto domains, `x` data in 0..10 and `x_end` data in 5..30 give an x
+- [x] With auto domains, `x` data in 0..10 and `x_end` data in 5..30 give an x
       domain covering 0..30 after `resolve` (GUP-424's union).
 
 ## Decisions
@@ -142,8 +143,8 @@ on GUP-424.
 
 ## Technical Tasks
 
-- [ ] Add `segment.wgsl` and `Segment` (derive); export both.
-- [ ] Tests for AC2, AC4, AC5; golden `segment_mark`, read by eye.
+- [x] Add `segment.wgsl` and `Segment` (derive); export both.
+- [x] Tests for AC2, AC4, AC5; golden `segment_mark`, read by eye.
 
 ## Dependencies
 
@@ -166,7 +167,7 @@ on GUP-424.
 
 ## Success Metrics
 
-- [ ] Error bars and reference lines draw with one mark and no hand-built scene
+- [x] Error bars and reference lines draw with one mark and no hand-built scene
       items.
 
 ## Risk Assessment
@@ -176,10 +177,60 @@ on GUP-424.
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (golden image or PNG read), if visual
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye (golden image or PNG read), if visual
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `gup_core::Segment` (+ `SegmentAttrs`, crate root and prelude) derived over
+  `crates/gup-wgsl/library/segment.wgsl` (`gup::marks::segment`); channels as in
+  Decisions. The doctest draws error bars.
+- Tests in `crates/gup-core/tests/segment_png.rs` (6): box exactness, diagonal
+  ink, per-row width and colour, NaN end, domain union, golden. Two `.stderr`
+  files list the new library module.
+- Perf budget: all pass (a first run failed `pipeline.link_create.median_ms` at
+  1.114 against 1.056 under load; the rerun measured 0.979). `old-path-loc`
+  28,910.
+
+## Retrospective
+
+**Completed**: 2026-10-16
+
+### Key Technical Learnings
+
+#### Measuring ink in the presence of guides
+
+- **Challenge**: grey axes and text sit in every render.
+- **Solution**: a red segment on white has coverage `(red - green) / 255`, which
+  grey ignores; for other colours, project the pixel's distance from white onto
+  the colour's.
+- **Pattern**: choose a measuring colour orthogonal to the guide colour.
+
+#### Pixels per domain unit
+
+- **Challenge**: `layout.plot.width` is not the scales' pixel span (the plot
+  rect is rounded; the range is not).
+- **Solution**: size test segments from `eval(1000) - eval(0)` after a resolve.
+
+### Architectural Decisions
+
+#### Golden `segment_mark`
+
+The PNG (720x450): 20 vertical blue error bars along a sine-like series with
+square, smooth ends; an orange fan of 8 diagonal segments from (60, 8) at widths
+0.5, 1, 2 and 4 px, the thinnest visibly fainter, edges smooth at 1x.
+
+### Development Workflow Insights
+
+- The `wgsl_function_fail` stderr lists library modules in registration order,
+  so a new module appends at the end, not alphabetically.
+- `compile_fail` takes about 3 minutes cold.
+
+### Follow-up Stories
+
+None.
