@@ -75,8 +75,8 @@ X) or `info` (printed, never fails).
 | `pipeline.link_create.cold_ms`    | 1.04      | <= 10     | `pipeline_timings`, its first run                 |
 | `pipeline.link_create.max_ms`     | 1.06      | info      | `pipeline_timings`                                |
 | `wasm.wgpu.gz_bytes`              | 41,712    | info      | `scripts/wasm_size.sh`, bare wgpu                 |
-| `wasm.scatter.gz_bytes`           | 316,565   | +2%       | `scripts/wasm_size.sh`, the reference scatter     |
-| `wasm.over_wgpu.gz_bytes`         | 274,852   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10       |
+| `wasm.scatter.gz_bytes`           | 321,457   | +2%       | `scripts/wasm_size.sh`, the reference scatter     |
+| `wasm.over_wgpu.gz_bytes`         | 279,744   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10       |
 
 A legitimate change that moves a number (a new guide, a bigger feature) records
 the new value here, in the same commit, with the reason in the story.
@@ -254,3 +254,10 @@ seeded violation (GUP-417 retrospective).
   hook and its overrides, `Layer::legends`, and the legend text the harness's
   plot now lays out). The harness change is one `.unwrap()` on the legend
   accessor, a few bytes.
+- **GUP-432 (S6f)** re-recorded the WASM scatter (+4,474 B gz, 316,983 to
+  321,457, both measured with `mask wasm-size` on 2026-10-17, the parent tree
+  first; over bare wgpu 279,744, under the 400,000 cap). The parent measured 418
+  B above the recorded 316,565. The growth is shared code the scatter runs
+  through although it draws no line: the glue emitter's next-row reads, draw
+  entries (`order::draw_entries`), per-slot vertex buffer bindings
+  (`ChunkDraw::slots`) and the vertex-slot and storage-buffer checks in prepare.

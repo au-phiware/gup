@@ -3159,3 +3159,144 @@ emphasised rows last. Same machine as S0a–S5c (Intel HD Graphics 630, Mesa
 - **Line marks** have no `Size`-role channel and never sort; their rows'
   adjacency is their geometry. A future mark with a `Size` role and
   order-dependent geometry must opt out.
+
+## GUP-432 findings (2026-10-17)
+
+[GUP-432](../stories/GUP-432_RFC_001_S6f_Line_Mark.md) added the `Line` mark: a
+polyline through a layer's rows in data order, with round caps and joins, broken
+at null rows. Same machine as S0a–S5c (Intel HD Graphics 630, Mesa 26.0.0
+Vulkan).
+
+### Geometry: `Polyline`, a second read of the position channels
+
+- **The mark declares it.** `Mark::GEOMETRY` is `Quad` (one quad per row, the
+  default) or `Polyline` (one quad per pair of consecutive rows, `N − 1` for `N`
+  rows). The derive takes `#[mark(geometry = Polyline)]`. A polyline's input
+  struct is its channels, then `<channel>_next` for each `X`/`Y`-role channel,
+  in channel order (`LineIn` is `x, y, width, color, x_next, y_next`), and the
+  derive checks it as it checks the channels. Only positions are read twice.
+  Width and colour come from a segment's first row, so a polyline's last row
+  gives only its position.
+- **The glue reads the next row through the same chain.** `m.x_next` is `m.x`'s
+  expression with the column `col.x_next` and the first link's base
+  `chunk.x_next_base`. The `Encodings` uniform, the LUTs and later links' bases
+  are shared. A constant position reads its uniform twice, and a key-encoded one
+  also checks `col.x_next` against `NULL_CODE`.
+
+### The successor across chunk boundaries: bridge draws
+
+- **Within a chunk**, the next-row column binds the same column range one
+  element on (`range.start + stride`). Instance `i` reads row `i` and row
+  `i + 1`, and the chunk draws `rows − 1` instances. This is §3's "bind the same
+  column twice, offset by one element".
+- **Across a boundary**, a **bridge** draws one instance. Its row columns bind
+  chunk `k`'s last row (offset `(len − 1) × stride`), and its next-row columns
+  bind chunk `k + 1`'s first row, from the other buffer. A vertex buffer slot
+  binds any buffer, so the two rows need no copy. Each bridge has its own
+  `Chunk` entry (256 bytes on): `row_base` is the first row's store index,
+  `x_base` comes from chunk `k`'s origin, and `x_next_base` from chunk
+  `k + 1`'s. Each row is therefore decoded relative to the origin it was stored
+  against. In an own-chunk entry, both bases are the chunk's.
+  `order::draw_entries` lists the chunks' entries, then the bridges.
+  `polyline_spans` draws them in data order: chunk 0's segments, bridge 0, chunk
+  1's segments, and so on. `ChunkDraw` now binds a buffer and range per slot
+  (`slots`) instead of one buffer's ranges.
+- **Validity.** A polyline with nulls reads two rows' bits: binding 1 (the row's
+  chunk) and binding 2 (the next row's chunk; the same buffer except in a
+  bridge). The `Chunk` uniform gains `valid_offset` and `next_offset`, the
+  validity row of instance 0 in each binding: 0 and 1 in an own-chunk entry,
+  `len − 1` and 0 in a bridge. A null position on either row hides the segment,
+  so a null row hides both segments that touch it. A lone row between two nulls
+  draws nothing. A polyline needs two vertex-stage storage buffers when it has
+  nulls; with fewer, prepare returns a configuration error.
+- **Evidence.** The 10-row, 4-row-chunk line has Unix-second x values. Every 0.5
+  px sample of its centreline has coverage ≥ 0.9, and the render matches the
+  one-chunk render to within 8 pixels at 2/255. With the bridges left out, the
+  check fails (coverage 0 at a boundary). It also fails when a bridge decodes
+  its next row against its own chunk's origin (the next point lands 60 s × k
+  away), and the null test then fails too. A crate test clears the y validity
+  bit of rows 3 (last of chunk 0), 5 and 8 (first of chunk 2). It hides exactly
+  the six segments touching those rows and keeps the other four. With the
+  next-row bit check seeded off, it fails at segment 2. The image test with NaN
+  rows passes either way, because Mesa culls NaN vertices (as in S4b), so only
+  the bit test proves the mechanism.
+- **Append.** Appended rows fill the last chunk's tail (its own span grows by
+  the new rows) and open new chunks, which adds a bridge per new boundary. The
+  spans change, so the layer rebuilds its chunk half (`with_chunks`) and keeps
+  its encodings. Only the new rows' column bytes are written. 12 rows appended
+  in three batches to a 10-row line in 8-row chunks wrote exactly 12 × 8 B, and
+  the image equals a line built from all 22 rows at once.
+
+### Cost
+
+- **Slots.** A line with per-row x, y, width and colour uses 6 of the 8 vertex
+  buffer slots: 4 columns plus 2 next-row bindings. Validity uses storage
+  bindings, not slots. Prepare now returns a configuration error, for any mark,
+  when columns plus next-row columns exceed the device's `max_vertex_buffers`
+  (§12 risk 7).
+- **Bytes per row.** These are the columns' own bytes, 4 B per column (16 B for
+  the 4-column line above), plus validity bits when there are nulls. The
+  next-row bindings cost no bytes: they are the same buffer.
+- **Per boundary.** One extra draw call and one 256 B `Chunk` entry, inside the
+  same single uniform write per frame. A layer of `n` chunks draws `2n − 1`
+  spans (one per chunk, plus a bridge per boundary). A one-chunk line draws one.
+- **WASM.** The reference scatter grows from 316,983 to 321,457 B gz (+4,474;
+  measured against the parent tree). That covers the shared glue, draw-entry and
+  per-slot binding code; the scatter has no line.
+
+### Joins and caps: capsules
+
+- Each segment is a capsule: every point within `width / 2` of the segment.
+  `line_quad` with `cap = width / 2` gives its quad. The fragment takes
+  `gup::coverage::span` of the distance to the segment, so the body has the
+  `Segment` mark's cross-section and the ends are round. Consecutive capsules
+  overlap in a disc at their shared row. That is a round join built from the two
+  endpoints alone, with no wedge gap at any angle (AC3 checks 30° and 170°, 6
+  px).
+- **Opaque colour** shows no seam: the overlap is fully covered by both
+  capsules.
+- **Translucent colour** blends twice where segments overlap, so joins are
+  darker. At alpha 0.5, the join pixel has 0.75 coverage-weighted ink against
+  0.5 on the arms (a test pins this). Sharp turns also overlap on the inner side
+  beyond the disc. This is the documented behaviour.
+- **Caps** are round, and a zero-length segment (repeated rows) is a disc.
+
+### Alternatives rejected
+
+1. **Duplicate each chunk's successor row** (an overlap row stored at the end of
+   every chunk, relative to that chunk's origin). Every segment would be an
+   own-chunk instance, with no bridges. But it changes the chunk format,
+   capacity and upload accounting (append would have to rewrite the previous
+   chunk's overlap row), and that is one of the story's escalation triggers. The
+   bridge needs no store change.
+2. **Read the successor from a storage buffer** (vertex pulling of the next
+   row). It frees two slots, but every column read becomes a storage read with
+   hand-written format conversion, in a second glue path. A bridge would still
+   need the next chunk's buffer and origin, and devices without vertex-stage
+   storage buffers could not draw a line at all.
+3. **Miter or bevel joins.** A segment needs both neighbours' directions, rows
+   `i − 1` to `i + 2`: 8 position bindings, the whole slot budget before width
+   and colour. Clipping each capsule's start disc to avoid the double blend
+   would leave a seam in opaque lines where the two coverage ramps cross
+   (over-blending two 0.5 ramps gives 0.75, by calculation; not built).
+4. **One triangle strip per chunk** (two vertices per row). It has no per-row
+   quad to carry analytic coverage across a join, and a strip cannot be broken
+   at a null row without a primitive-restart index buffer.
+
+### Interaction with draw order (GUP-431)
+
+- A polyline never sorts by size: `size_order` returns `None` for `Polyline`
+  geometry, whatever its channels. Adjacency is its geometry, as GUP-431
+  proposed. Rows draw in data order with bridges in place, so overlaps (joins,
+  self-crossings) composite in data order. Emphasis is a second line layer with
+  a higher `z`.
+
+### Proposed adjustments to later steps
+
+- **S9 (picking).** A drawn instance is its segment's first row,
+  `row_base + instance_index`. A bridge's `row_base` already points at it. Hit
+  testing a line should use the distance to the segment, as the shader does.
+- **Areas (MSAA, not yet a story)** can reuse `Polyline` geometry: a band
+  between `y` and `y_end` per consecutive pair, bridged the same way.
+- **S12 (`Window`).** Evicting a whole chunk drops its bridge with it. The
+  remaining first chunk's segments are unaffected.
