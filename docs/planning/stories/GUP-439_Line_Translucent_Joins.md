@@ -1,4 +1,4 @@
-# GUP-438: Translucent Lines Without Double-Blended Joins
+# GUP-439: Translucent Lines Without Double-Blended Joins
 
 ## Story Overview
 

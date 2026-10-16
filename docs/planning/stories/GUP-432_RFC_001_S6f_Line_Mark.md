@@ -275,7 +275,7 @@ point for the shader.
 #### Capsules for round joins
 
 - **Decision**: round caps and joins from the two endpoints.
-- **Trade-off**: translucent joins blend twice (documented; GUP-438).
+- **Trade-off**: translucent joins blend twice (documented; GUP-439).
 
 ### Development Workflow Insights
 
@@ -290,5 +290,5 @@ point for the shader.
 
 ### Follow-up Stories
 
-1. **GUP-438: Translucent Lines Without Double-Blended Joins**: even opacity
+1. **GUP-439: Translucent Lines Without Double-Blended Joins**: even opacity
    along translucent lines, using a per-layer coverage pass.

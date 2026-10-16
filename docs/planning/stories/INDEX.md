@@ -300,7 +300,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   ramp legends for `then` chains (ticks in data units) and sampled or
   user-supplied legends for `#[wgsl_function]` colour functions. Deps: GUP-426
   📋, GUP-420 ✅.
-- [GUP-438](GUP-438_Line_Translucent_Joins.md) 💡 — translucent `Line`s with
+- [GUP-439](GUP-439_Line_Translucent_Joins.md) 💡 — translucent `Line`s with
   even opacity: joins and self-crossings blended once (a per-layer coverage
   pass), opaque lines unchanged. Deps: GUP-432 ✅.
 
