@@ -250,7 +250,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   `…Attrs` setter trait and a naga check of `<NAME>In` against the channels, for
   library and user WGSL; rewrites `Circle` onto it unchanged. Deps: GUP-420 ✅,
   GUP-421 ✅, GUP-419 ✅.
-- [GUP-423](GUP-423_RFC_001_S6b_Segment_Mark.md) 📋 — RFC-001 step S6b: a
+- [GUP-423](GUP-423_RFC_001_S6b_Segment_Mark.md) ✅ — RFC-001 step S6b: a
   per-row `Segment` mark (two endpoints, real width, square caps) on
   `gup::coverage::line_quad`, with per-row width and colour. Deps: GUP-422 ✅,
   GUP-424 📋, GUP-421 ✅.
