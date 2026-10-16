@@ -361,6 +361,11 @@ detail. Use this outline, and point to files rather than repeating them:
   Lint workflow runs `mask all-check` and the Tests workflow runs every test, on
   every push, never scoped.
 - **Small commits**: Commit after each logical increment, not one big commit.
+- **Other agents share this machine**: other workers may be building, testing or
+  committing in other checkouts at the same time. Never kill processes by a
+  broad pattern (`pkill -f pre_commit.sh`, `pkill cargo`); kill only PIDs you
+  started yourself. Never touch another checkout's files or the shared build
+  directory beyond what `scripts/prune_build_dir.sh` does.
 - **wgpu version**: Do not downgrade wgpu.
 - **Breaking changes are allowed** (pre-alpha). Prefer deleting or replacing a
   wrong API over keeping it for backward compatibility. Never leave silent no-op
