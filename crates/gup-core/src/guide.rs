@@ -257,3 +257,34 @@ fn ramp_items(
         ));
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn swatch_rows_show_what_fits_and_count_the_rest() {
+        // 12 px for the first row, 20 px for each further one.
+        assert_eq!(swatch_rows(3, 52.0), (3, 0));
+        assert_eq!(swatch_rows(3, 51.9), (1, 2));
+        assert_eq!(swatch_rows(60, 112.0), (5, 55));
+        assert_eq!(swatch_rows(60, 11.0), (0, 60));
+        assert_eq!(swatch_rows(0, 0.0), (0, 0));
+    }
+
+    #[test]
+    fn dedup_keeps_the_first_and_its_first_title() {
+        let a = Legend::Swatches(vec![]);
+        let b = Legend::Swatches(vec![crate::scale::Swatch {
+            label: "k".into(),
+            color: crate::channel::Color::BLACK,
+        }]);
+        let out = dedup([
+            (None, a.clone()),
+            (Some("B".into()), b.clone()),
+            (Some("A".into()), a.clone()),
+            (Some("other".into()), b.clone()),
+        ]);
+        assert_eq!(out, [(Some("A".into()), a), (Some("B".into()), b)]);
+    }
+}

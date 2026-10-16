@@ -5,10 +5,11 @@
 //! into a [`Layout`] and a [`Scene`] (RFC-001 §8–9, S0a subset).
 //!
 //! Any number of layers share the x/y scales, whose automatic domains
-//! union across layers and channels. S0a scope otherwise: left and bottom
-//! axes with tick labels, an
-//! optional title. Legends, grids,
-//! axis titles, themes and the object-safe `Chart` trait are RFC-001 S7.
+//! union across layers and channels. Left and bottom axes with tick
+//! labels, an optional title, axis titles, a [`Theme`](crate::Theme) and
+//! colour legends at the right (found through
+//! [`ShaderFn::legend`](crate::ShaderFn::legend)); grids and the
+//! object-safe `Chart` trait are later RFC-001 S7 steps.
 
 use crate::channel::{Mark, Px};
 use crate::context::Context;
