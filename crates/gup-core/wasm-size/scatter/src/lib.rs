@@ -330,7 +330,7 @@ pub async fn render_band_categorical(width: u32, height: u32) -> Result<Vec<u8>,
     let mut plot = Plot::new();
     let (x, y) = (plot.x(Band::new()), plot.y(Linear::new()));
     let colour = ScaleRef::new(Categorical::okabe_ito());
-    plot.title("Band and categorical")
+    plot.legends(false).title("Band and categorical")
         .add(Selection::<Row, Circle>::new(rows.clone()))
         .attr(Circle::X, x.encode_nullable_key(|r: &Row| r.0))
         .attr(Circle::Y, y.encode(|r: &Row| r.1))
@@ -476,7 +476,7 @@ pub async fn render_diverging(width: u32, height: u32) -> Result<Vec<u8>, JsValu
     let mut plot = Plot::new();
     let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
     let colour = ScaleRef::new(Diverging::blue_red());
-    plot.title("Diverging")
+    plot.legends(false).title("Diverging")
         .add(Selection::<(f64, f64), Circle>::new(rows.clone()))
         .attr(Circle::X, x.encode(|r: &(f64, f64)| r.0))
         .attr(Circle::Y, y.encode(|r: &(f64, f64)| r.1))
