@@ -57,13 +57,13 @@ fn canvas(layout: &Layout) -> Rect {
     Rect::new(0.0, 0.0, layout.width, layout.height)
 }
 
-fn golden(cx: &Context, case: &str, plot: &mut Plot, w: u32, h: u32) -> Layout {
+fn golden(cx: &Context, case: &str, plot: &mut Plot, w: u32, h: u32) -> (Layout, image::RgbaImage) {
     let (image, layout) = plot.render_resolved(cx, w, h).unwrap();
     let vr = RgbaImage::new(image.width(), image.height(), image.as_raw().clone()).unwrap();
     harness()
         .run(case, Ok((vr, layout_metadata(&layout))))
         .assert_ok();
-    layout
+    (layout, image)
 }
 
 fn assert_texts_disjoint_and_inside(layout: &Layout) {
@@ -141,7 +141,7 @@ fn titles_and_a_titled_legend_do_not_overlap() {
     plot.title("Readings by group")
         .x_title("Time (s)")
         .y_title("Level (mV)");
-    let layout = golden(&cx, "gup_core/legend_guides", &mut plot, 720, 450);
+    let (layout, _) = golden(&cx, "gup_core/legend_guides", &mut plot, 720, 450);
     let legend_texts: Vec<_> = layout
         .texts
         .iter()
@@ -159,7 +159,7 @@ fn a_long_domain_shows_what_fits_and_counts_the_rest() {
     let cx = Context::new_blocking().unwrap();
     let (mut plot, colour) = categorical_plot(60, None);
     let layout = plot.resolve(&cx, 720.0, 300.0).unwrap().layout;
-    let keys = ColorScale::legend(&*colour.read()).swatches().len();
+    let keys = colour.read().legend().unwrap().swatches().len();
     assert_eq!(keys, 60);
     let legend = layout.legend.unwrap();
     assert!(legend.bottom() <= layout.plot.bottom() + 0.5, "{legend:?}");
@@ -205,7 +205,7 @@ fn two_layers_stack_two_legends_and_a_shared_scale_gives_one() {
         .attr(Circle::RADIUS, Px(2.5))
         .attr(Circle::FILL, heat.encode(|r: &Row| r.y))
         .legend_title(Circle::FILL, "Level");
-    let layout = golden(&cx, "gup_core/legend_two_layers", &mut plot, 720, 450);
+    let (layout, image) = golden(&cx, "gup_core/legend_two_layers", &mut plot, 720, 450);
     let legend = layout.legend.unwrap();
     let swatches: Vec<_> = layout
         .guides
@@ -223,6 +223,43 @@ fn two_layers_stack_two_legends_and_a_shared_scale_gives_one() {
         "the ramp is below the swatches"
     );
     assert_texts_disjoint_and_inside(&layout);
+
+    // The ramp's ticks sit where the scale's CPU mirror puts their values:
+    // the bar's colour on a tick's row is the mirror's colour for it, and
+    // the ticks are evenly spaced (a linear scale, a round step).
+    let bar = *bars[0];
+    let ticks: Vec<&Rect> = layout
+        .guides
+        .iter()
+        .filter(|g| g.width == 5.0 && g.height == 1.0 && legend.inflate(1.0).contains_rect(g))
+        .collect();
+    let ramp = heat.read().ramp();
+    assert_eq!(ticks.len(), ramp.ticks().len());
+    let mut centres = Vec::new();
+    for (tick, rect) in ramp.ticks().iter().zip(&ticks) {
+        let y = rect.y + rect.height / 2.0;
+        let want = bar.bottom() - tick.t as f32 * bar.height;
+        assert!(
+            (y - want).abs() <= 0.5,
+            "tick {}: {y} vs {want}",
+            tick.label
+        );
+        let got = image.get_pixel((bar.x + 7.0) as u32, y as u32).0;
+        let mirror = heat.read().eval(tick.value).to_rgba8();
+        for k in 0..3 {
+            assert!(
+                got[k].abs_diff(mirror[k]) <= 4,
+                "{}: {got:?} vs {mirror:?}",
+                tick.label
+            );
+        }
+        centres.push(y);
+    }
+    let gaps: Vec<f32> = centres.windows(2).map(|w| w[0] - w[1]).collect();
+    assert!(
+        gaps.iter().all(|g| (g - gaps[0]).abs() <= 1.0),
+        "uneven ticks {gaps:?}"
+    );
     for g in swatches.iter().chain(&bars) {
         for t in &layout.texts {
             assert!(!intersects(g, &t.bounds), "{g:?} overlaps {:?}", t.run.text);

@@ -117,7 +117,7 @@ fn categorical_scatter_with_eleven_keys_and_a_legend() {
         .attr(Circle::FILL, colour.encode_key(|b: &Bird| b.species))
         .legend_title(Circle::FILL, "Species");
     let (scene, layout) = resolve(&cx, &mut plot);
-    let swatches = ColorScale::legend(&*colour.read()).swatches().to_vec();
+    let swatches = colour.read().legend().unwrap().swatches().to_vec();
     assert_eq!(swatches.len(), 11);
     assert_eq!(&*swatches[10].label, "Swan");
     for (s, c) in swatches.iter().zip(OKABE_ITO) {

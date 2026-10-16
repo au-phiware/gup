@@ -12,12 +12,10 @@ use crate::encoding::{CpuMirror, EncodeFn, ShaderFn};
 use std::sync::Arc;
 
 /// A colour scale: a [`ShaderFn`] producing a [`Color`], with an f64
-/// mirror and a legend.
-pub trait ColorScale: ShaderFn<Out = Color> + EncodeFn<Output = Color> + CpuMirror {
-    /// What a legend for this scale shows, from its current domain. Each
-    /// colour is the mirror's, so it matches the GPU's.
-    fn legend(&self) -> Legend;
-}
+/// mirror. Its [`legend`](ShaderFn::legend) shows what the scale maps,
+/// from its current domain, in the mirror's colours, so they match the
+/// GPU's.
+pub trait ColorScale: ShaderFn<Out = Color> + EncodeFn<Output = Color> + CpuMirror {}
 
 /// A colour scale's legend.
 #[derive(Clone, Debug, PartialEq)]
@@ -116,7 +114,7 @@ impl Ramp {
         (lo, hi): (f64, f64),
         count: usize,
     ) -> Self {
-        Self::piecewise(lut, reverse, [lo, (lo + hi) / 2.0, hi], count)
+        Self::build(lut, reverse, [lo, (lo + hi) / 2.0, hi], count, false)
     }
 
     /// A ramp through `stops` (low, middle at `t = 0.5`, high), with about
@@ -127,6 +125,18 @@ impl Ramp {
         reverse: bool,
         stops: [f64; 3],
         count: usize,
+    ) -> Self {
+        Self::build(lut, reverse, stops, count, true)
+    }
+
+    /// `mark_mid`: label the middle stop even when it is not a round value
+    /// (a diverging scale's midpoint; a linear ramp's centre is not special).
+    fn build(
+        lut: Arc<[[u8; 4]]>,
+        reverse: bool,
+        stops: [f64; 3],
+        count: usize,
+        mark_mid: bool,
     ) -> Self {
         let mut ramp = Self {
             lut,
@@ -145,7 +155,10 @@ impl Ramp {
         if values.is_empty() {
             values = vec![lo, hi];
         }
-        if !values.iter().any(|v| (v - mid).abs() < step * 1e-9) && (lo..=hi).contains(&mid) {
+        if mark_mid
+            && !values.iter().any(|v| (v - mid).abs() < step * 1e-9)
+            && (lo..=hi).contains(&mid)
+        {
             values.push(mid);
             values.sort_by(f64::total_cmp);
         }

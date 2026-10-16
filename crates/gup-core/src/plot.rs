@@ -1023,7 +1023,8 @@ mod tests {
     /// uniform did reach the GPU.
     #[test]
     fn a_new_key_grows_the_domain_with_a_uniform_write_only() {
-        use crate::scale::{Categorical, ColorScale, OKABE_ITO};
+        use crate::ShaderFn;
+        use crate::scale::{Categorical, OKABE_ITO};
         type Row = (f64, f64, &'static str);
         let cx = Context::new_blocking().unwrap();
         let rows: Vec<Row> = (0..30)
@@ -1053,7 +1054,7 @@ mod tests {
         let first = plot.resolve(&cx, 400.0, 300.0).unwrap();
         target.render_blocking(&cx, &first.scene).unwrap();
         let labels = |c: &ScaleRef<Categorical>| -> Vec<String> {
-            let legend = c.read().legend();
+            let legend = c.read().legend().unwrap();
             legend
                 .swatches()
                 .iter()
@@ -1072,7 +1073,10 @@ mod tests {
         let written = cx.upload_stats() - start;
 
         assert_eq!(labels(&colour), ["a", "b", "c", "d"]);
-        assert_eq!(colour.read().legend().swatches()[3].color, OKABE_ITO[3]);
+        assert_eq!(
+            colour.read().legend().unwrap().swatches()[3].color,
+            OKABE_ITO[3]
+        );
         // x, y (4 bytes each) and the code (4 bytes) of 2 rows.
         assert_eq!(written.columns.bytes, 2 * 12, "{written:?}");
         assert_eq!(written.textures, Default::default(), "{written:?}");

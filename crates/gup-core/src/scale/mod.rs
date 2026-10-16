@@ -198,14 +198,7 @@ where
     }
 }
 
-impl<S> ColorScale for ScaleRef<S>
-where
-    S: ColorScale + CpuMirror<Output = <S as ShaderFn>::Out>,
-{
-    fn legend(&self) -> Legend {
-        ColorScale::legend(&*self.read())
-    }
-}
+impl<S> ColorScale for ScaleRef<S> where S: ColorScale + CpuMirror<Output = <S as ShaderFn>::Out> {}
 
 /// Object-safe position-scale operations the plot needs for its x and y
 /// slots.

@@ -254,3 +254,14 @@ user `#[wgsl_function]` colour functions moved to
 ### Follow-up Stories
 
 None. (GUP-437 covers chains; the `legend` name clash is noted above.)
+
+### Review fixes (2026-10-17)
+
+- A linear `Ramp` forced its centre in as a tick, so `legend_two_layers` showed
+  0, 2, 4, 5, 6, 8. Only a diverging scale's midpoint is marked now; the end
+  ticks sit inside the bar. A test checks the ramp's ticks against the CPU
+  mirror's colour at their rows and for even spacing. Goldens
+  `legend_two_layers` and `diverging_anomaly` re-blessed (the blessing only
+  rewrites a golden that fails: delete it to force a rewrite).
+- `ColorScale::legend` is gone: `ShaderFn::legend` is the one hook, so
+  `scale.legend()` is unambiguous (returns `Option<Legend>`).

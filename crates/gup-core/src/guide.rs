@@ -243,7 +243,9 @@ fn ramp_items(
     });
     p.guides.push(bar);
     for tick in ramp.ticks() {
-        let y = (bar.bottom() - tick.t as f32 * bar.height).floor() + 0.5;
+        // On a pixel centre, and inside the bar even at its ends.
+        let y = ((bar.bottom() - tick.t as f32 * bar.height).floor() + 0.5)
+            .clamp(bar.top() + 0.5, bar.bottom() - 0.5);
         rules.push(Rule {
             p0: Point::new(bar.right(), y),
             p1: Point::new(bar.right() + TICK_LEN, y),

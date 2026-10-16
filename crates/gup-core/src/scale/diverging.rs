@@ -166,7 +166,7 @@ impl ShaderFn for Diverging {
     const ENTRY: &'static str = "map";
 
     fn legend(&self) -> Option<Legend> {
-        Some(ColorScale::legend(self))
+        Some(Legend::Ramp(self.ramp()))
     }
 
     fn params(&self) -> DivergingParams {
@@ -213,11 +213,7 @@ impl CpuMirror for Diverging {
     }
 }
 
-impl ColorScale for Diverging {
-    fn legend(&self) -> Legend {
-        Legend::Ramp(self.ramp())
-    }
-}
+impl ColorScale for Diverging {}
 
 #[cfg(test)]
 mod tests {

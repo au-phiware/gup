@@ -96,7 +96,7 @@ impl ShaderFn for Sequential {
     const ENTRY: &'static str = "map";
 
     fn legend(&self) -> Option<Legend> {
-        Some(ColorScale::legend(self))
+        Some(Legend::Ramp(self.ramp()))
     }
 
     fn params(&self) -> SequentialParams {
@@ -151,11 +151,7 @@ impl Sequential {
     }
 }
 
-impl ColorScale for Sequential {
-    fn legend(&self) -> Legend {
-        Legend::Ramp(self.ramp())
-    }
-}
+impl ColorScale for Sequential {}
 
 /// `lut` at `t` in `0..=1`, linearly interpolated between texel centres
 /// as the GPU's filtering sampler does (the CPU mirror of

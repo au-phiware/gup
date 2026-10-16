@@ -49,7 +49,7 @@ pub const MAX_PALETTE: usize = 2048;
 /// [`encode_owned_key`](crate::EncodeFn::encode_owned_key) for integer
 /// and enum keys). Its domain is the channel's keys, in first-seen order
 /// ([`ShaderFn::fit_keys`]): the first key draws in the first palette
-/// colour, and [`legend`](ColorScale::legend) lists the keys in that
+/// colour, and [`legend`](ShaderFn::legend) lists the keys in that
 /// order with their colours. A new key (appended rows) grows the domain:
 /// one uniform write, with no column bytes and no texture write.
 ///
@@ -94,7 +94,7 @@ pub const MAX_PALETTE: usize = 2048;
 /// assert_eq!(centre(2.0), OKABE_ITO[1].to_rgba8());
 /// assert_eq!(centre(3.0), NULL_COLOR.to_rgba8());
 /// // The legend lists the keys, with the colours drawn.
-/// let legend = ColorScale::legend(&*colour.read());
+/// let legend = colour.read().legend().unwrap();
 /// let swatches = legend.swatches();
 /// assert_eq!((&*swatches[1].label, swatches[1].color), ("Europe", OKABE_ITO[1]));
 /// # Ok::<(), gup_core::Error>(())
@@ -260,7 +260,7 @@ impl ShaderFn for Categorical {
     const ENTRY: &'static str = "map";
 
     fn legend(&self) -> Option<Legend> {
-        Some(ColorScale::legend(self))
+        Some(Self::swatches_legend(self))
     }
 
     fn params(&self) -> CategoricalParams {
@@ -306,8 +306,8 @@ impl CpuMirror for Categorical {
     }
 }
 
-impl ColorScale for Categorical {
-    fn legend(&self) -> Legend {
+impl Categorical {
+    fn swatches_legend(&self) -> Legend {
         Legend::Swatches(
             self.keys
                 .iter()
@@ -320,6 +320,8 @@ impl ColorScale for Categorical {
         )
     }
 }
+
+impl ColorScale for Categorical {}
 
 #[cfg(test)]
 mod tests {
@@ -399,7 +401,7 @@ mod tests {
         let mut c = Categorical::okabe_ito();
         let keys: Vec<Arc<str>> = ["Asia", "Europe", "Africa"].map(Arc::from).to_vec();
         c.fit_keys(&keys).unwrap();
-        let legend = ColorScale::legend(&c);
+        let legend = c.legend().unwrap();
         let s = legend.swatches();
         assert_eq!(s.len(), 3);
         assert_eq!((&*s[2].label, s[2].color), ("Africa", OKABE_ITO[2]));

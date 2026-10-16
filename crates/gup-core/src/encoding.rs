@@ -264,7 +264,7 @@ pub trait EncodeFn: Clone + Send + Sync + 'static {
     /// // order; so is each legend swatch.
     /// let labels: Vec<_> = layout.texts.iter().map(|t| &*t.run.text).collect();
     /// assert!(labels.starts_with(&["2021", "2019", "2020"]), "{labels:?}");
-    /// let legend = ColorScale::legend(&*colour.read());
+    /// let legend = colour.read().legend().unwrap();
     /// let swatches: Vec<_> = legend.swatches().iter().map(|s| &*s.label).collect();
     /// assert_eq!(swatches, ["mid", "high", "low"]);
     /// # Ok::<(), gup_core::Error>(())
