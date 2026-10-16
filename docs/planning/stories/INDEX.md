@@ -279,7 +279,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   (design): size-descending and emphasis-last draw order that stays
   append-friendly and correct with translucent fills. Deps: GUP-430 📋; soft:
   GUP-424 📋.
-- [GUP-432](GUP-432_RFC_001_S6f_Line_Mark.md) 📋 — RFC-001 step S6f (design): a
+- [GUP-432](GUP-432_RFC_001_S6f_Line_Mark.md) 🚧 — RFC-001 step S6f (design): a
   `Line` mark binding each row with its successor across column chunks, with
   joins and breaks at null rows. Deps: GUP-423 📋, GUP-424 📋.
 - [GUP-433](GUP-433_RFC_001_S7d_Shared_Key_Dictionaries.md) ✅ — RFC-001 step
