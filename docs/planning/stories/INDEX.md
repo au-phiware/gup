@@ -245,7 +245,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   `DEFAULT_SAMPLES` to 1 with MSAA opt-in and auto-enabled for area/polygon
   marks (owner decision 2026-10-10, RFC-001), reusing the line-coverage math for
   RFC-001 S6's future `Line`/`Segment` mark. Deps: GUP-417 ✅, GUP-401 ✅.
-- [GUP-422](GUP-422_RFC_001_S6a_Derive_Mark_V2.md) 📋 — RFC-001 step S6a:
+- [GUP-422](GUP-422_RFC_001_S6a_Derive_Mark_V2.md) 🚧 — RFC-001 step S6a:
   `#[derive(Mark)]` v2 generating a mark's channel constants, `Mark` impl,
   `…Attrs` setter trait and a naga check of `<NAME>In` against the channels, for
   library and user WGSL; rewrites `Circle` onto it unchanged. Deps: GUP-420 ✅,

@@ -8,7 +8,8 @@ implementer-reason: macro syntax, generated items and checks settled in
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 📋 Planned **Created**: 2026-10-11
+**Initiative**: RFC-001 Migration **Status**: 🚧 In Progress **Created**:
+2026-10-11
 
 ## Context
 
