@@ -3053,3 +3053,109 @@ function is written twice (WGSL and its f64 mirror), and constants live in
 - **Performance.** GPU pass 2.95 ms median, 5.60 ms p95 at 1× (six runs at the
   clock floor), against 4.52–4.60 / 8.50–8.87 ms at 4× in the same session.
   WASM: +2,016 B gz.
+
+## GUP-431 findings (2026-10-17)
+
+[GUP-431](../stories/GUP-431_RFC_001_S6e_Mark_Draw_Order.md) draws a layer
+largest first when its `Size`-role channel is a column, and records how to draw
+emphasised rows last. Same machine as S0a–S5c (Intel HD Graphics 630, Mesa
+26.0.0 Vulkan).
+
+### Mechanism: sorted batches, merged by instance ranges
+
+- **Sort each batch before the store.** A batch is the first evaluation or one
+  append. `Selection` sorts its rows largest first (stable, so equal sizes keep
+  data order) and permutes every column alike before `ColumnStore::append`. The
+  store is unchanged: chunk format, `Retain`, origins, stats and upload
+  accounting are as in S4a/S4b. It just receives the rows of a sized layer in
+  size order within each batch. Dictionary codes are assigned before the sort,
+  so a key domain stays in first-seen data order.
+- **Direction.** The key is the size column's data value, since scales are
+  monotonic. A decreasing encoding sorts by the negated value. The direction
+  comes from the encoding's `image` of the batch's extent, taken end by end. An
+  encoding without an image counts as increasing. Nulls sort first; they draw
+  nothing.
+- **Draw order.** Each batch is one sorted run of stored rows. `order.rs` merges
+  the newest run into a list of segments, each a range of consecutive stored
+  rows in draw order (`O(segments + m log n)`). `LayerGpu::spans` splits the
+  segments at chunk boundaries. `Prepared::draw` issues one
+  `draw(0..v, first..end)` per span, and binds a chunk's columns and `Chunk`
+  entry only when the chunk changes. `instance_index` includes `first`, so
+  validity bits and `row_base + instance_index` still name the stored row. The
+  glue and the shaders are unchanged.
+- **Picking (S9).** A drawn instance is stored row `row_base + instance_index`.
+  `DrawOrder::row_of` maps it to the data row: its batch's start plus its index
+  within the batch. GPU picking can upload the same map as a `u32` column when
+  it needs one.
+
+### Cost
+
+- **Per row.** No GPU bytes and no vertex-buffer slots. 8 B of CPU (an `f32` key
+  and a `u32` index within the batch), for sized layers only.
+- **Draws.** A layer built at once draws one span per chunk, the same draws as
+  data order. An append of `m` rows adds at most `2m` spans, because each new
+  row can split a segment. A batch wholly smaller or larger than the stored rows
+  adds at most one. Above `64 + rows / 1024` segments, a layer that still holds
+  its rows evaluates them again into one run: a full upload, amortised over the
+  appends that fragmented it. After `Retain` released the rows, spans keep
+  growing with appends.
+- **CPU** (release build). Sorting a batch and permuting 4 columns takes 4.6 ms
+  per 100K rows and about 64 ms per 1M. Packing the key bits above the index and
+  running an unstable sort of `u64`s beat a stable `f32` sort (103 ms per 1M).
+  Merging an append of 10, 100 or 1000 rows into 100K stored rows takes 3, 16
+  and 100 µs.
+- **Frame.** In `zoom_bench` with a square-root radius column over 100K points,
+  the ordered layer measured 2.88 and 3.03 ms of GPU pass and 0.689 and 0.696 ms
+  of CPU. The same layer in data order measured 2.81 and 3.16 ms, and 0.685 and
+  0.702 ms. The difference is noise. The `mask perf-budget` timings pass. WASM
+  grows by 3,566 B.
+
+### Append and translucency
+
+- **Append.** An append uploads only its rows' column bytes and no ordering
+  data. The AC2 test asserts exactly `2 × stride` column bytes, with no validity
+  or texture bytes, for two rows that are both smaller and larger than every
+  stored row.
+- **Translucency.** Order is painter's order with the existing over blend, so
+  `fill_opacity < 1` composites smaller over larger exactly. The test checks
+  this within 3/255 at every chain centre, including one that two discs cover.
+
+### Emphasis: a second layer with a higher `z`
+
+- Emphasised rows (a highlighted category) draw last when they are their own
+  layer over the same scales, with a higher `Selection::z` (GUP-424). This needs
+  no new API. `wgsl_function_highlight` now does this. Each layer's `fit_keys`
+  sees only that layer's keys, so the grey layer highlights nothing.
+- **Rejected:** an `order_by(key)` per row. It would be new public API, and it
+  competes with size order: a compound key needs a rule for which wins.
+
+### Alternatives rejected
+
+1. **Depth test.** It gives wrong blends for translucent fills, and no target
+   has a depth attachment.
+2. **Sorting within a chunk only.** An appended larger row would draw over every
+   stored row, which fails AC2's append.
+3. **Permutation buffer with vertex pulling.** The order is exact, but inserting
+   rows into a dense permutation rewrites `O(n)` entries per append, unless it
+   also keeps runs, which this design does without the buffer. Every column read
+   would become a storage read with hand-written format conversion (`Unorm8x4`,
+   `F16`), in a second glue path. A merged order across chunks needs every chunk
+   bound at once. Devices with `max_storage_buffers_per_shader_stage == 0`
+   cannot run it.
+4. **GPU sort of the keys** (compute radix or bitonic) on each change. It
+   uploads nothing, but it needs compute and vertex pulling, so it has the same
+   limits plus a sort pipeline. Revisit it if S9's compute passes bring vertex
+   pulling anyway.
+5. **Re-sorting and re-uploading the whole store on append.** It writes `O(n)`
+   bytes per append, which fails AC2. Compaction does this, amortised.
+6. **Size buckets**, one draw per bucket. Order is exact only between buckets.
+
+### Proposed adjustments to later steps
+
+- **Eviction.** `Window::LastRows` (S12) evicts whole chunks, so it must drop
+  their rows from the `DrawOrder` segments too.
+- **`first_instance`.** Draws with `first_instance > 0` are core WebGPU; wgpu's
+  GL backend emulates them. Only sized layers with appends use them.
+- **Line marks** have no `Size`-role channel and never sort; their rows'
+  adjacency is their geometry. A future mark with a `Size` role and
+  order-dependent geometry must opt out.
