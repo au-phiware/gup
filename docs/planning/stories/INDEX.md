@@ -285,7 +285,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
 - [GUP-433](GUP-433_RFC_001_S7d_Shared_Key_Dictionaries.md) ✅ — RFC-001 step
   S7d: one key dictionary per shared `ScaleRef`, so layers sharing a categorical
   or band scale give each key one code. Deps: GUP-424 📋, GUP-419 ✅.
-- [GUP-434](GUP-434_RFC_001_S7e_Chart_Trait.md) 📋 — RFC-001 step S7e:
+- [GUP-434](GUP-434_RFC_001_S7e_Chart_Trait.md) 🚧 — RFC-001 step S7e:
   object-safe `Chart` with a `ChartExt` blanket extension (render, save) and
   `Plot::layer_mut`; caching and input are deferred to S8. Deps: GUP-424 📋.
 - [GUP-435](GUP-435_RFC_001_S7f_Tick_Label_Quality.md) 📋 — RFC-001 step S7f:
