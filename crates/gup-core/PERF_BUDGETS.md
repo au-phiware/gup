@@ -75,7 +75,7 @@ X) or `info` (printed, never fails).
 | `pipeline.link_create.cold_ms`    | 1.04      | <= 10     | `pipeline_timings`, its first run                 |
 | `pipeline.link_create.max_ms`     | 1.06      | info      | `pipeline_timings`                                |
 | `wasm.wgpu.gz_bytes`              | 41,712    | info      | `scripts/wasm_size.sh`, bare wgpu                 |
-| `wasm.scatter.gz_bytes`           | 302,929   | +2%       | `scripts/wasm_size.sh`, the reference scatter     |
+| `wasm.scatter.gz_bytes`           | 313,171   | +2%       | `scripts/wasm_size.sh`, the reference scatter     |
 | `wasm.over_wgpu.gz_bytes`         | 261,217   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10       |
 
 A legitimate change that moves a number (a new guide, a bigger feature) records
@@ -237,3 +237,9 @@ seeded violation (GUP-417 retrospective).
   B gz). Two complete `perf-budget` runs (GPU clock median 367 MHz) passed every
   check: GPU pass 3.00 and 2.95 ms median, CPU 0.58 ms, 88 uniform bytes and 0
   column bytes per frame, link and create 1.04 and 0.96 ms median.
+- **GUP-426 (S7c)** re-recorded the WASM scatter (+10,242 B gz, 302,929 to
+  313,171; over bare wgpu 261,217 to 271,458, under the 400,000 cap). It is the
+  library's legend code (`guide.rs` layout and drawing, the `ShaderFn::legend`
+  hook and its overrides, `Layer::legends`, and the legend text the harness's
+  plot now lays out). The harness change is one `.unwrap()` on the legend
+  accessor, a few bytes.
