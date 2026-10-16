@@ -640,6 +640,48 @@ mod tests {
         assert!(after == expected, "appending differs from building at once");
     }
 
+    /// RFC-001 S7d (GUP-433): `DictionarySlot` hands every user the same
+    /// dictionary, and reports a key type mismatch.
+    #[test]
+    fn dictionary_slot_shares_one_dictionary_per_key_type() {
+        use crate::encoding::DictionarySlot;
+        let slot = DictionarySlot::default();
+        let first = slot.get_or_insert::<Arc<str>>().unwrap();
+        first.lock().unwrap().encode(Arc::from("a")).unwrap();
+        let second = slot.get_or_insert::<Arc<str>>().unwrap();
+        assert!(Arc::ptr_eq(&first, &second));
+        assert_eq!(second.lock().unwrap().labels().len(), 1);
+        let (existing, requested) = slot.get_or_insert::<u32>().unwrap_err();
+        assert!(existing.contains("str") && requested == "u32");
+    }
+
+    /// RFC-001 S7d (GUP-433): a new key appended to one layer of a shared
+    /// band axis uploads only that layer's new rows.
+    #[test]
+    fn appending_a_new_key_uploads_only_the_appended_layer() {
+        use crate::scale::Band;
+        type R = (&'static str, f64);
+        let cx = Context::new_blocking().unwrap();
+        let mut plot = Plot::new();
+        let (x, y) = (plot.x(Band::new()), plot.y(Linear::new()));
+        for rows in [vec![("a", 1.0), ("b", 2.0)], vec![("b", 3.0), ("a", 4.0)]] {
+            plot.add(Selection::<R, Circle>::new(rows))
+                .attr(Circle::X, x.encode_key(|r: &R| r.0))
+                .attr(Circle::Y, y.encode(|r: &R| r.1));
+        }
+        plot.resolve(&cx, 400.0, 300.0).unwrap();
+        let start = cx.upload_stats();
+        let layer: &mut Selection<R, Circle> = plot.layers[1].as_any_mut().downcast_mut().unwrap();
+        layer
+            .append(vec![("c", 5.0), ("a", 6.0), ("c", 7.0)])
+            .unwrap();
+        plot.resolve(&cx, 400.0, 300.0).unwrap();
+        let written = cx.upload_stats() - start;
+        // A u32 code column and an f32 column: only the three new rows.
+        assert_eq!(written.columns.bytes, 3 * 8, "{written:?}");
+        assert_eq!(x.read().keys().len(), 3);
+    }
+
     #[test]
     fn resolve_errors_name_what_is_missing() {
         let cx = Context::new_blocking().unwrap();

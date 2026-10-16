@@ -264,6 +264,7 @@ pub mod prelude {
 /// What `#[wgsl_function]`'s expansion names. Not public API.
 #[doc(hidden)]
 pub mod __private {
+    pub use crate::encoding::DictionarySlot;
     pub use encase;
 
     /// The library's flattened modules (`VIEW`, `SCALE_LINEAR`, …), which a

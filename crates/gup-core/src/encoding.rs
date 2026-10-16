@@ -17,8 +17,9 @@ use crate::channel::{ConstValue, GpuType, Px, Visual};
 use crate::column::{ColumnData, ColumnFormat, ColumnStats, Dictionary, DictionaryKey, NULL_CODE};
 use crate::error::{Error, Result};
 use crate::shader::WgslModule;
+use std::any::Any;
 use std::marker::PhantomData;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 /// A GPU function from a column value (`In`) to a visual value (`Out`),
 /// implemented by one function of a WGSL library module.
@@ -80,6 +81,14 @@ pub trait ShaderFn: Clone + Send + Sync + 'static {
     /// unions every extent fitted in a pass; the plot starts a pass on
     /// every link before fitting any layer.
     fn begin_fit(&self) {}
+
+    /// The key dictionary this function shares among the channels that
+    /// encode keys through it, if any (a [`ScaleRef`](crate::ScaleRef)
+    /// has one). Internal.
+    #[doc(hidden)]
+    fn dictionary_slot(&self) -> Option<&DictionarySlot> {
+        None
+    }
 
     /// Adopt `extent`, the extent of this function's input (the encoded
     /// column's data, or its image through the links before it), if this
@@ -503,19 +512,74 @@ pub struct Encoded<A, S> {
 /// channel's [`Dictionary`]: the column store holds only codes, and the
 /// function is fitted to the dictionary's keys
 /// ([`ShaderFn::fit_keys`]).
+///
+/// When the function's first link is a shared scale
+/// ([`ScaleRef`](crate::ScaleRef)), the dictionary is the scale's, shared
+/// by every channel that encodes keys through it, so a key has one code in
+/// every layer. Cloning shares the dictionary (it does not copy it).
 #[derive(Clone)]
 pub struct KeyEncoded<K: KeySource, S> {
     key: K,
     func: S,
-    dictionary: Dictionary<K::Key>,
+    dictionary: Arc<Mutex<Dictionary<K::Key>>>,
+    /// Set when the shared scale's dictionary has another key type;
+    /// reported by `evaluate`.
+    mismatch: Option<String>,
 }
 
-impl<K: KeySource, S> KeyEncoded<K, S> {
+/// The key dictionary of a shared scale: one per scale, of whichever key
+/// type its first user chose. Internal.
+#[doc(hidden)]
+#[derive(Default)]
+pub struct DictionarySlot(Mutex<Option<(&'static str, Box<dyn Any + Send + Sync>)>>);
+
+impl std::fmt::Debug for DictionarySlot {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("DictionarySlot")
+    }
+}
+
+impl DictionarySlot {
+    /// The slot's dictionary, created if empty. On a key type mismatch,
+    /// the `(existing, requested)` type names.
+    pub(crate) fn get_or_insert<K: DictionaryKey>(
+        &self,
+    ) -> std::result::Result<Arc<Mutex<Dictionary<K>>>, (&'static str, &'static str)> {
+        let mut slot = self.0.lock().unwrap_or_else(|p| p.into_inner());
+        let requested = std::any::type_name::<K>();
+        match &*slot {
+            Some((name, any)) => any
+                .downcast_ref::<Arc<Mutex<Dictionary<K>>>>()
+                .cloned()
+                .ok_or((*name, requested)),
+            None => {
+                let dictionary = Arc::new(Mutex::new(Dictionary::<K>::new()));
+                *slot = Some((requested, Box::new(Arc::clone(&dictionary))));
+                Ok(dictionary)
+            }
+        }
+    }
+}
+
+impl<K: KeySource, S: EncodeFn> KeyEncoded<K, S> {
     fn new(key: K, func: S) -> Self {
+        let slot = func.links().first().and_then(|l| l.dictionary_slot());
+        let (dictionary, mismatch) = match slot.map(DictionarySlot::get_or_insert::<K::Key>) {
+            Some(Ok(d)) => (d, None),
+            Some(Err((existing, requested))) => (
+                Arc::default(),
+                Some(format!(
+                    "layers share one scale but key it by different types: \
+                     {existing} and {requested}"
+                )),
+            ),
+            None => (Arc::default(), None),
+        };
         Self {
             key,
             func,
-            dictionary: Dictionary::new(),
+            dictionary,
+            mismatch,
         }
     }
 
@@ -548,16 +612,18 @@ impl<K: KeySource, S> KeyEncoded<K, S> {
     ///
     /// With more keys than codes (`u32::MAX`, the last of which is
     /// reserved for null).
-    pub fn domain<I>(mut self, keys: I) -> Self
+    pub fn domain<I>(self, keys: I) -> Self
     where
         I: IntoIterator,
         I::Item: Into<K::Key>,
     {
+        let mut dictionary = self.dictionary.lock().unwrap_or_else(|p| p.into_inner());
         for key in keys {
-            self.dictionary
+            dictionary
                 .encode(key.into())
                 .expect("a domain within u32::MAX - 1 keys");
         }
+        drop(dictionary);
         self
     }
 }
@@ -830,10 +896,13 @@ where
     S: EncodeFn,
 {
     fn evaluate(&mut self, rows: &[T]) -> Result<ColumnData> {
-        let dictionary = &mut self.dictionary;
+        if let Some(detail) = &self.mismatch {
+            return Err(Error::config("shared key scale", detail.clone()));
+        }
+        let mut dictionary = self.dictionary.lock().unwrap_or_else(|p| p.into_inner());
         Ok(ColumnData::Codes(
             rows.iter()
-                .map(|r| self.key.code(r, dictionary))
+                .map(|r| self.key.code(r, &mut dictionary))
                 .collect::<Result<_>>()?,
         ))
     }
@@ -843,7 +912,14 @@ where
     }
 
     fn fit(&mut self, _stats: Option<ColumnStats>) -> Result<()> {
-        self.func.fit_dictionary(self.dictionary.labels())
+        // Release the lock before calling into the scale.
+        let labels = self
+            .dictionary
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .labels()
+            .to_vec();
+        self.func.fit_dictionary(&labels)
     }
 
     fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)> {
@@ -872,6 +948,9 @@ pub trait DynShaderFn: Send + Sync {
     fn resources(&self) -> Vec<Resource>;
     /// See [`ShaderFn::begin_fit`].
     fn begin_fit(&self);
+    /// See [`ShaderFn::dictionary_slot`].
+    #[doc(hidden)]
+    fn dictionary_slot(&self) -> Option<&DictionarySlot>;
     /// A stable description used in the pipeline cache key: everything
     /// that changes the generated WGSL, nothing that only changes uniforms.
     fn signature(&self) -> String;
@@ -916,6 +995,10 @@ impl<S: ShaderFn> DynShaderFn for S {
 
     fn resources(&self) -> Vec<Resource> {
         ShaderFn::resources(self)
+    }
+
+    fn dictionary_slot(&self) -> Option<&DictionarySlot> {
+        ShaderFn::dictionary_slot(self)
     }
 
     fn begin_fit(&self) {
