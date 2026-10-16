@@ -241,34 +241,61 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   `DEFAULT_SAMPLES` to 1 with MSAA opt-in and auto-enabled for area/polygon
   marks (owner decision 2026-10-10, RFC-001), reusing the line-coverage math for
   RFC-001 S6's future `Line`/`Segment` mark. Deps: GUP-417 ✅, GUP-401 ✅.
-- [GUP-422](GUP-422_RFC_001_S6a_Derive_Mark_Circle_And_Rect.md) 📋 — RFC-001
-  step S6a: `#[derive(Mark)]` v2 generating a mark's channel constants, `Mark`
-  impl and a naga-checked WGSL-matches-channels proof; rewrites `Circle` onto it
-  and adds `Rect` with a `Band::band_width()`-derived width, plus fill opacity,
-  a stroke channel and size-descending draw order on both marks. Deps: GUP-419
-  ✅, GUP-401 ✅; soft: GUP-420 ✅, GUP-421 ✅.
-- [GUP-423](GUP-423_RFC_001_S6b_Line_Segment_And_Rule_Marks.md) 📋 — RFC-001
-  step S6b: `Rule`, `Segment` and `Line` marks (quad-expanded, real widths,
-  joins and caps) sharing GUP-421's line-coverage WGSL module; `Line` binds its
-  position column twice, offset by one row, for the previous/next pair, and
-  breaks at a null row. Deps: GUP-421 ✅, GUP-422 📋.
+- [GUP-422](GUP-422_RFC_001_S6a_Derive_Mark_V2.md) 📋 — RFC-001 step S6a:
+  `#[derive(Mark)]` v2 generating a mark's channel constants, `Mark` impl,
+  `…Attrs` setter trait and a naga check of `<NAME>In` against the channels, for
+  library and user WGSL; rewrites `Circle` onto it unchanged. Deps: GUP-420 ✅,
+  GUP-421 ✅, GUP-419 ✅.
+- [GUP-423](GUP-423_RFC_001_S6b_Segment_Mark.md) 📋 — RFC-001 step S6b: a
+  per-row `Segment` mark (two endpoints, real width, square caps) on
+  `gup::coverage::line_quad`, with per-row width and colour. Deps: GUP-422 📋,
+  GUP-424 📋, GUP-421 ✅.
 - [GUP-424](GUP-424_RFC_001_S7a_Multi_Layer_Plot_And_Shared_Scales.md) 📋 —
-  RFC-001 step S7a: lift `Plot::resolve`'s one-layer limit, union domains across
-  layers, add the object-safe `Chart`/`ChartExt` trait, and fix the bug where
-  two layers sharing one `ScaleRef<Categorical>` give the same key different
-  codes (one dictionary per shared scale, the union of its layers' keys). Deps:
-  GUP-419 ✅, GUP-414 ✅, GUP-401 ✅.
-- [GUP-425](GUP-425_RFC_001_S7b_Axes_Theme_And_Tick_Quality.md) 📋 — RFC-001
-  step S7b: axis titles, a `Theme` type (`null_color` replacing the `NULL_COLOR`
-  literal), a heavier font weight for `Time` year ticks over month ticks,
-  collision-aware `Band`/`Point` labels, and a tighter log-domain `nice()` step
-  so `categorical_species`-style domains stop wasting two decades. Deps: GUP-424
-  📋, GUP-419 ✅, GUP-418 ✅, GUP-407 ✅.
+  RFC-001 step S7a: `Plot::resolve` over several layers, with a per-resolve fit
+  pass on `ScaleRef` that unions domains across every channel and layer, and
+  per-layer `.z()`. Deps: GUP-419 ✅, GUP-414 ✅, GUP-401 ✅.
+- [GUP-425](GUP-425_RFC_001_S7b_Theme_And_Axis_Titles.md) 📋 — RFC-001 step S7b:
+  a `Theme` replacing the hard-coded `style` constants, a themable null colour
+  in the glue and `Categorical`, and x/y axis titles with truncation. Deps:
+  GUP-424 📋, GUP-419 ✅.
 - [GUP-426](GUP-426_RFC_001_S7c_Legend_Placement.md) 📋 — RFC-001 step S7c:
-  automatic legend placement and titles in `Plot::resolve` for
-  `Legend::Swatches`/`Ramp`, replacing the hand-built scene items
-  `tests/common/legend.rs` constructs today, with an overflow strategy for long
-  domains. Deps: GUP-424 📋, GUP-419 ✅; soft: GUP-425 📋.
+  `Plot::resolve` finds colour legends through a `ShaderFn::legend` hook and
+  places them, titled, in a right-hand column with "+N more" overflow, replacing
+  hand-built legend items. Deps: GUP-424 📋, GUP-425 📋, GUP-419 ✅; soft:
+  GUP-433 📋.
+- [GUP-429](GUP-429_RFC_001_S6c_Rect_Mark_And_Derived_Constants.md) 📋 — RFC-001
+  step S6c: a `Rect` mark (centre-and-extent or two edges per axis) and
+  `Derived<V>` channel values re-evaluated each resolve, so a bar's width
+  follows `ScaleRef<Band>::band_width_px()`. Deps: GUP-422 📋, GUP-421 ✅.
+- [GUP-430](GUP-430_RFC_001_S6d_Mark_Stroke_And_Fill_Opacity.md) 📋 — RFC-001
+  step S6d: `fill_opacity` (new `Unit` type), `stroke` and `stroke_width` on
+  `Circle` and `Rect`, stroke inside the edge; `diverging_anomaly` drops its
+  tinted background. Deps: GUP-429 📋, GUP-422 📋.
+- [GUP-431](GUP-431_RFC_001_S6e_Mark_Draw_Order.md) 📋 — RFC-001 step S6e
+  (design): size-descending and emphasis-last draw order that stays
+  append-friendly and correct with translucent fills. Deps: GUP-430 📋; soft:
+  GUP-424 📋.
+- [GUP-432](GUP-432_RFC_001_S6f_Line_Mark.md) 📋 — RFC-001 step S6f (design): a
+  `Line` mark binding each row with its successor across column chunks, with
+  joins and breaks at null rows. Deps: GUP-423 📋, GUP-424 📋.
+- [GUP-433](GUP-433_RFC_001_S7d_Shared_Key_Dictionaries.md) 📋 — RFC-001 step
+  S7d: one key dictionary per shared `ScaleRef`, so layers sharing a categorical
+  or band scale give each key one code. Deps: GUP-424 📋, GUP-419 ✅.
+- [GUP-434](GUP-434_RFC_001_S7e_Chart_Trait.md) 📋 — RFC-001 step S7e:
+  object-safe `Chart` with a `ChartExt` blanket extension (render, save) and
+  `Plot::layer_mut`; caching and input are deferred to S8. Deps: GUP-424 📋.
+- [GUP-435](GUP-435_RFC_001_S7f_Tick_Label_Quality.md) 📋 — RFC-001 step S7f:
+  1-2-5 log `nice()` bounds, "B" for billions, and measured tick-label thinning
+  on every axis so labels never overlap. Deps: GUP-425 📋, GUP-418 ✅, GUP-419
+  ✅.
+- [GUP-436](GUP-436_RFC_001_S7g_Semibold_Time_Year_Ticks.md) 📋 — RFC-001 step
+  S7g: bundle Inter SemiBold, add text weights to `gup-text`, and draw `Time`
+  year ticks heavier than month ticks within the WASM budget. Deps: GUP-425 📋,
+  GUP-407 ✅, GUP-418 ✅.
+- [GUP-437](GUP-437_RFC_001_S7h_Legends_For_Chains.md) 📋 — RFC-001 step S7h:
+  ramp legends for `then` chains (ticks in data units) and sampled or
+  user-supplied legends for `#[wgsl_function]` colour functions. Deps: GUP-426
+  📋, GUP-420 ✅.
 
 ## GPU Rendering Pipeline
 

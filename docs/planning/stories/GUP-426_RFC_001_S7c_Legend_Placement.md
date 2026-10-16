@@ -1,3 +1,10 @@
+---
+implementer: sonnet
+implementer-reason:
+  legend discovery hook, geometry, overflow rule and API are settled in
+  Decisions; drawing code moves from tests/common/legend.rs
+---
+
 # GUP-426: RFC-001 Step S7c: Legend Placement
 
 ## Story Overview
@@ -6,166 +13,167 @@
 
 ## Context
 
-[GUP-419](GUP-419_RFC_001_S5b_Colour_Scales_And_Dictionary_Hook.md) built the
-`ColorScale::legend()` machinery — `Legend::Swatches` for `Categorical`,
-`Legend::Ramp` for `Sequential`/`Diverging` — and its own tests place them by
-hand: RFC-001's "S5b findings → Proposed adjustments to S5c, S6, S7" records
-"Legend guides: place `Legend::Swatches` and `Ramp`, with titles. The tests
-place them by hand today (`tests/common/legend.rs`)." That is, the _data_ a
-legend needs (swatch colours and labels, or a ramp's LUT and ticks) already
-exists and is exercised by goldens like `categorical_species` and
-`diverging_anomaly`, but `Plot::resolve` has no code path that measures a
-legend, reserves space for it in the plot rect, and emits its
-`ItemKind::Gradient`/swatch scene items automatically — every current legend
-golden constructs the legend's `Item`s directly in test code, not through
-`Plot`.
+[GUP-419](GUP-419_RFC_001_S5b_Colour_Scales_And_Dictionary_Hook.md) built
+`ColorScale::legend()` (`Legend::Swatches` for `Categorical`, `Legend::Ramp` for
+`Sequential`/`Diverging`; `crates/gup-core/src/scale/legend.rs`), but
+`Plot::resolve` never draws one: the goldens `categorical_species` and
+`diverging_anomaly` place legends by hand with `tests/common/legend.rs`
+(`swatches` and `ramp`, lines 127–226), after resolving the plot narrower than
+the image. RFC-001 "S5b findings → Proposed adjustments": "Legend guides: place
+`Legend::Swatches` and `Ramp`, with titles." RFC-001 §9's `Layout` has
+`legend: Option<Rect<Px>>`, and §7 puts legends at z 200 with the title.
 
-This story is the automatic placement RFC-001 §9's `Layout` design calls for
-(`pub legend: Option<Rect<Px>>`) and §7's default z-order already reserves space
-for ("legend and title 200"). It depends on
-[GUP-424](GUP-424_RFC_001_S7a_Multi_Layer_Plot_And_Shared_Scales.md)'s
-shared-dictionary fix, because a legend for a categorical scale shared by two
-layers must list the union of their keys with one colour per key — building the
-legend from only one layer's (possibly incomplete, possibly differently-coded)
-dictionary would reproduce S7a's bug at the legend layer. It also benefits from
-[GUP-425](GUP-425_RFC_001_S7b_Axes_Theme_And_Tick_Quality.md)'s `Theme` and
-axis-title margin computation, since the legend competes with axis titles and
-the chart title for the same plot-rect-shrinking budget.
+`Plot` does not know which scales colour its layers: a colour `ScaleRef` is
+never registered with the plot. Each layer's encodings do know, through their
+links (`&dyn DynShaderFn`), so a provided `legend()` on `ShaderFn` lets
+`resolve` collect legends from each layer's `Color`-role channels. Two layers
+sharing a colour scale produce equal `Legend` values, so equality removes
+duplicates. Legends for chains (`Linear.then(Pow::sqrt()).then(viridis)`) and
+user `#[wgsl_function]` colour functions moved to
+[GUP-437](GUP-437_RFC_001_S7h_Legends_For_Chains.md) on 2026-10-16.
+
+## Read First
+
+- RFC-001 §9 (lines 618–666), the resolve pipeline and `Layout`.
+- RFC-001 "S5b findings" → "Proposed adjustments" (lines 2791–2826).
+- `crates/gup-core/src/scale/legend.rs` (all, 162 lines).
+- `crates/gup-core/tests/common/legend.rs` lines 1–60 and 127–248.
+- `crates/gup-core/tests/ordinal_png.rs` lines 95–135 (`categorical_species`)
+  and 170–225 (`diverging_anomaly`).
+- `crates/gup-core/src/plot.rs` `resolve` (after GUP-425: margins, titles,
+  `Layout`).
+- `crates/gup-core/src/encoding.rs` lines 811–870 (`DynShaderFn`).
 
 ## User Story
 
-> "As a visualization developer, I want a chart's colour legend to be placed
-> automatically, with a title, without manually constructing its scene items or
-> getting its layout wrong next to the axis titles and chart title, so that a
-> categorical or sequential colour encoding is self-explanatory by default."
+> "As a visualization developer, I want a chart's colour legend placed
+> automatically, with a title, so that a categorical or sequential colour
+> encoding is self-explanatory by default."
 
 ## Acceptance Criteria
 
-### AC1: Automatic legend placement
+### AC1: Automatic legends
 
-- [ ] `Plot::resolve` detects when a layer's colour (or other legend-bearing)
-      channel is bound through a `ColorScale`, measures its `Legend` (`Swatches`
-      or `Ramp`) using `gup-text` for label widths, reserves a rectangle for it
-      (a documented default position — for example to the right of the plot rect
-      — matching `Layout::legend: Option<Rect>`'s RFC-001 §9 shape), and shrinks
-      the plot rect accordingly, the same way axis titles and the chart title
-      already shrink it.
-- [ ] `categorical_species` and `diverging_anomaly` (or their current
-      equivalents) are re-rendered with the legend placed by `Plot::resolve`
-      itself rather than constructed by hand in test code;
-      `tests/common/     legend.rs`'s manual construction is removed or reduced
-      to only what genuinely still needs manual control.
-- [ ] A golden with a long chart title, axis titles (if GUP-425 has landed) and
-      a legend together is read by eye: none overlaps another, and the plot rect
-      is the remaining space after all three guides are placed.
+- [ ] `categorical_species` and `diverging_anomaly` no longer build legend items
+      or resolve narrower than the image: `Plot::resolve` places them. Both
+      goldens are re-blessed and read by eye. Their existing data/legend colour
+      assertions still pass, reading swatch and ramp positions from
+      `layout.legend` and `layout.texts`.
+- [ ] `Layout` has `pub legend: Option<Rect>`; it is `Some` exactly when a
+      legend is drawn, lies inside the canvas, and does not intersect
+      `layout.plot`.
+- [ ] `Plot::legends(&mut self, on: bool) -> &mut Self` (default on); with
+      `false` no legend is drawn and the plot rect is as without legends.
 
-### AC2: Legend titles
+### AC2: Titles
 
-- [ ] A legend has its own title (for example the field name or a caller-
-      supplied string, matching how axis titles are supplied), placed above or
-      beside the swatches/ramp, measured and laid out with the same `gup-text`
-      API as every other text run.
-- [ ] A golden shows a titled legend, read by eye: the title is legible and does
-      not overlap the swatches or ramp.
+- [ ] `Selection::legend_title(&mut self, channel: Channel<M, Color>, title:     impl Into<String>) -> &mut Self`;
+      the title is drawn above its legend as a `TextRole::Legend` run.
+- [ ] Golden `gup_core/legend_guides` (720×450): chart title, x and y axis
+      titles, and a titled categorical legend. A test asserts all `layout.texts`
+      ink boxes are pairwise disjoint and inside the canvas; read by eye.
 
-### AC3: Overflow and multiple legends
+### AC3: Long domains
 
-- [ ] A legend taller or wider than the available chart height/width (many
-      categorical keys, or past the 64-colour Okabe-Ito-extension threshold from
-      GUP-419) is handled without panicking or drawing off-canvas — wrapping
-      into columns, scrolling (not applicable to a static render), truncation
-      with a "+N more" indicator, or a documented minimum-size behaviour; the
-      chosen strategy is demonstrated in a test with a a long domain (for
-      example 50+ keys).
-- [ ] If more than one layer contributes a distinct legend-bearing scale (for
-      example one layer's categorical colour and another's sequential size — if
-      size legends exist by this point, otherwise document as deferred),
-      multiple legends are placed without overlapping each other; if this case
-      cannot yet arise (no second legend-bearing scale exists in `gup-core` at
-      this story's implementation time), this sub-AC is marked deferred with a
-      note, per the pattern GUP-421's AC3 used for its own not-yet-applicable
-      case.
-- [ ] Chained encodings and user colour functions get legends.
-      `Linear.then(Pow::sqrt()).then(viridis)` and a `#[wgsl_function]` colour
-      function currently have no legend, so the GUP-420 aftershocks golden
-      places its ramp by hand. The legend for a chain comes from its last colour
-      link, with the domain mapped back through the CPU mirrors, and a user
-      colour function can supply one via a trait hook (RFC-001 "S5c findings").
+- [ ] A 60-key categorical legend on a 720×300 plot resolves; the legend shows
+      as many swatch rows as fit and a final "+N more" row, where N is the
+      number of keys not shown; nothing is drawn below the canvas (test on
+      `layout.texts` and `layout.legend`).
+
+### AC4: Several legends
+
+- [ ] Two layers, one with a `Categorical` fill and one with a `Sequential`
+      fill, give two stacked legends that do not overlap (ink boxes and bars);
+      two layers sharing one `ScaleRef<Categorical>` give one legend.
+- [ ] Golden `gup_core/legend_two_layers`, read by eye.
+
+## Decisions
+
+- **Discovery**: `ShaderFn` gains a provided
+  `fn legend(&self) -> Option<Legend> { None }`, forwarded by `DynShaderFn`.
+  `Categorical`, `Sequential` and `Diverging` override it with
+  `Some(ColorScale::legend(self))`; `ScaleRef` forwards through `read()`.
+  `Layer` gains `fn legends(&self) -> Vec<(Option<String>, Legend)>`: for each
+  `Color`-role channel whose encoding is a column with exactly one link that
+  returns `Some`, its legend and title. Chains return nothing (GUP-437). `Plot`
+  collects legends in layer order and drops any equal (`PartialEq`) to an
+  earlier one, keeping the first non-`None` title.
+- **Placement**: one column at the right. Its width is the widest legend:
+  swatches `12 + 6 + max label width`; ramp
+  `14 (bar) + 4 (tick) + 4 + max tick label width`; or the title's width if
+  wider. The plot rect's right edge moves left by that width plus `16`. Legends
+  stack from the plot rect's top, `theme.pad` apart; each is title (text
+  height) + 6 px + body. Text uses `theme.tick_size` and `theme.label`.
+- **Bodies**: swatch rows 20 px apart with 12 px squares (as
+  `tests/common/legend.rs`); a ramp bar `min(200, space left)` tall, at least 60
+  px, else the ramp is omitted with its title kept.
+- **Overflow**: when swatch rows do not fit the space left, show `k - 1` rows
+  and a final text row "+N more" (`N = keys - (k - 1)`), with no swatch. No
+  wrapping into columns.
+- **Code**: the drawing moves into `crates/gup-core/src/guide.rs`
+  (`pub(crate)`), ported from `tests/common/legend.rs`' `swatches` and `ramp`;
+  items at `Z_TITLE`. `tests/common/legend.rs` keeps `scene()` and the metadata
+  helpers used by `scene_items` and `svg`, and loses `swatches`/ `ramp` once
+  unused.
+
+## Escalation Triggers
+
+- `categorical_species`' or `diverging_anomaly`'s colour assertions fail after
+  the move for a reason other than positions.
+- Equal `Legend`s from different scales would be merged wrongly (two scales with
+  identical domains and palettes); report rather than add identity.
+- The `scene_items` or `svg` goldens change.
+
+## Out of Scope
+
+- Legends for chains and user colour functions: GUP-437.
+- Size and opacity legends: not yet a story.
+- Legend position options (bottom, inside): not planned until builders (RFC-001
+  S10).
 
 ## Technical Tasks
 
-- [ ] Extend `Layout` (`crates/gup-core/src/plot.rs`) with the
-      `legend:     Option<Rect>` field RFC-001 §9 specifies, if not already
-      present.
-- [ ] Implement legend measurement (swatch/ramp size from the `Legend` data,
-      label widths from `gup-text`) and placement in `Plot::resolve`, following
-      the existing title/axis-label margin computation pattern
-      (`plot.rs:236-258` and its neighbours).
-- [ ] Emit the legend's `ItemKind::Gradient`/swatch/text scene items from
-      `resolve` rather than from test code; update or remove
-      `tests/common/legend.rs`'s manual construction accordingly.
-- [ ] Add legend-title support (text run, measured and laid out).
-- [ ] Implement the chosen overflow strategy (AC3) for long domains.
-- [ ] Re-bless `categorical_species`, `diverging_anomaly` and any other
-      legend-bearing golden to go through automatic placement.
-- [ ] Add the combined-guides golden (title + axis titles + legend) and the
-      long-domain overflow test.
+- [ ] `legend()` hook on `ShaderFn`/`DynShaderFn`, overrides, `ScaleRef`.
+- [ ] `Layer::legends`, `Selection::legend_title`, `Plot::legends`.
+- [ ] `guide.rs` layout and drawing; `Layout::legend`; margin change.
+- [ ] Migrate the two ordinal goldens; tests and goldens for AC2–AC4.
 
 ## Dependencies
 
 ### Prerequisite Stories
 
-- GUP-424: RFC-001 S7a Multi-Layer Plot and Shared Scales 📋 — the
-  shared-dictionary fix a correct multi-layer legend depends on.
-- GUP-419: RFC-001 S5b Colour Scales and Dictionary Hook ✅ —
-  `ColorScale:: legend()`, `Legend::Swatches`/`Ramp`, and the manual
-  legend-placement test helpers this story automates.
+- GUP-424: Multi-Layer Plot 📋 — several layers' legends.
+- GUP-425: `Theme` and Axis Titles 📋 — text styling and the margins legends
+  share.
+- GUP-419: RFC-001 S5b ✅ — `Legend`, `ColorScale::legend`.
 
 ### Soft Dependencies
 
-- GUP-425: RFC-001 S7b Axes, Theme and Tick Quality 📋 — not required to start,
-  but the combined-guides golden (AC1's third bullet) is most meaningful once
-  axis titles and `Theme` exist; without GUP-425, this story's combined golden
-  covers chart title plus legend only.
+- GUP-433: Shared Key Dictionaries 📋 — makes a shared categorical legend's keys
+  the union of its layers'.
 
 ### Enables Stories
 
-- RFC-001 S10 (builders; not yet written as a story) — a `.color(...)` call on a
-  builder should produce a legend with no further caller effort, which needs
-  this story's automatic placement.
+- GUP-437: legends for chains and user functions.
+- RFC-001 S10 builders (not yet stories).
 
 ## Testing Strategy
 
-- **Unit tests**: legend measurement (swatch/ramp size) against known inputs;
-  overflow-strategy triggering at the threshold.
-- **Integration tests**: `Plot::resolve` placing a legend without manual
-  scene-item construction; combined-guides non-overlap.
-- **Visual validation**: re-blessed `categorical_species`/`diverging_anomaly`, a
-  titled-legend golden, a long-domain overflow golden — all read by eye.
-- **Performance**: legend measurement should be part of the existing resolve
-  pipeline's one-time-per-change cost (RFC-001 §9); confirm it participates in
-  GUP-424's resolve-cache rather than re-measuring on every frame.
+- **Unit tests**: legend measurement and the overflow count.
+- **Integration tests**: AC1–AC4 layout assertions.
+- **Visual validation**: re-blessed `categorical_species`, `diverging_anomaly`;
+  new `legend_guides`, `legend_two_layers`.
+- **Performance**: legends are measured once per resolve; none expected.
 
 ## Success Metrics
 
-- [ ] Every legend-bearing golden is placed by `Plot::resolve` itself, with
-      `tests/common/legend.rs`'s manual construction removed or reduced.
-- [ ] A combined-guides golden (title, axis titles if available, legend) shows
-      no overlap, read by eye.
-- [ ] A long-domain legend does not panic or draw off-canvas.
+- [ ] No gup-core golden builds legend items by hand except
+      `wgsl_function_aftershocks` (a chain, GUP-437).
 
 ## Risk Assessment
 
-- **Medium**: default legend placement (position, size budget relative to the
-  plot rect) has no existing precedent in `gup-core` to match against; an
-  arbitrary choice may need revisiting once real builder output is seen in T5.
-  _Mitigation_: document the chosen default placement clearly as a first cut,
-  and make it a `Plot` setting (not hard-coded) so T5 builders can override it
-  without another RFC-001 story.
-- **Low**: the 64-colour Okabe-Ito extension (GUP-419) means a legend can in
-  principle need to show many swatches; AC3's overflow strategy must be chosen
-  pragmatically rather than gold-plated. _Mitigation_: a simple "+N more"
-  truncation is an acceptable first cut; document it as such.
+- **Low**: the fixed right-hand column may be wrong for builders. _Mitigation_:
+  `Plot::legends(false)` lets callers place their own.
 
 ## Definition of Done
 
@@ -173,6 +181,6 @@ the chart title for the same plot-rect-shrinking budget.
 - [ ] All tests pass: `cargo test -- --test-threads=1`
 - [ ] Lint and format clean: `mask all-fix`
 - [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (golden image or PNG read)
+- [ ] Rendered output verified by eye (golden image or PNG read), if visual
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
