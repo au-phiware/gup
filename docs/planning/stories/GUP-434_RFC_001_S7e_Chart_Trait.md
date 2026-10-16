@@ -9,8 +9,8 @@ implementer-reason:
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 🚧 In Progress **Created**:
-2026-10-16
+**Initiative**: RFC-001 Migration **Status**: ✅ Complete (2026-10-17)
+**Created**: 2026-10-16
 
 ## Context
 
@@ -49,21 +49,21 @@ gup-core is unpublished and `Plot` is its only implementor.
 
 ### AC1: Traits
 
-- [ ] `gup_core::{Chart, ChartExt}` exist with the signatures in Decisions, both
+- [x] `gup_core::{Chart, ChartExt}` exist with the signatures in Decisions, both
       in the prelude; `Plot` implements `Chart`.
-- [ ] A doctest on `Chart` builds a `Plot`, boxes it as `Box<dyn Chart>`,
+- [x] A doctest on `Chart` builds a `Plot`, boxes it as `Box<dyn Chart>`,
       renders it with `ChartExt::render`, and downcasts back with
       `as_any_mut().downcast_mut::<Plot>()`.
 
 ### AC2: `Plot::layer_mut`
 
-- [ ] `Plot::layer_mut::<T, M>()` returns the first layer of type
+- [x] `Plot::layer_mut::<T, M>()` returns the first layer of type
       `Selection<T, M>`; a test with two layers of different row types gets each
       and changes an attribute.
 
 ### AC3: Callers migrate
 
-- [ ] `Plot`'s inherent `render`, `render_resolved` and `save_png` are removed;
+- [x] `Plot`'s inherent `render`, `render_resolved` and `save_png` are removed;
       every caller (tests, doctests, examples, `show.rs`) compiles through
       `ChartExt`. `cargo check --examples` and `cargo test -p gup-core --doc`
       pass.
@@ -118,9 +118,9 @@ impl<C: Chart + ?Sized> ChartExt for C { /* the bodies moved from Plot */ }
 
 ## Technical Tasks
 
-- [ ] Add `chart.rs`; implement `Chart` for `Plot`; move the render methods.
-- [ ] Add `Plot::layer_mut`; export and prelude.
-- [ ] Migrate callers; doctest and tests for AC1–AC2.
+- [x] Add `chart.rs`; implement `Chart` for `Plot`; move the render methods.
+- [x] Add `Plot::layer_mut`; export and prelude.
+- [x] Migrate callers; doctest and tests for AC1–AC2.
 
 ## Dependencies
 
@@ -137,7 +137,7 @@ impl<C: Chart + ?Sized> ChartExt for C { /* the bodies moved from Plot */ }
 
 ## Success Metrics
 
-- [ ] Rendering code can be written against `dyn Chart`.
+- [x] Rendering code can be written against `dyn Chart`.
 
 ## Risk Assessment
 
@@ -146,10 +146,57 @@ impl<C: Chart + ?Sized> ChartExt for C { /* the bodies moved from Plot */ }
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (golden image or PNG read), if visual
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye (golden image or PNG read), if visual
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `crates/gup-core/src/chart.rs`: `Chart` (resolve, `as_any`, `as_any_mut`) and
+  `ChartExt` (blanket `render`, `render_resolved`, `save_png`), both in the
+  crate root and prelude; `Plot` implements `Chart` by forwarding to its
+  inherent `resolve`.
+- `Plot::layer_mut::<T, M>()`; the inherent `render`, `render_resolved` and
+  `save_png` are removed. Callers needed only a `ChartExt` import in
+  `window_parity.rs` and the plot unit tests.
+- Tests: `layer_mut_matches_layers_by_type` and the `Chart` doctest (boxes a
+  `Plot`, renders, downcasts). gup-core: all tests and 20 doctests pass; goldens
+  unchanged; `mask old-path-loc` 28,910.
+
+## Retrospective
+
+**Completed**: 2026-10-17
+
+### Key Technical Learnings
+
+#### Blanket extension traits
+
+- **Challenge**: Moving inherent methods behind a trait.
+- **Solution**: Default method bodies on `ChartExt` plus
+  `impl<C: Chart + ?Sized> ChartExt for C {}` works for `dyn Chart`, and a
+  generic `save_png` is fine because `ChartExt` is not used as a trait object.
+- **Pattern**: Callers in the prelude need no changes; only files importing
+  `gup_core::Plot` without the prelude do.
+
+### Architectural Decisions
+
+#### Reduced RFC-001 §8 trait
+
+- **Decision**: `resolve` returns an owned `Resolved`; `handle` and caching are
+  left to S8.
+- **Trade-off**: One more allocation per resolve than a cached `&Resolved`.
+
+### Development Workflow Insights
+
+- A repo-wide grep for `.render(` is far too noisy; compile errors list the
+  callers exactly.
+- `perf-budget` was not run because machine load stayed above 4 (4.85); no
+  rendering path changed.
+
+### Follow-up Stories
+
+None.
