@@ -664,6 +664,41 @@ where
 /// Marker for constant visual values (see [`IntoEncoding`]).
 pub enum ConstMarker {}
 
+/// Marker for [`Derived`] constants (see [`IntoEncoding`]).
+pub enum DerivedMarker {}
+
+/// A constant that is recomputed on every resolve, after the plot has set
+/// its scales' ranges: a uniform field that follows a scale, such as a bar
+/// width from [`ScaleRef::band_width_px`](crate::ScaleRef). It costs one
+/// closure call per channel per resolve and no column.
+pub struct Derived<V>(Arc<dyn Fn() -> V + Send + Sync>);
+
+impl<V: Visual> Derived<V> {
+    /// A constant computed by `f`.
+    pub fn new(f: impl Fn() -> V + Send + Sync + 'static) -> Self {
+        Self(Arc::new(f))
+    }
+}
+
+impl<V> Clone for Derived<V> {
+    fn clone(&self) -> Self {
+        Self(Arc::clone(&self.0))
+    }
+}
+
+impl<V> std::fmt::Debug for Derived<V> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Derived")
+    }
+}
+
+impl<T, V: Visual> IntoEncoding<T, V, DerivedMarker> for Derived<V> {
+    fn into_encoding(self) -> Encoding<T> {
+        let f = self.0;
+        Encoding::Derived(Arc::new(move || f().to_const()))
+    }
+}
+
 /// Marker for column encodings producing `D` (see [`IntoEncoding`]).
 pub struct ColumnMarker<D>(PhantomData<fn() -> D>);
 
@@ -723,6 +758,8 @@ where
 pub enum Encoding<T> {
     /// A constant (a uniform field, no column).
     Const(ConstValue),
+    /// A constant recomputed on every resolve (see [`Derived`]).
+    Derived(Arc<dyn Fn() -> ConstValue + Send + Sync>),
     /// An accessor plus an encoding function (a column plus GPU calls).
     Column(Box<dyn DynColumnEncoding<T>>),
 }
@@ -731,6 +768,7 @@ impl<T> std::fmt::Debug for Encoding<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Encoding::Const(c) => write!(f, "Const({c:?})"),
+            Encoding::Derived(_) => f.write_str("Derived"),
             Encoding::Column(c) => {
                 let links: Vec<String> = c.links().iter().map(|l| l.signature()).collect();
                 write!(f, "Column({})", links.join(" then "))

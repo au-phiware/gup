@@ -27,8 +27,8 @@ forwards to `S::fit_domain` (`scale/mod.rs` lines 136–138), and
 `Linear::fit_domain` (`scale/linear.rs` line 112) replaces the domain: the last
 channel fitted wins. That breaks two layers sharing `x`, and also one layer with
 two channels on one scale ([GUP-423](GUP-423_RFC_001_S6b_Segment_Mark.md)'s
-`x`/`x2`, [GUP-429](GUP-429_RFC_001_S6c_Rect_Mark_And_Derived_Constants.md)'s
-`x`/`x2`). RFC-001 §8: "Layers that bind the same role share a scale, and its
+`x`/`x_end`, [GUP-429](GUP-429_RFC_001_S6c_Rect_Mark_And_Derived_Constants.md)'s
+`x`/`x_end`). RFC-001 §8: "Layers that bind the same role share a scale, and its
 domain is the union of their f64 chunk stats." Because every shared scale is a
 `ScaleRef` (cloned into each encoding, sharing one `Arc`), the union can live
 there: each resolve starts a fit pass, and every fit in the pass unions into it.
@@ -166,7 +166,7 @@ resolve caching is deferred to RFC-001 S8.
 
 - GUP-433: shared key dictionaries across layers.
 - GUP-434: `Chart`/`ChartExt` over a multi-layer `Plot`.
-- GUP-423: `Segment`'s `x`/`x2` union. GUP-432: `Line`.
+- GUP-423: `Segment`'s `x`/`x_end` union. GUP-432: `Line`.
 - GUP-426: legends from several layers.
 
 ## Testing Strategy

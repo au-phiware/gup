@@ -31,12 +31,13 @@ caps and 0 for butt caps. `rule.wgsl` is the reference use. A mark declares
 `Mark::ANTIALIAS` (`Analytic` by default). GUP-421 also made 1× sampling the
 default, with 1× and 4× renders agreeing within 2/255.
 
-A segment has two position channels per axis (`x`, `x2`), both normally encoded
-through the plot's shared x scale. Today `fit_domain` replaces a scale's domain
-(`Linear::fit_domain`, `scale/linear.rs` line 112), so the last channel fitted
-wins; [GUP-424](GUP-424_RFC_001_S7a_Multi_Layer_Plot_And_Shared_Scales.md) makes
-every fit in a resolve union into the scale's domain. That is why this story
-depends on GUP-424.
+A segment has two position channels per axis (`x`, `x_end`), both normally
+encoded through the plot's shared x scale. Today `fit_domain` replaces a scale's
+domain (`Linear::fit_domain`, `scale/linear.rs` line 112), so the last channel
+fitted wins;
+[GUP-424](GUP-424_RFC_001_S7a_Multi_Layer_Plot_And_Shared_Scales.md) makes every
+fit in a resolve union into the scale's domain. That is why this story depends
+on GUP-424.
 
 ## Read First
 
@@ -62,8 +63,8 @@ depends on GUP-424.
 - [ ] `gup_core::Segment` (crate root and prelude, with `SegmentAttrs`) is
       defined with `#[derive(Mark)]` over `crates/gup-wgsl/library/segment.wgsl`
       (`gup::marks::segment`), with the channels in Decisions.
-- [ ] `Segment`'s doc comment has a doctest drawing error bars (`x = x2 = year`,
-      `y = lo`, `y2 = hi`) that renders.
+- [ ] `Segment`'s doc comment has a doctest drawing error bars
+      (`x = x_end = year`, `y = lo`, `y_end = hi`) that renders.
 
 ### AC2: Geometry is exact at known pixels
 
@@ -96,9 +97,9 @@ depends on GUP-424.
 
 ### AC5: Nulls and domains
 
-- [ ] A row whose `x2` is NaN is not drawn (no ink within 10 px of its other
+- [ ] A row whose `x_end` is NaN is not drawn (no ink within 10 px of its other
       endpoint) and the rest draw.
-- [ ] With auto domains, `x` data in 0..10 and `x2` data in 5..30 give an x
+- [ ] With auto domains, `x` data in 0..10 and `x_end` data in 5..30 give an x
       domain covering 0..30 after `resolve` (GUP-424's union).
 
 ## Decisions
@@ -106,8 +107,8 @@ depends on GUP-424.
 - **Channels**, in order:
   - `x`: `Px`, role `X`, default 0
   - `y`: `Px`, role `Y`, default 0
-  - `x2`: `Px`, role `X`, default 0
-  - `y2`: `Px`, role `Y`, default 0
+  - `x_end`: `Px`, role `X`, default 0
+  - `y_end`: `Px`, role `Y`, default 0
   - `width`: `Px`, no role, default `Px(1.0)`
   - `color`: `Color`, role `Color`, default `Segment::DEFAULT_COLOR` (`#0072B2`)
 
@@ -119,7 +120,7 @@ depends on GUP-424.
   (GUP-432).
 - **WGSL** (`segment.wgsl`): `SegmentIn` as above;
   `Varyings { clip, local, half, color, row }` like `rect.wgsl`; `vertex` calls
-  `coverage::line_quad(vec2(x, y), vec2(x2, y2), width, width * 0.5, vertex_index, view.dpr)`;
+  `coverage::line_quad(vec2(x, y), vec2(x_end, y_end), width, width * 0.5, vertex_index, view.dpr)`;
   `shade` returns premultiplied colour with
   `a = color.a * coverage::box_coverage(local, half)`, discarding `a <= 0`.
 - **No `Rule` mark** and no stroke/opacity channels (a segment is a stroke;
@@ -149,7 +150,7 @@ depends on GUP-424.
 ### Prerequisite Stories
 
 - GUP-422: `#[derive(Mark)]` v2 📋 — defines `Segment`.
-- GUP-424: Multi-Layer Plot and Shared Scales 📋 — unions `x`/`x2` into one
+- GUP-424: Multi-Layer Plot and Shared Scales 📋 — unions `x`/`x_end` into one
   domain.
 - GUP-421: Analytic AA ✅ — `gup::coverage::line_quad`.
 

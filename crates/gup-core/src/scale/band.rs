@@ -6,10 +6,10 @@
 //! WGSL function, `offset + step · code`, and take their domain, the
 //! channel's keys in first-seen order, from [`ShaderFn::fit_keys`].
 
-use super::{PositionScale, Ticks};
+use super::{PositionScale, ScaleRef, Ticks};
 use crate::channel::Px;
 use crate::column::{ColumnFormat, NULL_CODE};
-use crate::encoding::{CpuMirror, ShaderFn};
+use crate::encoding::{CpuMirror, Derived, ShaderFn};
 use crate::error::{Error, Result};
 use crate::shader::{SCALE_BAND, WgslModule};
 use std::sync::Arc;
@@ -195,6 +195,30 @@ impl Band {
     /// The distance between adjacent bands' centres, in pixels.
     pub fn step(&self) -> f64 {
         self.0.step()
+    }
+}
+
+impl ScaleRef<Band> {
+    /// A bar's size across this axis: [`Band::band_width`] in logical
+    /// pixels (absolute, so a reversed range such as a y axis is fine),
+    /// read each time the plot resolves, after it has set the range. Bind
+    /// it to a channel like `Rect::WIDTH`; it follows the domain, so a
+    /// bar chart stays correct when a key is appended.
+    ///
+    /// ```
+    /// use gup_core::prelude::*;
+    ///
+    /// let x = ScaleRef::new(Band::new().padding(0.25).range(Px(0.0), Px(325.0)));
+    /// x.write().fit_keys(&["Mon".into(), "Tue".into(), "Wed".into()])?;
+    /// let width = x.band_width_px();
+    /// // The channel binds `width`; `Selection` evaluates it on resolve.
+    /// assert_eq!(x.read().band_width(), 75.0);
+    /// # let _: Derived<Px> = width;
+    /// # Ok::<(), gup_core::Error>(())
+    /// ```
+    pub fn band_width_px(&self) -> Derived<Px> {
+        let band = self.clone();
+        Derived::new(move || Px(band.read().band_width().abs() as f32))
     }
 }
 

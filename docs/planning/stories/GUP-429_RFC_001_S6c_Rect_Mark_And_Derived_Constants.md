@@ -9,7 +9,8 @@ implementer-reason:
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 📋 Planned **Created**: 2026-10-16
+**Initiative**: RFC-001 Migration **Status**: 🚧 In Progress **Created**:
+2026-10-16
 
 ## Context
 
@@ -68,9 +69,9 @@ whose extent is non-zero, and two edges otherwise.
       `crates/gup-wgsl/library/rect.wgsl` (`gup::marks::rect`), with the
       channels in Decisions.
 - [ ] A render test draws one rect with `width`/`height` (centre form) and one
-      with `x2`/`y2` (edge form, corners given in reverse order) at known pixel
-      coordinates; for each, the pixels 1 px inside every edge are the fill
-      within 2/255 and the pixels 1 px outside are background within 2/255.
+      with `x_end`/`y_end` (edge form, corners given in reverse order) at known
+      pixel coordinates; for each, the pixels 1 px inside every edge are the
+      fill within 2/255 and the pixels 1 px outside are background within 2/255.
 
 ### AC2: `Derived` constants
 
@@ -98,7 +99,7 @@ whose extent is non-zero, and two edges otherwise.
 - [ ] Golden `gup_core/rect_bars` (720×450): six monthly values on a `Band` x
       (`domain([Jan..Jun])`), `Linear` y with explicit domain `0..max`, `Rect`
       with `x = x.encode_key(..)`, `width = x.band_width_px()`,
-      `y = y.encode(..)`, `y2 = Derived` of `y.read().eval(0.0)`.
+      `y = y.encode(..)`, `y_end = Derived` of `y.read().eval(0.0)`.
 - [ ] Read by eye: six equal-width bars, each centred on its month label,
       bottoms within 2 px of the x axis line, tops at their values, no bar
       outside the plot rect. The retrospective describes the PNG.
@@ -108,7 +109,7 @@ whose extent is non-zero, and two edges otherwise.
 ### AC5: Horizontal bars
 
 - [ ] A render test draws horizontal bars (`y` a `Band`,
-      `height =     y.band_width_px()`, `x` the value, `x2` a `Derived`
+      `height =     y.band_width_px()`, `x` the value, `x_end` a `Derived`
       baseline) and checks each bar's measured extent along both axes within 1
       px.
 
@@ -120,15 +121,15 @@ whose extent is non-zero, and two edges otherwise.
   - `y`: `Px`, role `Y`, default 0
   - `width`: `Px`, no role, default `Px(0.0)`
   - `height`: `Px`, no role, default `Px(0.0)`
-  - `x2`: `Px`, role `X`, default 0
-  - `y2`: `Px`, role `Y`, default 0
+  - `x_end`: `Px`, role `X`, default 0
+  - `y_end`: `Px`, role `Y`, default 0
   - `fill`: `Color`, role `Color`, default `Rect::DEFAULT_FILL` (`#0072B2`)
 
   Horizontal span: if `width != 0`, `x ± |width| / 2` (centre form); otherwise
-  `min(x, x2)..max(x, x2)` (edge form). Vertical likewise with `height`, `y`,
-  `y2`. A zero extent cannot be drawn anyway, so 0 is a safe "unset" value; NaN
-  is not used because WGSL implementations may assume no NaNs. `width`/`height`
-  have no role, so they add nothing to the plot inset.
+  `min(x, x_end)..max(x, x_end)` (edge form). Vertical likewise with `height`,
+  `y`, `y_end`. A zero extent cannot be drawn anyway, so 0 is a safe "unset"
+  value; NaN is not used because WGSL implementations may assume no NaNs.
+  `width`/`height` have no role, so they add nothing to the plot inset.
 
 - **WGSL** (`crates/gup-wgsl/library/rect.wgsl`): `RectIn` as above; `Varyings`
   with `@builtin(position) clip` and, at locations 0–3, `local: vec2<f32>`,
@@ -138,6 +139,8 @@ whose extent is non-zero, and two edges otherwise.
   `shade` returns premultiplied `fill.rgb * a, a` with
   `a = fill.a * coverage::box_coverage(local, half)`, discarding `a <= 0`. Not
   the guide shader `crates/gup-core/src/shaders/rect.wgsl`.
+- **Second-edge names** are `x_end`/`y_end`, not `x2`/`y2`: a composable WGSL
+  struct member cannot end in a digit (naga's writeback rule; GUP-420).
 - **`Derived`** (in `crates/gup-core/src/encoding.rs`, re-exported at the crate
   root):
 
@@ -176,9 +179,9 @@ whose extent is non-zero, and two edges otherwise.
 ## Out of Scope
 
 - Stroke and fill opacity on `Rect` and `Circle`: GUP-430.
-- Unioned domains when `x` and `x2` are both columns on one auto-domained scale
-  (today the last-fitted channel wins): GUP-424. This story's tests use explicit
-  domains or a `Derived` second edge.
+- Unioned domains when `x` and `x_end` are both columns on one auto-domained
+  scale (today the last-fitted channel wins): GUP-424. This story's tests use
+  explicit domains or a `Derived` second edge.
 - A bar builder (`BarChart`): RFC-001 S10, not yet a story.
 - `Derived` values that change between resolves without a resolve (they are read
   only in `prepare`).

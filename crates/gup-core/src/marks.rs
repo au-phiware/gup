@@ -57,6 +57,69 @@ impl Circle {
     pub const DEFAULT_FILL: Color = Color::hex(0x0072b2);
 }
 
+/// A filled axis-aligned box in logical pixels, with analytically
+/// antialiased edges.
+///
+/// On each axis a non-zero extent (`width`, `height`) gives a box centred on
+/// `x` (`y`); a zero extent gives the box between the two edges `x` and `x_end`
+/// (`y` and `y_end`), in either order. A bar's width comes from its band scale,
+/// and its far edge is a constant derived from the value scale:
+///
+/// ```
+/// use gup_core::prelude::*;
+///
+/// # fn main() -> gup_core::Result<()> {
+/// struct Sale {
+///     month: &'static str,
+///     total: f64,
+/// }
+/// let sales = vec![Sale { month: "Jan", total: 3.0 }, Sale { month: "Feb", total: 5.0 }];
+///
+/// let x = ScaleRef::new(Band::new());
+/// let y = ScaleRef::new(Linear::new().domain(0.0, 5.0));
+/// let mut bars = Selection::<Sale, Rect>::new(sales);
+/// bars.x(x.encode_key(|s: &Sale| s.month).domain(["Jan", "Feb"]))
+///     .width(x.band_width_px())
+///     .y(y.encode(|s: &Sale| s.total))
+///     .y_end({
+///         let y = y.clone();
+///         Derived::new(move || Px(y.read().eval(0.0) as f32))
+///     });
+/// # let _ = bars;
+/// # Ok(())
+/// # }
+/// ```
+#[derive(Debug, gup_core_macros::Mark)]
+#[mark(module = "gup::marks::rect", geometry = Quad)]
+pub struct Rect {
+    /// Centre x, or the first edge when `width` is 0 (logical pixels).
+    #[channel(role = X)]
+    x: Px,
+    /// Centre y, or the first edge when `height` is 0 (logical pixels).
+    #[channel(role = Y)]
+    y: Px,
+    /// Width (logical pixels); 0 means the span `x..x_end`.
+    #[channel(default = Px(0.0))]
+    width: Px,
+    /// Height (logical pixels); 0 means the span `y..y_end`.
+    #[channel(default = Px(0.0))]
+    height: Px,
+    /// Second x edge, used when `width` is 0.
+    #[channel(role = X)]
+    x_end: Px,
+    /// Second y edge, used when `height` is 0.
+    #[channel(role = Y)]
+    y_end: Px,
+    /// Fill colour. Default Okabe-Ito blue.
+    #[channel(role = Color, default = Rect::DEFAULT_FILL)]
+    fill: Color,
+}
+
+impl Rect {
+    /// The default fill (`#0072B2`).
+    pub const DEFAULT_FILL: Color = Color::hex(0x0072b2);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

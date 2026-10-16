@@ -907,6 +907,78 @@ mod tests {
         assert_eq!(at((36.0, 3.0)), OKABE_ITO[0].to_rgba8(), "an old key");
     }
 
+    /// GUP-429 AC3: a bar's width comes from the band scale each resolve.
+    /// Appending a row with a new key narrows every bar through a uniform
+    /// write: the second resolve's column writes are the appended rows'
+    /// bytes only, and `width` has no column.
+    #[test]
+    fn a_bar_width_follows_an_appended_key() {
+        type Row = (&'static str, f64);
+        let cx = Context::new_blocking().unwrap();
+        let rows: Vec<Row> = vec![("A", 5.0), ("B", 8.0), ("C", 6.0)];
+        let mut plot = Plot::new();
+        let (x, y) = (
+            plot.x(crate::Band::new()),
+            plot.y(Linear::new().domain(0.0, 10.0)),
+        );
+        let floor = y.clone();
+        plot.add(Selection::<Row, crate::Rect>::new(rows))
+            .attr(crate::Rect::X, x.encode_key(|r: &Row| r.0))
+            .attr(crate::Rect::WIDTH, x.band_width_px())
+            .attr(crate::Rect::Y, y.encode(|r: &Row| r.1))
+            .attr(
+                crate::Rect::Y_END,
+                crate::Derived::new(move || Px(floor.read().eval(0.0) as f32)),
+            );
+        let mut target = ImageTarget::new(&cx, 400, 300).unwrap();
+        // Ink widths along a row just above the baseline, one run per bar.
+        let widths = |image: &image::RgbaImage| -> Vec<u32> {
+            let row = (y.read().eval(0.0) - 3.0) as u32;
+            let mut runs = Vec::new();
+            let mut start = None;
+            for px in 0..image.width() {
+                let ink = image.get_pixel(px, row).0[0] < 128;
+                match (ink, start) {
+                    (true, None) => start = Some(px),
+                    (false, Some(s)) => {
+                        // Runs of a few pixels are the axis, not a bar.
+                        if px - s > 5 {
+                            runs.push(px - s);
+                        }
+                        start = None;
+                    }
+                    _ => {}
+                }
+            }
+            runs
+        };
+        let first = plot.resolve(&cx, 400.0, 300.0).unwrap();
+        let before = target.render_blocking(&cx, &first.scene).unwrap();
+        let w3 = x.read().band_width();
+        let runs = widths(&before);
+        assert_eq!(runs.len(), 3, "{runs:?}");
+        for r in &runs {
+            assert!((f64::from(*r) - w3.round()).abs() <= 1.0, "{r} vs {w3}");
+        }
+
+        let start = cx.upload_stats();
+        let layer: &mut Selection<Row, crate::Rect> =
+            plot.layers[0].as_any_mut().downcast_mut().unwrap();
+        layer.append([("D", 7.0), ("A", 9.0)]).unwrap();
+        let second = plot.resolve(&cx, 400.0, 300.0).unwrap();
+        let after = target.render_blocking(&cx, &second.scene).unwrap();
+        let written = cx.upload_stats() - start;
+        // y (4 bytes) and the key code (4 bytes) of 2 rows.
+        assert_eq!(written.columns.bytes, 2 * 8, "{written:?}");
+        let w4 = x.read().band_width();
+        assert!(w4 < w3, "{w4} vs {w3}");
+        let runs = widths(&after);
+        assert_eq!(runs.len(), 4, "{runs:?}");
+        for r in &runs {
+            assert!((f64::from(*r) - w4.round()).abs() <= 1.0, "{r} vs {w4}");
+        }
+    }
+
     /// GUP-419 AC4: a null key on a band position is hidden by the glue's
     /// `NULL_CODE` comparison, not by landing off-screen. The x channel is
     /// a `Band` with an empty range (step 0), so the GPU maps every code,

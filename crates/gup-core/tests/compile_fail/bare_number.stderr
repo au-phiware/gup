@@ -11,6 +11,9 @@ error[E0277]: `f32` cannot drive a channel of visual type `Px`
 help: the following other types implement trait `IntoEncoding<T, V, K>`
   --> src/encoding.rs
    |
+   |   impl<T, V: Visual> IntoEncoding<T, V, DerivedMarker> for Derived<V> {
+   |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `gup_core::Derived<V>` implements `IntoEncoding<T, V, DerivedMarker>`
+...
    | / impl<T, V, A, D, S> IntoEncoding<T, V, ColumnMarker<D>> for Encoded<A, S>
    | | where
    | |     T: 'static,

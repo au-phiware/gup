@@ -491,6 +491,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
                 }
                 _ if d.role != Some(Role::Size) => continue,
                 Some(Encoding::Const(v)) => size(v),
+                Some(Encoding::Derived(f)) => size(&f()),
                 None => size(&d.default),
             };
             overhang = overhang.max(r);
@@ -519,6 +520,9 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
                 }
                 Some(Encoding::Const(v)) => {
                     write_field(&mut encodings, &program.encodings, desc.name, &v.bytes())?;
+                }
+                Some(Encoding::Derived(f)) => {
+                    write_field(&mut encodings, &program.encodings, desc.name, &f().bytes())?;
                 }
                 None => {
                     let bytes = desc.default.bytes();

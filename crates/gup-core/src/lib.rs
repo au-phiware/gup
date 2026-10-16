@@ -96,12 +96,12 @@ pub use channel::{
 };
 pub use context::{Caps, Context, ContextId, ContextOptions, Upload, UploadStats, WriteCount};
 pub use encoding::{
-    ColumnMarker, ColumnValue, ConstMarker, CpuMirror, DynColumnEncoding, DynShaderFn, EncodeFn,
-    Encoded, Encoding, Feeds, IntoEncoding, Key, KeyAccessor, KeyEncoded, KeyMarker, KeySource,
-    NullableKey, NullableOwnedKey, OwnedKey, Resource, ShaderFn, Then,
+    ColumnMarker, ColumnValue, ConstMarker, CpuMirror, Derived, DerivedMarker, DynColumnEncoding,
+    DynShaderFn, EncodeFn, Encoded, Encoding, Feeds, IntoEncoding, Key, KeyAccessor, KeyEncoded,
+    KeyMarker, KeySource, NullableKey, NullableOwnedKey, OwnedKey, Resource, ShaderFn, Then,
 };
 pub use error::{Error, Result};
-pub use marks::{Circle, CircleAttrs};
+pub use marks::{Circle, CircleAttrs, Rect, RectAttrs};
 pub use plot::{Layout, PlacedText, Plot, Resolved};
 pub use render::{PipelineStats, Prepared, Renderer, TargetDesc};
 pub use scale::{
@@ -255,9 +255,9 @@ pub use gup_core_macros::Mark;
 /// The names most programs need.
 pub mod prelude {
     pub use crate::{
-        Band, Categorical, Circle, CircleAttrs, Color, ColorScale, Context, CpuMirror, Diverging,
-        EncodeFn, Linear, Log, Mark, Plot, Point, PositionScale, Pow, Px, Retain, ScaleRef,
-        Selection, Sequential, ShaderFn, Symlog, Time, wgsl_function,
+        Band, Categorical, Circle, CircleAttrs, Color, ColorScale, Context, CpuMirror, Derived,
+        Diverging, EncodeFn, Linear, Log, Mark, Plot, Point, PositionScale, Pow, Px, Rect,
+        RectAttrs, Retain, ScaleRef, Selection, Sequential, ShaderFn, Symlog, Time, wgsl_function,
     };
 }
 

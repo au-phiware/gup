@@ -1,0 +1,262 @@
+// Copyright (C) 2024 Corin Lawson
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+//! RFC-001 S6c (GUP-429): the `Rect` mark and scale-derived constants,
+//! rendered headlessly. Edges are measured on the pixels: a bar's ink
+//! runs along a row or column through its centre.
+
+mod common;
+
+use common::vr::{harness, layout_metadata, rgba8};
+use gup_core::ImageTarget;
+use gup_core::prelude::*;
+use gup_visual_regression::RgbaImage;
+use std::sync::{Arc, Mutex};
+
+const WIDTH: u32 = 720;
+const HEIGHT: u32 = 450;
+
+fn render(cx: &Context, plot: &mut Plot, width: u32, height: u32) -> image::RgbaImage {
+    let resolved = plot.resolve(cx, width as f32, height as f32).unwrap();
+    ImageTarget::new(cx, width, height)
+        .unwrap()
+        .render_blocking(cx, &resolved.scene)
+        .unwrap()
+}
+
+/// How far a pixel is from the background (white) towards a fill with a
+/// red channel of `fill_red`, in 0..1.
+fn coverage(image: &image::RgbaImage, x: u32, y: u32, fill_red: u8) -> f64 {
+    let r = f64::from(image.get_pixel(x, y).0[0]);
+    ((255.0 - r) / (255.0 - f64::from(fill_red))).clamp(0.0, 1.0)
+}
+
+/// The contiguous run of pixels (red below 128) through `(x, y)`, along x
+/// when `horizontal`: `(first, one past the last)`.
+fn run(image: &image::RgbaImage, x: u32, y: u32, horizontal: bool) -> (u32, u32) {
+    let ink = |i: i64| {
+        let (px, py) = if horizontal {
+            (i, i64::from(y))
+        } else {
+            (i64::from(x), i)
+        };
+        px >= 0
+            && py >= 0
+            && px < i64::from(image.width())
+            && py < i64::from(image.height())
+            && image.get_pixel(px as u32, py as u32).0[0] < 128
+    };
+    let at = i64::from(if horizontal { x } else { y });
+    assert!(ink(at), "no ink at ({x}, {y})");
+    let (mut lo, mut hi) = (at, at + 1);
+    while ink(lo - 1) {
+        lo -= 1;
+    }
+    while ink(hi) {
+        hi += 1;
+    }
+    (lo as u32, hi as u32)
+}
+
+/// Pixel `(x, y)` is the fill (within 2/255) or the background.
+fn assert_pixel(image: &image::RgbaImage, x: u32, y: u32, fill: Option<Color>) {
+    let want = fill.map_or([255; 4], Color::to_rgba8);
+    let got = image.get_pixel(x, y).0;
+    for k in 0..4 {
+        assert!(
+            got[k].abs_diff(want[k]) <= 2,
+            "({x}, {y}): {got:?}, wanted {want:?}"
+        );
+    }
+}
+
+/// AC1: a rect from a centre and a size, and one from two edges given in
+/// reverse order. The pixels 1 px inside every edge are the fill, those
+/// 1 px outside the background.
+#[test]
+fn centre_and_edge_forms_cover_exactly_their_pixels() {
+    let cx = Context::new_blocking().unwrap();
+    let fill = Rect::DEFAULT_FILL;
+    let mut plot = Plot::new();
+    plot.x(Linear::new().domain(0.0, 1.0));
+    plot.y(Linear::new().domain(0.0, 1.0));
+    plot.add(Selection::<(), Rect>::new(vec![()]))
+        .attr(Rect::X, Px(100.0))
+        .attr(Rect::Y, Px(100.0))
+        .attr(Rect::WIDTH, Px(60.0))
+        .attr(Rect::HEIGHT, Px(40.0));
+    plot.add(Selection::<(), Rect>::new(vec![()]))
+        .attr(Rect::X, Px(300.0))
+        .attr(Rect::X_END, Px(220.0))
+        .attr(Rect::Y, Px(150.0))
+        .attr(Rect::Y_END, Px(110.0));
+    let image = render(&cx, &mut plot, 400, 300);
+    // x 70..130, y 80..120; and x 220..300, y 110..150.
+    for (x0, x1, y0, y1) in [(70, 130, 80, 120), (220, 300, 110, 150)] {
+        let (xm, ym) = ((x0 + x1) / 2, (y0 + y1) / 2);
+        assert_pixel(&image, x0, ym, Some(fill));
+        assert_pixel(&image, x0 - 1, ym, None);
+        assert_pixel(&image, x1 - 1, ym, Some(fill));
+        assert_pixel(&image, x1, ym, None);
+        assert_pixel(&image, xm, y0, Some(fill));
+        assert_pixel(&image, xm, y0 - 1, None);
+        assert_pixel(&image, xm, y1 - 1, Some(fill));
+        assert_pixel(&image, xm, y1, None);
+    }
+}
+
+/// AC2: a `Derived` channel is recomputed on every resolve and written
+/// as a uniform: the disc's measured radius follows the shared value and
+/// no column bytes are uploaded.
+#[test]
+fn a_derived_radius_follows_its_closure_without_column_writes() {
+    let cx = Context::new_blocking().unwrap();
+    let r = Arc::new(Mutex::new(10.0f32));
+    let shared = Arc::clone(&r);
+    let mut plot = Plot::new();
+    plot.x(Linear::new().domain(0.0, 1.0));
+    plot.y(Linear::new().domain(0.0, 1.0));
+    plot.add(Selection::<(), Circle>::new(vec![()]))
+        .attr(Circle::X, Px(150.0))
+        .attr(Circle::Y, Px(100.0))
+        .attr(Circle::FILL, Color::hex(0x000000))
+        .attr(
+            Circle::RADIUS,
+            Derived::new(move || Px(*shared.lock().unwrap())),
+        );
+    let measured = |image: &image::RgbaImage| -> f64 {
+        (100..200).map(|x| coverage(image, x, 100, 0)).sum::<f64>() / 2.0
+    };
+    let first = render(&cx, &mut plot, 300, 200);
+    assert!(
+        (measured(&first) - 10.0).abs() < 0.5,
+        "{}",
+        measured(&first)
+    );
+
+    *r.lock().unwrap() = 25.0;
+    let start = cx.upload_stats();
+    let second = render(&cx, &mut plot, 300, 200);
+    let written = cx.upload_stats() - start;
+    assert!(
+        (measured(&second) - 25.0).abs() < 0.5,
+        "{}",
+        measured(&second)
+    );
+    assert_eq!(written.columns.bytes, 0, "{written:?}");
+}
+
+struct Sale {
+    month: &'static str,
+    total: f64,
+}
+
+const MONTHS: [&str; 6] = ["Jan", "Feb", "Mar", "Apr", "May", "Jun"];
+
+fn sales() -> Vec<Sale> {
+    [32.0, 45.0, 28.0, 51.0, 60.0, 39.0]
+        .iter()
+        .zip(MONTHS)
+        .map(|(&total, month)| Sale { month, total })
+        .collect()
+}
+
+/// AC4: six monthly totals as bars sized by the band scale. Each bar's
+/// edges are within a pixel of its band's centre minus and plus half
+/// `band_width`, and the top of each is at its value.
+#[test]
+fn monthly_bars_are_as_wide_as_their_band() {
+    let cx = Context::new_blocking().unwrap();
+    let mut plot = Plot::new();
+    let (x, y) = (plot.x(Band::new()), plot.y(Linear::new().domain(0.0, 60.0)));
+    let baseline = y.clone();
+    plot.title("Monthly sales")
+        .add(Selection::<Sale, Rect>::new(sales()))
+        .attr(Rect::X, x.encode_key(|s: &Sale| s.month).domain(MONTHS))
+        .attr(Rect::WIDTH, x.band_width_px())
+        .attr(Rect::Y, y.encode(|s: &Sale| s.total))
+        .attr(
+            Rect::Y_END,
+            Derived::new(move || Px(baseline.read().eval(0.0) as f32)),
+        );
+    let resolved = plot.resolve(&cx, WIDTH as f32, HEIGHT as f32).unwrap();
+    let image = ImageTarget::new(&cx, WIDTH, HEIGHT)
+        .unwrap()
+        .render_blocking(&cx, &resolved.scene)
+        .unwrap();
+    let vr = RgbaImage::new(image.width(), image.height(), image.as_raw().clone()).unwrap();
+    let meta = layout_metadata(&resolved.layout)
+        .with_expected_color("bar fill", rgba8(Rect::DEFAULT_FILL));
+    harness()
+        .run("gup_core/rect_bars", Ok((vr, meta)))
+        .assert_ok();
+
+    let band = x.read().band_width();
+    let floor = y.read().eval(0.0);
+    for (k, sale) in sales().iter().enumerate() {
+        let centre = x.read().eval(k as f64);
+        let (left, right) = run(&image, centre as u32, (floor - 3.0) as u32, true);
+        assert!(
+            (f64::from(left) - (centre - band / 2.0)).abs() <= 1.0
+                && (f64::from(right) - (centre + band / 2.0)).abs() <= 1.0,
+            "{}: ink {left}..{right}, band {centre} ± {}",
+            sale.month,
+            band / 2.0
+        );
+        let (top, bottom) = run(&image, centre as u32, (floor - 3.0) as u32, false);
+        assert!(
+            (f64::from(top) - y.read().eval(sale.total)).abs() <= 1.0,
+            "{}: top {top}",
+            sale.month
+        );
+        assert!(
+            (f64::from(bottom) - floor).abs() <= 2.0,
+            "{}: bottom {bottom}, axis {floor}",
+            sale.month
+        );
+    }
+}
+
+/// AC5: horizontal bars, a band on y and the value on x with a derived
+/// baseline.
+#[test]
+fn horizontal_bars_measure_to_their_band_and_value() {
+    let cx = Context::new_blocking().unwrap();
+    let rows: Vec<(&str, f64)> = vec![("A", 4.0), ("B", 10.0), ("C", 7.0)];
+    let mut plot = Plot::new();
+    let (x, y) = (plot.x(Linear::new().domain(0.0, 10.0)), plot.y(Band::new()));
+    let baseline = x.clone();
+    plot.add(Selection::<(&str, f64), Rect>::new(rows.clone()))
+        .attr(
+            Rect::Y,
+            y.encode_key(|r: &(&str, f64)| r.0).domain(["A", "B", "C"]),
+        )
+        .attr(Rect::HEIGHT, y.band_width_px())
+        .attr(Rect::X, x.encode(|r: &(&str, f64)| r.1))
+        .attr(
+            Rect::X_END,
+            Derived::new(move || Px(baseline.read().eval(0.0) as f32)),
+        );
+    let image = render(&cx, &mut plot, 400, 300);
+    let band = y.read().band_width().abs();
+    let (x0, x1) = (x.read().eval(0.0), x.read().eval(10.0));
+    for (k, (_, v)) in rows.iter().enumerate() {
+        let centre = y.read().eval(k as f64);
+        let inside = x.read().eval(*v) - 3.0;
+        let (top, bottom) = run(&image, inside as u32, centre as u32, false);
+        let (left, right) = run(&image, (x0 + 3.0) as u32, centre as u32, true);
+        assert!(
+            (f64::from(bottom - top) - band).abs() <= 1.0
+                && (f64::from(top + bottom) / 2.0 - centre).abs() <= 1.0,
+            "bar {k}: rows {top}..{bottom}, band {centre} ± {}",
+            band / 2.0
+        );
+        assert!(
+            (f64::from(left) - x0).abs() <= 1.0
+                && (f64::from(right) - x.read().eval(*v)).abs() <= 1.0,
+            "bar {k}: columns {left}..{right}, expected {x0}..{}",
+            x.read().eval(*v)
+        );
+        assert!(x1 >= f64::from(right) - 1.0);
+    }
+}
