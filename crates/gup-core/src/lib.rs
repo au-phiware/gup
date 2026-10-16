@@ -88,6 +88,7 @@ mod shader;
 mod show;
 mod svg;
 pub mod target;
+mod theme;
 #[cfg(feature = "window")]
 mod window;
 
@@ -116,6 +117,7 @@ pub use shader::WgslModule;
 pub use show::show;
 pub use svg::{SvgOptions, SvgTarget, VectorTarget};
 pub use target::{DEFAULT_SAMPLES, Frame, ImageTarget, RenderTarget, TargetOptions, TextureTarget};
+pub use theme::Theme;
 #[cfg(feature = "window")]
 pub use window::WindowTarget;
 
@@ -257,7 +259,7 @@ pub mod prelude {
     pub use crate::{
         Band, Categorical, Circle, CircleAttrs, Color, ColorScale, Context, CpuMirror, Derived,
         Diverging, EncodeFn, Linear, Log, Mark, Plot, Point, PositionScale, Pow, Px, Rect,
-        RectAttrs, Retain, ScaleRef, Selection, Sequential, ShaderFn, Symlog, Time, Unit,
+        RectAttrs, Retain, ScaleRef, Selection, Sequential, ShaderFn, Symlog, Theme, Time, Unit,
         wgsl_function,
     };
 }

@@ -8,6 +8,7 @@ use crate::column::{ColumnFormat, NULL_CODE};
 use crate::encoding::{CpuMirror, Resource, ShaderFn};
 use crate::error::Result;
 use crate::shader::{COLOR_CATEGORICAL, WgslModule};
+use crate::theme::Theme;
 use std::sync::{Arc, OnceLock};
 
 /// The colour of a null: a missing key in a dictionary column or a
@@ -105,6 +106,10 @@ pub struct Categorical {
     lut: Arc<[[u8; 4]]>,
     /// The domain: the keys' labels, in code order.
     keys: Vec<Arc<str>>,
+    /// Drawn for a missing key; the plot's theme sets it unless
+    /// `null_color_set`.
+    null_color: Color,
+    null_color_set: bool,
 }
 
 impl Categorical {
@@ -114,6 +119,8 @@ impl Categorical {
         Self {
             lut: Arc::clone(LUT.get_or_init(|| extend(&OKABE_ITO).into())),
             keys: Vec::new(),
+            null_color: NULL_COLOR,
+            null_color_set: false,
         }
     }
 
@@ -133,7 +140,18 @@ impl Categorical {
         Self {
             lut: extend(&colors).into(),
             keys: Vec::new(),
+            null_color: NULL_COLOR,
+            null_color_set: false,
         }
+    }
+
+    /// Draw missing and out-of-domain keys in `color`, whatever the
+    /// plot's theme says.
+    #[must_use]
+    pub fn null_color(mut self, color: Color) -> Self {
+        self.null_color = color;
+        self.null_color_set = true;
+        self
     }
 
     /// The domain: each key's label, in code (first-seen) order.
@@ -243,7 +261,7 @@ impl ShaderFn for Categorical {
 
     fn params(&self) -> CategoricalParams {
         CategoricalParams {
-            null_color: NULL_COLOR,
+            null_color: self.null_color,
             count: u32::try_from(self.keys.len()).unwrap_or(NULL_CODE),
             pad_a: 0,
             pad_b: 0,
@@ -259,6 +277,12 @@ impl ShaderFn for Categorical {
         vec![Resource::Lut(self.lut.to_vec())]
     }
 
+    fn apply_theme(&mut self, theme: &Theme) {
+        if !self.null_color_set {
+            self.null_color = theme.null_color;
+        }
+    }
+
     fn fit_keys(&mut self, keys: &[Arc<str>]) -> Result<()> {
         if self.keys != keys {
             self.keys = keys.to_vec();
@@ -272,7 +296,7 @@ impl CpuMirror for Categorical {
     /// [`NULL_COLOR`] for NaN, [`NULL_CODE`] or a code outside the domain.
     fn eval(&self, code: f64) -> Color {
         if !(code.is_finite() && code >= 0.0 && code < self.keys.len() as f64) {
-            return NULL_COLOR;
+            return self.null_color;
         }
         self.entry(code as usize % self.lut.len())
     }

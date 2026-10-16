@@ -269,6 +269,8 @@ pub enum TextRole {
     Title,
     /// An axis tick label.
     TickLabel,
+    /// An axis title.
+    AxisTitle,
     /// A legend entry or legend title.
     Legend,
 }

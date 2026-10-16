@@ -22,26 +22,10 @@ use crate::scene::{
 use crate::selection::{Layer, Selection};
 #[cfg(not(target_arch = "wasm32"))]
 use crate::target::{ImageTarget, save_png};
+use crate::theme::Theme;
+use gup_text::TextSystem;
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
-
-/// Fixed S0a styling (a `Theme` is RFC-001 S7 / GUP-392).
-mod style {
-    use crate::channel::Color;
-
-    pub const BACKGROUND: Color = Color::WHITE;
-    pub const AXIS: Color = Color::hex(0x333333);
-    pub const LABEL: Color = Color::hex(0x333333);
-    pub const TITLE: Color = Color::hex(0x111111);
-    pub const TITLE_SIZE: f32 = 18.0;
-    pub const TICK_SIZE: f32 = 12.0;
-    pub const TICK_LEN: f32 = 5.0;
-    pub const LABEL_GAP: f32 = 4.0;
-    pub const PAD: f32 = 12.0;
-    /// Target spacing between ticks.
-    pub const X_TICK_SPACING: f32 = 80.0;
-    pub const Y_TICK_SPACING: f32 = 45.0;
-}
 
 /// A text run placed by layout, with its ink box.
 #[derive(Clone, Debug, PartialEq)]
@@ -118,6 +102,9 @@ pub struct Plot {
     x: Option<Box<dyn DynPositionScale>>,
     y: Option<Box<dyn DynPositionScale>>,
     layers: Vec<Box<dyn Layer>>,
+    x_title: Option<String>,
+    y_title: Option<String>,
+    theme: Theme,
 }
 
 impl std::fmt::Debug for Plot {
@@ -129,6 +116,23 @@ impl std::fmt::Debug for Plot {
     }
 }
 
+/// `s`, or its longest prefix followed by "…" that fits in `max` pixels
+/// at `size` (U+2026 is in the bundled font subset).
+fn fit_text(text: &TextSystem, s: &str, size: f32, max: f32) -> String {
+    if text.measure(s, size).width <= max {
+        return s.to_owned();
+    }
+    let mut kept: Vec<char> = s.chars().collect();
+    while !kept.is_empty() {
+        kept.pop();
+        let candidate: String = kept.iter().collect::<String>().trim_end().to_owned() + "…";
+        if text.measure(&candidate, size).width <= max {
+            return candidate;
+        }
+    }
+    "…".to_owned()
+}
+
 impl Plot {
     /// An empty plot.
     pub fn new() -> Self {
@@ -138,6 +142,24 @@ impl Plot {
     /// Set the title.
     pub fn title(&mut self, title: impl Into<String>) -> &mut Self {
         self.title = Some(title.into());
+        self
+    }
+
+    /// Set the x axis title, centred under the x tick labels.
+    pub fn x_title(&mut self, title: impl Into<String>) -> &mut Self {
+        self.x_title = Some(title.into());
+        self
+    }
+
+    /// Set the y axis title: horizontal, left-aligned above the y axis.
+    pub fn y_title(&mut self, title: impl Into<String>) -> &mut Self {
+        self.y_title = Some(title.into());
+        self
+    }
+
+    /// Style the plot with `theme`.
+    pub fn theme(&mut self, theme: Theme) -> &mut Self {
+        self.theme = theme;
         self
     }
 
@@ -230,6 +252,11 @@ impl Plot {
             }
         }
 
+        let th = self.theme.clone();
+        for layer in &mut self.layers {
+            layer.apply_theme(&th);
+        }
+
         // 1–2. Domains from column stats, then nice.
         // Every scale clears its union once, then every layer fits into it.
         for layer in &self.layers {
@@ -246,40 +273,60 @@ impl Plot {
 
         // 3. Ticks and label measurements give the margins.
         let tick_style = TextStyle {
-            size: Px(style::TICK_SIZE),
-            color: style::LABEL,
+            size: Px(th.tick_size.0),
+            color: th.label,
         };
-        let x_ticks = x.ticks(((width / style::X_TICK_SPACING) as usize).max(2));
-        let y_ticks = y.ticks(((height / style::Y_TICK_SPACING) as usize).max(2));
-        let (title_h, y_label_w, x_label_h, last_x_label_w) = {
+        let x_ticks = x.ticks(((width / th.x_tick_spacing.0) as usize).max(2));
+        let y_ticks = y.ticks(((height / th.y_tick_spacing.0) as usize).max(2));
+        let (title_h, axis_title_h, y_label_w, x_label_h, last_x_label_w) = {
             let text = cx.text();
+            let axis_title_h = {
+                let m = text.measure("0", th.axis_title_size.0);
+                m.cap_height + m.descent
+            };
             let title_h = self.title.as_ref().map_or(0.0, |t| {
-                let m = text.measure(t, style::TITLE_SIZE);
+                let m = text.measure(t, th.title_size.0);
                 m.cap_height + m.descent
             });
             let y_label_w = y_ticks
                 .labels
                 .iter()
-                .map(|l| text.measure(l, style::TICK_SIZE).width)
+                .map(|l| text.measure(l, th.tick_size.0).width)
                 .fold(0.0, f32::max);
-            let m = text.measure("0", style::TICK_SIZE);
+            let m = text.measure("0", th.tick_size.0);
             let last = x_ticks
                 .labels
                 .last()
-                .map_or(0.0, |l| text.measure(l, style::TICK_SIZE).width);
-            (title_h, y_label_w, m.cap_height + m.descent, last)
+                .map_or(0.0, |l| text.measure(l, th.tick_size.0).width);
+            (
+                title_h,
+                axis_title_h,
+                y_label_w,
+                m.cap_height + m.descent,
+                last,
+            )
         };
 
         // 4. The plot rect, on whole pixels.
-        let top = style::PAD
+        let top = th.pad.0
             + if self.title.is_some() {
-                title_h + style::PAD
+                title_h + th.pad.0
+            } else {
+                0.0
+            }
+            + if self.y_title.is_some() {
+                axis_title_h + th.label_gap.0
             } else {
                 0.0
             };
-        let left = style::PAD + y_label_w + style::LABEL_GAP + style::TICK_LEN;
-        let bottom = height - (style::PAD + x_label_h + style::LABEL_GAP + style::TICK_LEN);
-        let right = width - style::PAD.max(last_x_label_w / 2.0 + 2.0);
+        let left = th.pad.0 + y_label_w + th.label_gap.0 + th.tick_len.0;
+        let x_title_h = if self.x_title.is_some() {
+            axis_title_h + th.label_gap.0
+        } else {
+            0.0
+        };
+        let bottom = height - (th.pad.0 + x_label_h + th.label_gap.0 + th.tick_len.0 + x_title_h);
+        let right = width - th.pad.0.max(last_x_label_w / 2.0 + 2.0);
         let plot = Rect::from_edges(left.round(), top.round(), right.round(), bottom.round());
         if plot.width < 10.0 || plot.height < 10.0 {
             return Err(Error::config(
@@ -299,7 +346,7 @@ impl Plot {
         for layer in &mut self.layers {
             let batch = cx.scoped(
                 || "layer resolution (column upload, uniforms)".to_owned(),
-                || layer.prepare(cx),
+                || layer.prepare(cx, &th),
             )?;
             // Only after the upload succeeded: CPU data the layer's
             // `Retain` policy does not keep.
@@ -308,14 +355,14 @@ impl Plot {
         }
 
         // 7. The scene.
-        let mut scene = Scene::new(width, height, style::BACKGROUND);
+        let mut scene = Scene::new(width, height, th.background);
         let mut rules = Vec::new();
         let mut labels = Vec::new();
         let axis = |p0: Point, p1: Point| Rule {
             p0,
             p1,
             width: Px(1.0),
-            color: style::AXIS,
+            color: th.axis,
         };
         // Axis lines just outside the plot rect, on pixel centres.
         let (ax_y, ay_x) = (plot.bottom() + 0.5, plot.left() - 0.5);
@@ -333,11 +380,11 @@ impl Plot {
             let cx_ = px.floor() + 0.5;
             rules.push(axis(
                 Point::new(cx_, ax_y),
-                Point::new(cx_, ax_y + style::TICK_LEN),
+                Point::new(cx_, ax_y + th.tick_len.0),
             ));
             labels.push(TextRun {
                 text: label.as_str().into(),
-                at: Point::new(px, ax_y + style::TICK_LEN + style::LABEL_GAP),
+                at: Point::new(px, ax_y + th.tick_len.0 + th.label_gap.0),
                 anchor: Anchor::new(HAlign::Middle, VAlign::Top),
                 style: tick_style,
                 role: TextRole::TickLabel,
@@ -349,34 +396,65 @@ impl Plot {
             let py = y.eval(*v) as f32;
             let cy = py.floor() + 0.5;
             rules.push(axis(
-                Point::new(ay_x - style::TICK_LEN, cy),
+                Point::new(ay_x - th.tick_len.0, cy),
                 Point::new(ay_x, cy),
             ));
             labels.push(TextRun {
                 text: label.as_str().into(),
-                at: Point::new(ay_x - style::TICK_LEN - style::LABEL_GAP, py),
+                at: Point::new(ay_x - th.tick_len.0 - th.label_gap.0, py),
                 anchor: Anchor::new(HAlign::End, VAlign::Middle),
                 style: tick_style,
                 role: TextRole::TickLabel,
             });
             y_placed.push((*v, py));
         }
-        let title = self.title.as_ref().map(|t| TextRun {
-            text: t.as_str().into(),
-            at: Point::new(plot.x + plot.width / 2.0, style::PAD),
-            anchor: Anchor::new(HAlign::Middle, VAlign::Top),
-            style: TextStyle {
-                size: Px(style::TITLE_SIZE),
-                color: style::TITLE,
-            },
-            role: TextRole::Title,
-        });
+        let (title, axis_titles) = {
+            let text = cx.text();
+            let title = self.title.as_ref().map(|t| TextRun {
+                text: fit_text(&text, t, th.title_size.0, plot.width).into(),
+                at: Point::new(plot.x + plot.width / 2.0, th.pad.0),
+                anchor: Anchor::new(HAlign::Middle, VAlign::Top),
+                style: TextStyle {
+                    size: th.title_size,
+                    color: th.title,
+                },
+                role: TextRole::Title,
+            });
+            let axis_style = TextStyle {
+                size: th.axis_title_size,
+                color: th.label,
+            };
+            let mut axis_titles = Vec::new();
+            if let Some(t) = &self.x_title {
+                axis_titles.push(TextRun {
+                    text: fit_text(&text, t, th.axis_title_size.0, plot.width).into(),
+                    at: Point::new(
+                        plot.x + plot.width / 2.0,
+                        ax_y + th.tick_len.0 + th.label_gap.0 + x_label_h + th.label_gap.0,
+                    ),
+                    anchor: Anchor::new(HAlign::Middle, VAlign::Top),
+                    style: axis_style,
+                    role: TextRole::AxisTitle,
+                });
+            }
+            if let Some(t) = &self.y_title {
+                axis_titles.push(TextRun {
+                    text: fit_text(&text, t, th.axis_title_size.0, width - 2.0 * th.pad.0).into(),
+                    at: Point::new(th.pad.0, plot.top() - th.label_gap.0),
+                    anchor: Anchor::new(HAlign::Start, VAlign::Bottom),
+                    style: axis_style,
+                    role: TextRole::AxisTitle,
+                });
+            }
+            (title, axis_titles)
+        };
 
         let texts = {
             let text = cx.text();
             labels
                 .iter()
                 .chain(&title)
+                .chain(&axis_titles)
                 .map(|run| PlacedText {
                     run: run.clone(),
                     bounds: text.ink_bounds(&run.layout_run()).into(),
@@ -404,11 +482,12 @@ impl Plot {
             clip: None,
             kind: ItemKind::Text(labels),
         });
-        if let Some(title) = title {
+        let titles: Vec<TextRun> = title.into_iter().chain(axis_titles).collect();
+        if !titles.is_empty() {
             scene.push(Item {
                 z: Z_TITLE,
                 clip: None,
-                kind: ItemKind::Text(vec![title]),
+                kind: ItemKind::Text(titles),
             });
         }
 
@@ -479,6 +558,20 @@ mod tests {
     use crate::scene::ItemKind;
     use crate::selection::Retain;
     use std::sync::Arc;
+
+    #[test]
+    fn fit_text_keeps_what_fits_and_truncates_the_rest() {
+        let cx = Context::new_blocking().unwrap();
+        let text = cx.text();
+        assert_eq!(fit_text(&text, "short", 12.0, 500.0), "short");
+        let long = "x".repeat(100);
+        for max in [30.0, 80.0, 200.0] {
+            let fitted = fit_text(&text, &long, 12.0, max);
+            assert!(fitted.ends_with('…') && fitted.len() < long.len());
+            assert!(text.measure(&fitted, 12.0).width <= max);
+        }
+        assert_eq!(fit_text(&text, &long, 12.0, 1.0), "…");
+    }
 
     fn batch(r: &Resolved) -> Arc<crate::render::LayerGpu> {
         r.scene

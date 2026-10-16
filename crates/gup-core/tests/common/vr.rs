@@ -29,6 +29,7 @@ pub fn role(role: TextRole) -> VrTextRole {
     match role {
         TextRole::Title => VrTextRole::Title,
         TextRole::TickLabel => VrTextRole::TickLabel,
+        TextRole::AxisTitle => VrTextRole::AxisTitle,
         TextRole::Legend => VrTextRole::Legend,
     }
 }

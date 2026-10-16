@@ -47,6 +47,7 @@ use crate::column::ColumnFormat;
 use crate::encoding::{CpuMirror, DictionarySlot, EncodeFn, Resource, ShaderFn};
 use crate::error::Result;
 use crate::shader::WgslModule;
+use crate::theme::Theme;
 use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 /// Tick positions (domain values) and their labels.
@@ -173,6 +174,10 @@ impl<S: ShaderFn> ShaderFn for ScaleRef<S> {
 
     fn fit_keys(&mut self, keys: &[Arc<str>]) -> Result<()> {
         self.write().fit_keys(keys)
+    }
+
+    fn apply_theme(&mut self, theme: &Theme) {
+        self.write().apply_theme(theme);
     }
 
     fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)> {
