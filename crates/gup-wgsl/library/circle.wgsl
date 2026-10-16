@@ -14,6 +14,9 @@ struct CircleIn {
     y: f32,
     radius: f32,
     fill: vec4<f32>,
+    fill_opacity: f32,
+    stroke: vec4<f32>,
+    stroke_width: f32,
 }
 
 struct Varyings {
@@ -26,7 +29,10 @@ struct Varyings {
     @location(1) radius: f32,
     // sRGB-encoded, straight alpha.
     @location(2) fill: vec4<f32>,
-    @location(3) @interpolate(flat) row: u32,
+    // Straight alpha, stroke inside the edge, width in physical pixels.
+    @location(3) stroke: vec4<f32>,
+    @location(4) stroke_width: f32,
+    @location(5) @interpolate(flat) row: u32,
 }
 
 // Corner of the instance quad for vertex 0..5 (two triangles).
@@ -50,18 +56,31 @@ fn vertex(m: CircleIn, vertex_index: u32, row: u32, view: View) -> Varyings {
     out.clip = px_to_clip(vec2<f32>(m.x, m.y) + offset, view);
     out.local = offset * view.dpr;
     out.radius = m.radius * view.dpr;
-    out.fill = m.fill;
+    out.fill = vec4<f32>(m.fill.rgb, m.fill.a * m.fill_opacity);
+    out.stroke = m.stroke;
+    out.stroke_width = m.stroke_width * view.dpr;
     out.row = row;
     return out;
 }
 
-// Analytic coverage of a disc with a one-physical-pixel ramp; premultiplied.
-fn shade(v: Varyings) -> vec4<f32> {
-    let distance = length(v.local) - v.radius;
-    let coverage = clamp(0.5 - distance, 0.0, 1.0);
-    let alpha = v.fill.a * coverage;
-    if (alpha <= 0.0) {
+// `out = S * ring + F * outer * (1 - S.a * ring)`, premultiplied, with
+// `F` the fill and `S` the stroke. Discards a fully transparent fragment.
+fn compose(fill: vec4<f32>, stroke: vec4<f32>, outer: f32, ring: f32) -> vec4<f32> {
+    let f = vec4<f32>(fill.rgb * fill.a, fill.a);
+    let s = vec4<f32>(stroke.rgb * stroke.a, stroke.a);
+    let out = s * ring + f * outer * (1.0 - s.a * ring);
+    if (out.a <= 0.0) {
         discard;
     }
-    return vec4<f32>(v.fill.rgb * alpha, alpha);
+    return out;
+}
+
+// Analytic coverage of a disc with a one-physical-pixel ramp, and of the disc
+// shrunk by the stroke width; the ring between them is the stroke. Fill lies
+// under the stroke. Premultiplied.
+fn shade(v: Varyings) -> vec4<f32> {
+    let d = length(v.local);
+    let outer = clamp(0.5 - (d - v.radius), 0.0, 1.0);
+    let inner = clamp(0.5 - (d - max(v.radius - v.stroke_width, 0.0)), 0.0, 1.0);
+    return compose(v.fill, v.stroke, outer, outer - inner);
 }

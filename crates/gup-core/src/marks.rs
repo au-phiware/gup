@@ -3,7 +3,7 @@
 
 //! Marks. S0a has one: [`Circle`]. Rect, Rule and Segment/Line are RFC-001 S6.
 
-use crate::channel::{Color, Px};
+use crate::channel::{Color, Px, Unit};
 
 /// A filled disc centred on `(X, Y)`, sized in logical pixels so it stays
 /// round on any aspect ratio.
@@ -50,6 +50,15 @@ pub struct Circle {
     /// Fill colour. Default Okabe-Ito blue.
     #[channel(role = Color, default = Circle::DEFAULT_FILL)]
     fill: Color,
+    /// Fill opacity, multiplied into the fill colour's alpha. Default 1.
+    #[channel(default = Unit(1.0))]
+    fill_opacity: Unit,
+    /// Stroke colour, drawn inside the edge. Default transparent.
+    #[channel(role = Color, default = Color::TRANSPARENT)]
+    stroke: Color,
+    /// Stroke width (logical pixels), inside the edge. Default 0.
+    #[channel(default = Px(0.0))]
+    stroke_width: Px,
 }
 
 impl Circle {
@@ -113,6 +122,15 @@ pub struct Rect {
     /// Fill colour. Default Okabe-Ito blue.
     #[channel(role = Color, default = Rect::DEFAULT_FILL)]
     fill: Color,
+    /// Fill opacity, multiplied into the fill colour's alpha. Default 1.
+    #[channel(default = Unit(1.0))]
+    fill_opacity: Unit,
+    /// Stroke colour, drawn inside the edge. Default transparent.
+    #[channel(role = Color, default = Color::TRANSPARENT)]
+    stroke: Color,
+    /// Stroke width (logical pixels), inside the edge. Default 0.
+    #[channel(default = Px(0.0))]
+    stroke_width: Px,
 }
 
 impl Rect {
@@ -130,20 +148,28 @@ mod tests {
     #[test]
     fn derive_reproduces_the_hand_written_table() {
         let expected = [
-            ("x", Role::X, "f32", ConstValue::F32(0.0)),
-            ("y", Role::Y, "f32", ConstValue::F32(0.0)),
-            ("radius", Role::Size, "f32", ConstValue::F32(3.5)),
+            ("x", Some(Role::X), "f32", ConstValue::F32(0.0)),
+            ("y", Some(Role::Y), "f32", ConstValue::F32(0.0)),
+            ("radius", Some(Role::Size), "f32", ConstValue::F32(3.5)),
             (
                 "fill",
-                Role::Color,
+                Some(Role::Color),
                 "vec4<f32>",
                 ConstValue::Vec4(Color::hex(0x0072b2).to_array()),
             ),
+            ("fill_opacity", None, "f32", ConstValue::F32(1.0)),
+            (
+                "stroke",
+                Some(Role::Color),
+                "vec4<f32>",
+                ConstValue::Vec4(Color::TRANSPARENT.to_array()),
+            ),
+            ("stroke_width", None, "f32", ConstValue::F32(0.0)),
         ];
         assert_eq!(Circle::CHANNELS.len(), expected.len());
         for (desc, (name, role, wgsl_type, default)) in Circle::CHANNELS.iter().zip(expected) {
             assert_eq!(desc.name, name);
-            assert_eq!(desc.role, Some(role));
+            assert_eq!(desc.role, role);
             assert_eq!(desc.wgsl_type, wgsl_type);
             assert_eq!(desc.default, default);
         }

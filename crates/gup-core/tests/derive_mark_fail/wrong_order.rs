@@ -11,6 +11,9 @@ struct Circle {
     y: Px,
     fill: Color,
     radius: Px,
+    fill_opacity: Unit,
+    stroke: Color,
+    stroke_width: Px,
 }
 
 fn main() {}

@@ -1,5 +1,5 @@
-error: `Circle`'s channel `stroke` is missing from `CircleIn` in the WGSL of `gup::marks::circle`, which has: x, y, radius, fill
-  --> tests/derive_mark_fail/missing_field.rs:14:5
+error: `Circle`'s channel `outline` is missing from `CircleIn` in the WGSL of `gup::marks::circle`, which has: x, y, radius, fill, fill_opacity, stroke, stroke_width
+  --> tests/derive_mark_fail/missing_field.rs:17:5
    |
-14 |     stroke: Color,
-   |     ^^^^^^
+17 |     outline: Color,
+   |     ^^^^^^^

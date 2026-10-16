@@ -113,6 +113,30 @@ impl Visual for Px {
     }
 }
 
+/// A dimensionless fraction, typically `0.0..=1.0` (an opacity).
+#[derive(Copy, Clone, Debug, PartialEq, PartialOrd, Default)]
+pub struct Unit(pub f32);
+
+impl GpuType for Unit {
+    const WGSL: &'static str = "f32";
+    type Cpu = f64;
+}
+
+impl Unit {
+    /// The value as uniform data, in `const` context.
+    pub const fn const_value(self) -> ConstValue {
+        ConstValue::F32(self.0)
+    }
+}
+
+impl Visual for Unit {
+    const ZERO: ConstValue = ConstValue::F32(0.0);
+
+    fn to_const(self) -> ConstValue {
+        ConstValue::F32(self.0)
+    }
+}
+
 /// An sRGB-encoded colour with straight (non-premultiplied) alpha, each
 /// component in `0.0..=1.0`. Gup blends in sRGB space (RFC-001 §7).
 ///

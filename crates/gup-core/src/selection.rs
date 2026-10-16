@@ -893,7 +893,8 @@ mod tests {
         assert_eq!(
             glue.signature,
             "Circle {x: f32rel→gup::scale::linear::map_rel, y: f32→gup::scale::log::map, \
-             radius: const f32, fill: f32→gup::color::sequential::map(lut)}"
+             radius: const f32, fill: f32→gup::color::sequential::map(lut)\
+             , fill_opacity: const f32, stroke: const vec4<f32>, stroke_width: const f32}"
         );
         assert_eq!(
             glue.columns,
@@ -974,7 +975,7 @@ mod tests {
             "{:?}",
             glue.encodings
         );
-        assert_eq!(glue.encodings.span, 64);
+        assert_eq!(glue.encodings.span, 112);
     }
 
     /// A layer whose channels are chains (GUP-418): a hi/lo `Time` x, a
@@ -1035,7 +1036,10 @@ mod tests {
                 "radius_link2",
                 "fill",
                 "fill_link1",
-                "fill_link2"
+                "fill_link2",
+                "fill_opacity",
+                "stroke",
+                "stroke_width"
             ]
         );
         assert!(
@@ -1244,7 +1248,8 @@ mod tests {
         assert_eq!(
             glue.signature,
             "Circle {x: f32rel→gup::scale::linear::map_rel, y: f32→gup::scale::log::map, \
-             radius: const f32, fill: u32→gup::color::categorical::map(lut)} with nulls"
+             radius: const f32, fill: u32→gup::color::categorical::map(lut)\
+             , fill_opacity: const f32, stroke: const vec4<f32>, stroke_width: const f32} with nulls"
         );
         assert_eq!(
             glue.columns,

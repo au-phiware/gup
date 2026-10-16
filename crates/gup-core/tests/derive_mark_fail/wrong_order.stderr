@@ -1,4 +1,4 @@
-error: `Circle`'s channel `fill` is number 3 but `CircleIn.fill` is number 4 in the WGSL: the struct's members must be the channels, in order (x, y, radius, fill)
+error: `Circle`'s channel `fill` is number 3 but `CircleIn.fill` is number 4 in the WGSL: the struct's members must be the channels, in order (x, y, radius, fill, fill_opacity, stroke, stroke_width)
   --> tests/derive_mark_fail/wrong_order.rs:12:5
    |
 12 |     fill: Color,

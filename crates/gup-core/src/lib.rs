@@ -92,7 +92,7 @@ pub mod target;
 mod window;
 
 pub use channel::{
-    Antialias, Channel, ChannelDesc, Color, ConstValue, GpuType, Mark, Px, Role, Visual,
+    Antialias, Channel, ChannelDesc, Color, ConstValue, GpuType, Mark, Px, Role, Unit, Visual,
 };
 pub use context::{Caps, Context, ContextId, ContextOptions, Upload, UploadStats, WriteCount};
 pub use encoding::{
@@ -257,7 +257,8 @@ pub mod prelude {
     pub use crate::{
         Band, Categorical, Circle, CircleAttrs, Color, ColorScale, Context, CpuMirror, Derived,
         Diverging, EncodeFn, Linear, Log, Mark, Plot, Point, PositionScale, Pow, Px, Rect,
-        RectAttrs, Retain, ScaleRef, Selection, Sequential, ShaderFn, Symlog, Time, wgsl_function,
+        RectAttrs, Retain, ScaleRef, Selection, Sequential, ShaderFn, Symlog, Time, Unit,
+        wgsl_function,
     };
 }
 

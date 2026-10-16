@@ -19,6 +19,9 @@ struct RectIn {
     x_end: f32,
     y_end: f32,
     fill: vec4<f32>,
+    fill_opacity: f32,
+    stroke: vec4<f32>,
+    stroke_width: f32,
 }
 
 struct Varyings {
@@ -30,7 +33,10 @@ struct Varyings {
     @location(1) half: vec2<f32>,
     // sRGB-encoded, straight alpha.
     @location(2) fill: vec4<f32>,
-    @location(3) @interpolate(flat) row: u32,
+    // Straight alpha, stroke inside the edge, width in physical pixels.
+    @location(3) stroke: vec4<f32>,
+    @location(4) stroke_width: f32,
+    @location(5) @interpolate(flat) row: u32,
 }
 
 // The span `lo..hi` on one axis.
@@ -50,15 +56,27 @@ fn vertex(m: RectIn, vertex_index: u32, row: u32, view: View) -> Varyings {
     out.clip = px_to_clip(q.position, view);
     out.local = q.local;
     out.half = q.half;
-    out.fill = m.fill;
+    out.fill = vec4<f32>(m.fill.rgb, m.fill.a * m.fill_opacity);
+    out.stroke = m.stroke;
+    out.stroke_width = m.stroke_width * view.dpr;
     out.row = row;
     return out;
 }
 
-fn shade(v: Varyings) -> vec4<f32> {
-    let alpha = v.fill.a * box_coverage(v.local, v.half);
-    if (alpha <= 0.0) {
+// `out = S * ring + F * outer * (1 - S.a * ring)`, premultiplied, with
+// `F` the fill and `S` the stroke. Discards a fully transparent fragment.
+fn compose(fill: vec4<f32>, stroke: vec4<f32>, outer: f32, ring: f32) -> vec4<f32> {
+    let f = vec4<f32>(fill.rgb * fill.a, fill.a);
+    let s = vec4<f32>(stroke.rgb * stroke.a, stroke.a);
+    let out = s * ring + f * outer * (1.0 - s.a * ring);
+    if (out.a <= 0.0) {
         discard;
     }
-    return vec4<f32>(v.fill.rgb * alpha, alpha);
+    return out;
+}
+
+fn shade(v: Varyings) -> vec4<f32> {
+    let outer = box_coverage(v.local, v.half);
+    let inner = box_coverage(v.local, max(v.half - vec2<f32>(v.stroke_width), vec2<f32>(0.0)));
+    return compose(v.fill, v.stroke, outer, outer - inner);
 }
