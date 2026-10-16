@@ -47,7 +47,7 @@ use crate::column::ColumnFormat;
 use crate::encoding::{CpuMirror, EncodeFn, Resource, ShaderFn};
 use crate::error::Result;
 use crate::shader::WgslModule;
-use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard};
+use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 /// Tick positions (domain values) and their labels.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -85,7 +85,15 @@ pub trait PositionScale: ShaderFn<Out = Px> + EncodeFn<Output = Px> + CpuMirror 
 /// set ranges; the layer's encoding keeps another to write uniforms, so
 /// both always see the same domain and range.
 #[derive(Debug, Default)]
-pub struct ScaleRef<S>(Arc<RwLock<S>>);
+pub struct ScaleRef<S>(Arc<Shared<S>>);
+
+/// What clones of a [`ScaleRef`] share.
+#[derive(Debug, Default)]
+struct Shared<S> {
+    scale: RwLock<S>,
+    /// The union of the extents fitted since [`ShaderFn::begin_fit`].
+    fit: Mutex<Option<(f64, f64)>>,
+}
 
 impl<S> Clone for ScaleRef<S> {
     fn clone(&self) -> Self {
@@ -96,17 +104,20 @@ impl<S> Clone for ScaleRef<S> {
 impl<S> ScaleRef<S> {
     /// Share `scale`.
     pub fn new(scale: S) -> Self {
-        Self(Arc::new(RwLock::new(scale)))
+        Self(Arc::new(Shared {
+            scale: RwLock::new(scale),
+            fit: Mutex::new(None),
+        }))
     }
 
     /// Read the scale.
     pub fn read(&self) -> RwLockReadGuard<'_, S> {
-        self.0.read().unwrap_or_else(|p| p.into_inner())
+        self.0.scale.read().unwrap_or_else(|p| p.into_inner())
     }
 
     /// Modify the scale.
     pub fn write(&self) -> RwLockWriteGuard<'_, S> {
-        self.0.write().unwrap_or_else(|p| p.into_inner())
+        self.0.scale.write().unwrap_or_else(|p| p.into_inner())
     }
 }
 
@@ -133,8 +144,24 @@ impl<S: ShaderFn> ShaderFn for ScaleRef<S> {
         self.read().resources()
     }
 
+    fn begin_fit(&self) {
+        *self.0.fit.lock().unwrap_or_else(|p| p.into_inner()) = None;
+    }
+
+    /// Unions `extent` into the pass's extent (see
+    /// [`begin_fit`](ShaderFn::begin_fit)) before fitting the scale.
     fn fit_domain(&mut self, extent: (f64, f64)) -> Result<()> {
-        self.write().fit_domain(extent)
+        if !(extent.0.is_finite() && extent.1.is_finite()) {
+            // Let the scale report it; a union would hide it.
+            return self.write().fit_domain(extent);
+        }
+        let union = {
+            let mut fit = self.0.fit.lock().unwrap_or_else(|p| p.into_inner());
+            let union = fit.map_or(extent, |(lo, hi)| (lo.min(extent.0), hi.max(extent.1)));
+            *fit = Some(union);
+            union
+        };
+        self.write().fit_domain(union)
     }
 
     fn fit_keys(&mut self, keys: &[Arc<str>]) -> Result<()> {
@@ -298,6 +325,27 @@ pub(crate) fn format_with_step(v: f64, step: f64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// GUP-424: fits in one pass union; a new pass starts from scratch; an
+    /// explicit domain ignores fits.
+    #[test]
+    fn fit_passes_union_domains() {
+        let s = ScaleRef::new(Linear::new());
+        let mut a = s.clone();
+        let mut b = s.clone();
+        s.begin_fit();
+        a.fit_domain((0.0, 10.0)).unwrap();
+        b.fit_domain((5.0, 30.0)).unwrap();
+        assert_eq!(s.read().current_domain(), Some((0.0, 30.0)));
+        s.begin_fit();
+        a.fit_domain((2.0, 3.0)).unwrap();
+        assert_eq!(s.read().current_domain(), Some((2.0, 3.0)));
+
+        let mut fixed = ScaleRef::new(Linear::new().domain(1.0, 2.0));
+        fixed.begin_fit();
+        fixed.fit_domain((0.0, 10.0)).unwrap();
+        assert_eq!(fixed.read().current_domain(), Some((1.0, 2.0)));
+    }
 
     #[test]
     fn steps_are_one_two_five() {

@@ -100,6 +100,8 @@ pub struct Selection<T, M: Mark> {
     /// How many leading rows were dropped after upload ([`Retain`]).
     released: usize,
     retain: Retain,
+    /// Draw order among the plot's items (default 0).
+    z: i32,
     encodings: Vec<Option<Encoding<T>>>,
     /// Evaluated columns, one per column-encoded channel in channel order.
     columns: Option<ColumnStore>,
@@ -131,6 +133,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             rows: rows.into(),
             released: 0,
             retain: Retain::Auto,
+            z: 0,
             encodings: M::CHANNELS.iter().map(|_| None).collect(),
             columns: None,
             max_chunk_rows: None,
@@ -194,6 +197,14 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
     /// (default [`Retain::Auto`]).
     pub fn retain(&mut self, policy: Retain) -> &mut Self {
         self.retain = policy;
+        self
+    }
+
+    /// Set the layer's draw order in a [`Plot`](crate::Plot) (default 0,
+    /// within `-99..=99`): higher draws on top; equal `z` draws in the
+    /// order the layers were added.
+    pub fn z(&mut self, z: i32) -> &mut Self {
+        self.z = z;
         self
     }
 
@@ -403,6 +414,12 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
 /// A plot layer: the object-safe face of a [`Selection`] (internal; the
 /// public `Layer`/`Chart` traits are RFC-001 S7).
 pub(crate) trait Layer: wgpu::WasmNotSendSync {
+    /// Start a fit pass on every link of every column encoding, so a scale
+    /// shared by several channels or layers unions from scratch. Called
+    /// on every layer before any [`fit_domains`](Self::fit_domains).
+    fn begin_fit(&self);
+    /// The layer's z-order among the plot's items.
+    fn z(&self) -> i32;
     /// Evaluate accessors (chunked for `cx`'s device) and fit every
     /// data-driven domain to its column's stats across every chunk.
     fn fit_domains(&mut self, cx: &Context) -> Result<()>;
@@ -421,6 +438,20 @@ pub(crate) trait Layer: wgpu::WasmNotSendSync {
 }
 
 impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
+    fn begin_fit(&self) {
+        for enc in self.encodings.iter().flatten() {
+            if let Encoding::Column(c) = enc {
+                for link in c.links() {
+                    link.begin_fit();
+                }
+            }
+        }
+    }
+
+    fn z(&self) -> i32 {
+        self.z
+    }
+
     fn fit_domains(&mut self, cx: &Context) -> Result<()> {
         let store = self.evaluate(cx)?;
         let stats: Vec<_> = (0..store.formats().len()).map(|k| store.stats(k)).collect();
