@@ -267,9 +267,9 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   places them, titled, in a right-hand column with "+N more" overflow, replacing
   hand-built legend items. Deps: GUP-424 📋, GUP-425 📋, GUP-419 ✅; soft:
   GUP-433 📋.
-- [GUP-429](GUP-429_RFC_001_S6c_Rect_Mark_And_Derived_Constants.md) 🚧 — RFC-001
-  step S6c: a `Rect` mark (centre-and-extent or two edges per axis) and
-  `Derived<V>` channel values re-evaluated each resolve, so a bar's width
+- [GUP-429](GUP-429_RFC_001_S6c_Rect_Mark_And_Derived_Constants.md) ✅ Complete
+  — RFC-001 step S6c: a `Rect` mark (centre-and-extent or two edges per axis)
+  and `Derived<V>` channel values re-evaluated each resolve, so a bar's width
   follows `ScaleRef<Band>::band_width_px()`. Deps: GUP-422 ✅, GUP-421 ✅.
 - [GUP-430](GUP-430_RFC_001_S6d_Mark_Stroke_And_Fill_Opacity.md) 📋 — RFC-001
   step S6d: `fill_opacity` (new `Unit` type), `stroke` and `stroke_width` on

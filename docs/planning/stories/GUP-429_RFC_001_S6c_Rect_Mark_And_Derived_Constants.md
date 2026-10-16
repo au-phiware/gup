@@ -9,8 +9,8 @@ implementer-reason:
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 🚧 In Progress **Created**:
-2026-10-16
+**Initiative**: RFC-001 Migration **Status**: ✅ Complete (2026-10-16)
+**Created**: 2026-10-16
 
 ## Context
 
@@ -64,29 +64,29 @@ whose extent is non-zero, and two edges otherwise.
 
 ### AC1: `Rect` mark
 
-- [ ] `gup_core::Rect` (re-exported at the crate root and in the prelude with
+- [x] `gup_core::Rect` (re-exported at the crate root and in the prelude with
       `RectAttrs`) is defined with `#[derive(Mark)]` over
       `crates/gup-wgsl/library/rect.wgsl` (`gup::marks::rect`), with the
       channels in Decisions.
-- [ ] A render test draws one rect with `width`/`height` (centre form) and one
+- [x] A render test draws one rect with `width`/`height` (centre form) and one
       with `x_end`/`y_end` (edge form, corners given in reverse order) at known
       pixel coordinates; for each, the pixels 1 px inside every edge are the
       fill within 2/255 and the pixels 1 px outside are background within 2/255.
 
 ### AC2: `Derived` constants
 
-- [ ] `Derived<V>` drives any channel: a test binds `Circle::RADIUS` to
+- [x] `Derived<V>` drives any channel: a test binds `Circle::RADIUS` to
       `Derived::new(move || Px(*r.lock().unwrap()))` reading a shared
       `Arc<Mutex<f32>>`, resolves, changes the value, resolves again, and the
       disc's ink radius (measured along a row of pixels) follows within 0.5 px;
       `UploadStats` shows no column bytes on the second resolve.
-- [ ] `ScaleRef<Band>::band_width_px()` returns a `Derived<Px>` whose value is
+- [x] `ScaleRef<Band>::band_width_px()` returns a `Derived<Px>` whose value is
       `|band.band_width()|` at evaluation time; a doctest on it compiles and
       runs.
 
 ### AC3: A bar width follows an appended key
 
-- [ ] A test (in `plot.rs`' tests, after the AC3 pattern above) draws bars over
+- [x] A test (in `plot.rs`' tests, after the AC3 pattern above) draws bars over
       a `Band` x with keys `A`, `B`, `C`, `width = x.band_width_px()`; it
       appends rows with a new key `D` and resolves again. The second resolve's
       column writes are only the appended rows' bytes (no column exists for
@@ -96,19 +96,19 @@ whose extent is non-zero, and two edges otherwise.
 
 ### AC4: Bar-chart golden
 
-- [ ] Golden `gup_core/rect_bars` (720×450): six monthly values on a `Band` x
+- [x] Golden `gup_core/rect_bars` (720×450): six monthly values on a `Band` x
       (`domain([Jan..Jun])`), `Linear` y with explicit domain `0..max`, `Rect`
       with `x = x.encode_key(..)`, `width = x.band_width_px()`,
       `y = y.encode(..)`, `y_end = Derived` of `y.read().eval(0.0)`.
-- [ ] Read by eye: six equal-width bars, each centred on its month label,
+- [x] Read by eye: six equal-width bars, each centred on its month label,
       bottoms within 2 px of the x axis line, tops at their values, no bar
       outside the plot rect. The retrospective describes the PNG.
-- [ ] A pixel test asserts each bar's measured left/right edges are within 1 px
+- [x] A pixel test asserts each bar's measured left/right edges are within 1 px
       of `centre ∓ band_width / 2`.
 
 ### AC5: Horizontal bars
 
-- [ ] A render test draws horizontal bars (`y` a `Band`,
+- [x] A render test draws horizontal bars (`y` a `Band`,
       `height =     y.band_width_px()`, `x` the value, `x_end` a `Derived`
       baseline) and checks each bar's measured extent along both axes within 1
       px.
@@ -188,12 +188,12 @@ whose extent is non-zero, and two edges otherwise.
 
 ## Technical Tasks
 
-- [ ] Add `rect.wgsl` to the library and `Rect` to `marks.rs` with the derive.
-- [ ] Add `Derived`, `DerivedMarker` and `Encoding::Derived`; handle it in
+- [x] Add `rect.wgsl` to the library and `Rect` to `marks.rs` with the derive.
+- [x] Add `Derived`, `DerivedMarker` and `Encoding::Derived`; handle it in
       `prepare`, `overhang`, `glue()` and `Debug`.
-- [ ] Add `ScaleRef<Band>::band_width_px`.
-- [ ] Export `Rect`, `RectAttrs`, `Derived` (crate root and prelude).
-- [ ] Tests for AC1–AC3 and AC5; golden `rect_bars` (AC4), read by eye.
+- [x] Add `ScaleRef<Band>::band_width_px`.
+- [x] Export `Rect`, `RectAttrs`, `Derived` (crate root and prelude).
+- [x] Tests for AC1–AC3 and AC5; golden `rect_bars` (AC4), read by eye.
 
 ## Dependencies
 
@@ -218,7 +218,7 @@ whose extent is non-zero, and two edges otherwise.
 
 ## Success Metrics
 
-- [ ] A bar chart renders with bars sized by the band scale, and appending a key
+- [x] A bar chart renders with bars sized by the band scale, and appending a key
       rewrites no column bytes for the width.
 
 ## Risk Assessment
@@ -231,10 +231,66 @@ whose extent is non-zero, and two edges otherwise.
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (golden image or PNG read), if visual
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye (golden image or PNG read), if visual
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `Rect` (`crates/gup-wgsl/library/rect.wgsl`, `marks.rs`), exported with
+  `RectAttrs`; `Derived`/`DerivedMarker`/`Encoding::Derived` (`encoding.rs`,
+  handled in `selection.rs` `prepare`/`overhang`; the glue's `_` arm already
+  treats it as a constant); `ScaleRef<Band>::band_width_px`.
+- Tests: `crates/gup-core/tests/rect_png.rs` (AC1, AC2, AC4, AC5), plot.rs
+  `a_bar_width_follows_an_appended_key` (AC3), two doctests. Blessed three
+  trybuild `.stderr` files (the library now lists `rect`; a new `IntoEncoding`
+  impl is listed).
+- Golden `tests/golden/gup_core/rect_bars.png`: six equal-width blue bars
+  centred on their month labels, tops at their values, bottoms on the x axis,
+  title "Monthly sales", nothing outside the plot rect.
+- `mask perf-budget`: all pass except `pipeline.link_create.median_ms` (median
+  1.130 ms against a 1.056 ms limit) under machine load 6.5 from other workers;
+  not re-recorded. `mask old-path-loc` 28,910.
+
+## Retrospective
+
+**Completed**: 2026-10-16
+
+### Key Technical Learnings
+
+#### Digit-ending WGSL identifiers
+
+- **Challenge**: `x2`/`y2` in `RectIn` failed the build: naga's namer rewrites
+  names ending in a digit and naga_oil rejects that in composable modules.
+- **Solution**: channels renamed `x_end`/`y_end` (Decisions; GUP-423 and GUP-424
+  text updated).
+- **Pattern**: no digit-ending names in library WGSL structs or channel names.
+  `#[derive(Mark)]` gives no early error for a digit-ending channel name; the
+  failure surfaces when the user's WGSL module composes. A derive-time check was
+  not added (left as a possible small follow-up, not written up).
+
+#### Derived constants
+
+- `prepare` always runs after `set_range` in `Plot::resolve` (zoom only changes
+  domains), so the escalation trigger did not fire. `Derived` needed no glue
+  change.
+
+### Architectural Decisions
+
+- **Rect extent form**: 0 means "use the second edge"; a genuinely zero-size
+  rect is not drawable, so no information is lost.
+
+### Development Workflow Insights
+
+- Trybuild stderr files list every `IntoEncoding` impl and library module, so
+  adding either needs a bless.
+- Test measurements: use contiguous runs of pixels with red < 128 and ignore
+  runs of a few pixels, which are axis lines and ticks.
+
+### Follow-up Stories
+
+None.
