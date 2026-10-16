@@ -126,8 +126,26 @@ one build directory (GUP-411):
   2.1 GB, in a third 0.4 GB; building gup-core's tests adds 1 GB per checkout.
   Clippy artifacts are shared, so a checkout re-lints when another checkout
   linted last: `mask all-check` then takes about 90 s instead of 26 s.
-- Never `cargo clean` a shared build directory; delete your own
-  `CARGO_TARGET_DIR` instead.
+- Never `cargo clean` a shared build directory: it deletes every checkout's
+  artifacts, dependencies included. `mask clean` deletes only this checkout's.
+- **Pruning** (GUP-427): the pre-commit hook runs `scripts/prune_build_dir.sh`
+  after its Rust checks (`mask prune-build` runs it by hand, `--dry-run` to
+  look). It deletes the units, incremental caches and target directory of
+  checkouts that no longer exist (the workspace wrapper records which checkout
+  built what), every incremental session but the newest per crate, caches idle
+  for 3 days, and the least recently compiled caches over 8 GB per profile. It
+  holds cargo's build-directory lock while it works and skips a directory
+  another build holds for more than 10 s. A deleted cache costs one
+  non-incremental compile; a live checkout's artifacts are never touched.
+- **Bound**: measured on this repository (2026-10-11), a warm hook run with a
+  root-crate change grows the build directory by 0–35 MB after the prune
+  (without it, the second run doubled every incremental cache: +1.7 GB). An
+  agent worktree that runs `cargo test -p gup` adds 21.8 GB of its own (tests,
+  examples, caches); once the worktree is removed, the next prune reclaims all
+  of it (9.5 s). Remove finished worktrees promptly. Units built before GUP-427
+  have no owner record and are never pruned; delete the build directory once,
+  when nothing is building, to drop them. `scripts/test_prune_build_dir.sh` (in
+  `mask all-check`) proves the bound on a seeded multi-commit history.
 - A commit older than GUP-411 has no `.cargo/config.toml`. In a worktree nested
   inside a checkout that has one, cargo uses the outer checkout's and the build
   stops with an explanation. Elsewhere, give it its own build directory.

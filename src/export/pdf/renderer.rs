@@ -1283,7 +1283,7 @@ mod tests {
 
     #[test]
     fn test_pdf_document_write_file() {
-        let dir = std::env::temp_dir().join("gup_pdf_test");
+        let dir = std::env::temp_dir().join(format!("gup_pdf_test-{}", std::process::id()));
         let _ = std::fs::create_dir_all(&dir);
         let path = dir.join("test_output.pdf");
 

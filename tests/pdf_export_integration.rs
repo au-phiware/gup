@@ -187,7 +187,7 @@ fn test_multi_page_pdf_page_count() {
 
 #[test]
 fn test_pdf_document_write_and_read_back() {
-    let dir = std::env::temp_dir().join("gup_pdf_integration");
+    let dir = std::env::temp_dir().join(format!("gup_pdf_integration-{}", std::process::id()));
     let _ = std::fs::create_dir_all(&dir);
     let path = dir.join("integration_output.pdf");
 

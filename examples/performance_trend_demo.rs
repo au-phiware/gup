@@ -17,7 +17,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("📊 Performance Trend Visualization Demo\n");
 
     // Set up temporary directory for demo
-    let demo_dir = std::env::temp_dir().join("gup_trend_demo");
+    let demo_dir = std::env::temp_dir().join(format!("gup_trend_demo-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&demo_dir);
     std::fs::create_dir_all(&demo_dir)?;
 

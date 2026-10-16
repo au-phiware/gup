@@ -13,7 +13,7 @@ use std::collections::HashMap;
 #[test]
 fn test_trend_visualization_with_sample_data() -> GupResult<()> {
     // Create temporary directory for test baselines
-    let temp_dir = std::env::temp_dir().join("gup_trend_viz_test");
+    let temp_dir = std::env::temp_dir().join(format!("gup_trend_viz_test-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&temp_dir); // Clean up any old test data
     std::fs::create_dir_all(&temp_dir).unwrap();
 
@@ -154,7 +154,8 @@ fn test_svg_chart_structure() {
 
 #[test]
 fn test_empty_baseline_handling() -> GupResult<()> {
-    let temp_dir = std::env::temp_dir().join("gup_empty_baselines_test");
+    let temp_dir =
+        std::env::temp_dir().join(format!("gup_empty_baselines_test-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&temp_dir);
     std::fs::create_dir_all(&temp_dir).unwrap();
 

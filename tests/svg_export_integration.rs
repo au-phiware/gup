@@ -286,7 +286,7 @@ async fn svg_export_to_file() {
     let chart = test_chart(config).await;
     let opts = SvgExportOptions::new(800, 600);
 
-    let dir = std::env::temp_dir().join("gup_svg_integration_test");
+    let dir = std::env::temp_dir().join(format!("gup_svg_integration_test-{}", std::process::id()));
     let _ = std::fs::create_dir_all(&dir);
     let path = dir.join("test_chart.svg");
 

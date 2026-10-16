@@ -238,9 +238,11 @@ scripts: GitHub does not report a workflow it cannot parse, it just never starts
 it (GUP-409). The files are named explicitly because, with no arguments,
 actionlint looks for the workflows next to the nearest `.git` above it, which
 from the hook's snapshot is the real checkout. `test_pre_commit.sh` tests the
-pre-commit hook's scoping rules and its staged snapshot, and
+pre-commit hook's scoping rules and its staged snapshot,
 `test_shared_build_dir.sh` that checkouts sharing a build directory get their
-own workspace-member artifacts (GUP-411).
+own workspace-member artifacts (GUP-411), and `test_prune_build_dir.sh` that the
+prune bounds the build directory's growth per commit without touching a live
+checkout's artifacts (GUP-427).
 
 The whitespace check passes only when `git grep` finds nothing (exit 1): a
 `git grep` error must fail it, not pass it.
@@ -261,7 +263,7 @@ concurrently --group --names '\s,rs,nix,md,gha,marks,gallery,hook' \
    'actionlint .github/workflows/*.y*ml' \
    'mask validate-marks' \
    './scripts/check_gallery_sync.sh' \
-   './scripts/test_pre_commit.sh && ./scripts/test_shared_build_dir.sh'
+   './scripts/test_pre_commit.sh && ./scripts/test_shared_build_dir.sh && ./scripts/test_prune_build_dir.sh'
 ```
 
 ## pre-commit
@@ -444,10 +446,38 @@ cargo bench --all-features -- --list --save-baseline ci
 
 ## clean
 
-Clean build artifacts
+Delete this checkout's build artifacts. With a build directory shared between
+checkouts (`scripts/cargo_env.sh`), `cargo clean` would delete every checkout's,
+dependencies included, so this deletes only what this checkout and its
+pre-commit snapshot built: their workspace-member units, incremental caches and
+target directory (GUP-427). Without one, it is `cargo clean`.
 
 ```bash
-cargo clean
+if [[ -n ${CARGO_BUILD_BUILD_DIR:-} ]]; then
+  ./scripts/prune_build_dir.sh \
+    --forget "$(git rev-parse --show-toplevel)" \
+    --forget "$(git rev-parse --absolute-git-dir)/gup-pre-commit/tree"
+else
+  cargo clean
+fi
+```
+
+## prune-build
+
+Prune the build directory (GUP-427): delete what checkouts that no longer exist
+built, superseded and idle incremental caches, and the least recently compiled
+caches over the size cap. The pre-commit hook runs it after its Rust checks. The
+rules, the knobs (`GUP_PRUNE_IDLE_DAYS`, `GUP_PRUNE_INCREMENTAL_MB`,
+`GUP_PRUNE_WAIT`) and why they are safe are in `scripts/prune_build_dir.sh`.
+
+OPTIONS
+
+- dry_run
+  - flags: -n --dry-run
+  - desc: List what would be deleted, and delete nothing
+
+```bash
+./scripts/prune_build_dir.sh ${dry_run:+--dry-run}
 ```
 
 ## doc

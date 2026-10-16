@@ -196,7 +196,7 @@ fn html_export_write_to_file() {
     let exporter =
         HtmlExporter::new(WasmStrategy::Url("gup.wasm".into())).with_title("File Write Test");
 
-    let dir = std::env::temp_dir().join("gup_html_test");
+    let dir = std::env::temp_dir().join(format!("gup_html_test-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("test_chart.html");
 
@@ -221,7 +221,7 @@ fn html_export_write_to_file() {
 
 #[test]
 fn html_export_convenience_method() {
-    let dir = std::env::temp_dir().join("gup_html_convenience");
+    let dir = std::env::temp_dir().join(format!("gup_html_convenience-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("convenience.html");
 
@@ -284,7 +284,7 @@ fn chart_snapshot_round_trip_from_html() {
 #[test]
 fn html_export_inline_wasm_strategy() {
     // Create a temporary fake WASM file.
-    let dir = std::env::temp_dir().join("gup_html_inline_test");
+    let dir = std::env::temp_dir().join(format!("gup_html_inline_test-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let wasm_path = dir.join("fake.wasm");
     // A minimal valid WASM magic header + version.
@@ -452,7 +452,7 @@ fn html_export_without_data_has_no_data_field() {
 
 #[test]
 fn html_export_with_data_file_write() {
-    let dir = std::env::temp_dir().join("gup_html_data_test");
+    let dir = std::env::temp_dir().join(format!("gup_html_data_test-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("chart_with_data.html");
 
@@ -485,7 +485,7 @@ fn html_export_with_data_file_write() {
 
 #[test]
 fn html_export_convenience_with_data() {
-    let dir = std::env::temp_dir().join("gup_html_conv_data");
+    let dir = std::env::temp_dir().join(format!("gup_html_conv_data-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("convenience_data.html");
 
@@ -590,7 +590,7 @@ fn html_export_js_reads_chart_data() {
 #[test]
 fn html_export_auto_strategy() {
     // Create a temporary wasm-pack layout.
-    let dir = std::env::temp_dir().join("gup_html_auto_test");
+    let dir = std::env::temp_dir().join(format!("gup_html_auto_test-{}", std::process::id()));
     let pkg = dir.join("pkg");
     std::fs::create_dir_all(&pkg).unwrap();
     let wasm_path = pkg.join("gup_bg.wasm");

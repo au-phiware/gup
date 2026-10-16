@@ -124,7 +124,7 @@ async fn test_export_png_writes_file() {
     let context = Arc::new(gup::RenderContext::new().await.unwrap());
     let mut chart = build_chart(sample_data(), context).unwrap();
 
-    let path = std::env::temp_dir().join("gup_test_export.png");
+    let path = std::env::temp_dir().join(format!("gup_test_export-{}.png", std::process::id()));
     chart.export_png(&path, 640, 480).unwrap();
 
     assert!(path.exists(), "PNG file was not written to disk");

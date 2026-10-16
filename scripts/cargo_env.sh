@@ -27,4 +27,9 @@ build=${1:-${CARGO_BUILD_BUILD_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/gup/build}}
 [[ $build == /* ]] || build=$PWD/$build
 hash=$(printf '%s' "$top" | sha256sum | cut -c1-8)
 target=$build/checkouts/${top##*/}-$hash
+# Which checkout the target directory belongs to, so that
+# scripts/prune_build_dir.sh can delete it once the checkout is gone (GUP-427).
+if mkdir -p "$target" 2>/dev/null; then
+  printf '%s\n' "$top" >"$target/.gup-checkout" 2>/dev/null || true
+fi
 printf 'export CARGO_BUILD_BUILD_DIR=%q CARGO_TARGET_DIR=%q\n' "$build" "$target"

@@ -23,7 +23,11 @@ unset CARGO_BUILD_BUILD_DIR CARGO_BUILD_TARGET_DIR RUSTC_WORKSPACE_WRAPPER \
   GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX GIT_COMMON_DIR \
   GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES
 export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null CARGO_TERM_COLOR=never
-tmp=$(mktemp -d)
+# Not /tmp, which build output must never fill (GUP-427), and not inside this
+# checkout, whose .cargo/config.toml cargo would find.
+scratch=${GUP_TEST_SCRATCH:-${XDG_CACHE_HOME:-$HOME/.cache}/gup/test-scratch}
+mkdir -p "$scratch"
+tmp=$(mktemp -d "$scratch/run.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
 
 # A dependency outside the workspace (shared between checkouts) and a member

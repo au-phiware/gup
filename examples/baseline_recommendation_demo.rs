@@ -22,7 +22,8 @@ fn main() -> GupResult<()> {
     println!("=========================================\n");
 
     // Setup demo directory
-    let demo_dir = std::env::temp_dir().join("gup_baseline_rec_demo");
+    let demo_dir =
+        std::env::temp_dir().join(format!("gup_baseline_rec_demo-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&demo_dir);
     std::fs::create_dir_all(&demo_dir)?;
     println!("📁 Demo directory: {}\n", demo_dir.display());

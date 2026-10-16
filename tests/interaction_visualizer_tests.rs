@@ -144,7 +144,11 @@ async fn test_interaction_visualizer_export() -> Result<(), Box<dyn std::error::
     visualizer.update(&elements, &queries, &results);
 
     // Export to JSON
-    let temp_path = "/tmp/gup_interaction_debug_test.json";
+    let temp_path = std::env::temp_dir().join(format!(
+        "gup_interaction_debug_test-{}.json",
+        std::process::id()
+    ));
+    let temp_path = temp_path.to_str().expect("temp dir is UTF-8");
     visualizer.export_json(temp_path)?;
 
     // Verify file was created

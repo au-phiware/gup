@@ -214,12 +214,12 @@ async fn run_ci_performance_suite() {
 
 #[tokio::test]
 async fn test_baseline_management() {
-    let storage = BaselineStorage::new(PathBuf::from("/tmp/gup_test_baselines"));
+    let dir = std::env::temp_dir().join(format!("gup_test_baselines-{}", std::process::id()));
+    let storage = BaselineStorage::new(dir.clone());
 
     // Clean up any previous test data
-    let _ = std::fs::remove_dir_all("/tmp/gup_test_baselines");
-    std::fs::create_dir_all("/tmp/gup_test_baselines/test_category")
-        .expect("Failed to create test directory");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("test_category")).expect("Failed to create test directory");
 
     // Create and save a baseline
     let baseline = gup::debug::ci_performance::PerformanceBaseline {
@@ -259,5 +259,5 @@ async fn test_baseline_management() {
     );
 
     // Clean up
-    std::fs::remove_dir_all("/tmp/gup_test_baselines").expect("Failed to clean up test directory");
+    std::fs::remove_dir_all(&dir).expect("Failed to clean up test directory");
 }
