@@ -153,13 +153,17 @@ Work iteratively in small, focused increments. For each increment:
   `npx prettier`: it fetches the latest release, which re-wraps Markdown
   differently from the pinned version and churns unrelated lines. If a tool is
   missing from PATH, run it via `nix develop -c`.
-- **Build output**: in a worktree, start every shell, including the one you
-  commit from, with `eval "$(scripts/cargo_env.sh <BUILD_DIR>)"` run from the
-  worktree, where `<BUILD_DIR>` is the shared build directory the orchestrator
-  gives you. Your shell inherits the environment of the checkout that started
-  you, and that checkout's `CARGO_TARGET_DIR` is not yours. Never `cargo clean`
-  the shared build directory. See "Sharing build output between checkouts" in
-  `CLAUDE.md`.
+- **Build output**: run every cargo and mask command, and every `git commit`
+  (the hook builds), through your checkout's wrapper, by absolute path:
+  `/path/to/checkout/scripts/with_cargo_env.sh cargo test -p gup-core`. Your
+  shell starts fresh for each command and inherits the environment of the
+  checkout that started you, and that checkout's `CARGO_TARGET_DIR` is not
+  yours. The wrapper needs no `eval` or `cd`.
+- **Long commands**: the shell tool times out after 2 minutes by default. Pass a
+  timeout of up to 600000 ms for builds, `mask all-fix`, `mask all-check` and
+  `mask perf-budget`, or run them in the background. A timeout is not a failure
+  of the command. Never `cargo clean` the shared build directory. See "Sharing
+  build output between checkouts" in `CLAUDE.md`.
 
 ### Repeat
 

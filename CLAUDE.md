@@ -114,10 +114,12 @@ one build directory (GUP-411):
   output), which a shared target directory lets another checkout overwrite. On
   the same filesystem they are hard links, so they cost almost no disk.
 
-- **Worktree agents**: a shell inherits the environment of the checkout that
-  started it. Run the line above from the worktree in every shell, with the
-  orchestrator's build directory, e.g.
-  `cd <worktree> && eval "$(scripts/cargo_env.sh /tmp/gup-target)"`.
+- **Agents**: an agent's shell starts fresh for every command and inherits the
+  environment of the checkout that started it, so it runs cargo and mask through
+  the wrapper, by its own checkout's path:
+  `<checkout>/scripts/with_cargo_env.sh cargo test -p gup-core`. The wrapper
+  sets the same environment as the `eval` line above, without `eval` or `cd`,
+  which an agent's sandbox may refuse.
 - **Concurrency**: safe. Cargo locks the build directory while it compiles, so
   builds from different checkouts take turns; tests and `cargo run` programs run
   after the lock is released. No checkout uses another's member artifacts.
