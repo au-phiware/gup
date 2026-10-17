@@ -68,15 +68,15 @@ X) or `info` (printed, never fails).
 | `zoom.validity.bytes`             | 0         | exact     | `zoom_bench`                                      |
 | `zoom.uniforms.bytes_per_frame`   | 136       | exact     | `zoom_bench`                                      |
 | `zoom.uniforms.writes_per_frame`  | 3         | exact     | `zoom_bench`                                      |
-| `zoom.instances.bytes`            | 5,629,476 | exact     | `zoom_bench`, over the 600 measured frames        |
+| `zoom.instances.bytes`            | 5,646,396 | exact     | `zoom_bench`, over the 600 measured frames        |
 | `zoom.instances.writes_per_frame` | 3         | exact     | `zoom_bench`                                      |
 | `zoom.textures.bytes`             | 0         | exact     | `zoom_bench`                                      |
 | `pipeline.link_create.median_ms`  | 0.88      | +20%      | `pipeline_timings`, 20 runs, fresh cache each     |
 | `pipeline.link_create.cold_ms`    | 1.04      | <= 10     | `pipeline_timings`, its first run                 |
 | `pipeline.link_create.max_ms`     | 1.06      | info      | `pipeline_timings`                                |
 | `wasm.wgpu.gz_bytes`              | 41,712    | info      | `scripts/wasm_size.sh`, bare wgpu                 |
-| `wasm.scatter.gz_bytes`           | 321,457   | +2%       | `scripts/wasm_size.sh`, the reference scatter     |
-| `wasm.over_wgpu.gz_bytes`         | 279,744   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10       |
+| `wasm.scatter.gz_bytes`           | 329,548   | +2%       | `scripts/wasm_size.sh`, the reference scatter     |
+| `wasm.over_wgpu.gz_bytes`         | 287,835   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10       |
 
 A legitimate change that moves a number (a new guide, a bigger feature) records
 the new value here, in the same commit, with the reason in the story.
@@ -261,3 +261,15 @@ seeded violation (GUP-417 retrospective).
   through although it draws no line: the glue emitter's next-row reads, draw
   entries (`order::draw_entries`), per-slot vertex buffer bindings
   (`ChunkDraw::slots`) and the vertex-slot and storage-buffer checks in prepare.
+- **Merge of GUP-435, 437 and 432 (2026-10-17)**, measured by the orchestrator
+  with `mask perf-budget` on the merged tree (GPU clock median 433 MHz, load
+  5.2):
+  - `zoom.instances.bytes` 5,629,476 to 5,646,396 (+16,920 B): the guide
+    instances from GUP-435's tick changes (thinned and re-nice'd labels on
+    widened domains). `tests/zoom_uploads.rs` moved with it in GUP-435.
+  - WASM scatter 321,457 to 329,548 B gz (+8,091), and over bare wgpu 279,744 to
+    287,835. That is GUP-435's tick thinning, domain widening and log nice, plus
+    GUP-437's chain legends; measured on its own base (316,565) at +6,462 and
+    +2,618 respectively.
+  - `pipeline.link_create.median_ms` read 1.139 against 1.056 at load 5.2: a
+    timing failure under load, not re-recorded.
