@@ -26,6 +26,12 @@ use std::sync::{Arc, OnceLock};
 /// [`Font`].
 pub const INTER_REGULAR: &[u8] = include_bytes!("../fonts/Inter-Regular-Subset.ttf");
 
+/// The bundled bold face: a subset of Inter SemiBold 4.1 (weight 600), made
+/// by `mask subset-inter` with the same character list and features as
+/// [`INTER_REGULAR`]. It draws [`Weight::SemiBold`](crate::Weight::SemiBold)
+/// text.
+pub const INTER_SEMIBOLD: &[u8] = include_bytes!("../fonts/Inter-SemiBold-Subset.ttf");
+
 /// The complete Inter Regular 4.1, for text the [`INTER_REGULAR`] subset
 /// does not cover: it adds Cyrillic, Vietnamese, the rest of Latin and
 /// Greek, and more symbols (2,852 characters in all). Load it with
@@ -101,6 +107,14 @@ impl Font {
         INTER_FULL
             .get_or_init(|| Font::bundled(INTER_REGULAR_FULL))
             .clone()
+    }
+
+    /// The bundled semibold face, the Inter SemiBold subset
+    /// ([`INTER_SEMIBOLD`]). It is parsed on first use, once per process,
+    /// and shared. Named "Inter" like the regular face.
+    pub fn inter_semibold() -> Self {
+        static INTER: OnceLock<Font> = OnceLock::new();
+        INTER.get_or_init(|| Font::bundled(INTER_SEMIBOLD)).clone()
     }
 
     fn bundled(data: &'static [u8]) -> Self {
@@ -240,6 +254,27 @@ mod tests {
              Inter lacks: listed but unmapped {unmapped:?}, mapped but unlisted {extra:?}"
         );
         assert_eq!(Font::inter_full().face().chars().len(), 2852);
+    }
+
+    #[test]
+    fn semibold_subset_covers_what_regular_covers() {
+        let regular: BTreeSet<char> = Font::inter().face().chars().keys().copied().collect();
+        let semibold: BTreeSet<char> = Font::inter_semibold()
+            .face()
+            .chars()
+            .keys()
+            .copied()
+            .collect();
+        assert_eq!(Font::inter_semibold().data(), INTER_SEMIBOLD);
+        assert!(
+            regular.is_subset(&semibold),
+            "SemiBold lacks {:?}",
+            regular.difference(&semibold).collect::<Vec<_>>()
+        );
+        assert!(Arc::ptr_eq(
+            &Font::inter_semibold().face,
+            &Font::inter_semibold().face
+        ));
     }
 
     #[test]

@@ -102,29 +102,32 @@ harness's `Cargo.lock` version. See `scripts/wasm_browser.sh` and
 
 ## subset-inter
 
-Regenerate `gup-text`'s bundled font (GUP-407): subset the full Inter Regular to
-the characters listed in `crates/gup-text/fonts/inter-subset.txt`. Keeps GPOS
-`kern` and GSUB `tnum` (for shaping, GUP-405) and every other OpenType feature
-is dropped, as is hinting (fontdue and resvg don't hint). The missing-glyph box
-keeps its outline, so a character outside the subset draws as a visible box, not
-as nothing. The copyright, trademark and licence names (IDs 0, 7, 13 and 14) are
-kept, so an embedded copy carries its OFL notice. The output is byte-for-byte
-reproducible with the dev shell's fonttools (pinned by `flake.lock`). Commit the
-result with the character list.
+Regenerate `gup-text`'s bundled font (GUP-407): subset the full Inter Regular
+and SemiBold (GUP-436) to the characters listed in
+`crates/gup-text/fonts/inter-subset.txt`. Keeps GPOS `kern` and GSUB `tnum` (for
+shaping, GUP-405) and every other OpenType feature is dropped, as is hinting
+(fontdue and resvg don't hint). The missing-glyph box keeps its outline, so a
+character outside the subset draws as a visible box, not as nothing. The
+copyright, trademark and licence names (IDs 0, 7, 13 and 14) are kept, so an
+embedded copy carries its OFL notice. The output is byte-for-byte reproducible
+with the dev shell's fonttools (pinned by `flake.lock`). Commit the result with
+the character list.
 
 ```bash
 set -euo pipefail
 fonts=crates/gup-text/fonts
-pyftsubset "$fonts/Inter-Regular.ttf" \
-  --unicodes-file="$fonts/inter-subset.txt" \
-  --layout-features=kern,tnum \
-  --no-hinting \
-  --notdef-outline \
-  --name-IDs=0,1,2,3,4,5,6,7,13,14 \
-  --output-file="$fonts/Inter-Regular-Subset.ttf"
-for f in "$fonts/Inter-Regular.ttf" "$fonts/Inter-Regular-Subset.ttf"; do
-  printf '%-44s %7d B raw %6d B gz\n' "$f" "$(stat -c %s "$f")" \
-    "$(gzip -9 -c "$f" | wc -c)"
+for w in Regular SemiBold; do
+  pyftsubset "$fonts/Inter-$w.ttf" \
+    --unicodes-file="$fonts/inter-subset.txt" \
+    --layout-features=kern,tnum \
+    --no-hinting \
+    --notdef-outline \
+    --name-IDs=0,1,2,3,4,5,6,7,13,14 \
+    --output-file="$fonts/Inter-$w-Subset.ttf"
+  for f in "$fonts/Inter-$w.ttf" "$fonts/Inter-$w-Subset.ttf"; do
+    printf '%-44s %7d B raw %6d B gz\n' "$f" "$(stat -c %s "$f")" \
+      "$(gzip -9 -c "$f" | wc -c)"
+  done
 done
 ```
 

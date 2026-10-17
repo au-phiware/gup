@@ -188,7 +188,7 @@ impl PositionScale for Linear {
             .map(|i| step_value(start + i as f64, step))
             .collect();
         let labels = values.iter().map(|&v| format_with_step(v, step)).collect();
-        Ticks { values, labels }
+        Ticks::new(values, labels)
     }
 }
 

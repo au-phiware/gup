@@ -7,7 +7,7 @@
 use crate::atlas::GlyphAtlas;
 use crate::error::Result;
 use crate::font::Font;
-use crate::layout::{Bounds, Run, TextMetrics};
+use crate::layout::{Bounds, Run, TextMetrics, Weight};
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
@@ -183,10 +183,11 @@ struct AtlasTexture {
 /// prepare while holding it; the returned [`GlyphBatch`] draws without it.
 pub struct TextSystem {
     device: wgpu::Device,
-    /// Set by [`with_font`](Self::with_font), or the bundled Inter on
-    /// first use: parsing Inter takes about 18 ms (release), which a
-    /// device that never draws text should not pay.
-    font: OnceLock<Font>,
+    /// One face per [`Weight`], set by [`with_font`](Self::with_font) or
+    /// [`with_fonts`](Self::with_fonts), or the bundled Inter on first use:
+    /// parsing Inter takes about 18 ms (release), which a device that never
+    /// draws text (or never draws semibold text) should not pay.
+    fonts: [OnceLock<Font>; Weight::COUNT],
     atlas: GlyphAtlas,
     texture: Option<AtlasTexture>,
     bind_group_layout: wgpu::BindGroupLayout,
@@ -201,7 +202,7 @@ pub struct TextSystem {
 impl std::fmt::Debug for TextSystem {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("TextSystem")
-            .field("font", &self.font.get())
+            .field("font", &self.fonts[0].get())
             .field("atlas_size", &self.atlas.size())
             .field("glyphs", &self.atlas.len())
             .finish_non_exhaustive()
@@ -211,15 +212,21 @@ impl std::fmt::Debug for TextSystem {
 impl TextSystem {
     /// A text system with the bundled Inter font, loaded on first use.
     pub fn new(device: &wgpu::Device) -> Self {
-        Self::build(device, OnceLock::new())
+        Self::build(device, [OnceLock::new(), OnceLock::new()])
     }
 
-    /// A text system with `font`.
+    /// A text system that draws every weight with `font`.
     pub fn with_font(device: &wgpu::Device, font: Font) -> Self {
-        Self::build(device, OnceLock::from(font))
+        Self::build(device, [OnceLock::from(font.clone()), OnceLock::from(font)])
     }
 
-    fn build(device: &wgpu::Device, font: OnceLock<Font>) -> Self {
+    /// A text system with `regular` for [`Weight::Regular`] and `semibold`
+    /// for [`Weight::SemiBold`].
+    pub fn with_fonts(device: &wgpu::Device, regular: Font, semibold: Font) -> Self {
+        Self::build(device, [OnceLock::from(regular), OnceLock::from(semibold)])
+    }
+
+    fn build(device: &wgpu::Device, fonts: [OnceLock<Font>; Weight::COUNT]) -> Self {
         let bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("gup-text atlas"),
             entries: &[
@@ -253,7 +260,7 @@ impl TextSystem {
         });
         Self {
             device: device.clone(),
-            font,
+            fonts,
             atlas: GlyphAtlas::new(device.limits().max_texture_dimension_2d),
             texture: None,
             bind_group_layout,
@@ -265,19 +272,33 @@ impl TextSystem {
         }
     }
 
-    /// The font.
+    /// The regular font.
     pub fn font(&self) -> &Font {
-        self.font.get_or_init(Font::inter)
+        self.font_weight(Weight::Regular)
     }
 
-    /// Measure `text` at `size` logical pixels.
+    /// The font that draws `weight`.
+    pub fn font_weight(&self, weight: Weight) -> &Font {
+        self.fonts[weight.index()].get_or_init(match weight {
+            Weight::Regular => Font::inter,
+            Weight::SemiBold => Font::inter_semibold,
+        })
+    }
+
+    /// Measure `text` at `size` logical pixels in the regular weight.
     pub fn measure(&self, text: &str, size: f32) -> TextMetrics {
-        self.font().measure(text, size)
+        self.measure_weight(text, size, Weight::Regular)
     }
 
-    /// The ink box of `run` in logical pixels (see [`Font::ink_bounds`]).
+    /// Measure `text` at `size` logical pixels in `weight`.
+    pub fn measure_weight(&self, text: &str, size: f32, weight: Weight) -> TextMetrics {
+        self.font_weight(weight).measure(text, size)
+    }
+
+    /// The ink box of `run` in logical pixels (see [`Font::ink_bounds`]),
+    /// in the run's weight.
     pub fn ink_bounds(&self, run: &Run<'_>) -> Bounds {
-        self.font().ink_bounds(run)
+        self.font_weight(run.weight).ink_bounds(run)
     }
 
     /// Width and height of the glyph atlas in texels.
@@ -303,13 +324,14 @@ impl TextSystem {
     /// its glyph quads to `glyphs`, rasterising new glyphs at the glyphs'
     /// scale into the atlas.
     pub fn layout(&mut self, run: &Run<'_>, color: [f32; 4], glyphs: &mut Glyphs) -> Result<()> {
-        let font = self.font().clone();
+        let font = self.font_weight(run.weight).clone();
+        let weight = run.weight;
         let mut result = Ok(());
         font.walk(run, glyphs.scale, |g| {
             if result.is_err() || g.metrics.width == 0 || g.metrics.height == 0 {
                 return;
             }
-            match self.atlas.glyph(&font, g.c, g.px) {
+            match self.atlas.glyph(&font, weight, g.c, g.px) {
                 Ok(r) => {
                     let [u, v, w, h] = [r.x, r.y, r.width, r.height].map(|t| t as f32);
                     glyphs.quads.push(GlyphInstance {

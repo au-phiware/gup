@@ -85,6 +85,37 @@ pub struct Run<'a> {
     pub at: [f32; 2],
     /// How `at` relates to the text.
     pub anchor: Anchor,
+    /// Which bundled face draws the text.
+    pub weight: Weight,
+}
+
+/// The weight of a [`Run`]: which of the two bundled faces draws it.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub enum Weight {
+    /// Inter Regular.
+    #[default]
+    Regular,
+    /// Inter SemiBold (CSS weight 600).
+    SemiBold,
+}
+
+impl Weight {
+    pub(crate) const COUNT: usize = 2;
+
+    pub(crate) fn index(self) -> usize {
+        match self {
+            Weight::Regular => 0,
+            Weight::SemiBold => 1,
+        }
+    }
+
+    /// The CSS `font-weight` value.
+    pub fn css(self) -> u16 {
+        match self {
+            Weight::Regular => 400,
+            Weight::SemiBold => 600,
+        }
+    }
 }
 
 /// One glyph of a laid-out run, in physical pixels.
@@ -206,6 +237,7 @@ mod tests {
             size: 16.0,
             at: [100.0, 50.0],
             anchor,
+            weight: Weight::Regular,
         }
     }
 

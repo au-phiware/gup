@@ -139,7 +139,13 @@ impl PositionScale for Time {
         let unit = Interval::choose(hi - lo, count);
         let values = unit.ticks(lo, hi);
         let labels = values.iter().map(|&t| label(t, &unit)).collect();
-        Ticks { values, labels }
+        let mut ticks = Ticks::new(values, labels);
+        // A year label outweighs the month labels around it; when every
+        // tick is a year none is singled out.
+        if !matches!(unit, Interval::Years(_)) {
+            ticks.major = ticks.values.iter().map(|&t| begins_year(t)).collect();
+        }
+        ticks
     }
 }
 
@@ -352,6 +358,14 @@ fn label(t: f64, unit: &Interval) -> String {
     } else {
         y.to_string()
     }
+}
+
+/// Whether `t` is the first instant of a year (the ticks that `label` names
+/// by their year).
+fn begins_year(t: f64) -> bool {
+    let t = t.round();
+    let (_, m, d) = civil(t);
+    m == 1 && d == 1 && t.rem_euclid(DAY) == 0.0
 }
 
 /// `(year, month, day)` of the UTC day holding `t` seconds since the

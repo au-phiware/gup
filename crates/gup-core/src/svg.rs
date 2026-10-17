@@ -29,7 +29,7 @@
 
 use crate::channel::Color;
 use crate::error::{Error, Result};
-use crate::scene::{GradientDirection, HAlign, ItemKind, Scene};
+use crate::scene::{GradientDirection, HAlign, ItemKind, Scene, Weight};
 use std::fmt::Write as _;
 
 /// Something that writes a [`Scene`] as vector graphics (SVG, PDF).
@@ -90,13 +90,20 @@ pub struct SvgOptions {
     /// bundled Inter subset, as every [`Context`](crate::Context)'s text
     /// system uses.
     pub font: gup_text::Font,
+    /// The face of [`Weight::SemiBold`](crate::scene::Weight::SemiBold)
+    /// runs (major tick labels), written with `font-weight="600"`.
+    /// Default: the bundled Inter SemiBold subset. Name it like `font`, so
+    /// both share one `font-family`.
+    pub semibold_font: gup_text::Font,
     /// Embed `font` in the document as an `@font-face` with a base64 data
     /// URL (only when the scene has text). Default: off; the document
     /// then names the font and relies on the viewer having it. The
     /// embedded file is the font's [`data`](gup_text::Font::data) as
     /// loaded, so a large face makes a large SVG; the bundled subset adds
     /// about 82 KB. The bundled Inter is under the SIL Open Font License,
-    /// which allows embedding it in documents.
+    /// which allows embedding it in documents. `semibold_font` follows as
+    /// a second `@font-face` with `font-weight:600`, when the scene has a
+    /// semibold run.
     pub embed_font: bool,
 }
 
@@ -104,6 +111,7 @@ impl Default for SvgOptions {
     fn default() -> Self {
         Self {
             font: gup_text::Font::inter(),
+            semibold_font: gup_text::Font::inter_semibold(),
             embed_font: false,
         }
     }
@@ -175,10 +183,21 @@ impl SvgTarget {
             // then XML-escaped. Base64 needs neither.
             writeln!(
                 s,
-                r#"<style>@font-face{{font-family:"{}";src:url(data:font/ttf;base64,{}) format("truetype")}}</style>"#,
+                r#"<style>@font-face{{font-family:"{}";font-weight:400;src:url(data:font/ttf;base64,{}) format("truetype")}}</style>"#,
                 escape(&css_string(self.options.font.name())),
                 base64(self.options.font.data())
             )?;
+            if scene
+                .text_runs()
+                .any(|r| r.style.weight == Weight::SemiBold)
+            {
+                writeln!(
+                    s,
+                    r#"<style>@font-face{{font-family:"{}";font-weight:600;src:url(data:font/ttf;base64,{}) format("truetype")}}</style>"#,
+                    escape(&css_string(self.options.semibold_font.name())),
+                    base64(self.options.semibold_font.data())
+                )?;
+            }
         }
         for (i, c) in scene.clips.iter().enumerate() {
             writeln!(
@@ -287,7 +306,11 @@ impl SvgTarget {
                         // the baseline from Inter's metrics. Like the GPU
                         // path, the pen start and baseline snap to whole
                         // pixels, so glyphs land on the same pixels.
-                        let [x, y] = self.options.font.baseline_origin(&run.layout_run());
+                        let font = match run.style.weight {
+                            Weight::Regular => &self.options.font,
+                            Weight::SemiBold => &self.options.semibold_font,
+                        };
+                        let [x, y] = font.baseline_origin(&run.layout_run());
                         let anchor_x = run.at.x + (x.round() - x);
                         let baseline = y.round();
                         let anchor = match run.anchor.h {
@@ -297,11 +320,15 @@ impl SvgTarget {
                         };
                         writeln!(
                             s,
-                            r#"<text x="{}" y="{}" font-family="{}, sans-serif" font-size="{}" text-anchor="{anchor}" fill="{}"{}>{}</text>"#,
+                            r#"<text x="{}" y="{}" font-family="{}, sans-serif" font-size="{}"{} text-anchor="{anchor}" fill="{}"{}>{}</text>"#,
                             num(anchor_x),
                             num(baseline),
                             escape(self.options.font.name()),
                             num(run.style.size.0),
+                            match run.style.weight {
+                                Weight::Regular => String::new(),
+                                w => format!(r#" font-weight="{}""#, w.css()),
+                            },
                             hex(run.style.color),
                             opacity("fill-opacity", run.style.color),
                             escape(&run.text)
