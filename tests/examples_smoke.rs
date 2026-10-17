@@ -122,6 +122,7 @@ fn examples() -> Vec<Example> {
             } else if text.contains("EventLoop")
                 || text.contains("ApplicationHandler")
                 || text.contains("GupApp::new")
+                || text.contains("gup_core::show(")
             {
                 Kind::Windowed
             } else {
@@ -186,6 +187,18 @@ fn skip_list() -> BTreeMap<String, String> {
 fn expected_failures() -> ExpectedFailures {
     ExpectedFailures::load(root().join(EXPECTED_FAILURES))
         .unwrap_or_else(|e| panic!("invalid expected-failure list: {e}"))
+}
+
+/// The headline of GUP-448: the hello world stays ten lines.
+#[test]
+fn hello_world_is_at_most_ten_lines() {
+    let text = std::fs::read_to_string(root().join("examples/hello_world.rs"))
+        .expect("examples/hello_world.rs");
+    let counted = text
+        .lines()
+        .filter(|l| !l.trim().is_empty() && !l.trim_start().starts_with("//"))
+        .count();
+    assert!(counted <= 10, "hello_world.rs has {counted} counted lines");
 }
 
 #[test]

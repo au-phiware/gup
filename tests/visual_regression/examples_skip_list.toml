@@ -35,7 +35,7 @@ reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
 
 [[skip]]
 name = "boxplot_rendering_demo"
-reason = "GupApp window shell has no GUP_SCREENSHOT_PATH mode (GUP-375/GUP-376)"
+reason = "Windowed (gup_core::show); its GUP_SCREENSHOT_PATH capture needs a display"
 
 [[skip]]
 name = "brush_selection"
@@ -75,7 +75,7 @@ reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
 
 [[skip]]
 name = "hello_world"
-reason = "GupApp window shell has no GUP_SCREENSHOT_PATH mode (GUP-375/GUP-376)"
+reason = "Windowed (gup_core::show); its GUP_SCREENSHOT_PATH capture needs a display"
 
 [[skip]]
 name = "hover_reveal_demo"

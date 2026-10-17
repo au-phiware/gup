@@ -324,7 +324,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   step S8d: default linear axes, `plot.circles/rects/segments/line(rows)`, and
   plain closures on position channels bound to the plot's scales. Deps: GUP-424
   ✅, GUP-433 ✅.
-- [GUP-448](GUP-448_RFC_001_S8e_GupApp_And_Hello_World.md) 📋 — RFC-001 step
+- [GUP-448](GUP-448_RFC_001_S8e_GupApp_And_Hello_World.md) 🚧 — RFC-001 step
   S8e: `GupApp`/`show` on any `Chart` forwarding pointer input, and
   `examples/hello_world.rs` cut from 265 lines to 10 (sine scatter with
   tooltips) plus a golden. Deps: GUP-444 📋, GUP-446 📋, GUP-447 📋.

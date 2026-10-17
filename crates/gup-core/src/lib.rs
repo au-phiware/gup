@@ -33,6 +33,22 @@
 //! until RFC-001 S7). It is not re-exported by the `gup` crate until the
 //! RFC-001 S14 flip, and it never depends on `gup`.
 //!
+//! ## Hello, world
+//!
+//! ```no_run
+//! use gup_core::prelude::*;
+//!
+//! fn main() -> gup_core::Result<()> {
+//!     let points = (0..50).map(|i| f64::from(i) / 5.0).map(|x| (x, x.sin()));
+//!     let mut plot = Plot::new();
+//!     plot.circles(points)
+//!         .x(|p| p.0)
+//!         .y(|p| p.1)
+//!         .tooltip(|p| format!("sin({:.1}) = {:.2}", p.0, p.1));
+//!     gup_core::show(plot)
+//! }
+//! ```
+//!
 //! ## Contracts
 //!
 //! - **One device per process by default.** [`Context::shared`] is the
@@ -70,6 +86,8 @@
 /// [`Context::from_wgpu`] must use the same major version.
 pub use wgpu;
 
+#[cfg(all(feature = "window", not(target_arch = "wasm32")))]
+mod app;
 pub mod channel;
 mod chart;
 pub mod column;
@@ -89,8 +107,6 @@ pub mod scene;
 mod scope;
 mod selection;
 mod shader;
-#[cfg(all(feature = "window", not(target_arch = "wasm32")))]
-mod show;
 mod svg;
 pub mod target;
 mod theme;
@@ -98,6 +114,8 @@ mod tooltip;
 #[cfg(feature = "window")]
 mod window;
 
+#[cfg(all(feature = "window", not(target_arch = "wasm32")))]
+pub use app::{GupApp, show};
 pub use channel::{
     Antialias, Channel, ChannelDesc, Color, ConstValue, Geometry, GpuType, HitShape, Mark, Px,
     Role, Unit, Visual,
@@ -123,8 +141,6 @@ pub use scale::{
 pub use scene::Scene;
 pub use selection::{Retain, Selection};
 pub use shader::WgslModule;
-#[cfg(all(feature = "window", not(target_arch = "wasm32")))]
-pub use show::show;
 pub use svg::{SvgOptions, SvgTarget, VectorTarget};
 pub use target::{DEFAULT_SAMPLES, Frame, ImageTarget, RenderTarget, TargetOptions, TextureTarget};
 pub use theme::Theme;

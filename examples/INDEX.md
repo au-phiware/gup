@@ -11,13 +11,13 @@ Run any example with: `cargo run --example <name>`
 
 ## Basic (`basic/`)
 
-| Example             | Description                                |
-| ------------------- | ------------------------------------------ |
-| `01_hello_chart`    | Minimal scatter plot (console output only) |
-| `02_scatter_window` | Visual scatter plot in a GPU window        |
-| `03_line_chart`     | Line chart API demonstration               |
-| `04_bar_chart`      | Bar chart API demonstration                |
-| `hello_world`       | Hello world example                        |
+| Example             | Description                                                 |
+| ------------------- | ----------------------------------------------------------- |
+| `01_hello_chart`    | Minimal scatter plot (console output only)                  |
+| `02_scatter_window` | Visual scatter plot in a GPU window                         |
+| `03_line_chart`     | Line chart API demonstration                                |
+| `04_bar_chart`      | Bar chart API demonstration                                 |
+| `hello_world`       | A sine-wave scatter with tooltips in a window, in ten lines |
 
 ---
 
