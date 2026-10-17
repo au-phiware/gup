@@ -316,7 +316,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   `Plot::pick_row`/`pick::<T>` on the CPU, with a declared `HitShape` per mark
   (disc, box, square-capped segment, polyline), mapped back to data rows across
   chunks, nulls, draw order and `Retain`, through a lazy grid. Deps: GUP-444 📋.
-- [GUP-446](GUP-446_RFC_001_S8c_Hover_Click_Tooltips.md) 📋 — RFC-001 step S8c:
+- [GUP-446](GUP-446_RFC_001_S8c_Hover_Click_Tooltips.md) ✅ — RFC-001 step S8c:
   `Selection::on(Event::{Enter, Leave, Click})` handlers and
   `Selection::tooltip`, drawn as an overlay on the cached scene, with a tooltip
   golden. Deps: GUP-444 📋, GUP-445 📋.

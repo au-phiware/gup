@@ -9,8 +9,8 @@ implementer-reason:
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 🚧 In Progress **Created**:
-2026-10-17
+**Initiative**: RFC-001 Migration **Status**: ✅ Complete (2026-10-18)
+**Created**: 2026-10-17
 
 ## Context
 
@@ -58,65 +58,65 @@ Interaction is not fully testable with goldens. Each behaviour gets a synthetic
 In a new `crates/gup-core/tests/events.rs` (three circles, rows 0–2, resolved at
 480×320; anchors from `Plot::pick_anchor`):
 
-- [ ] Moving 0 → 1 → (empty space) → `PointerLeft` calls handlers in exactly
+- [x] Moving 0 → 1 → (empty space) → `PointerLeft` calls handlers in exactly
       this order: `Enter(0)`, `Leave(0)`, `Enter(1)`, `Leave(1)`. Each
       `EventInfo` has the pointer position and `RowId`, and `Plot::hovered()`
       follows along.
-- [ ] Moving within row 1's disc calls no handler.
-- [ ] `PointerDown(Primary)` at row 2 and `PointerUp(Primary)` 3 px away calls
+- [x] Moving within row 1's disc calls no handler.
+- [x] `PointerDown(Primary)` at row 2 and `PointerUp(Primary)` 3 px away calls
       `Click(2)` once. Moving 5 px between down and up calls none. Secondary and
       Middle buttons call none.
-- [ ] A handler that pushes the clicked row's name into an
+- [x] A handler that pushes the clicked row's name into an
       `Arc<Mutex<Vec<String>>>` receives `&T` (the rows are a struct with a
       `name`).
-- [ ] Under `Retain::Columns`, no handler runs (no `&T`), but `hovered()` still
+- [x] Under `Retain::Columns`, no handler runs (no `&T`), but `hovered()` still
       changes.
-- [ ] A wheel zoom while row 0 is hovered calls `Leave(0)` and clears
+- [x] A wheel zoom while row 0 is hovered calls `Leave(0)` and clears
       `hovered()`.
 
 ### AC2: Redraw only when the tooltip changes
 
-- [ ] Over a layer with `.tooltip(..)`, entering, changing or leaving a row
+- [x] Over a layer with `.tooltip(..)`, entering, changing or leaving a row
       returns `redraw: true`. Moving within the same row, or over a layer
       without a tooltip, returns `redraw: false`.
 
 ### AC3: Tooltip overlay without re-resolving
 
-- [ ] After hovering row 1, the next `resolve` leaves `resolve_generation()`
+- [x] After hovering row 1, the next `resolve` leaves `resolve_generation()`
       unchanged and writes 0 bytes of `Column`, `Validity` and `Uniform`
       (`Texture` may grow with new glyphs). Its scene has one `Rects` item and
       one `Text` item at `Z_TOOLTIP`, with one `TextRun` per line of the tooltip
       text (role `TextRole::Tooltip`). `layout().tooltip` is `Some`.
       `layout().texts` holds no tooltip run.
-- [ ] After `PointerLeft`, the next resolve's scene has no `Z_TOOLTIP` items and
+- [x] After `PointerLeft`, the next resolve's scene has no `Z_TOOLTIP` items and
       `layout().tooltip` is `None`.
-- [ ] After a resize while hovering (a full resolve), the tooltip is re-anchored
+- [x] After a resize while hovering (a full resolve), the tooltip is re-anchored
       at the row's new anchor.
 
 ### AC4: Tooltip golden and placement
 
-- [ ] Golden `tests/golden/gup_core/tooltip.png` (480×320): five rows
+- [x] Golden `tests/golden/gup_core/tooltip.png` (480×320): five rows
       `{ name, mass }` with
       `.tooltip(|r| format!("{}\nmass {:.1} kg", r.name,     r.mass))`, hovering
       the middle row. The implementer reads the PNG: a white box with a 1 px
       grey border sits 8 px above and right of the disc's centre, two
       left-aligned dark lines ("Kiwi", "mass 2.4 kg") sit inside it with 6 px
       padding, and no glyph is clipped.
-- [ ] Placement test: hovering a row 5 px from the plot's top-right corner gives
+- [x] Placement test: hovering a row 5 px from the plot's top-right corner gives
       a `layout().tooltip` rect left of and below the anchor, inside
       `[0, 480] × [0, 320]`, with whole-pixel edges. A text longer than the
       canvas is clamped to `x = 1`.
-- [ ] An empty tooltip string draws nothing (`layout().tooltip` is `None`).
+- [x] An empty tooltip string draws nothing (`layout().tooltip` is `None`).
 
 ### AC5: Names and defaults
 
-- [ ] `SELECTION_METHODS` in `gup-core-macros` gains `on` and `tooltip`, and the
+- [x] `SELECTION_METHODS` in `gup-core-macros` gains `on` and `tooltip`, and the
       already-missing `z` and `legend_title`. `derive_mark_fail` snapshots
       change only if one names those.
-- [ ] `Theme::default()` gains the four tooltip fields in Decisions, and
+- [x] `Theme::default()` gains the four tooltip fields in Decisions, and
       `theme.rs`'s `default_is_the_old_styling` test asserts them.
       `tests/common/vr.rs` maps `TextRole::Tooltip` to `VrTextRole::Other`.
-- [ ] `mask wasm-browser` and `mask wasm-size` pass (re-record
+- [x] `mask wasm-browser` and `mask wasm-size` pass (re-record
       `wasm.scatter.gz_bytes` if it moved). `mask perf-budget` passes (a
       timing-only failure needs a second run).
 
@@ -212,14 +212,14 @@ On `Plot`: `pub fn hovered(&self) -> Option<RowId>`.
 
 ## Technical Tasks
 
-- [ ] `Event`, `EventInfo`, `Selection::on`, `Selection::tooltip`, and
+- [x] `Event`, `EventInfo`, `Selection::on`, `Selection::tooltip`, and
       `Layer::dispatch`/`tooltip_text`.
-- [ ] The hover/press state machine in `Plot::handle`, and `Plot::hovered`.
-- [ ] The overlay builder (pure: text sizes and canvas in, rects and runs out)
+- [x] The hover/press state machine in `Plot::handle`, and `Plot::hovered`.
+- [x] The overlay builder (pure: text sizes and canvas in, rects and runs out)
       with unit tests for placement, then the composed-resolve cache.
-- [ ] Theme fields, `TextRole::Tooltip`, `Z_TOOLTIP`, `Layout::tooltip`, and the
+- [x] Theme fields, `TextRole::Tooltip`, `Z_TOOLTIP`, `Layout::tooltip`, and the
       `SELECTION_METHODS` entries.
-- [ ] `tests/events.rs`, the tooltip golden (`GUP_BLESS=1` once, then read it),
+- [x] `tests/events.rs`, the tooltip golden (`GUP_BLESS=1` once, then read it),
       and the placement tests.
 
 ## Dependencies
@@ -245,8 +245,8 @@ On `Plot`: `pub fn hovered(&self) -> Option<RowId>`.
 
 ## Success Metrics
 
-- [ ] Every AC1 sequence produces exactly the listed handler calls.
-- [ ] Hover changes cost no full resolve.
+- [x] Every AC1 sequence produces exactly the listed handler calls.
+- [x] Hover changes cost no full resolve.
 
 ## Risk Assessment
 
@@ -258,10 +258,67 @@ On `Plot`: `pub fn hovered(&self) -> Option<RowId>`.
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (golden image or PNG read), if visual
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye (golden image or PNG read), if visual
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `Event`, `EventInfo`, `Selection::on`/`tooltip`,
+  `Layer::dispatch`/`tooltip_text`.
+- `Plot::handle` hover/press state machine, `Plot::hovered`, composed tooltip
+  `Resolved` cached by base generation (`sync_tooltip`); `Layout::tooltip`,
+  `Z_TOOLTIP`, `TextRole::Tooltip`, theme fields.
+- `src/tooltip.rs`: pure `place` and `overlay` with unit tests.
+- `tests/events.rs`: 12 tests; golden `tests/golden/gup_core/tooltip.png`.
+- `SELECTION_METHODS` gained `z`, `legend_title`, `on`, `tooltip`.
+
+Evidence: golden read at 8x zoom: white box, 1 px grey border, 8 px up and right
+of the disc, "Kiwi" / "mass 2.4 kg" left-aligned with 6 px padding, no clipped
+glyph. Flip case (right-most row) reads correctly up-left of the anchor; an
+over-wide text clamps to x = 1 and runs off the canvas, as the Decisions
+specify. `mask wasm-size`: scatter 376,211 B gz (budget 372,092 +2% = 379,534,
+pass). `mask perf-budget`, `mask wasm-browser` and `mask visual-regression`
+pass.
+
+## Retrospective
+
+**Completed**: 2026-10-18
+
+### Key Technical Learnings
+
+#### Overlay cache
+
+- **Challenge**: `layout()` and `resolve()` must show the tooltip without a full
+  resolve.
+- **Solution**: `overlay: Option<(generation, Resolved)>` dropped on every hover
+  change; `layout()` and `resolve()` prefer it when its generation matches the
+  base.
+- **Pattern**: store the anchor's generation in `hover` to re-anchor lazily.
+
+#### Commit hook vs `mask all-fix`
+
+- **Challenge**: `clippy --fix` after `fmt` leaves unformatted code, so the
+  hook's `fmt --check` refused the commit.
+- **Solution**: run `cargo fmt --all` after `mask all-fix`.
+
+### Architectural Decisions
+
+#### Leave position
+
+- **Decision**: `EventInfo::at` for `Leave` is the position of the input that
+  caused it (the last known position for `PointerLeft`).
+- **Trade-off**: a clamped over-wide tooltip is cut by the canvas.
+
+### Development Workflow Insights
+
+- The first commit attempt was delayed past the checkpoint rule; the cause was
+  the fmt/clippy ordering above.
+
+### Follow-up Stories
+
+None.
