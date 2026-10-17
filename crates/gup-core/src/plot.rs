@@ -391,14 +391,16 @@ impl Plot {
         let mark_overhang = self.layers.iter().map(|l| l.overhang()).fold(0.0, f32::max);
         let inset = mark_overhang + th.plot_padding.0;
         // A widened axis already holds the inset in its domain, so its
-        // range is the whole plot rect.
+        // range is the whole plot rect. Any other axis insets only its far
+        // end (right, top), so the axes meet at the corner and a baseline
+        // sits on its axis.
         let set_ranges = |plot: Rect, widened: (bool, bool)| {
             let (ix, iy) = (
                 if widened.0 { 0.0 } else { inset },
                 if widened.1 { 0.0 } else { inset },
             );
-            x.set_range(Px(plot.left() + ix), Px(plot.right() - ix));
-            y.set_range(Px(plot.bottom() - iy), Px(plot.top() + iy));
+            x.set_range(Px(plot.left()), Px(plot.right() - ix));
+            y.set_range(Px(plot.bottom()), Px(plot.top() + iy));
         };
         let mut counts = (
             ((width / th.x_tick_spacing.0) as usize).max(2),
@@ -500,12 +502,12 @@ impl Plot {
         let (x_from, x_to) = if x.is_auto() {
             (ay_x, plot.right() - 0.5)
         } else {
-            (plot.left() + inset, plot.right() - inset)
+            (ay_x, plot.right() - inset)
         };
         let (y_from, y_to) = if y.is_auto() {
             (plot.top() + 0.5, ax_y)
         } else {
-            (plot.top() + inset, plot.bottom() - inset)
+            (plot.top() + inset, ax_y)
         };
         rules.push(axis(Point::new(x_from, ax_y), Point::new(x_to, ax_y)));
         rules.push(axis(Point::new(ay_x, y_from), Point::new(ay_x, y_to)));

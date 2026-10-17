@@ -198,6 +198,24 @@ fn monthly_bars_are_as_wide_as_their_band() {
         "top bar at {top}, plot top {}",
         resolved.layout.plot.top()
     );
+    // GUP-435: bars sit on the x axis line, and the axes meet.
+    let axes: Vec<&gup_core::scene::Rule> = resolved
+        .scene
+        .items
+        .iter()
+        .filter_map(|i| match &i.kind {
+            gup_core::scene::ItemKind::Rules(r) => Some(r),
+            _ => None,
+        })
+        .flatten()
+        .take(2)
+        .collect();
+    let (x_axis, y_axis) = (axes[0], axes[1]);
+    assert!(
+        (y.read().eval(0.0) as f32 - x_axis.p0.y).abs() <= 0.5,
+        "bars float"
+    );
+    assert_eq!(x_axis.p0, y_axis.p1, "axis lines do not meet at the corner");
     let band = x.read().band_width();
     let floor = y.read().eval(0.0);
     for (k, sale) in sales().iter().enumerate() {
@@ -210,7 +228,9 @@ fn monthly_bars_are_as_wide_as_their_band() {
             sale.month,
             band / 2.0
         );
-        let (top, bottom) = run(&image, centre as u32, (floor - 3.0) as u32, false);
+        let (top, _) = run(&image, centre as u32, (floor - 3.0) as u32, false);
+        // Off the tick that hangs under the band's centre.
+        let (_, bottom) = run(&image, (centre - 4.0) as u32, (floor - 3.0) as u32, false);
         assert!(
             (f64::from(top) - y.read().eval(sale.total)).abs() <= 1.0,
             "{}: top {top}",
@@ -251,7 +271,9 @@ fn horizontal_bars_measure_to_their_band_and_value() {
         let centre = y.read().eval(k as f64);
         let inside = x.read().eval(*v) - 3.0;
         let (top, bottom) = run(&image, inside as u32, centre as u32, false);
-        let (left, right) = run(&image, (x0 + 3.0) as u32, centre as u32, true);
+        let (_, right) = run(&image, (x0 + 3.0) as u32, centre as u32, true);
+        // Off the tick that sticks out of the band's centre row.
+        let (left, _) = run(&image, (x0 + 3.0) as u32, (centre + 4.0) as u32, true);
         assert!(
             (f64::from(bottom - top) - band).abs() <= 1.0
                 && (f64::from(top + bottom) / 2.0 - centre).abs() <= 1.0,

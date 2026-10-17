@@ -45,8 +45,10 @@ fn dots() -> Vec<Dot> {
 /// Pixel at the centre of dot `i` (x domain 0..2 over the plot rect).
 fn centre(image: &image::RgbaImage, layout: &gup_core::Layout, i: usize) -> [u8; 4] {
     let p = layout.plot;
-    let inset = 11.0; // radius 10 + 1
-    let px = p.left() + inset + (p.width - 2.0 * inset) * i as f32 / 2.0;
+    // A fixed domain starts on the axis and insets its far end by the radius
+    // (10) and the plot padding (4).
+    let far = 14.0;
+    let px = p.left() + (p.width - far) * i as f32 / 2.0;
     image
         .get_pixel(px as u32, (p.top() + p.height / 2.0) as u32)
         .0
