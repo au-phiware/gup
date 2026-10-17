@@ -75,8 +75,8 @@ X) or `info` (printed, never fails).
 | `pipeline.link_create.cold_ms`    | 1.04      | <= 10     | `pipeline_timings`, its first run                 |
 | `pipeline.link_create.max_ms`     | 1.06      | info      | `pipeline_timings`                                |
 | `wasm.wgpu.gz_bytes`              | 41,712    | info      | `scripts/wasm_size.sh`, bare wgpu                 |
-| `wasm.scatter.gz_bytes`           | 361,531   | +2%       | `scripts/wasm_size.sh`, the reference scatter     |
-| `wasm.over_wgpu.gz_bytes`         | 319,818   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10       |
+| `wasm.scatter.gz_bytes`           | 372,092   | +2%       | `scripts/wasm_size.sh`, the reference scatter     |
+| `wasm.over_wgpu.gz_bytes`         | 330,379   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10       |
 
 A legitimate change that moves a number (a new guide, a bigger feature) records
 the new value here, in the same commit, with the reason in the story.
@@ -299,3 +299,13 @@ seeded violation (GUP-417 retrospective).
   once per layer, so the cost is not visible to users. Recorded at 1.11 (the
   mean of the two runs). In the same A/B, CPU per frame went from 0.695 to 0.73
   to 0.76 ms and the GPU pass from 2.94 to 3.11 ms, both within their budgets.
+- **S8 so far: GUP-444, 447 and 445 (2026-10-17)**, re-measured by the
+  orchestrator on main at 087856c. WASM scatter 361,531 to 372,092 B gz
+  (+10,561); over bare wgpu 319,818 to 330,379, against the 400,000 cap:
+  - GUP-444 (cached resolve, `Input`/`handle`) and GUP-447 (adders, default
+    axes, position closures) measured 366,318 together (+4,787).
+  - GUP-445 (CPU picking) adds 5,774. Most of that is two new `Layer` methods
+    (`hit_items`, `row_any`) instantiated for every `Selection<T, M>`, so each
+    distinct row/mark type in a program pays for them.
+  - That leaves 69,621 B of headroom under the cap. Per-instantiation code is
+    now the growth to watch, ahead of S9 to S12.
