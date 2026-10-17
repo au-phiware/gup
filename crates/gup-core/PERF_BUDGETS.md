@@ -71,7 +71,7 @@ X) or `info` (printed, never fails).
 | `zoom.instances.bytes`            | 5,631,168 | exact     | `zoom_bench`, over the 600 measured frames        |
 | `zoom.instances.writes_per_frame` | 3         | exact     | `zoom_bench`                                      |
 | `zoom.textures.bytes`             | 0         | exact     | `zoom_bench`                                      |
-| `pipeline.link_create.median_ms`  | 0.88      | +20%      | `pipeline_timings`, 20 runs, fresh cache each     |
+| `pipeline.link_create.median_ms`  | 1.11      | +20%      | `pipeline_timings`, 20 runs, fresh cache each     |
 | `pipeline.link_create.cold_ms`    | 1.04      | <= 10     | `pipeline_timings`, its first run                 |
 | `pipeline.link_create.max_ms`     | 1.06      | info      | `pipeline_timings`                                |
 | `wasm.wgpu.gz_bytes`              | 41,712    | info      | `scripts/wasm_size.sh`, bare wgpu                 |
@@ -289,3 +289,13 @@ seeded violation (GUP-417 retrospective).
   all of it is the bundled Inter SemiBold subset that year ticks use: the
   story's 40,000 B allowance for a second weight. The Regular subset line in
   `wasm_size.sh`'s table does not list the SemiBold subset yet.
+- **link_create re-recorded after an A/B (2026-10-17, orchestrator)**: with no
+  agents running (load 4 to 5 from ZFS writes), `mask perf-budget` measured
+  `pipeline.link_create.median_ms` at 0.926 at GUP-421's commit (b263068) and at
+  1.137 and 1.091 at main after GUP-447 (20d18ad), both at a GPU clock median of
+  367 to 450 MHz. The +0.2 ms (+18 to 23%) built up as the generated glue grew:
+  draw entries (GUP-431), next-row reads (GUP-432), legend hooks (GUP-426/437)
+  and the closures bound to position channels (GUP-447). A pipeline is created
+  once per layer, so the cost is not visible to users. Recorded at 1.11 (the
+  mean of the two runs). In the same A/B, CPU per frame went from 0.695 to 0.73
+  to 0.76 ms and the GPU pass from 2.94 to 3.11 ms, both within their budgets.
