@@ -163,7 +163,7 @@ whatever it cannot fix, so only the strict runs after it can fail.
 
 ```bash
 concurrently --group --names clippy,statix,mdl,gha \
-   'cargo clippy --allow-no-vcs --fix --workspace --all-targets --all-features && cargo clippy --workspace --all-targets -- -D warnings && cargo clippy --workspace --all-targets --all-features -- -D warnings && ./scripts/clippy_wasm32.sh' \
+   'cargo clippy --allow-no-vcs --fix --workspace --all-targets --all-features && cargo fmt --all && cargo clippy --workspace --all-targets -- -D warnings && cargo clippy --workspace --all-targets --all-features -- -D warnings && ./scripts/clippy_wasm32.sh' \
    'statix fix flake.nix' \
    'mdl --git-recurse .' \
    'actionlint .github/workflows/*.y*ml'
@@ -214,8 +214,10 @@ concurrently --group --names '\s,rs,nix,md' \
 
 Apply every automatic fix (whitespace, rustfmt, clippy, nixfmt, statix,
 prettier), then run the strict checks. `cargo clippy --fix` exits 0 whatever it
-cannot fix, so only the strict clippy runs after it can fail. `actionlint` has
-no fixer, so it only checks.
+cannot fix, so only the strict clippy runs after it can fail. rustfmt runs again
+after it, because its fixes are not formatted, and the pre-commit hook would
+otherwise refuse the commit (found in GUP-446). `actionlint` has no fixer, so it
+only checks.
 
 ```bash
 shopt -qs globstar
