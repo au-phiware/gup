@@ -17,8 +17,13 @@
 
 use gup_core::geom::Rect;
 use gup_core::prelude::*;
-use gup_core::scene::{GradientBar, GradientDirection, Item, ItemKind, RectPrim, Z_GRID, Z_TITLE};
-use gup_core::{ImageTarget, SvgTarget, VectorTarget};
+use gup_core::scale::PositionScale;
+use gup_core::scene::{
+    GradientBar, GradientDirection, Item, ItemKind, RectPrim, TextRole, Z_GRID, Z_TITLE,
+};
+use gup_core::{ImageTarget, Resolved, RowId, SvgTarget, VectorTarget};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicI32, AtomicU32, Ordering};
 use wasm_bindgen::prelude::*;
 
 /// Room on the right for the legend bar.
@@ -330,7 +335,8 @@ pub async fn render_band_categorical(width: u32, height: u32) -> Result<Vec<u8>,
     let mut plot = Plot::new();
     let (x, y) = (plot.x(Band::new()), plot.y(Linear::new()));
     let colour = ScaleRef::new(Categorical::okabe_ito());
-    plot.legends(false).title("Band and categorical")
+    plot.legends(false)
+        .title("Band and categorical")
         .add(Selection::<Row, Circle>::new(rows.clone()))
         .attr(Circle::X, x.encode_nullable_key(|r: &Row| r.0))
         .attr(Circle::Y, y.encode(|r: &Row| r.1))
@@ -476,7 +482,8 @@ pub async fn render_diverging(width: u32, height: u32) -> Result<Vec<u8>, JsValu
     let mut plot = Plot::new();
     let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
     let colour = ScaleRef::new(Diverging::blue_red());
-    plot.legends(false).title("Diverging")
+    plot.legends(false)
+        .title("Diverging")
         .add(Selection::<(f64, f64), Circle>::new(rows.clone()))
         .attr(Circle::X, x.encode(|r: &(f64, f64)| r.0))
         .attr(Circle::Y, y.encode(|r: &(f64, f64)| r.1))
@@ -540,7 +547,9 @@ pub async fn render_diverging(width: u32, height: u32) -> Result<Vec<u8>, JsValu
         }
     }
     if probed < 10 {
-        return fail(format!("only {probed} dots stood clear of their neighbours"));
+        return fail(format!(
+            "only {probed} dots stood clear of their neighbours"
+        ));
     }
     let [lo, mid, hi] = colour.read().current_domain().unwrap_or([0.0; 3]);
     if mid != 0.0 || lo != -hi {
@@ -747,4 +756,168 @@ extern "C" {
     fn web_log_text(message: &str);
     #[wasm_bindgen(js_namespace = console, js_name = error)]
     fn web_error(message: &str);
+}
+
+/// Six named rows on a canvas, driven by DOM events through
+/// [`gup_core::web::CanvasApp`] (RFC-001 S8f). The page dispatches synthetic
+/// pointer and wheel events and reads the state back through these hooks.
+#[wasm_bindgen]
+pub struct InteractiveScatter {
+    app: gup_core::web::CanvasApp,
+    x: ScaleRef<Linear>,
+    hovered: Arc<AtomicI32>,
+    clicks: Arc<AtomicU32>,
+    last_clicked: Arc<AtomicI32>,
+    size: (f32, f32),
+}
+
+const NAMES: [&str; 6] = ["Tui", "Weka", "Kiwi", "Kea", "Kaka", "Pukeko"];
+
+/// Show the six rows on `canvas`. Rejects if the canvas cannot take a
+/// WebGPU surface, or the first frame fails.
+#[wasm_bindgen]
+pub async fn show_scatter(
+    canvas: web_sys::HtmlCanvasElement,
+) -> Result<InteractiveScatter, JsValue> {
+    std::panic::set_hook(Box::new(|info| web_error(&info.to_string())));
+    let size = (canvas.client_width() as f32, canvas.client_height() as f32);
+    let hovered = Arc::new(AtomicI32::new(-1));
+    let clicks = Arc::new(AtomicU32::new(0));
+    let last_clicked = Arc::new(AtomicI32::new(-1));
+    let mut plot = Plot::new();
+    let x = plot.x(Linear::new().domain(0.0, 100.0));
+    let y = plot.y(Linear::new().domain(0.0, 10.0));
+    let rows: Vec<(usize, f64, f64)> = (0..6)
+        .map(|i| (i, 10.0 + 15.0 * i as f64, [3.0, 7.0, 4.0, 8.0, 2.0, 6.0][i]))
+        .collect();
+    let (enter, leave) = (Arc::clone(&hovered), Arc::clone(&hovered));
+    let (count, last) = (Arc::clone(&clicks), Arc::clone(&last_clicked));
+    plot.title("Interactive scatter")
+        .add(Selection::<(usize, f64, f64), Circle>::new(rows))
+        .attr(Circle::X, x.encode(|r: &(usize, f64, f64)| r.1))
+        .attr(Circle::Y, y.encode(|r: &(usize, f64, f64)| r.2))
+        .attr(Circle::FILL, Color::hex(0x2a6fdb))
+        .attr(Circle::RADIUS, Px(8.0))
+        .tooltip(|r| format!("{}\nx {}", NAMES[r.0], r.1))
+        .on(Event::Enter, move |info, _| {
+            enter.store(info.row.row as i32, Ordering::SeqCst);
+        })
+        .on(Event::Leave, move |_, _| leave.store(-1, Ordering::SeqCst))
+        .on(Event::Click, move |info, _| {
+            count.fetch_add(1, Ordering::SeqCst);
+            last.store(info.row.row as i32, Ordering::SeqCst);
+        });
+    let app = gup_core::web::show(canvas, plot).await.map_err(js)?;
+    Ok(InteractiveScatter {
+        app,
+        x,
+        hovered,
+        clicks,
+        last_clicked,
+        size,
+    })
+}
+
+impl InteractiveScatter {
+    fn resolved(&self) -> Result<Resolved, JsValue> {
+        let cx = self.app.context();
+        let (w, h) = self.size;
+        self.app
+            .with_chart(|chart| chart.resolve(&cx, w, h).cloned())
+            .map_err(js)
+    }
+}
+
+#[wasm_bindgen]
+impl InteractiveScatter {
+    /// Where row `row`'s dot is, relative to the canvas's top left (CSS
+    /// pixels): `[x, y]`.
+    pub fn row_px(&self, row: u32) -> Vec<f32> {
+        self.app
+            .with_chart(|chart| {
+                let plot = chart.as_any_mut().downcast_mut::<Plot>()?;
+                plot.pick_anchor(RowId {
+                    layer: 0,
+                    row: row as usize,
+                })
+            })
+            .map(|p| vec![p.x, p.y])
+            .unwrap_or_default()
+    }
+
+    /// The centre of the plot rectangle: `[x, y]`.
+    pub fn plot_centre(&self) -> Result<Vec<f32>, JsValue> {
+        let r = self.resolved()?.layout.plot;
+        Ok(vec![r.x + r.width / 2.0, r.y + r.height / 2.0])
+    }
+
+    /// The hovered row, or -1.
+    pub fn hovered_row(&self) -> i32 {
+        self.hovered.load(Ordering::SeqCst)
+    }
+
+    /// The tooltip's lines joined with `\n`, if one is shown.
+    pub fn tooltip_text(&self) -> Result<Option<String>, JsValue> {
+        let resolved = self.resolved()?;
+        let lines: Vec<&str> = resolved
+            .scene
+            .items
+            .iter()
+            .filter_map(|i| match &i.kind {
+                ItemKind::Text(runs) => Some(runs),
+                _ => None,
+            })
+            .flatten()
+            .filter(|r| r.role == TextRole::Tooltip)
+            .map(|r| &*r.text)
+            .collect();
+        Ok((!lines.is_empty()).then(|| lines.join("\n")))
+    }
+
+    /// The tooltip's box `[x, y, width, height]`, empty when none is shown.
+    pub fn tooltip_rect(&self) -> Result<Vec<f32>, JsValue> {
+        Ok(self
+            .resolved()?
+            .layout
+            .tooltip
+            .map(|r| vec![r.x, r.y, r.width, r.height])
+            .unwrap_or_default())
+    }
+
+    /// The x axis's current domain `[lo, hi]`.
+    pub fn x_domain(&self) -> Vec<f64> {
+        self.x
+            .read()
+            .current_domain()
+            .map(|(a, b)| vec![a, b])
+            .unwrap_or_default()
+    }
+
+    /// How many clicks reached the handler.
+    pub fn clicks(&self) -> u32 {
+        self.clicks.load(Ordering::SeqCst)
+    }
+
+    /// The row of the last click, or -1.
+    pub fn last_clicked(&self) -> i32 {
+        self.last_clicked.load(Ordering::SeqCst)
+    }
+
+    /// The current scene through an awaited `ImageTarget`, as RGBA.
+    pub async fn render_rgba(&self) -> Result<Vec<u8>, JsValue> {
+        let cx = self.app.context();
+        let resolved = self.resolved()?;
+        let (w, h) = self.size;
+        let image = ImageTarget::new(&cx, w as u32, h as u32)
+            .map_err(js)?
+            .render(&cx, &resolved.scene)
+            .await
+            .map_err(js)?;
+        Ok(image.into_raw())
+    }
+
+    /// The last frame error, if any.
+    pub fn last_error(&self) -> Option<String> {
+        self.app.last_error()
+    }
 }
