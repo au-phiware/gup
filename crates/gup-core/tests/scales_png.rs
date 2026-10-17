@@ -249,7 +249,56 @@ fn time_axis_ticks_on_years() {
             "no {year} label: {labels:?}"
         );
     }
+    // Half-yearly ticks: every January is a major tick, drawn semibold.
+    let heavy: Vec<&str> = layout
+        .texts
+        .iter()
+        .filter(|t| t.run.style.weight == gup_core::scene::Weight::SemiBold)
+        .map(|t| &*t.run.text)
+        .collect();
+    assert_eq!(heavy, ["2019", "2020", "2021", "2022", "2023", "2024"]);
     check("gup_core/time_years", image, &layout, &[("points", ink)]);
+}
+
+/// GUP-436: monthly ticks over two and a half years: the January labels
+/// carry the year and draw in the heavier weight.
+#[test]
+fn time_tick_hierarchy() {
+    let cx = Context::new_blocking().unwrap();
+    let t0 = new_year(2020);
+    let rows: Vec<(f64, f64)> = (0..900)
+        .map(|d| {
+            let d = f64::from(d);
+            (
+                t0 + d * 86_400.0,
+                40.0 + 15.0 * (d / 70.0).sin() + d / 40.0 + 5.0 * (d / 9.0).sin(),
+            )
+        })
+        .collect();
+    let mut plot = Plot::new();
+    let (x, y) = (plot.x(Time::new()), plot.y(Linear::new()));
+    let ink = Color::hex(0x0072b2);
+    plot.legends(false)
+        .add(Selection::<(f64, f64), Circle>::new(rows))
+        .attr(Circle::X, x.encode(|r: &(f64, f64)| r.0))
+        .attr(Circle::Y, y.encode(|r: &(f64, f64)| r.1))
+        .attr(Circle::RADIUS, Px(1.5))
+        .attr(Circle::FILL, ink);
+    let (image, layout) = plot.render_resolved(&cx, WIDTH, 300).unwrap();
+    let heavy: Vec<&str> = layout
+        .texts
+        .iter()
+        .filter(|t| t.run.style.weight == gup_core::scene::Weight::SemiBold)
+        .map(|t| &*t.run.text)
+        .collect();
+    eprintln!("semibold labels {heavy:?}");
+    assert_eq!(heavy, ["2020", "2021", "2022"]);
+    check(
+        "gup_core/time_tick_hierarchy",
+        image,
+        &layout,
+        &[("points", ink)],
+    );
 }
 
 /// AC4: a million one-per-second rows (twelve days) on a `Time` x axis

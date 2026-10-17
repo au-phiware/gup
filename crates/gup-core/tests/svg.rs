@@ -15,8 +15,11 @@ mod common;
 use common::legend::{self, legend_metadata};
 use common::scatter::{HEIGHT, WIDTH};
 use common::vr::harness;
-use gup_core::scene::{ItemKind, TextRole};
-use gup_core::{Context, ImageTarget, SvgOptions, SvgTarget, VectorTarget};
+use gup_core::geom::Point;
+use gup_core::scene::{
+    Anchor, HAlign, Item, ItemKind, TextRole, TextRun, TextStyle, VAlign, Weight,
+};
+use gup_core::{Color, Context, ImageTarget, Px, Scene, SvgOptions, SvgTarget, VectorTarget};
 use gup_visual_regression::golden::default_artifact_dir;
 use gup_visual_regression::{DiffTolerance, RgbaImage, diff::perceptual_diff};
 use std::path::Path;
@@ -203,7 +206,8 @@ fn embedded_font_is_the_bundled_subset() {
         .unwrap();
 
     // One declaration, of the family the text names, inside <defs>.
-    let prefix = r#"<style>@font-face{font-family:"Inter";src:url(data:font/ttf;base64,"#;
+    let prefix =
+        r#"<style>@font-face{font-family:"Inter";font-weight:400;src:url(data:font/ttf;base64,"#;
     assert_eq!(svg.matches("@font-face").count(), 1);
     let start = svg.find(prefix).expect("an @font-face for Inter") + prefix.len();
     let defs = (svg.find("<defs>").unwrap(), svg.find("</defs>").unwrap());
@@ -239,4 +243,62 @@ fn embedded_font_is_the_bundled_subset() {
     let a = rasterise_with(svg, &font);
     let b = rasterise(plain.svg());
     assert!(a == b, "the embedded font rasterises differently");
+}
+
+/// GUP-436: a semibold run is written with `font-weight="600"`, and with
+/// `embed_font` the SemiBold subset follows the Regular one as a second
+/// `@font-face`; a scene with no semibold run embeds one face only.
+#[test]
+fn semibold_runs_set_the_weight_and_embed_the_second_face() {
+    use base64::Engine as _;
+    let run = |text: &str, weight| TextRun {
+        text: text.into(),
+        at: Point::new(50.0, 20.0),
+        anchor: Anchor::new(HAlign::Middle, VAlign::Top),
+        style: TextStyle {
+            size: Px(12.0),
+            color: Color::hex(0x333333),
+            weight,
+        },
+        role: TextRole::TickLabel,
+    };
+    let scene = |runs| {
+        let mut scene = Scene::new(100.0, 40.0, Color::WHITE);
+        scene.push(Item {
+            z: 0,
+            clip: None,
+            kind: ItemKind::Text(runs),
+        });
+        scene
+    };
+    let mut svg = SvgTarget::with_options(SvgOptions {
+        embed_font: true,
+        ..SvgOptions::default()
+    });
+    svg.render(&scene(vec![
+        run("2021", Weight::SemiBold),
+        run("Jul", Weight::Regular),
+    ]))
+    .unwrap();
+    let doc = svg.svg();
+    assert_eq!(doc.matches("@font-face").count(), 2, "{doc}");
+    assert_eq!(doc.matches(r#"font-weight="600""#).count(), 1, "{doc}");
+    assert!(doc.contains(r##"font-weight="600" text-anchor="middle" fill="#333333">2021<"##));
+    let prefix = r#"font-family:"Inter";font-weight:600;src:url(data:font/ttf;base64,"#;
+    let start = doc.find(prefix).expect("a 600 @font-face") + prefix.len();
+    let len = doc[start..].find(')').unwrap();
+    let font = base64::engine::general_purpose::STANDARD
+        .decode(&doc[start..start + len])
+        .unwrap();
+    assert_eq!(font, gup_text::INTER_SEMIBOLD);
+
+    let mut regular = SvgTarget::with_options(SvgOptions {
+        embed_font: true,
+        ..SvgOptions::default()
+    });
+    regular
+        .render(&scene(vec![run("Jul", Weight::Regular)]))
+        .unwrap();
+    assert_eq!(regular.svg().matches("@font-face").count(), 1);
+    assert!(!regular.svg().contains("font-weight=\"600\""));
 }

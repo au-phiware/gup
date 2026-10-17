@@ -425,6 +425,26 @@ mod tests {
         Time::new().domain(d0, d1)
     }
 
+    /// Monthly ticks over 2020-2022: exactly the Januaries are major. Yearly
+    /// ticks (all years) and other scales have none.
+    #[test]
+    fn january_ticks_are_major_while_the_interval_is_under_a_year() {
+        let t = time(date(2020, 1, 1) - 10.0 * DAY, date(2022, 7, 15)).ticks(32);
+        assert_eq!(t.values.len(), t.major.len());
+        let majors: Vec<&str> = t
+            .labels
+            .iter()
+            .zip(&t.major)
+            .filter(|(_, m)| **m)
+            .map(|(l, _)| l.as_str())
+            .collect();
+        assert_eq!(majors, ["2020", "2021", "2022"]);
+        assert!(t.labels.iter().any(|l| l == "Jul"));
+        let yearly = time(date(2010, 1, 1), date(2020, 1, 1)).ticks(10);
+        assert!(yearly.major.iter().all(|m| !m), "{yearly:?}");
+        assert_eq!(yearly.major.len(), yearly.values.len());
+    }
+
     /// Daily ticks across February in a leap year: Feb 29 exists, and
     /// March 1 is labelled as a month.
     #[test]
