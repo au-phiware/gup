@@ -299,6 +299,23 @@ pub enum Geometry {
     Polyline,
 }
 
+/// How CPU picking hit-tests a mark's rows (RFC-001 §9).
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub enum HitShape {
+    /// Never picked on the CPU (the default for user marks).
+    #[default]
+    Unpickable,
+    /// A disc at (`x`, `y`) of radius `radius`.
+    Disc,
+    /// An axis-aligned box: per axis, centre and extent (`width`, `height`)
+    /// when the extent is non-zero, else the edges `x`..`x_end` (`y`..`y_end`).
+    AlignedBox,
+    /// `(x, y)`–`(x_end, y_end)`, `width` wide, square caps.
+    Segment,
+    /// Capsules from each row to the next, `width` wide (`Geometry::Polyline`).
+    Polyline,
+}
+
 /// A mark: a WGSL module implementing the mark contract plus its channels.
 ///
 /// The contract (see `crates/gup-wgsl/library/circle.wgsl`): the module defines
@@ -328,6 +345,8 @@ pub trait Mark: Send + Sync + 'static {
     const ANTIALIAS: Antialias = Antialias::Analytic;
     /// How instances map to rows.
     const GEOMETRY: Geometry = Geometry::Quad;
+    /// How CPU picking hit-tests the mark's rows.
+    const HIT: HitShape = HitShape::Unpickable;
 }
 
 /// `[r, g, b, a]`: a WGSL `vec4<f32>` in a uniform.

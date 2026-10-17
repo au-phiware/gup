@@ -1,0 +1,5 @@
+error: `hit = Disc` reads channels `x`, `y`, `radius`; this mark has no `radius`
+ --> tests/derive_mark_fail/hit_missing_channel.rs:8:63
+  |
+8 | #[mark(module = "gup::marks::segment", geometry = Quad, hit = Disc)]
+  |                                                               ^^^^

@@ -1,0 +1,5 @@
+error: `hit = Polyline` needs `geometry = Polyline`; this mark is a `Quad`
+ --> tests/derive_mark_fail/hit_polyline_on_quad.rs:8:63
+  |
+8 | #[mark(module = "gup::marks::segment", geometry = Quad, hit = Polyline)]
+  |                                                               ^^^^^^^^

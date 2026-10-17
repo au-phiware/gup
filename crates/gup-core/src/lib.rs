@@ -97,8 +97,8 @@ mod theme;
 mod window;
 
 pub use channel::{
-    Antialias, Channel, ChannelDesc, Color, ConstValue, Geometry, GpuType, Mark, Px, Role, Unit,
-    Visual,
+    Antialias, Channel, ChannelDesc, Color, ConstValue, Geometry, GpuType, HitShape, Mark, Px,
+    Role, Unit, Visual,
 };
 pub use chart::{Chart, ChartExt};
 pub use context::{Caps, Context, ContextId, ContextOptions, Upload, UploadStats, WriteCount};
