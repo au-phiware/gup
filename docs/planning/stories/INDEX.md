@@ -308,7 +308,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
 - [GUP-439](GUP-439_Line_Translucent_Joins.md) 💡 — translucent `Line`s with
   even opacity: joins and self-crossings blended once (a per-layer coverage
   pass), opaque lines unchanged. Deps: GUP-432 ✅.
-- [GUP-444](GUP-444_RFC_001_S8a_Cached_Resolve_And_Input.md) 🚧 — RFC-001 step
+- [GUP-444](GUP-444_RFC_001_S8a_Cached_Resolve_And_Input.md) ✅ — RFC-001 step
   S8a: `Chart::resolve` cached by a revision sum (a clean resolve writes
   nothing), `Input`/`Response`, and `Chart::handle` with wheel zoom moved out of
   `show`. Deps: GUP-434 ✅.

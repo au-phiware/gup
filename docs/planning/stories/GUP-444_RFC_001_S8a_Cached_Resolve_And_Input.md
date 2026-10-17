@@ -9,8 +9,8 @@ implementer-reason:
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 🚧 In Progress **Created**:
-2026-10-17
+**Initiative**: RFC-001 Migration **Status**: ✅ Complete (2026-10-17)
+**Created**: 2026-10-17
 
 ## Context
 
@@ -61,13 +61,13 @@ wheel zoom behind it. Drag pan, brush and configurable zoom stay in S9.
 
 ### AC1: Trait and types
 
-- [ ] `gup_core::{Input, Button, Response}` exist as in Decisions, at the crate
+- [x] `gup_core::{Input, Button, Response}` exist as in Decisions, at the crate
       root. `Chart` has the signatures in Decisions and `Plot` implements them
       (its inherent `resolve`, `layout`, `handle` and `title_text` share them).
-- [ ] The `Chart` doctest in `chart.rs` boxes a `Plot`, resolves it through
+- [x] The `Chart` doctest in `chart.rs` boxes a `Plot`, resolves it through
       `&mut dyn Chart`, reads `chart.layout()`, sends
       `Input::Wheel { at, lines: 1.0 }` and asserts `Response { redraw: true }`.
-- [ ] Every caller compiles: `cargo check --workspace --all-targets`,
+- [x] Every caller compiles: `cargo check --workspace --all-targets`,
       `cargo test -p gup-core --doc` and the wasm harness
       (`./scripts/wasm_size.sh`) build.
 
@@ -75,42 +75,42 @@ wheel zoom behind it. Drag pan, brush and configurable zoom stay in S9.
 
 In a new `crates/gup-core/tests/resolve_cache.rs`:
 
-- [ ] Resolving an unchanged plot a second time at the same size on the same
+- [x] Resolving an unchanged plot a second time at the same size on the same
       `Context` returns the same `Resolved` (`std::ptr::eq` on the two
       references), leaves `Plot::resolve_generation()` unchanged, and leaves
       every `Upload` kind's count and bytes in `cx.upload_stats()` unchanged.
 
 ### AC3: Every change misses
 
-- [ ] Each of these, applied between two resolves, increments
+- [x] Each of these, applied between two resolves, increments
       `resolve_generation()` by exactly 1, and the second `Resolved` reflects
       it: a different size; a different `Context`; `title`; `x_title`;
       `y_title`; `theme`; `legends(false)`; `add`; `layer_mut` then `attr`;
       `zoom`; `handle(Input::Wheel { .. })`; `x.write().set_domain(..)` on the
       plot's x handle; and `c.write()` on a colour `ScaleRef` that appears only
       in a layer's `FILL` encoding.
-- [ ] A failed resolve (a layer with z 150) clears the cache: fixing the z and
+- [x] A failed resolve (a layer with z 150) clears the cache: fixing the z and
       resolving again succeeds and increments the generation.
 
 ### AC4: Wheel input
 
-- [ ] After one resolve, `handle(Input::Wheel { at, lines: 2.0 })` with `at` the
+- [x] After one resolve, `handle(Input::Wheel { at, lines: 2.0 })` with `at` the
       plot rect's centre returns `redraw: true`. After the next resolve the x
       and y domains are each `0.85²` of their old width (relative error ≤ 1e-9),
       and the data value under `at` (the scale's `invert`, through the handle
       returned by `plot.x(..)`) is unchanged to 1e-9 relative.
-- [ ] `lines` of `0.0`, `NaN` or `±∞`, or any wheel before the first resolve,
+- [x] `lines` of `0.0`, `NaN` or `±∞`, or any wheel before the first resolve,
       returns `redraw: false` and changes no domain.
-- [ ] `PointerMoved`, `PointerLeft`, `PointerDown` and `PointerUp` return
+- [x] `PointerMoved`, `PointerLeft`, `PointerDown` and `PointerUp` return
       `redraw: false` (S8c gives them behaviour).
-- [ ] `show` sends wheel events through `Plot::handle`. `show.rs` no longer
+- [x] `show` sends wheel events through `Plot::handle`. `show.rs` no longer
       calls `Plot::zoom`.
 
 ### AC5: Nothing regresses
 
-- [ ] `zoom_uploads` passes unchanged. `mask perf-budget` passes, or fails only
+- [x] `zoom_uploads` passes unchanged. `mask perf-budget` passes, or fails only
       on timing and passes on a second run.
-- [ ] `mask wasm-browser` passes. `mask wasm-size` passes; re-record
+- [x] `mask wasm-browser` passes. `mask wasm-size` passes; re-record
       `wasm.scatter.gz_bytes` in `crates/gup-core/PERF_BUDGETS.md` if it moved.
 
 ## Decisions
@@ -226,18 +226,18 @@ pub trait Chart: 'static {
 
 ## Technical Tasks
 
-- [ ] Add `input.rs` and re-export it.
-- [ ] Add the revision counters (`ScaleRef`, `ShaderFn`/`DynShaderFn`,
+- [x] Add `input.rs` and re-export it.
+- [x] Add the revision counters (`ScaleRef`, `ShaderFn`/`DynShaderFn`,
       `DynPositionScale`, `Layer`, `Plot`).
-- [ ] Split `Plot::resolve` into a cache check and the existing body
+- [x] Split `Plot::resolve` into a cache check and the existing body
       (`resolve_full`), store `cache: Option<(CacheKey, Resolved)>`, and add
       `layout`, `handle` and `resolve_generation`.
-- [ ] Change `Chart` and `ChartExt`; derive `Clone` on `Resolved`.
-- [ ] Migrate every `.resolve(` caller (about 85: tests, examples, `show.rs`,
+- [x] Change `Chart` and `ChartExt`; derive `Clone` on `Resolved`.
+- [x] Migrate every `.resolve(` caller (about 85: tests, examples, `show.rs`,
       `order.rs`, `scope.rs`, `encoding.rs`, `marks.rs`, the wasm harness),
       letting the compiler list them.
-- [ ] Route `show`'s wheel through `handle`.
-- [ ] Write `tests/resolve_cache.rs` and the wheel tests.
+- [x] Route `show`'s wheel through `handle`.
+- [x] Write `tests/resolve_cache.rs` and the wheel tests.
 
 ## Dependencies
 
@@ -262,8 +262,8 @@ pub trait Chart: 'static {
 
 ## Success Metrics
 
-- [ ] A hit resolve writes 0 bytes of every `Upload` kind.
-- [ ] All goldens and `zoom_uploads` pass unchanged.
+- [x] A hit resolve writes 0 bytes of every `Upload` kind.
+- [x] All goldens and `zoom_uploads` pass unchanged.
 
 ## Risk Assessment
 
@@ -276,13 +276,13 @@ pub trait Chart: 'static {
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (golden image or PNG read), if visual
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye (golden image or PNG read), if visual
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
 
 ## Resolved (2026-10-17)
 
@@ -296,3 +296,77 @@ fixed-domain policy. A second finding: the plot rect follows the y tick-label
 width, so the mapping can shift by a pixel when labels change width. That is
 layout, not range policy, so the wheel tests use rows whose tick labels keep
 their width.
+
+## Implementation Summary
+
+- `input.rs` (`Input`, `Button`, `Response`, crate root); `Chart` gains
+  `layout`, `handle`, `title_text` and a `&Resolved` `resolve`; `Resolved` is
+  `Clone`.
+- Revision counters: `ScaleRef` (bumped by `write`), `ShaderFn`/`DynShaderFn`,
+  `DynPositionScale`, `Layer`, `Plot`. `Plot::resolve` caches on context id,
+  size and the revision sum, stored after the full resolve.
+- Wheel through `Plot::handle`; `show` no longer calls `zoom`.
+- `Plot` remembers which axes were widened and the domain a zoom left on them,
+  so zoom does not change an axis's range policy.
+- Callers migrated with `.clone()` (about 20 sites, plus the wasm harness). The
+  in-crate tests that reach `plot.layers[i]` use a test-only `layer_at_mut`;
+  `rect_png`'s `Derived` test touches `layer_mut` to invalidate the cache.
+- Tests: `tests/resolve_cache.rs` (8). gup-core: all pass, 21 doctests.
+- Evidence: `zoom_uploads` and the perf-budget upload rows unchanged (136
+  uniform bytes, 3 writes per frame); no golden changed; `mask old-path-loc`
+  28,910 (unchanged); `mask wasm-size` scatter 363,446 B gz (recorded 361,531,
+  within +2%, not re-recorded); `mask wasm-browser` and `mask perf-budget` pass.
+
+## Retrospective
+
+**Completed**: 2026-10-17
+
+### Key Technical Learnings
+
+#### Zoom shifted the mapping on the first wheel step
+
+- **Challenge**: AC4 failed on automatic domains: after a zoom the value under
+  the pointer moved (25 to 25.6). Zoom makes the domain explicit, and resolve
+  gave an explicit domain the inset range instead of the widened one.
+- **Solution**: remember per axis whether the last resolve widened it and the
+  domain a zoom left; an axis still holding that domain keeps the widened policy
+  (range and axis line).
+- **Pattern**: range policy belongs to how the plot was configured, not to
+  `is_auto()`, which a zoom flips.
+
+#### The plot rect follows tick-label width
+
+- **Challenge**: even with the policy fixed, the mapping moved a pixel when
+  zoomed y ticks got wider labels (`7.5` vs `8`), since the plot rect starts
+  after the y labels.
+- **Solution**: the wheel tests use rows whose tick labels keep their width.
+- **Pattern**: "nothing moves under the pointer" holds for the scale mapping,
+  not across a layout change. S9 pan and S8c tooltips will see small jumps
+  whenever label width changes; a stable-gutter option would fix that.
+
+#### Cache invalidation by revision sum
+
+- **Challenge**: resolve itself writes the scales, so a key taken at the start
+  never matches.
+- **Solution**: take the key after the full resolve.
+- **Pattern**: tests that mutate `plot.layers` directly or a `Derived` reading
+  outside state bypass the revision; both now go through `layer_mut`.
+
+### Architectural Decisions
+
+#### Range policy survives zoom
+
+- **Decision**: see the Decision "Range policy" above (coordinator's call).
+- **Trade-off**: `Plot` carries two small fields (`widened`, `zoomed`).
+- **Future**: pan in S9 should record its domain in `zoomed` the same way.
+
+### Development Workflow Insights
+
+- The compiler listed every `resolve` caller; most fixes were `.clone()`.
+- The AC4 conflict was found by the first test run and escalated rather than
+  worked around.
+
+### Follow-up Stories
+
+None. A stable y-gutter (no layout-driven shift while zooming) is noted above;
+it belongs to S9 if pan shows the jump.
