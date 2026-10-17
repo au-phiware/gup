@@ -9,8 +9,8 @@ implementer-reason:
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 🚧 In Progress **Created**:
-2026-10-17
+**Initiative**: RFC-001 Migration **Status**: ✅ Complete (2026-10-18)
+**Created**: 2026-10-17
 
 ## Context
 
@@ -56,21 +56,21 @@ new hello world uses `gup_core` directly; the root crate already depends on it.
 
 ### AC1: The ten-line hello world
 
-- [ ] `examples/hello_world.rs` is replaced by the program in Decisions: the
+- [x] `examples/hello_world.rs` is replaced by the program in Decisions: the
       copyright header, one `//!` comment, and the ten lines exactly as written
       (after `cargo fmt`).
-- [ ] A new always-run test `hello_world_is_at_most_ten_lines` in
+- [x] A new always-run test `hello_world_is_at_most_ten_lines` in
       `tests/examples_smoke.rs` counts the lines of `examples/hello_world.rs`
       that are neither blank nor start with `//`, and asserts ≤ 10.
-- [ ] The same ten lines are the "Hello, world" section of `gup-core`'s crate
+- [x] The same ten lines are the "Hello, world" section of `gup-core`'s crate
       docs (`lib.rs`) as a `no_run` doctest, so they compile in an external
       crate. `cargo test -p gup-core --doc` passes.
-- [ ] `examples/INDEX.md` describes it as "A sine-wave scatter with tooltips in
+- [x] `examples/INDEX.md` describes it as "A sine-wave scatter with tooltips in
       a window, in ten lines".
 
 ### AC2: Headless golden of the same chart
 
-- [ ] `crates/gup-core/tests/hello_world.rs` builds the same plot (lines 3–8 of
+- [x] `crates/gup-core/tests/hello_world.rs` builds the same plot (lines 3–8 of
       the program, verbatim), resolves it at 640×400, sends
       `Input::PointerMoved` at row 10's `pick_anchor`, resolves again, and
       renders it. Its scene has a text run `"sin(2.0) = 0.91"`, and it matches a
@@ -80,23 +80,23 @@ new hello world uses `gup_core` directly; the root crate already depends on it.
 
 ### AC3: `GupApp` on any chart
 
-- [ ] `GupApp` and `show` have the signatures in Decisions, exported at the
+- [x] `GupApp` and `show` have the signatures in Decisions, exported at the
       crate root (feature `window`, not on wasm32). `show(scatter::plot())`
       callers (the `scatter_window` example, `window_parity`) compile unchanged.
-- [ ] A unit test of `input_from` (Decisions) covers `CursorMoved` at scale
+- [x] A unit test of `input_from` (Decisions) covers `CursorMoved` at scale
       factor 2 (logical position halved), `CursorLeft`, left, right and middle
       `MouseInput` press and release, a `LineDelta` and a `PixelDelta` wheel, a
       mouse button other than those (`None`), and a wheel before any
       `CursorMoved` (`None`). Build winit's `DeviceId` with
       `unsafe { DeviceId::dummy() }`.
-- [ ] The window title is `GupApp::title`, else `chart.title_text()`, else
+- [x] The window title is `GupApp::title`, else `chart.title_text()`, else
       "Gup".
 
 ### AC4: In a real window
 
 These need a display. Run them and record the results in the Retrospective:
 
-- [ ] This command, with `<x>,<y>` the anchor from AC2, writes a PNG. The
+- [x] This command, with `<x>,<y>` the anchor from AC2, writes a PNG. The
       implementer reads it, and it shows the same chart and tooltip as the AC2
       golden.
 
@@ -106,21 +106,21 @@ These need a display. Run them and record the results in the Retrospective:
         cargo run --example hello_world
       ```
 
-- [ ] `cargo test -p gup-core --test window_parity -- --ignored` passes.
-- [ ] A new ignored test `show_twice_fails_cleanly` (`tests/app_once.rs`, one
+- [x] `cargo test -p gup-core --test window_parity -- --ignored` passes.
+- [x] A new ignored test `show_twice_fails_cleanly` (`tests/app_once.rs`, one
       test per file) calls `show` twice with `GUP_SCREENSHOT_PATH` set. The
       second call returns `Err(Error::Config { .. })` naming "one event loop per
       process", and does not panic.
-- [ ] `GUP_SMOKE_WINDOWED=1 GUP_SMOKE_FILTER=hello_world mask smoke-examples`
+- [x] `GUP_SMOKE_WINDOWED=1 GUP_SMOKE_FILTER=hello_world mask smoke-examples`
       passes (the window runs for 5 s without panicking).
 
 ### AC5: Smoke test bookkeeping
 
-- [ ] `tests/examples_smoke.rs` classifies a source containing `gup_core::show(`
+- [x] `tests/examples_smoke.rs` classifies a source containing `gup_core::show(`
       as `Windowed`. The `hello_world` skip-list reason reads "Windowed
       (gup_core::show); its GUP_SCREENSHOT_PATH capture needs a display".
       `skip_list_matches_examples` passes.
-- [ ] `cargo check --examples` and `mask all-check` pass.
+- [x] `cargo check --examples` and `mask all-check` pass.
 
 ## Decisions
 
@@ -207,15 +207,15 @@ pub fn show(chart: impl Chart) -> Result<()>;
 
 ## Technical Tasks
 
-- [ ] Rename `show.rs` to `app.rs`. Add `GupApp`, generalise to
+- [x] Rename `show.rs` to `app.rs`. Add `GupApp`, generalise to
       `Box<dyn Chart>`, and add `input_from` with its unit test.
-- [ ] Add `GUP_SCREENSHOT_POINTER` and the second-run error mapping.
-- [ ] Replace `examples/hello_world.rs`. Add the crate-docs doctest, the
+- [x] Add `GUP_SCREENSHOT_POINTER` and the second-run error mapping.
+- [x] Replace `examples/hello_world.rs`. Add the crate-docs doctest, the
       line-count test and the `INDEX.md` line.
-- [ ] Add `tests/hello_world.rs` and its golden (`GUP_BLESS=1` once, then read
+- [x] Add `tests/hello_world.rs` and its golden (`GUP_BLESS=1` once, then read
       it).
-- [ ] Update the smoke classifier and skip-list reason.
-- [ ] Run AC4 on a display.
+- [x] Update the smoke classifier and skip-list reason.
+- [x] Run AC4 on a display.
 
 ## Dependencies
 
@@ -242,8 +242,8 @@ pub fn show(chart: impl Chart) -> Result<()>;
 
 ## Success Metrics
 
-- [ ] `examples/hello_world.rs` has 10 counted lines (was 265).
-- [ ] The window and the headless render show the same chart and tooltip.
+- [x] `examples/hello_world.rs` has 10 counted lines (was 265).
+- [x] The window and the headless render show the same chart and tooltip.
 
 ## Risk Assessment
 
@@ -255,10 +255,57 @@ pub fn show(chart: impl Chart) -> Result<()>;
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (golden image or PNG read), if visual
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye (golden image or PNG read), if visual
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `crates/gup-core/src/show.rs` became `app.rs`: `GupApp` (`new`, `title`,
+  `size`, `run`) and `show` on any `Chart`; private `input_from` forwards every
+  pointer event to `Chart::handle`; `GUP_SCREENSHOT_POINTER`; a second run maps
+  winit's `RecreationAttempt` to `Error::Configuration` naming "one event loop
+  per process".
+- `examples/hello_world.rs` is the ten-line program (was 265 lines), the same
+  program is the crate-docs doctest, and `hello_world_is_at_most_ten_lines`
+  guards it.
+- Tests: `app::tests` (2 unit), `tests/hello_world.rs` golden
+  (`tests/golden/gup_core/hello_world.png`: 50 dots on a sine, axes, tooltip
+  `sin(2.0) = 0.91` above and right of the 11th dot, anchor 166.1,31.28),
+  ignored `tests/app_once.rs`.
+- Smoke classifier treats `gup_core::show(` as `Windowed`; skip-list reason
+  updated.
+- Evidence: window screenshot with `GUP_SCREENSHOT_POINTER=166.1,31.282251`
+  matches the golden by eye; `window_parity --ignored`, `app_once --ignored` and
+  the windowed smoke run pass; `mask perf-budget` passes (wasm.scatter 376,211 B
+  gz vs budget 372,092 +2%; budget not edited); `mask wasm-browser` passes.
+
+## Retrospective
+
+**Completed**: 2026-10-18
+
+### Key Technical Learnings
+
+- The program compiled unchanged against GUP-444/446/447; no escalation.
+- The error variant is `Error::Configuration`, not `Error::Config` as the story
+  wrote; `DeviceId::dummy()` is safe in this winit, so no `unsafe` in the test.
+- winit reports a second event loop as `EventLoopError::RecreationAttempt`, so
+  no process-wide flag is needed.
+
+### Architectural Decisions
+
+- Pointer-moved handling for the screenshot resolves twice (before and after
+  `handle`) so the tooltip is in the captured frame.
+
+### Development Workflow Insights
+
+- The pre-commit hook rejected the first commit on prettier for
+  `examples/INDEX.md` (table widened); `prettier --write` fixed it.
+
+### Follow-up Stories
+
+None.
