@@ -6,6 +6,7 @@
 use crate::context::Context;
 use crate::error::{Error, Result};
 use crate::render::TargetDesc;
+use crate::surface::surface_config;
 use crate::target::{DEFAULT_SAMPLES, Frame, Readback, RenderTarget, check_samples, msaa_view};
 use std::sync::Arc;
 use winit::window::Window;
@@ -66,56 +67,11 @@ impl WindowTarget {
         let surface = instance
             .create_surface(Arc::clone(&window))
             .map_err(|e| Error::config("window target", format!("cannot create a surface: {e}")))?;
-        let caps = surface.get_capabilities(adapter);
-        // An 8-bit RGBA/BGRA format, preferring one whose non-sRGB view
-        // format can be used on it.
-        let format = caps
-            .formats
-            .iter()
-            .copied()
-            .find(|f| {
-                matches!(
-                    f.remove_srgb_suffix(),
-                    wgpu::TextureFormat::Bgra8Unorm | wgpu::TextureFormat::Rgba8Unorm
-                )
-            })
-            .ok_or_else(|| {
-                Error::config(
-                    "window target",
-                    format!(
-                        "{} cannot present 8-bit RGBA or BGRA to this window (formats: {:?})",
-                        adapter.get_info().name,
-                        caps.formats
-                    ),
-                )
-            })?;
-        let view_format = format.remove_srgb_suffix();
-        let can_capture = caps.usages.contains(wgpu::TextureUsages::COPY_SRC);
-        let usage = if can_capture {
-            wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC
-        } else {
-            wgpu::TextureUsages::RENDER_ATTACHMENT
-        };
-        let alpha_mode = if caps.alpha_modes.contains(&wgpu::CompositeAlphaMode::Opaque) {
-            wgpu::CompositeAlphaMode::Opaque
-        } else {
-            caps.alpha_modes[0]
-        };
         let size = window.inner_size();
-        let config = wgpu::SurfaceConfiguration {
-            usage,
-            format,
-            width: size.width.max(1),
-            height: size.height.max(1),
-            present_mode: wgpu::PresentMode::Fifo,
-            desired_maximum_frame_latency: 2,
-            alpha_mode,
-            view_formats: if view_format == format {
-                vec![]
-            } else {
-                vec![view_format]
-            },
-        };
+        let (config, present_modes) = surface_config(adapter, &surface, size.width, size.height)?;
+        let format = config.format;
+        let view_format = format.remove_srgb_suffix();
+        let can_capture = config.usage.contains(wgpu::TextureUsages::COPY_SRC);
         let samples = DEFAULT_SAMPLES;
         let msaa = cx.scoped(
             || {
@@ -139,7 +95,7 @@ impl WindowTarget {
             window,
             surface,
             config,
-            present_modes: caps.present_modes,
+            present_modes,
             samples,
             msaa,
             can_capture,

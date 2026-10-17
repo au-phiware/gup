@@ -328,7 +328,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   S8e: `GupApp`/`show` on any `Chart` forwarding pointer input, and
   `examples/hello_world.rs` cut from 265 lines to 10 (sine scatter with
   tooltips) plus a golden. Deps: GUP-444 📋, GUP-446 📋, GUP-447 📋.
-- [GUP-449](GUP-449_RFC_001_S8f_Web_Canvas_Host.md) 📋 — RFC-001 step S8f:
+- [GUP-449](GUP-449_RFC_001_S8f_Web_Canvas_Host.md) 🚧 — RFC-001 step S8f:
   `gup_core::web::CanvasApp` (a canvas surface and DOM pointer listeners) with
   hover, click and wheel checked in the browser smoke test. Deps: GUP-444 📋,
   GUP-446 📋.
