@@ -148,7 +148,6 @@ impl DrawOrder {
     }
 
     /// The stored rows in draw order, as ranges of consecutive rows.
-    #[cfg(test)]
     pub(crate) fn segments(&self) -> &[Range<u64>] {
         &self.segments
     }
@@ -164,7 +163,6 @@ impl DrawOrder {
     /// The data row (index into the selection's rows) stored at `stored`:
     /// how picking maps a drawn instance (`row_base + instance_index`)
     /// back to its row (RFC-001 S9).
-    #[cfg_attr(not(test), expect(dead_code, reason = "picking is RFC-001 S9"))]
     pub(crate) fn row_of(&self, stored: u64) -> u64 {
         let batch = self.batches.partition_point(|&b| b <= stored) - 1;
         self.batches[batch] + u64::from(self.local[stored as usize])

@@ -17,6 +17,7 @@ use crate::error::{Error, Result};
 use crate::geom::{Point, Rect};
 use crate::input::{Input, Response};
 use crate::marks::{Circle, Line, Rect as MarkRect, Segment};
+use crate::pick::{PickIndex, RowId};
 use crate::scale::{DynPositionScale, Linear, PositionScale, ScaleRef, Ticks};
 use crate::scene::{
     Anchor, HAlign, Item, ItemKind, Rule, Scene, TextRole, TextRun, TextStyle, VAlign, Weight,
@@ -159,6 +160,8 @@ pub struct Plot {
     /// has it, the axis keeps the widened range policy, so zooming moves
     /// no pixel. A domain set any other way gets the fixed-domain policy.
     zoomed: [Option<(f64, f64)>; 2],
+    /// The pick index, and the (generation, revision sum) it was built at.
+    pick: Option<((u64, u64), PickIndex)>,
 }
 
 /// What a cached [`Resolved`] is valid for.
@@ -183,6 +186,9 @@ impl crate::chart::Chart for Plot {
     }
     fn handle(&mut self, input: Input) -> Response {
         Plot::handle(self, input)
+    }
+    fn pick_row(&mut self, at: Point) -> Option<RowId> {
+        Plot::pick_row(self, at)
     }
     fn title_text(&self) -> Option<&str> {
         Plot::title_text(self)
@@ -254,6 +260,7 @@ impl Plot {
             generation: 0,
             widened: [false; 2],
             zoomed: [None; 2],
+            pick: None,
         }
     }
 
@@ -456,6 +463,102 @@ impl Plot {
             }
             _ => Response::default(),
         }
+    }
+
+    /// The topmost row drawn under `at` (logical pixels), or `None`: before
+    /// the first resolve, outside [`Layout::plot`] (marks are clipped to
+    /// it), when nothing is within [`PICK_TOLERANCE`](crate::PICK_TOLERANCE), or when a layer
+    /// cannot be read (see below).
+    ///
+    /// The hit test runs on the CPU over the retained columns, in the same
+    /// pixels the marks were drawn at: a disc for `Circle`, an aligned box
+    /// for `Rect`, a square-capped stroke for `Segment`, and a chain of
+    /// capsules for `Line` (which picks the nearer end of the segment
+    /// under `at`). Among marks containing `at` the topmost wins, else the
+    /// nearest within tolerance. "Topmost" follows the draw: the layer's
+    /// `z`, the layer, then the row's place in the draw order (a layer
+    /// sorted by size draws the smallest last). Marks without a declared
+    /// hit shape are never picked.
+    ///
+    /// A layer is read from its CPU columns, else by running its
+    /// accessors over its rows; with neither (`Retain::GpuOnly` above one
+    /// chunk) its rows are not picked. The index is built on the first
+    /// pick after a resolve or a zoom.
+    pub fn pick_row(&mut self, at: Point) -> Option<RowId> {
+        self.pick_hit(at).map(|h| h.row)
+    }
+
+    /// The data of the topmost row drawn under `at` (see
+    /// [`pick_row`](Self::pick_row)), if its layer holds rows of type `T`
+    /// and kept them ([`Retain::Auto`](crate::Retain::Auto),
+    /// [`Rows`](crate::Retain::Rows)). It looks at the topmost row only:
+    /// if that is another type, it is `None`.
+    ///
+    /// ```
+    /// use gup_core::prelude::*;
+    /// use gup_core::geom::Point;
+    ///
+    /// struct Row { name: &'static str, x: f64, y: f64 }
+    /// # fn main() -> gup_core::Result<()> {
+    /// let rows = vec![
+    ///     Row { name: "a", x: 1.0, y: 1.0 },
+    ///     Row { name: "b", x: 2.0, y: 3.0 },
+    ///     Row { name: "c", x: 3.0, y: 2.0 },
+    /// ];
+    /// let cx = Context::new_blocking()?;
+    /// let mut plot = Plot::new();
+    /// plot.circles(rows).x(|r| r.x).y(|r| r.y);
+    /// let resolved = plot.resolve(&cx, 320.0, 200.0)?;
+    /// let layout = &resolved.layout;
+    ///
+    /// // The second row's position, from the tick pixels.
+    /// let at = |ticks: &[(f64, f32)], v: f64| {
+    ///     let (a, b) = (ticks[0], ticks[ticks.len() - 1]);
+    ///     f64::from(a.1) + (v - a.0) * f64::from(b.1 - a.1) / (b.0 - a.0)
+    /// };
+    /// let p = Point::new(at(&layout.x_ticks, 2.0) as f32, at(&layout.y_ticks, 3.0) as f32);
+    /// let row = plot.pick::<Row>(p).expect("a row is drawn there");
+    /// assert_eq!(row.name, "b");
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn pick<T: 'static>(&mut self, at: Point) -> Option<&T> {
+        let id = self.pick_row(at)?;
+        self.layers
+            .get(id.layer)?
+            .row_any(id.row)?
+            .downcast_ref::<T>()
+    }
+
+    /// Where a tooltip for `row` attaches: a disc's centre, the middle of
+    /// a box's top edge, a segment's midpoint, a line vertex.
+    #[doc(hidden)]
+    pub fn pick_anchor(&mut self, row: RowId) -> Option<Point> {
+        self.pick_index()?;
+        self.pick.as_ref()?.1.anchor(row)
+    }
+
+    fn pick_hit(&mut self, at: Point) -> Option<crate::pick::Hit> {
+        self.pick_index()?.query(at)
+    }
+
+    /// The pick index for the current resolve, built on first use.
+    fn pick_index(&mut self) -> Option<&PickIndex> {
+        let plot = self.layout()?.plot;
+        let key = (self.generation, self.revision_sum());
+        if self
+            .pick
+            .as_ref()
+            .is_none_or(|(k, i)| *k != key || i.rect() != plot)
+        {
+            self.pick = None;
+            let mut items = Vec::new();
+            for (i, layer) in self.layers.iter_mut().enumerate() {
+                layer.hit_items(i, &mut items).ok()?;
+            }
+            self.pick = Some((key, PickIndex::new(plot, items)));
+        }
+        self.pick.as_ref().map(|(_, i)| i)
     }
 
     /// How many full (uncached) resolves have succeeded. Internal: tests

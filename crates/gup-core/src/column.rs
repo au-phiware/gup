@@ -1033,6 +1033,48 @@ impl ColumnStore {
         Ok(())
     }
 
+    /// Column `column`'s values for every row, in stored order, as the
+    /// GPU sees them: the origin plus the stored offset (plus its low
+    /// part), or the code of a dictionary column. A null (a cleared
+    /// validity bit, or [`NULL_CODE`]) is NaN. `None` if any chunk's CPU
+    /// copy was released (see [`release`](Self::release)), or `column` is
+    /// out of range.
+    pub(crate) fn cpu_values(&self, column: usize) -> Option<Vec<f64>> {
+        let format = *self.formats.get(column)?;
+        let plane = self.formats[..column]
+            .iter()
+            .filter(|f| f.has_validity())
+            .count();
+        let planes = self.validity_planes();
+        let mut out = Vec::with_capacity(self.rows as usize);
+        for chunk in &self.chunks {
+            let cpu = chunk.cpu.as_ref()?;
+            let col = &chunk.columns[column];
+            let origin = col.origin();
+            let stride = format.stride() as usize;
+            let f32_at = |at: usize| f32::from_le_bytes(cpu.bytes[at..at + 4].try_into().unwrap());
+            for r in 0..chunk.len as usize {
+                let at = col.offset as usize + r * stride;
+                out.push(match format {
+                    ColumnFormat::U32 => {
+                        let code = u32::from_le_bytes(cpu.bytes[at..at + 4].try_into().unwrap());
+                        if code == NULL_CODE {
+                            f64::NAN
+                        } else {
+                            f64::from(code)
+                        }
+                    }
+                    _ if cpu.validity[r / 32 * planes + plane] >> (r % 32) & 1 == 0 => f64::NAN,
+                    ColumnFormat::F32 | ColumnFormat::F32Relative => origin + f64::from(f32_at(at)),
+                    ColumnFormat::F32x2Relative => {
+                        origin + f64::from(f32_at(at)) + f64::from(f32_at(at + 4))
+                    }
+                });
+            }
+        }
+        Some(out)
+    }
+
     /// Drop the CPU copy of every full chunk whose rows (and null bits)
     /// are uploaded, keeping its stats and origins. The last, unfilled
     /// chunk keeps its copy so appends can fill it. Returns the number of chunks released by this
@@ -1617,5 +1659,67 @@ mod tests {
             "{err}"
         );
         assert!(store.chunks()[0].buffer(&cx).is_some(), "left in place");
+    }
+
+    /// GUP-445: `cpu_values` reads back every format, with nulls as NaN,
+    /// across chunks, and is `None` once a chunk is released.
+    #[test]
+    fn cpu_values_read_back_each_format() {
+        let t0 = 1.7e9;
+        let times: Vec<f64> = (0..10)
+            .map(|i| {
+                if i == 3 {
+                    f64::NAN
+                } else {
+                    t0 + f64::from(i) * 0.001
+                }
+            })
+            .collect();
+        let plain: Vec<f64> = (0..10).map(|i| f64::from(i) * 0.5).collect();
+        let mut dict = Dictionary::new();
+        let keys: Vec<Option<&str>> = (0..10)
+            .map(|i| {
+                if i == 5 {
+                    None
+                } else {
+                    Some(["p", "q"][i % 2])
+                }
+            })
+            .collect();
+        let mut store = ColumnStore::from_columns(
+            vec![
+                (ColumnFormat::F32, ColumnData::Values(plain.clone())),
+                (ColumnFormat::F32Relative, ColumnData::Values(times.clone())),
+                (
+                    ColumnFormat::F32x2Relative,
+                    ColumnData::Values(times.clone()),
+                ),
+                (ColumnFormat::U32, keyed(&mut dict, &keys)),
+            ],
+            4,
+        )
+        .unwrap();
+        assert_eq!(store.chunks().len(), 3);
+        assert_eq!(store.cpu_values(0).unwrap(), plain);
+        let rel = store.cpu_values(1).unwrap();
+        let both = store.cpu_values(2).unwrap();
+        for (i, t) in times.iter().enumerate() {
+            if t.is_nan() {
+                assert!(rel[i].is_nan() && both[i].is_nan());
+            } else {
+                // f32 relative keeps ~1e-7 s here; hi/lo is exact to 1e-6 relative.
+                assert!((rel[i] - t).abs() < 1e-3, "{} vs {t}", rel[i]);
+                assert!((both[i] - t).abs() < 1e-9 * t.abs(), "{} vs {t}", both[i]);
+            }
+        }
+        let codes = store.cpu_values(3).unwrap();
+        assert!(codes[5].is_nan());
+        assert_eq!((codes[0], codes[1], codes[6]), (0.0, 1.0, 0.0));
+        assert!(store.cpu_values(4).is_none());
+
+        let cx = Context::new_blocking().unwrap();
+        store.upload(&cx).unwrap();
+        store.release();
+        assert!(store.cpu_values(0).is_none(), "full chunks released");
     }
 }

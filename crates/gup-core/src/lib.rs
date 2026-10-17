@@ -81,6 +81,7 @@ mod guide;
 mod input;
 pub mod marks;
 mod order;
+mod pick;
 pub mod plot;
 mod render;
 pub mod scale;
@@ -110,6 +111,7 @@ pub use encoding::{
 pub use error::{Error, Result};
 pub use input::{Button, Input, Response};
 pub use marks::{Circle, CircleAttrs, Line, LineAttrs, Rect, RectAttrs, Segment, SegmentAttrs};
+pub use pick::{PICK_TOLERANCE, RowId};
 pub use plot::{Layout, PlacedText, Plot, Resolved};
 pub use render::{PipelineStats, Prepared, Renderer, TargetDesc};
 pub use scale::{

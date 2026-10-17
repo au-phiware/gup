@@ -5,7 +5,9 @@
 
 use crate::context::Context;
 use crate::error::Result;
+use crate::geom::Point;
 use crate::input::{Input, Response};
+use crate::pick::RowId;
 use crate::plot::{Layout, Resolved};
 use std::any::Any;
 #[cfg(not(target_arch = "wasm32"))]
@@ -56,6 +58,9 @@ pub trait Chart: 'static {
     fn layout(&self) -> Option<&Layout>;
     /// React to input; never fails.
     fn handle(&mut self, input: Input) -> Response;
+    /// The topmost row drawn under `at` (logical pixels), if the chart can
+    /// say; see [`Plot::pick_row`](crate::Plot::pick_row).
+    fn pick_row(&mut self, at: Point) -> Option<RowId>;
     /// The chart's title, if any (a window title).
     fn title_text(&self) -> Option<&str>;
     /// The chart as [`Any`], to downcast to its concrete type.

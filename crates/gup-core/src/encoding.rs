@@ -976,6 +976,13 @@ pub trait DynColumnEncoding<T>: Send + Sync {
     fn fit(&mut self, stats: Option<ColumnStats>) -> Result<()>;
     /// See [`EncodeFn::image`].
     fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)>;
+    /// The encoding's output for column value `v` (a code, for a key
+    /// column), if it has a CPU mirror: how picking turns a stored column
+    /// into pixels (RFC-001 §9). Every library scale is monotonic, so its
+    /// image of the extent `(v, v)` is the value.
+    fn cpu_eval(&self, v: f64) -> Option<f64> {
+        self.image((v, v)).map(|(a, _)| a)
+    }
     /// The legend of the encoding as fitted (see [`EncodeFn::legend`]).
     fn legend(&self) -> Option<crate::Legend>;
     /// See [`EncodeFn::apply_theme`].

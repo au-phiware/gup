@@ -5,12 +5,13 @@
 //! (RFC-001 §4). S0a scope: data and `attr`; events, transitions and
 //! append are later S-stories.
 
-use crate::channel::{Channel, Geometry, Mark, Role, Visual};
+use crate::channel::{Channel, ConstValue, Geometry, HitShape, Mark, Role, Visual};
 use crate::column::{ColumnFormat, ColumnStore};
 use crate::context::Context;
 use crate::encoding::{AxisEncoding, Encoding, IntoEncoding, Resource};
 use crate::error::{Error, Result};
 use crate::order::{DrawEntry, DrawOrder, chunk_spans, draw_entries, polyline_spans};
+use crate::pick::{Chan, Chans, PickItem, build_items};
 use crate::render::{
     ChunkDraw, Draws, LayerGpu, LayerUniforms, chunk_uniform_offset, chunk_uniforms,
 };
@@ -576,6 +577,13 @@ pub(crate) trait Layer: wgpu::WasmNotSendSync {
     /// (RFC-001 S7): each `Color`-role channel encoded by a column of one
     /// link that has a legend. Chains have none.
     fn legends(&self) -> Vec<(Option<String>, Legend)>;
+    /// Push the layer's drawn marks as pick items (RFC-001 §9): nothing for
+    /// an unpickable mark, an unevaluated layer, or one whose rows and CPU
+    /// columns were both released.
+    fn hit_items(&mut self, layer: usize, out: &mut Vec<PickItem>) -> Result<()>;
+    /// Row `row` (an index into the rows the selection was given), if the
+    /// layer still holds it.
+    fn row_any(&self, row: usize) -> Option<&dyn Any>;
     /// The generated glue (for tests and diagnostics).
     fn glue_source(&self) -> Glue;
     fn as_any_mut(&mut self) -> &mut dyn Any;
@@ -927,6 +935,154 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             self.released += self.rows.len();
             self.rows = Vec::new();
         }
+    }
+
+    fn hit_items(&mut self, layer: usize, out: &mut Vec<PickItem>) -> Result<()> {
+        if M::HIT == HitShape::Unpickable {
+            return Ok(());
+        }
+        let Some(store) = &self.columns else {
+            return Ok(());
+        };
+        let n = store.rows() as usize;
+        if n == 0 {
+            return Ok(());
+        }
+        let wanted: &[&str] = match M::HIT {
+            HitShape::Unpickable => &[],
+            HitShape::Disc => &["x", "y", "radius"],
+            HitShape::AlignedBox => &["x", "y", "width", "height", "x_end", "y_end"],
+            HitShape::Segment => &["x", "y", "x_end", "y_end", "width"],
+            HitShape::Polyline => &["x", "y", "width"],
+        };
+        let slot_of = |name: &str| M::CHANNELS.iter().position(|d| d.name == name);
+        // Column index of each column-encoded slot.
+        let mut col_of = vec![None; M::CHANNELS.len()];
+        let mut k = 0;
+        for (slot, e) in self.encodings.iter().enumerate() {
+            if matches!(e, Some(Encoding::Column(_))) {
+                col_of[slot] = Some(k);
+                k += 1;
+            }
+        }
+        let needed: Vec<(usize, usize)> = wanted
+            .iter()
+            .filter_map(|w| slot_of(w))
+            .filter_map(|slot| col_of[slot].map(|k| (slot, k)))
+            .collect();
+
+        // Values per needed channel, by data row (RFC-001 S8b): the CPU
+        // columns if every chunk kept them, else the accessors over the
+        // rows, else nothing to pick.
+        let mut raw: Vec<Vec<f64>> = Vec::with_capacity(needed.len());
+        let from_store: Option<Vec<Vec<f64>>> =
+            needed.iter().map(|&(_, k)| store.cpu_values(k)).collect();
+        if let Some(stored) = from_store {
+            for v in stored {
+                raw.push(match &self.order {
+                    Some(order) => {
+                        let mut data = vec![f64::NAN; n];
+                        for (s, v) in v.into_iter().enumerate() {
+                            data[order.row_of(s as u64) as usize] = v;
+                        }
+                        data
+                    }
+                    None => v,
+                });
+            }
+        } else if self.released == 0 && self.rows.len() == n {
+            let rows = &self.rows;
+            for &(slot, _) in &needed {
+                let Some(Encoding::Column(c)) = &mut self.encodings[slot] else {
+                    unreachable!("a column slot")
+                };
+                raw.push(match c.evaluate(rows)? {
+                    crate::column::ColumnData::Values(v) => v,
+                    crate::column::ColumnData::Codes(codes) => codes
+                        .into_iter()
+                        .map(|c| {
+                            if c == crate::column::NULL_CODE {
+                                f64::NAN
+                            } else {
+                                f64::from(c)
+                            }
+                        })
+                        .collect(),
+                });
+            }
+        } else {
+            return Ok(());
+        }
+
+        let as_px = |v: ConstValue| match v {
+            ConstValue::F32(v) => f64::from(v),
+            ConstValue::Vec4(_) => f64::NAN,
+        };
+        let chan = |name: &str| -> Chan {
+            if !wanted.contains(&name) {
+                return Chan::Unused;
+            }
+            let Some(slot) = slot_of(name) else {
+                return Chan::Unused;
+            };
+            match &self.encodings[slot] {
+                None => Chan::Const(as_px(M::CHANNELS[slot].default)),
+                Some(Encoding::Const(c)) => Chan::Const(as_px(*c)),
+                Some(Encoding::Derived(f)) => Chan::Const(as_px(f())),
+                Some(Encoding::Column(c)) => {
+                    let at = needed
+                        .iter()
+                        .position(|&(s, _)| s == slot)
+                        .expect("a needed column");
+                    Chan::Col(
+                        raw[at]
+                            .iter()
+                            .map(|&v| {
+                                if v.is_nan() {
+                                    f64::NAN
+                                } else {
+                                    c.cpu_eval(v).unwrap_or(f64::NAN)
+                                }
+                            })
+                            .collect(),
+                    )
+                }
+            }
+        };
+        let chans = Chans {
+            x: chan("x"),
+            y: chan("y"),
+            radius: chan("radius"),
+            width: chan("width"),
+            height: chan("height"),
+            x_end: chan("x_end"),
+            y_end: chan("y_end"),
+        };
+
+        // Stored rows with their data row and rank in the draw order.
+        let slots: Vec<(usize, u64)> = match &self.order {
+            Some(order) => {
+                let mut rank = vec![0u64; n];
+                let mut next = 0;
+                for seg in order.segments() {
+                    for s in seg.clone() {
+                        rank[s as usize] = next;
+                        next += 1;
+                    }
+                }
+                (0..n)
+                    .map(|s| (order.row_of(s as u64) as usize, rank[s]))
+                    .collect()
+            }
+            None => (0..n).map(|s| (s, s as u64)).collect(),
+        };
+        build_items(M::HIT, layer, self.z, &slots, &chans, out);
+        Ok(())
+    }
+
+    fn row_any(&self, row: usize) -> Option<&dyn Any> {
+        let row = row.checked_sub(self.released)?;
+        self.rows.get(row).map(|r| r as &dyn Any)
     }
 
     fn glue_source(&self) -> Glue {
