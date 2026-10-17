@@ -98,7 +98,7 @@ survives into `gup-core`.
   deleted targets, pre-GUP-427 checkouts), which GUP-427's owner-based prune
   never touches. Deps: GUP-427 ✅.
 
-- [GUP-438](GUP-438_Trustworthy_Goldens_And_Size_Gates.md) 📋 — `GUP_BLESS=1`
+- [GUP-438](GUP-438_Trustworthy_Goldens_And_Size_Gates.md) ✅ — `GUP_BLESS=1`
   always writes (and verifies) the current render, `mask wasm-browser` runs with
   `LD_LIBRARY_PATH` unset, and `mask wasm-size` in CI fails over the
   `wasm.scatter.gz_bytes` budget. Deps: GUP-388 ✅, GUP-417 ✅, GUP-408 ✅.
