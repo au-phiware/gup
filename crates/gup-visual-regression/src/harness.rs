@@ -191,6 +191,7 @@ impl fmt::Display for CaseReport {
                             BlessReason::Missing => "new".to_string(),
                             BlessReason::SizeChanged => "size changed".to_string(),
                             BlessReason::Changed(stats) => format!("changed: {stats}"),
+                            BlessReason::Refreshed(stats) => format!("refreshed: {stats}"),
                         };
                         writeln!(f, "  BLESS {check}: wrote {} ({why})", path.display())?
                     }

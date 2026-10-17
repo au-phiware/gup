@@ -66,9 +66,12 @@ git add tests/golden/
 ```
 
 `GUP_BLESS=1` (also `true` or `yes`) rewrites the golden image of every case
-that ran and was missing, changed size or differed beyond tolerance. Goldens
-within tolerance are left alone to avoid churn from backend noise. Blessing
-never hides a structural failure: those still fail unless tracked.
+that ran, whether it was missing, changed size, differed beyond tolerance or was
+within tolerance, and reads each one back to check it equals the render. The
+committed PNGs therefore equal the current renders, and
+`git diff --stat tests/golden` lists exactly the goldens whose bytes changed.
+Read each one. Never delete goldens to force a rewrite. Blessing never hides a
+structural failure: those still fail unless tracked.
 
 Before committing re-blessed goldens:
 

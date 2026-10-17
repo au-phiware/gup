@@ -26,6 +26,9 @@ pub enum BlessReason {
     SizeChanged,
     /// The golden image differed beyond tolerance.
     Changed(DiffStats),
+    /// The golden image was within tolerance and was rewritten anyway, so
+    /// the committed PNG equals the current render.
+    Refreshed(DiffStats),
 }
 
 /// Result of a successful golden comparison.
@@ -106,11 +109,11 @@ impl GoldenStore {
     /// Compare `actual` with the golden image for `case`.
     ///
     /// The actual render is always saved to [`actual_path`](Self::actual_path)
-    /// so it can be inspected. In bless mode a missing or out-of-tolerance
-    /// golden image is overwritten (an in-tolerance one is left alone, to
-    /// avoid churn from backend noise). Otherwise a missing or mismatched
-    /// golden image is a [`Check::Golden`] failure, and a diff image is
-    /// written next to the actual render.
+    /// so it can be inspected. In bless mode the golden image is always
+    /// overwritten with the render (missing, resized, out of tolerance or
+    /// within tolerance) and read back to verify. Otherwise a missing or
+    /// mismatched golden image is a [`Check::Golden`] failure, and a diff
+    /// image is written next to the actual render.
     pub fn check(&self, case: &str, actual: &RgbaImage) -> Result<GoldenOutcome, CheckFailure> {
         let fail = |msg: String| CheckFailure::new(Check::Golden, msg);
         validate_case_name(case).map_err(fail)?;
@@ -137,7 +140,10 @@ impl GoldenStore {
             None => BlessReason::Missing,
             Some(Err(_)) => BlessReason::SizeChanged,
             Some(Ok(stats)) if stats.within(&self.tolerance) => {
-                return Ok(GoldenOutcome::Matched(stats));
+                if !self.bless {
+                    return Ok(GoldenOutcome::Matched(stats));
+                }
+                BlessReason::Refreshed(stats)
             }
             Some(Ok(stats)) => BlessReason::Changed(stats),
         };
@@ -146,6 +152,7 @@ impl GoldenStore {
             actual
                 .save_png(&golden_path)
                 .map_err(|e| fail(format!("could not bless golden image: {e}")))?;
+            verify_refreshed(&golden_path, actual).map_err(fail)?;
             return Ok(GoldenOutcome::Blessed {
                 path: golden_path,
                 reason,
@@ -187,8 +194,24 @@ impl GoldenStore {
                     actual_path.display(),
                 )
             }
-            (_, None) => unreachable!("size/changed reasons imply a golden image"),
+            (_, None) | (BlessReason::Refreshed(_), _) => {
+                unreachable!("size/changed reasons imply a golden image; refreshed implies bless")
+            }
         }))
+    }
+}
+
+/// Read the golden at `path` back and require it to equal `actual` exactly.
+fn verify_refreshed(path: &Path, actual: &RgbaImage) -> Result<(), String> {
+    let not_refreshed = || {
+        format!(
+            "golden {} was not refreshed by this bless run",
+            path.display()
+        )
+    };
+    match RgbaImage::load_png(path) {
+        Ok(written) if written == *actual => Ok(()),
+        _ => Err(not_refreshed()),
     }
 }
 
@@ -308,6 +331,54 @@ mod tests {
             store.check("c", &image(15.0)).unwrap(),
             GoldenOutcome::Matched(_)
         ));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn bless_rewrites_a_within_tolerance_golden() {
+        let dir = scratch("refresh");
+        let store = GoldenStore::new(dir.join("golden"), dir.join("out")).with_bless(true);
+        store.check("r", &image(0.0)).unwrap();
+        let path = store.golden_path("r");
+        let original = RgbaImage::load_png(&path).unwrap();
+
+        // Pick an offset that stays within tolerance.
+        let tolerant = store.clone().with_tolerance(DiffTolerance {
+            max_differing_fraction: 1.0,
+            ..DiffTolerance::default()
+        });
+        let outcome = tolerant.clone().with_bless(false).check("r", &image(15.0));
+        assert!(
+            matches!(outcome, Ok(GoldenOutcome::Matched(_))),
+            "{outcome:?}"
+        );
+        let bytes = std::fs::read(&path).unwrap();
+        assert_eq!(RgbaImage::load_png(&path).unwrap(), original);
+
+        let outcome = tolerant.check("r", &image(15.0)).unwrap();
+        assert!(matches!(
+            outcome,
+            GoldenOutcome::Blessed {
+                reason: BlessReason::Refreshed(_),
+                ..
+            }
+        ));
+        let rewritten = RgbaImage::load_png(&path).unwrap();
+        assert_eq!(rewritten, image(15.0));
+        assert_ne!(rewritten, original);
+        assert_ne!(std::fs::read(&path).unwrap(), bytes);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn verify_refreshed_detects_stale_golden() {
+        let dir = scratch("verify");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("g.png");
+        image(0.0).save_png(&path).unwrap();
+        assert!(verify_refreshed(&path, &image(0.0)).is_ok());
+        let err = verify_refreshed(&path, &image(15.0)).unwrap_err();
+        assert!(err.contains("not refreshed"), "{err}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

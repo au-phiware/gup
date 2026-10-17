@@ -36,5 +36,5 @@ trap 'rm -rf "$web"' EXIT
 wasm-bindgen --target web --out-dir "$web" --out-name scatter \
   "$target/wasm32-unknown-unknown/release/gup_core_wasm_size_scatter.wasm"
 cp "$harness/index.html" "$web/"
-node "$root/scripts/browser_smoke.mjs" "$web" \
+env -u LD_LIBRARY_PATH node "$root/scripts/browser_smoke.mjs" "$web" \
   "$target/visual-regression/gup_core/browser_scatter.png"

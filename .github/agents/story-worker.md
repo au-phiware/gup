@@ -201,10 +201,11 @@ Before marking the story complete, perform comprehensive checks:
      colours present, and the golden image. The checks take an `RgbaImage` plus
      `LayoutMetadata`, so new render paths (e.g. `gup-core`) add their own small
      adapter and reuse them.
-   - **Intentional visual change**: re-run with `GUP_BLESS=1`, open every
-     changed PNG under `tests/golden/`, commit them with the change, and
-     describe the rendered result in the story's Definition-of-Done evidence.
-     See `tests/golden/README.md`.
+   - **Intentional visual change**: re-run with `GUP_BLESS=1`, which rewrites
+     every golden the run renders (never delete goldens to force a rewrite).
+     `git diff --stat tests/golden` lists the goldens whose bytes changed; open
+     every one, commit them with the change, and describe the rendered result in
+     the story's Definition-of-Done evidence. See `tests/golden/README.md`.
    - **Known-broken output** is tracked in
      `tests/visual_regression/expected_failures.toml`. If your fix makes a
      tracked check pass (XPASS), remove its entry in the same commit. Never

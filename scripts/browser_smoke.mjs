@@ -85,11 +85,15 @@ await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
 const pageUrl = `http://127.0.0.1:${server.address().port}/index.html`;
 
 const profile = mkdtempSync(join(tmpdir(), "gup-browser-smoke-"));
+// Chromium needs nothing from the dev shell's LD_LIBRARY_PATH, and the nix
+// libraries on it can make Chromium die at startup (missing GLIBC symbols).
+const { LD_LIBRARY_PATH: _ignored, ...browserEnv } = process.env;
 const browser = spawn(
   chromium,
   [...flags, `--user-data-dir=${profile}`, "about:blank"],
   {
     stdio: ["ignore", "ignore", "pipe"],
+    env: browserEnv,
     // Its own process group, so the whole browser (and any wrapper's
     // children) can be stopped at once.
     detached: true,
@@ -117,7 +121,12 @@ browser.on("error", e => {
 browser.on("exit", (code, signal) => {
   if (!result && !stopping)
     errors.push(
-      `${chromium} exited (${signal || code}) before the page reported`
+      `${chromium} exited (${signal || code}) before the page reported; ` +
+        `check LD_LIBRARY_PATH and GUP_CHROMIUM\n` +
+        `browser stderr (first 20 lines):\n${stderr
+          .split("\n")
+          .slice(0, 20)
+          .join("\n")}`
     );
   finish();
 });
