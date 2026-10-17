@@ -308,6 +308,30 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
 - [GUP-439](GUP-439_Line_Translucent_Joins.md) 💡 — translucent `Line`s with
   even opacity: joins and self-crossings blended once (a per-layer coverage
   pass), opaque lines unchanged. Deps: GUP-432 ✅.
+- [GUP-444](GUP-444_RFC_001_S8a_Cached_Resolve_And_Input.md) 📋 — RFC-001 step
+  S8a: `Chart::resolve` cached by a revision sum (a clean resolve writes
+  nothing), `Input`/`Response`, and `Chart::handle` with wheel zoom moved out of
+  `show`. Deps: GUP-434 ✅.
+- [GUP-445](GUP-445_RFC_001_S8b_CPU_Picking.md) 📋 — RFC-001 step S8b:
+  `Plot::pick_row`/`pick::<T>` on the CPU, with a declared `HitShape` per mark
+  (disc, box, square-capped segment, polyline), mapped back to data rows across
+  chunks, nulls, draw order and `Retain`, through a lazy grid. Deps: GUP-444 📋.
+- [GUP-446](GUP-446_RFC_001_S8c_Hover_Click_Tooltips.md) 📋 — RFC-001 step S8c:
+  `Selection::on(Event::{Enter, Leave, Click})` handlers and
+  `Selection::tooltip`, drawn as an overlay on the cached scene, with a tooltip
+  golden. Deps: GUP-444 📋, GUP-445 📋.
+- [GUP-447](GUP-447_RFC_001_S8d_Mark_Adders_And_Default_Axes.md) 📋 — RFC-001
+  step S8d: default linear axes, `plot.circles/rects/segments/line(rows)`, and
+  plain closures on position channels bound to the plot's scales. Deps: GUP-424
+  ✅, GUP-433 ✅.
+- [GUP-448](GUP-448_RFC_001_S8e_GupApp_And_Hello_World.md) 📋 — RFC-001 step
+  S8e: `GupApp`/`show` on any `Chart` forwarding pointer input, and
+  `examples/hello_world.rs` cut from 265 lines to 10 (sine scatter with
+  tooltips) plus a golden. Deps: GUP-444 📋, GUP-446 📋, GUP-447 📋.
+- [GUP-449](GUP-449_RFC_001_S8f_Web_Canvas_Host.md) 📋 — RFC-001 step S8f:
+  `gup_core::web::CanvasApp` (a canvas surface and DOM pointer listeners) with
+  hover, click and wheel checked in the browser smoke test. Deps: GUP-444 📋,
+  GUP-446 📋.
 
 ## GPU Rendering Pipeline
 
