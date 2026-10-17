@@ -253,6 +253,13 @@ not design:
 - Check new names and signatures against the limitations the RFC findings
   already record. For example, WGSL composable identifiers cannot end in a digit
   (RFC-001 "S5c findings"), which made GUP-429's `x2`/`y2` channels unbuildable.
+- When a story changes a default, add an AC that searches for every place that
+  already does the thing by hand (tests, examples, browser scenes, doctests) and
+  updates or opts it out. GUP-426's default-on legends broke two tests and two
+  browser scenes that drew their own.
+- When a story changes layout (padding, widening, tick placement), add an AC to
+  run the browser smoke test. Its scenes check pixels, and native tests don't
+  cover them.
 - List the **Escalation Triggers** you can foresee: the places where the plan
   rests on an assumption that might be false.
 
