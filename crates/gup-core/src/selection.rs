@@ -10,6 +10,7 @@ use crate::column::{ColumnFormat, ColumnStore};
 use crate::context::Context;
 use crate::encoding::{AxisEncoding, Encoding, IntoEncoding, Resource};
 use crate::error::{Error, Result};
+use crate::input::{Event, EventInfo};
 use crate::order::{DrawEntry, DrawOrder, chunk_spans, draw_entries, polyline_spans};
 use crate::pick::{Chan, Chans, PickItem, build_items};
 use crate::render::{
@@ -22,6 +23,9 @@ use crate::theme::Theme;
 use std::any::Any;
 use std::marker::PhantomData;
 use std::sync::Arc;
+
+type Handler<T> = Box<dyn FnMut(&EventInfo, &T) + Send + Sync>;
+type TooltipFn<T> = Box<dyn Fn(&T) -> String + Send + Sync>;
 
 /// The palette LUTs a layer's GPU state was built with.
 type Luts = Vec<Vec<[u8; 4]>>;
@@ -117,6 +121,10 @@ pub struct Selection<T, M: Mark> {
     axes_bound: u64,
     /// Legend titles, by channel slot.
     legend_titles: Vec<Option<String>>,
+    /// Event handlers, in registration order.
+    handlers: Vec<(Event, Handler<T>)>,
+    /// The tooltip text of a hovered row.
+    tooltip: Option<TooltipFn<T>>,
     /// Evaluated columns, one per column-encoded channel in channel order.
     columns: Option<ColumnStore>,
     /// The size-descending draw order of the stored rows, when the mark's
@@ -155,6 +163,8 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             axes: M::CHANNELS.iter().map(|_| None).collect(),
             axes_bound: 0,
             legend_titles: vec![None; M::CHANNELS.len()],
+            handlers: Vec::new(),
+            tooltip: None,
             columns: None,
             order: None,
             max_chunk_rows: None,
@@ -240,6 +250,32 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
     /// their own, over the same scales, with a higher `z`.
     pub fn z(&mut self, z: i32) -> &mut Self {
         self.z = z;
+        self
+    }
+
+    /// Call `handler` with the row when `event` happens on one of this
+    /// layer's marks. Handlers for one event run in registration order. Not
+    /// called for rows dropped by [`Retain`] (there is no `&T`).
+    ///
+    /// ```
+    /// use gup_core::prelude::*;
+    ///
+    /// let mut sel = Selection::<(f64, f64), Circle>::new(vec![(1.0, 2.0)]);
+    /// sel.on(Event::Click, |ev, d: &(f64, f64)| println!("{:?} {:?}", ev.row, d));
+    /// ```
+    pub fn on(
+        &mut self,
+        event: Event,
+        handler: impl FnMut(&EventInfo, &T) + Send + Sync + 'static,
+    ) -> &mut Self {
+        self.handlers.push((event, Box::new(handler)));
+        self
+    }
+
+    /// Show `text(row)` beside a hovered row; `'\n'` separates lines. An
+    /// empty text shows nothing. Not shown for rows dropped by [`Retain`].
+    pub fn tooltip(&mut self, text: impl Fn(&T) -> String + Send + Sync + 'static) -> &mut Self {
+        self.tooltip = Some(Box::new(text));
         self
     }
 
@@ -584,6 +620,12 @@ pub(crate) trait Layer: wgpu::WasmNotSendSync {
     /// Row `row` (an index into the rows the selection was given), if the
     /// layer still holds it.
     fn row_any(&self, row: usize) -> Option<&dyn Any>;
+    /// Run the layer's handlers for `info.event` on the row `info.row`.
+    /// Does nothing when the layer no longer holds the row.
+    fn dispatch(&mut self, info: &EventInfo);
+    /// The tooltip text for `row`: `None` without a tooltip, for a row the
+    /// layer no longer holds, or for empty text.
+    fn tooltip_text(&self, row: usize) -> Option<String>;
     /// The generated glue (for tests and diagnostics).
     fn glue_source(&self) -> Glue;
     fn as_any_mut(&mut self) -> &mut dyn Any;
@@ -1083,6 +1125,24 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
     fn row_any(&self, row: usize) -> Option<&dyn Any> {
         let row = row.checked_sub(self.released)?;
         self.rows.get(row).map(|r| r as &dyn Any)
+    }
+
+    fn dispatch(&mut self, info: &EventInfo) {
+        let Some(i) = info.row.row.checked_sub(self.released) else {
+            return;
+        };
+        let Some(row) = self.rows.get(i) else { return };
+        for (event, handler) in &mut self.handlers {
+            if *event == info.event {
+                handler(info, row);
+            }
+        }
+    }
+
+    fn tooltip_text(&self, row: usize) -> Option<String> {
+        let f = self.tooltip.as_ref()?;
+        let row = self.rows.get(row.checked_sub(self.released)?)?;
+        Some(f(row)).filter(|s| !s.is_empty())
     }
 
     fn glue_source(&self) -> Glue {

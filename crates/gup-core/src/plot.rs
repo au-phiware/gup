@@ -15,7 +15,7 @@ use crate::channel::{Mark, Px};
 use crate::context::{Context, ContextId};
 use crate::error::{Error, Result};
 use crate::geom::{Point, Rect};
-use crate::input::{Input, Response};
+use crate::input::{Button, Event, EventInfo, Input, Response};
 use crate::marks::{Circle, Line, Rect as MarkRect, Segment};
 use crate::pick::{PickIndex, RowId};
 use crate::scale::{DynPositionScale, Linear, PositionScale, ScaleRef, Ticks};
@@ -58,6 +58,10 @@ pub struct Layout {
     /// The legend column, `Some` exactly when a legend is drawn. Lies
     /// inside the canvas, right of [`plot`](Self::plot).
     pub legend: Option<Rect>,
+    /// The hover tooltip's box, `Some` exactly while one is drawn. Its text
+    /// runs are in the scene (role [`TextRole::Tooltip`]) but not in
+    /// [`texts`](Self::texts).
+    pub tooltip: Option<Rect>,
 }
 
 /// A layout plus the scene drawn from it.
@@ -162,7 +166,21 @@ pub struct Plot {
     zoomed: [Option<(f64, f64)>; 2],
     /// The pick index, and the (generation, revision sum) it was built at.
     pick: Option<((u64, u64), PickIndex)>,
+    /// The hovered row, where its tooltip attaches, and the generation that
+    /// anchor was found at.
+    hover: Option<(RowId, Point, u64)>,
+    /// Where the primary button went down, until it comes up.
+    press: Option<Point>,
+    /// The last pointer position seen.
+    last_at: Point,
+    /// The cached resolve with the tooltip composed on, and the generation
+    /// of the base it was made from. Dropped when the hover changes.
+    overlay: Option<(u64, Resolved)>,
 }
+
+/// How far (px) the pointer may move between press and release for the
+/// pair to be a click.
+const CLICK_SLOP: f32 = 4.0;
 
 /// What a cached [`Resolved`] is valid for.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -261,6 +279,10 @@ impl Plot {
             widened: [false; 2],
             zoomed: [None; 2],
             pick: None,
+            hover: None,
+            press: None,
+            last_at: Point::new(0.0, 0.0),
+            overlay: None,
         }
     }
 
@@ -440,28 +462,168 @@ impl Plot {
             // After resolving: it writes the scales.
             self.cache = Some((key(self), resolved));
         }
-        match &self.cache {
-            Some((_, resolved)) => Ok(resolved),
-            None => unreachable!("the cache was just filled"),
+        self.sync_tooltip(cx);
+        match (&self.overlay, &self.cache) {
+            (Some((g, composed)), _) if *g == self.generation => Ok(composed),
+            (_, Some((_, resolved))) => Ok(resolved),
+            _ => unreachable!("the cache was just filled"),
         }
     }
 
-    /// The layout of the last successful resolve.
-    pub fn layout(&self) -> Option<&Layout> {
-        self.cache.as_ref().map(|(_, r)| &r.layout)
+    /// Bring the hover and the composed tooltip scene up to date with the
+    /// base resolve: re-anchor after a full resolve, and compose the overlay
+    /// when it is missing. Costs nothing when neither changed.
+    fn sync_tooltip(&mut self, cx: &Context) {
+        let Some((row, _, at_gen)) = self.hover else {
+            self.overlay = None;
+            return;
+        };
+        if at_gen != self.generation {
+            self.overlay = None;
+            match self.pick_anchor(row) {
+                Some(a) => self.hover = Some((row, a, self.generation)),
+                None => {
+                    self.hover = None;
+                    return;
+                }
+            }
+        }
+        if self
+            .overlay
+            .as_ref()
+            .is_some_and(|(g, _)| *g == self.generation)
+        {
+            return;
+        }
+        self.overlay = None;
+        let Some((_, base)) = &self.cache else {
+            return;
+        };
+        let Some((_, anchor, _)) = self.hover else {
+            return;
+        };
+        let Some(text) = self
+            .layers
+            .get(row.layer)
+            .and_then(|l| l.tooltip_text(row.row))
+        else {
+            return;
+        };
+        let (width, height) = (base.layout.width, base.layout.height);
+        let (rect, items) =
+            crate::tooltip::overlay(&cx.text(), &self.theme, &text, anchor, width, height);
+        let mut composed = base.clone();
+        for item in items {
+            composed.scene.push(item);
+        }
+        composed.layout.tooltip = Some(rect);
+        self.overlay = Some((self.generation, composed));
     }
 
-    /// React to `input`. A wheel turn zooms about the pointer
-    /// ([`zoom`](Self::zoom)); the rest do nothing yet.
+    /// The layout of the last successful resolve (with the tooltip, while
+    /// one is shown).
+    pub fn layout(&self) -> Option<&Layout> {
+        match (&self.overlay, &self.cache) {
+            (Some((g, composed)), _) if *g == self.generation => Some(&composed.layout),
+            (_, Some((_, r))) => Some(&r.layout),
+            _ => None,
+        }
+    }
+
+    /// The row the pointer is over, as of the last
+    /// [`handle`](Self::handle).
+    pub fn hovered(&self) -> Option<RowId> {
+        self.hover.map(|(row, _, _)| row)
+    }
+
+    /// React to `input`.
+    ///
+    /// - Moving the pointer onto another row (or off the rows) calls the
+    ///   `Leave` handlers of the old row, then the `Enter` handlers of the
+    ///   new one, and updates [`hovered`](Self::hovered).
+    /// - The primary button going down and up within a few pixels calls the
+    ///   `Click` handlers of the row under the pointer.
+    /// - A wheel turn zooms about the pointer ([`zoom`](Self::zoom)),
+    ///   leaving the hovered row first.
+    ///
+    /// `redraw` is true when the tooltip shown changes (a hovered row of a
+    /// layer with a [`tooltip`](Selection::tooltip), or leaving one) or the
+    /// scales moved. Handlers need the rows: a layer that dropped them
+    /// ([`Retain`](crate::Retain)) runs none.
     pub fn handle(&mut self, input: Input) -> Response {
+        let mut redraw = false;
         match input {
+            Input::PointerMoved { at } => {
+                self.last_at = at;
+                let row = self.pick_row(at);
+                if row != self.hovered() {
+                    redraw = self.set_hover(row, at);
+                }
+            }
+            Input::PointerLeft => {
+                redraw = self.set_hover(None, self.last_at);
+                self.press = None;
+            }
+            Input::PointerDown {
+                at,
+                button: Button::Primary,
+            } => {
+                self.last_at = at;
+                self.press = Some(at);
+            }
+            Input::PointerUp {
+                at,
+                button: Button::Primary,
+            } => {
+                self.last_at = at;
+                if let Some(down) = self.press.take() {
+                    let (dx, dy) = (at.x - down.x, at.y - down.y);
+                    if dx.hypot(dy) <= CLICK_SLOP
+                        && let Some(row) = self.pick_row(at)
+                    {
+                        self.dispatch(Event::Click, at, row);
+                    }
+                }
+            }
             Input::Wheel { at, lines }
                 if lines.is_finite() && lines != 0.0 && self.cache.is_some() =>
             {
-                let redraw = self.zoom(at, ZOOM_PER_LINE.powf(f64::from(lines))).is_ok();
-                Response { redraw }
+                self.last_at = at;
+                self.set_hover(None, at);
+                redraw = self.zoom(at, ZOOM_PER_LINE.powf(f64::from(lines))).is_ok();
             }
-            _ => Response::default(),
+            _ => {}
+        }
+        Response { redraw }
+    }
+
+    /// Move the hover to `row`: `Leave` the old row, `Enter` the new one.
+    /// Whether the tooltip shown changes.
+    fn set_hover(&mut self, row: Option<RowId>, at: Point) -> bool {
+        let old = self.hover.take();
+        let anchor = row.and_then(|r| self.pick_anchor(r));
+        self.hover = row.zip(anchor).map(|(r, a)| (r, a, self.generation));
+        self.overlay = None;
+        if let Some((old, _, _)) = old {
+            self.dispatch(Event::Leave, at, old);
+        }
+        let new = self.hover.map(|(r, _, _)| r);
+        if let Some(new) = new {
+            self.dispatch(Event::Enter, at, new);
+        }
+        let has_tooltip = |plot: &Self, r: Option<RowId>| {
+            r.is_some_and(|r| {
+                plot.layers
+                    .get(r.layer)
+                    .is_some_and(|l| l.tooltip_text(r.row).is_some())
+            })
+        };
+        has_tooltip(self, old.map(|(r, _, _)| r)) || has_tooltip(self, new)
+    }
+
+    fn dispatch(&mut self, event: Event, at: Point, row: RowId) {
+        if let Some(layer) = self.layers.get_mut(row.layer) {
+            layer.dispatch(&EventInfo { event, at, row });
         }
     }
 
@@ -993,6 +1155,7 @@ impl Plot {
                 x_ticks: x_placed,
                 y_ticks: y_placed,
                 legend: legend_bounds,
+                tooltip: None,
             },
             scene,
         })

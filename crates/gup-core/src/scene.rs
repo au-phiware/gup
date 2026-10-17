@@ -18,6 +18,8 @@ pub const Z_GRID: i32 = -100;
 pub const Z_AXES: i32 = 100;
 /// Default z-order of the title and legends.
 pub const Z_TITLE: i32 = 200;
+/// Z-order of the hover tooltip, above everything else.
+pub const Z_TOOLTIP: i32 = 300;
 
 /// Everything a target needs to draw a chart.
 #[derive(Clone, Debug)]
@@ -277,6 +279,8 @@ pub enum TextRole {
     AxisTitle,
     /// A legend entry or legend title.
     Legend,
+    /// A line of a hover tooltip.
+    Tooltip,
 }
 
 /// One line of horizontal text.

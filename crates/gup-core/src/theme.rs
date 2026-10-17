@@ -49,6 +49,14 @@ pub struct Theme {
     /// or `Diverging` input, a missing `Categorical` key). A
     /// `Categorical` can override it for itself.
     pub null_color: Color,
+    /// Tooltip box fill.
+    pub tooltip_background: Color,
+    /// Tooltip box border (1 px).
+    pub tooltip_border: Color,
+    /// Tooltip text colour.
+    pub tooltip_text: Color,
+    /// Tooltip text size.
+    pub tooltip_size: Px,
 }
 
 impl Default for Theme {
@@ -68,6 +76,10 @@ impl Default for Theme {
             x_tick_spacing: Px(80.0),
             y_tick_spacing: Px(45.0),
             null_color: NULL_COLOR,
+            tooltip_background: Color::WHITE,
+            tooltip_border: Color::hex(0x999999),
+            tooltip_text: Color::hex(0x333333),
+            tooltip_size: Px(12.0),
         }
     }
 }
@@ -93,5 +105,9 @@ mod tests {
         assert_eq!(t.x_tick_spacing, Px(80.0));
         assert_eq!(t.y_tick_spacing, Px(45.0));
         assert_eq!(t.null_color, NULL_COLOR);
+        assert_eq!(t.tooltip_background, Color::WHITE);
+        assert_eq!(t.tooltip_border, Color::hex(0x999999));
+        assert_eq!(t.tooltip_text, Color::hex(0x333333));
+        assert_eq!(t.tooltip_size, Px(12.0));
     }
 }

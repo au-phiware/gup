@@ -30,6 +30,10 @@ const SELECTION_METHODS: &[&str] = &[
     "retain",
     "rows_released",
     "attr",
+    "z",
+    "legend_title",
+    "on",
+    "tooltip",
 ];
 
 #[derive(Default)]

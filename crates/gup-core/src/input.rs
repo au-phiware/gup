@@ -4,6 +4,7 @@
 //! Input a host passes to a [`Chart`](crate::Chart).
 
 use crate::geom::Point;
+use crate::pick::RowId;
 
 /// Pointer and wheel input in chart coordinates: logical pixels from the
 /// chart's top-left corner, y down (the coordinates of
@@ -59,4 +60,31 @@ pub enum Button {
 pub struct Response {
     /// The chart looks different: resolve and render again.
     pub redraw: bool,
+}
+
+/// What happens to a row a handler registered with
+/// [`Selection::on`](crate::Selection::on) listens for.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum Event {
+    /// The pointer moved onto a row.
+    Enter,
+    /// The pointer left a row (or the chart, or a zoom moved it away).
+    Leave,
+    /// The primary button went down and up on a row, with the pointer
+    /// moving no more than a few pixels between.
+    Click,
+}
+
+/// What a handler is told about an [`Event`].
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct EventInfo {
+    /// What happened.
+    pub event: Event,
+    /// Where the pointer was, in chart coordinates (for `Leave`, where the
+    /// pointer was when the row was left; for a zoom or `PointerLeft`, the
+    /// last position the plot knew).
+    pub at: Point,
+    /// The row.
+    pub row: RowId,
 }
