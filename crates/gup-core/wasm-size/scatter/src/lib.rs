@@ -518,13 +518,29 @@ pub async fn render_diverging(width: u32, height: u32) -> Result<Vec<u8>, JsValu
         .await
         .map_err(js)?;
     let fail = |m: String| Err(JsValue::from_str(&format!("diverging: {m}")));
+    // Probe where the render put each dot (the scales it used), but only
+    // the dots whose centre no other dot's edge reaches: a neighbour's
+    // antialiased rim would tint the pixel, whatever the layout.
+    let at = |r: &(f64, f64)| (x.read().eval(r.0), y.read().eval(r.1));
+    let mut probed = 0;
     for r in &rows {
-        let (px, py) = (x.read().eval(r.0), y.read().eval(r.1));
+        let (px, py) = at(r);
+        let crowded = rows.iter().filter(|o| *o != r).any(|o| {
+            let (ox, oy) = at(o);
+            (ox - px).hypot(oy - py) < 4.5 + 1.5
+        });
+        if crowded {
+            continue;
+        }
+        probed += 1;
         let want = colour.read().eval(r.1).to_rgba8();
         let got = image.get_pixel(px as u32, py as u32).0;
         if (0..3).any(|k| got[k].abs_diff(want[k]) > 2) {
             return fail(format!("{r:?} drew {got:?}, not the mirror's {want:?}"));
         }
+    }
+    if probed < 10 {
+        return fail(format!("only {probed} dots stood clear of their neighbours"));
     }
     let [lo, mid, hi] = colour.read().current_domain().unwrap_or([0.0; 3]);
     if mid != 0.0 || lo != -hi {
