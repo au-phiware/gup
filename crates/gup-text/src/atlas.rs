@@ -6,6 +6,7 @@
 
 use crate::error::{Error, Result};
 use crate::font::Font;
+use crate::layout::Weight;
 use std::collections::HashMap;
 
 /// Initial atlas width and height.
@@ -48,8 +49,8 @@ pub(crate) struct GlyphAtlas {
     size: u32,
     max_size: u32,
     pixels: Vec<u8>,
-    /// By character and size in physical pixels (`f32` bits).
-    glyphs: HashMap<(char, u32), AtlasRect>,
+    /// By character, size in physical pixels (`f32` bits) and weight.
+    glyphs: HashMap<(char, u32, Weight), AtlasRect>,
     cursor: (u32, u32),
     row_height: u32,
     dirty: Option<Dirty>,
@@ -97,8 +98,14 @@ impl GlyphAtlas {
 
     /// The atlas rectangle of `c` at `px` physical pixels, rasterising it
     /// on first use.
-    pub(crate) fn glyph(&mut self, font: &Font, c: char, px: f32) -> Result<AtlasRect> {
-        if let Some(r) = self.glyphs.get(&(c, px.to_bits())) {
+    pub(crate) fn glyph(
+        &mut self,
+        font: &Font,
+        weight: Weight,
+        c: char,
+        px: f32,
+    ) -> Result<AtlasRect> {
+        if let Some(r) = self.glyphs.get(&(c, px.to_bits(), weight)) {
             return Ok(*r);
         }
         let (metrics, bitmap) = font.face().rasterize(c, px);
@@ -126,7 +133,7 @@ impl GlyphAtlas {
             width: w,
             height: h,
         };
-        self.glyphs.insert((c, px.to_bits()), r);
+        self.glyphs.insert((c, px.to_bits(), weight), r);
         Ok(r)
     }
 
@@ -188,9 +195,9 @@ mod tests {
     fn a_glyph_is_rasterised_once_per_size() {
         let font = Font::inter();
         let mut atlas = GlyphAtlas::new(4096);
-        let a = atlas.glyph(&font, '1', 12.0).unwrap();
-        let b = atlas.glyph(&font, '1', 12.0).unwrap();
-        let c = atlas.glyph(&font, '1', 24.0).unwrap();
+        let a = atlas.glyph(&font, Weight::Regular, '1', 12.0).unwrap();
+        let b = atlas.glyph(&font, Weight::Regular, '1', 12.0).unwrap();
+        let c = atlas.glyph(&font, Weight::Regular, '1', 24.0).unwrap();
         assert_eq!(a, b);
         assert_ne!(a, c);
         assert_eq!(atlas.len(), 2);
@@ -202,15 +209,15 @@ mod tests {
         let font = Font::inter();
         let mut atlas = GlyphAtlas::new(4096);
         assert_eq!(atlas.take_dirty(), None);
-        let a = atlas.glyph(&font, 'A', 16.0).unwrap();
-        let b = atlas.glyph(&font, 'B', 16.0).unwrap();
+        let a = atlas.glyph(&font, Weight::Regular, 'A', 16.0).unwrap();
+        let b = atlas.glyph(&font, Weight::Regular, 'B', 16.0).unwrap();
         let d = atlas.take_dirty().unwrap();
         assert_eq!((d.x0, d.y0), (a.x, a.y.min(b.y)));
         assert_eq!(d.x1, b.x + b.width);
         assert!(d.y1 - d.y0 <= a.height.max(b.height));
         assert!((d.x1 - d.x0) < 64, "a dirty rect, not whole rows: {d:?}");
         // Cached glyphs dirty nothing.
-        atlas.glyph(&font, 'A', 16.0).unwrap();
+        atlas.glyph(&font, Weight::Regular, 'A', 16.0).unwrap();
         assert_eq!(atlas.take_dirty(), None);
         // Coverage landed in the atlas.
         let row = ((a.y + a.height / 2) * atlas.size()) as usize;
@@ -230,16 +237,19 @@ mod tests {
                 .collect()
         };
         let mut atlas = GlyphAtlas::with_sizes(128, 256);
-        let first = atlas.glyph(&font, 'W', 40.0).unwrap();
+        let first = atlas.glyph(&font, Weight::Regular, 'W', 40.0).unwrap();
         let before = texels(&atlas, first);
         atlas.take_dirty();
         let mut px = 41;
         while atlas.size() == 128 {
-            atlas.glyph(&font, 'W', px as f32).unwrap();
+            atlas.glyph(&font, Weight::Regular, 'W', px as f32).unwrap();
             px += 1;
         }
         assert_eq!(atlas.size(), 256);
-        assert_eq!(atlas.glyph(&font, 'W', 40.0).unwrap(), first);
+        assert_eq!(
+            atlas.glyph(&font, Weight::Regular, 'W', 40.0).unwrap(),
+            first
+        );
         assert_eq!(texels(&atlas, first), before);
         assert_eq!(
             atlas.take_dirty(),
@@ -251,7 +261,7 @@ mod tests {
             })
         );
         let err = loop {
-            match atlas.glyph(&font, 'W', px as f32) {
+            match atlas.glyph(&font, Weight::Regular, 'W', px as f32) {
                 Ok(_) => px += 1,
                 Err(e) => break e,
             }

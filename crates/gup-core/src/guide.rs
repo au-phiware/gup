@@ -10,7 +10,7 @@ use crate::geom::{Point, Rect};
 use crate::scale::{Legend, Ramp};
 use crate::scene::{
     Anchor, GradientBar, GradientDirection, HAlign, Item, ItemKind, RectPrim, Rule, TextRole,
-    TextRun, TextStyle, VAlign, Z_TITLE,
+    TextRun, TextStyle, VAlign, Weight, Z_TITLE,
 };
 use crate::theme::Theme;
 use gup_text::TextSystem;
@@ -125,6 +125,7 @@ pub(crate) fn place(
     let style = TextStyle {
         size: Px(size),
         color: th.label,
+        weight: Weight::Regular,
     };
     let run = |s: &str, at: Point, anchor: Anchor| TextRun {
         text: s.into(),

@@ -241,7 +241,7 @@ impl PositionScale for Symlog {
                 .map(|i| step_value(start + i as f64, step))
                 .collect();
             let labels = values.iter().map(|&v| format_with_step(v, step)).collect();
-            return Ticks { values, labels };
+            return Ticks::new(values, labels);
         }
         // Decades from the first power of ten past about 3c (so the ticks
         // nearest zero sit at least two transformed units from it, as far
@@ -281,7 +281,7 @@ impl PositionScale for Symlog {
                 v => format_log_tick(v),
             })
             .collect();
-        Ticks { values, labels }
+        Ticks::new(values, labels)
     }
 }
 

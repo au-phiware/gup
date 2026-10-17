@@ -17,8 +17,8 @@ use crate::error::{Error, Result};
 use crate::geom::{Point, Rect};
 use crate::scale::{DynPositionScale, PositionScale, ScaleRef, Ticks};
 use crate::scene::{
-    Anchor, HAlign, Item, ItemKind, Rule, Scene, TextRole, TextRun, TextStyle, VAlign, Z_AXES,
-    Z_GRID, Z_TITLE,
+    Anchor, HAlign, Item, ItemKind, Rule, Scene, TextRole, TextRun, TextStyle, VAlign, Weight,
+    Z_AXES, Z_GRID, Z_TITLE,
 };
 use crate::selection::{Layer, Selection};
 use crate::theme::Theme;
@@ -319,6 +319,7 @@ impl Plot {
         let tick_style = TextStyle {
             size: Px(th.tick_size.0),
             color: th.label,
+            weight: Weight::Regular,
         };
         let legend_w = if legends.is_empty() {
             0.0
@@ -348,15 +349,18 @@ impl Plot {
             let x_ticks = x.ticks(x_count);
             let y_ticks = y.ticks(y_count);
             let text = cx.text();
-            let y_label_w = y_ticks
-                .labels
-                .iter()
-                .map(|l| text.measure(l, th.tick_size.0).width)
+            let width_of = |ticks: &Ticks, i: usize| {
+                text.measure_weight(&ticks.labels[i], th.tick_size.0, ticks.weight(i))
+                    .width
+            };
+            let y_label_w = (0..y_ticks.labels.len())
+                .map(|i| width_of(&y_ticks, i))
                 .fold(0.0, f32::max);
             let last_x_label_w = x_ticks
                 .labels
-                .last()
-                .map_or(0.0, |l| text.measure(l, th.tick_size.0).width);
+                .len()
+                .checked_sub(1)
+                .map_or(0.0, |i| width_of(&x_ticks, i));
             let top = th.pad.0
                 + if has_title { title_h + th.pad.0 } else { 0.0 }
                 + if has_y_title {
@@ -427,12 +431,14 @@ impl Plot {
                     .values
                     .iter()
                     .zip(&ticks.labels)
-                    .map(|(v, l)| {
+                    .enumerate()
+                    .map(|(i, (v, l))| {
                         let c = s.eval(*v) as f32;
                         let h = if vertical {
                             x_label_h
                         } else {
-                            text.measure(l, th.tick_size.0).width
+                            text.measure_weight(l, th.tick_size.0, ticks.weight(i))
+                                .width
                         } / 2.0;
                         (c - h, c + h)
                     })
@@ -507,7 +513,7 @@ impl Plot {
         rules.push(axis(Point::new(x_from, ax_y), Point::new(x_to, ax_y)));
         rules.push(axis(Point::new(ay_x, y_from), Point::new(ay_x, y_to)));
         let mut x_placed = Vec::new();
-        for (v, label) in x_ticks.values.iter().zip(&x_ticks.labels) {
+        for (i, (v, label)) in x_ticks.values.iter().zip(&x_ticks.labels).enumerate() {
             let px = x.eval(*v) as f32;
             let cx_ = px.floor() + 0.5;
             rules.push(axis(
@@ -518,13 +524,16 @@ impl Plot {
                 text: label.as_str().into(),
                 at: Point::new(px, ax_y + th.tick_len.0 + th.label_gap.0),
                 anchor: Anchor::new(HAlign::Middle, VAlign::Top),
-                style: tick_style,
+                style: TextStyle {
+                    weight: x_ticks.weight(i),
+                    ..tick_style
+                },
                 role: TextRole::TickLabel,
             });
             x_placed.push((*v, px));
         }
         let mut y_placed = Vec::new();
-        for (v, label) in y_ticks.values.iter().zip(&y_ticks.labels) {
+        for (i, (v, label)) in y_ticks.values.iter().zip(&y_ticks.labels).enumerate() {
             let py = y.eval(*v) as f32;
             let cy = py.floor() + 0.5;
             rules.push(axis(
@@ -535,7 +544,10 @@ impl Plot {
                 text: label.as_str().into(),
                 at: Point::new(ay_x - th.tick_len.0 - th.label_gap.0, py),
                 anchor: Anchor::new(HAlign::End, VAlign::Middle),
-                style: tick_style,
+                style: TextStyle {
+                    weight: y_ticks.weight(i),
+                    ..tick_style
+                },
                 role: TextRole::TickLabel,
             });
             y_placed.push((*v, py));
@@ -549,12 +561,14 @@ impl Plot {
                 style: TextStyle {
                     size: th.title_size,
                     color: th.title,
+                    weight: Weight::Regular,
                 },
                 role: TextRole::Title,
             });
             let axis_style = TextStyle {
                 size: th.axis_title_size,
                 color: th.label,
+                weight: Weight::Regular,
             };
             let mut axis_titles = Vec::new();
             if let Some(t) = &self.x_title {

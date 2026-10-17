@@ -6,7 +6,7 @@
 //! into a render pass the test opened itself, and read the pixels back.
 
 use gup_text::{
-    Anchor, DrawTarget, GlyphBuffer, Glyphs, HAlign, Run, TextSystem, Uploader, VAlign,
+    Anchor, DrawTarget, GlyphBuffer, Glyphs, HAlign, Run, TextSystem, Uploader, VAlign, Weight,
 };
 use std::cell::Cell;
 
@@ -147,6 +147,7 @@ fn measures_and_draws_a_run_into_a_callers_pass() {
         size: 24.0,
         at: [WIDTH as f32 / 2.0, 16.0],
         anchor: Anchor::new(HAlign::Middle, VAlign::Top),
+        weight: Weight::Regular,
     };
     let metrics = text.measure(run.text, run.size);
     assert!(metrics.width > 60.0 && metrics.width < 200.0, "{metrics:?}");
@@ -218,6 +219,37 @@ fn measures_and_draws_a_run_into_a_callers_pass() {
 }
 
 #[test]
+fn semibold_text_is_wider_and_has_its_own_glyphs() {
+    let (device, _queue) = device();
+    let mut text = TextSystem::new(&device);
+    let regular = text.measure("2021", 12.0).width;
+    let semibold = text.measure_weight("2021", 12.0, Weight::SemiBold).width;
+    assert_eq!(
+        regular,
+        text.measure_weight("2021", 12.0, Weight::Regular).width
+    );
+    assert!(semibold > regular, "{semibold} vs {regular}");
+
+    let mut run = Run {
+        text: "2021",
+        size: 12.0,
+        at: [0.0, 0.0],
+        anchor: Anchor::new(HAlign::Start, VAlign::Top),
+        weight: Weight::Regular,
+    };
+    let mut glyphs = Glyphs::new(1.0);
+    text.layout(&run, [0.0; 4], &mut glyphs).unwrap();
+    let regular_glyphs = text.atlas_glyphs();
+    run.weight = Weight::SemiBold;
+    text.layout(&run, [0.0; 4], &mut glyphs).unwrap();
+    assert!(
+        text.atlas_glyphs() > regular_glyphs,
+        "weights share no atlas entries"
+    );
+    assert!(text.ink_bounds(&run).width > 0.0);
+}
+
+#[test]
 fn a_device_pixel_ratio_of_two_draws_twice_the_size() {
     let (device, queue) = device();
     let mut text = TextSystem::new(&device);
@@ -226,6 +258,7 @@ fn a_device_pixel_ratio_of_two_draws_twice_the_size() {
         size: 12.0,
         at: [10.0, 10.0],
         anchor: Anchor::new(HAlign::Start, VAlign::Top),
+        weight: Weight::Regular,
     };
     let ink = |g: &Glyphs| {
         g.rects()

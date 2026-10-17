@@ -81,10 +81,10 @@ impl Slots {
         let n = self.keys.len();
         let stride = n.div_ceil(2 * count.max(1)).max(1);
         let codes: Vec<usize> = (0..n).step_by(stride).collect();
-        Ticks {
-            values: codes.iter().map(|&c| c as f64).collect(),
-            labels: codes.iter().map(|&c| self.keys[c].to_string()).collect(),
-        }
+        Ticks::new(
+            codes.iter().map(|&c| c as f64).collect(),
+            codes.iter().map(|&c| self.keys[c].to_string()).collect(),
+        )
     }
 
     fn params(&self) -> BandParams {

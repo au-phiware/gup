@@ -139,7 +139,13 @@ impl PositionScale for Time {
         let unit = Interval::choose(hi - lo, count);
         let values = unit.ticks(lo, hi);
         let labels = values.iter().map(|&t| label(t, &unit)).collect();
-        Ticks { values, labels }
+        let mut ticks = Ticks::new(values, labels);
+        // A year label outweighs the month labels around it; when every
+        // tick is a year none is singled out.
+        if !matches!(unit, Interval::Years(_)) {
+            ticks.major = ticks.values.iter().map(|&t| begins_year(t)).collect();
+        }
+        ticks
     }
 }
 
@@ -354,6 +360,14 @@ fn label(t: f64, unit: &Interval) -> String {
     }
 }
 
+/// Whether `t` is the first instant of a year (the ticks that `label` names
+/// by their year).
+fn begins_year(t: f64) -> bool {
+    let t = t.round();
+    let (_, m, d) = civil(t);
+    m == 1 && d == 1 && t.rem_euclid(DAY) == 0.0
+}
+
 /// `(year, month, day)` of the UTC day holding `t` seconds since the
 /// epoch (proleptic Gregorian).
 fn civil(t: f64) -> (i64, u32, u32) {
@@ -409,6 +423,26 @@ mod tests {
 
     fn time(d0: f64, d1: f64) -> Time {
         Time::new().domain(d0, d1)
+    }
+
+    /// Monthly ticks over 2020-2022: exactly the Januaries are major. Yearly
+    /// ticks (all years) and other scales have none.
+    #[test]
+    fn january_ticks_are_major_while_the_interval_is_under_a_year() {
+        let t = time(date(2020, 1, 1) - 10.0 * DAY, date(2022, 7, 15)).ticks(32);
+        assert_eq!(t.values.len(), t.major.len());
+        let majors: Vec<&str> = t
+            .labels
+            .iter()
+            .zip(&t.major)
+            .filter(|(_, m)| **m)
+            .map(|(l, _)| l.as_str())
+            .collect();
+        assert_eq!(majors, ["2020", "2021", "2022"]);
+        assert!(t.labels.iter().any(|l| l == "Jul"));
+        let yearly = time(date(2010, 1, 1), date(2020, 1, 1)).ticks(10);
+        assert!(yearly.major.iter().all(|m| !m), "{yearly:?}");
+        assert_eq!(yearly.major.len(), yearly.values.len());
     }
 
     /// Daily ticks across February in a leap year: Feb 29 exists, and

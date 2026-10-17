@@ -57,6 +57,31 @@ pub struct Ticks {
     pub values: Vec<f64>,
     /// One label per value.
     pub labels: Vec<String>,
+    /// One flag per value: a major tick is drawn heavier (a `Time` tick that
+    /// begins a year while the tick interval is shorter than one). Every
+    /// other scale marks none.
+    pub major: Vec<bool>,
+}
+
+impl Ticks {
+    /// Ticks with no major ones.
+    pub fn new(values: Vec<f64>, labels: Vec<String>) -> Self {
+        let major = vec![false; values.len()];
+        Self {
+            values,
+            labels,
+            major,
+        }
+    }
+
+    /// The weight tick `i`'s label is drawn in.
+    pub(crate) fn weight(&self, i: usize) -> gup_text::Weight {
+        if self.major.get(i).copied().unwrap_or(false) {
+            gup_text::Weight::SemiBold
+        } else {
+            gup_text::Weight::Regular
+        }
+    }
 }
 
 /// A scale from a domain to a pixel range: a numeric domain (`In = f32`:

@@ -15,7 +15,7 @@ use gup_core::geom::{Point, Rect};
 use gup_core::prelude::*;
 use gup_core::scene::{
     Anchor, GradientBar, GradientDirection, HAlign, Item, ItemKind, RectPrim, TextRole, TextRun,
-    TextStyle, VAlign, Z_GRID, Z_TITLE,
+    TextStyle, VAlign, Weight, Z_GRID, Z_TITLE,
 };
 use gup_core::{Layout, Scene};
 use gup_visual_regression::LayoutMetadata;
@@ -79,6 +79,7 @@ pub fn scene(cx: &Context) -> LegendScene {
         style: TextStyle {
             size: Px(LEGEND_SIZE),
             color: Color::hex(0x333333),
+            weight: Weight::Regular,
         },
         role: TextRole::Legend,
     };
@@ -112,6 +113,7 @@ pub fn legend_metadata(s: &LegendScene) -> LayoutMetadata {
             size: run.style.size.0,
             at: [run.at.x, run.at.y],
             anchor: run.anchor,
+            weight: run.style.weight,
         });
         meta = meta.with_text(
             role(run.role),

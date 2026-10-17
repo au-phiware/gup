@@ -197,7 +197,7 @@ impl PositionScale for Log {
                 .collect();
         }
         let labels = values.iter().map(|&v| format_log_tick(v)).collect();
-        Ticks { values, labels }
+        Ticks::new(values, labels)
     }
 }
 

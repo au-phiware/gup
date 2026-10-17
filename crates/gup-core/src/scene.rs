@@ -253,15 +253,17 @@ impl GradientBar {
     }
 }
 // Text anchors come from `gup-text`, which lays the runs out.
-pub use gup_text::{Anchor, HAlign, VAlign};
+pub use gup_text::{Anchor, HAlign, VAlign, Weight};
 
-/// Font size and colour.
+/// Font size, weight and colour.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct TextStyle {
     /// Font size.
     pub size: Px,
     /// Colour.
     pub color: Color,
+    /// Weight.
+    pub weight: Weight,
 }
 
 /// What a text run is for.
@@ -300,6 +302,7 @@ impl TextRun {
             size: self.style.size.0,
             at: [self.at.x, self.at.y],
             anchor: self.anchor,
+            weight: self.style.weight,
         }
     }
 }
