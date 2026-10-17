@@ -93,9 +93,22 @@ pub trait ShaderFn: Clone + Send + Sync + 'static {
     }
 
     /// The legend a plot draws for a colour encoding through this
-    /// function, if it has one: the colour scales override it. A chain
-    /// has none (see [`DynShaderFn::legend`]).
+    /// function, if it has one: the colour scales override it, and so can
+    /// a `#[wgsl_function]` colour function. A chain takes its last link's
+    /// and puts the ticks in the data's units ([`EncodeFn::legend`]).
     fn legend(&self) -> Option<crate::Legend> {
+        None
+    }
+
+    /// The legend of a colour function with a CPU mirror and no palette
+    /// of its own, when its input spans `extent`: `#[wgsl_function]`
+    /// implements it as a sampled ramp (256 entries from the mirror, five
+    /// round ticks) for a colour function whose type implements
+    /// [`CpuMirror`]. A plot asks it only when [`legend`](Self::legend)
+    /// has none. Write your own `legend` to override.
+    #[doc(hidden)]
+    fn sampled_legend(&self, extent: (f64, f64)) -> Option<crate::Legend> {
+        let _ = extent;
         None
     }
 
@@ -173,6 +186,19 @@ pub trait EncodeFn: Clone + Send + Sync + 'static {
     /// The extent of the chain's numeric output over column values in
     /// `extent`: each link's [`ShaderFn::image`] in turn.
     fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)>;
+
+    /// The legend a plot draws for a colour encoding through this
+    /// function: the last link's, with a ramp's ticks in the data's units
+    /// (see [`Then`]). `None` for a swatch legend at the end of a chain,
+    /// for a chain that was not fitted, and for a function with no legend.
+    /// (Named apart from [`ShaderFn::legend`], which scales also have.)
+    fn encode_legend(&self) -> Option<crate::Legend>;
+
+    /// [`encode_legend`](Self::encode_legend) for a function whose input
+    /// spans `extent`, which also gives a colour function without a
+    /// palette its sampled ramp ([`ShaderFn::sampled_legend`]).
+    #[doc(hidden)]
+    fn encode_legend_over(&self, extent: (f64, f64)) -> Option<crate::Legend>;
 
     /// Apply the plot's theme to every link (see [`ShaderFn::apply_theme`]).
     fn apply_theme(&mut self, theme: &Theme);
@@ -323,6 +349,9 @@ pub trait EncodeFn: Clone + Send + Sync + 'static {
     ///
     /// let cx = Context::new_blocking()?;
     /// let mut plot = Plot::new();
+    /// // The legend would narrow the plot until Amsterdam's disc covers
+    /// // London's centre, which the pixel check below reads.
+    /// plot.legends(false);
     /// let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
     /// let area = Pow::sqrt().domain(0.0, 4e7);
     /// plot.add(Selection::<City, Circle>::new(cities.clone()))
@@ -362,6 +391,7 @@ pub trait EncodeFn: Clone + Send + Sync + 'static {
         Then {
             first: self.clone(),
             next,
+            extent: None,
         }
     }
 }
@@ -388,6 +418,14 @@ impl<S: ShaderFn> EncodeFn for S {
 
     fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)> {
         ShaderFn::image(self, extent)
+    }
+
+    fn encode_legend(&self) -> Option<crate::Legend> {
+        ShaderFn::legend(self)
+    }
+
+    fn encode_legend_over(&self, extent: (f64, f64)) -> Option<crate::Legend> {
+        ShaderFn::legend(self).or_else(|| ShaderFn::sampled_legend(self, extent))
     }
 }
 
@@ -425,6 +463,8 @@ impl Feeds<f32> for Px {}
 pub struct Then<A, B> {
     first: A,
     next: B,
+    /// The data extent the chain was last fitted to.
+    extent: Option<(f64, f64)>,
 }
 
 impl<A, B> Then<A, B> {
@@ -436,6 +476,18 @@ impl<A, B> Then<A, B> {
     /// The function fed by [`first`](Self::first).
     pub fn next(&self) -> &B {
         &self.next
+    }
+}
+
+impl<A, B> Then<A, B>
+where
+    A: CpuMirror,
+    A::Output: Feeds<B::Input>,
+    B: EncodeFn,
+{
+    /// The chain's legend once fitted: [`EncodeFn::encode_legend`].
+    pub fn legend(&self) -> Option<crate::Legend> {
+        self.encode_legend()
     }
 }
 
@@ -455,6 +507,7 @@ where
     }
 
     fn fit(&mut self, extent: (f64, f64)) -> Result<()> {
+        self.extent = Some(extent);
         self.first.fit(extent)?;
         let (a, b) = (self.first.eval(extent.0), self.first.eval(extent.1));
         self.next.fit((a.min(b), a.max(b)))
@@ -465,6 +518,7 @@ where
         let Some(last) = keys.len().checked_sub(1) else {
             return Ok(());
         };
+        self.extent = Some((0.0, last as f64));
         let (a, b) = (self.first.eval(0.0), self.first.eval(last as f64));
         self.next.fit((a.min(b), a.max(b)))
     }
@@ -476,6 +530,31 @@ where
 
     fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)> {
         self.next.image(self.first.image(extent)?)
+    }
+
+    /// The last link's ramp with its ticks in the data's units: about five
+    /// round values of the fitted data extent, each placed at the image of
+    /// the value through the earlier links (their CPU mirrors). The bar
+    /// shows the colour function's colours, so it stays right for a
+    /// non-monotonic earlier link; only the ticks then run out of order.
+    /// A swatch legend, or a chain that ends in a chain, has none.
+    fn encode_legend(&self) -> Option<crate::Legend> {
+        self.encode_legend_over(self.extent?)
+    }
+
+    fn encode_legend_over(&self, extent: (f64, f64)) -> Option<crate::Legend> {
+        if self.next.links().len() != 1 {
+            return None;
+        }
+        let (a, b) = (self.first.eval(extent.0), self.first.eval(extent.1));
+        let crate::Legend::Ramp(ramp) = self.next.encode_legend_over((a.min(b), a.max(b)))? else {
+            return None;
+        };
+        Some(crate::Legend::Ramp(ramp.with_data_ticks(
+            extent,
+            |v| self.first.eval(v),
+            5,
+        )))
     }
 }
 
@@ -830,6 +909,7 @@ where
 {
     fn into_encoding(self) -> Encoding<T> {
         Encoding::Column(Box::new(ColumnEncoding {
+            extent: None,
             accessor: self.accessor,
             func: self.func,
             _d: PhantomData,
@@ -886,6 +966,8 @@ pub trait DynColumnEncoding<T>: Send + Sync {
     fn fit(&mut self, stats: Option<ColumnStats>) -> Result<()>;
     /// See [`EncodeFn::image`].
     fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)>;
+    /// The legend of the encoding as fitted (see [`EncodeFn::legend`]).
+    fn legend(&self) -> Option<crate::Legend>;
     /// See [`EncodeFn::apply_theme`].
     fn apply_theme(&mut self, theme: &Theme);
 }
@@ -893,6 +975,8 @@ pub trait DynColumnEncoding<T>: Send + Sync {
 struct ColumnEncoding<A, S, D> {
     accessor: A,
     func: S,
+    /// The extent of the column the function was last fitted to.
+    extent: Option<(f64, f64)>,
     _d: PhantomData<fn() -> D>,
 }
 
@@ -913,11 +997,19 @@ where
     }
 
     fn fit(&mut self, stats: Option<ColumnStats>) -> Result<()> {
-        stats.map_or(Ok(()), |s| self.func.fit(s.extent()))
+        let Some(stats) = stats else { return Ok(()) };
+        self.extent = Some(stats.extent());
+        self.func.fit(stats.extent())
     }
 
     fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)> {
         self.func.image(extent)
+    }
+
+    fn legend(&self) -> Option<crate::Legend> {
+        self.func
+            .encode_legend()
+            .or_else(|| self.func.encode_legend_over(self.extent?))
     }
 
     fn apply_theme(&mut self, theme: &Theme) {
@@ -959,6 +1051,10 @@ where
 
     fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)> {
         self.func.image(extent)
+    }
+
+    fn legend(&self) -> Option<crate::Legend> {
+        self.func.encode_legend()
     }
 
     fn apply_theme(&mut self, theme: &Theme) {

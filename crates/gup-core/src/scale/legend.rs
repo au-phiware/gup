@@ -106,6 +106,57 @@ impl Ramp {
         sample_lut(&self.lut, if self.reverse { 1.0 - t } else { t })
     }
 
+    /// A ramp of `f`'s colours over `domain` (256 entries, `t` linear in
+    /// the value), with about `ticks` ticks at round values: the legend of
+    /// a colour function that has a CPU mirror but no palette of its own.
+    pub fn sampled(domain: (f64, f64), f: impl Fn(f64) -> Color, ticks: usize) -> Self {
+        const SIZE: usize = 256;
+        let byte = |c: f32| (c.clamp(0.0, 1.0) * 255.0).round() as u8;
+        let lut: Vec<[u8; 4]> = (0..SIZE)
+            .map(|i| {
+                let v = domain.0 + (domain.1 - domain.0) * i as f64 / (SIZE - 1) as f64;
+                let c = f(v);
+                [byte(c.r), byte(c.g), byte(c.b), byte(c.a)]
+            })
+            .collect();
+        Self::linear(lut.into(), false, domain, ticks)
+    }
+
+    /// This ramp with its ticks replaced by about `count` round values of
+    /// the data `extent` that feeds it through `image` (a chain's earlier
+    /// links): each tick's `t` is where its image falls along the bar. A
+    /// tick whose image is not finite is dropped. Ticks stay in data
+    /// order, so a non-monotonic `image` puts them out of order on the bar.
+    pub(crate) fn with_data_ticks(
+        mut self,
+        extent: (f64, f64),
+        image: impl Fn(f64) -> f64,
+        count: usize,
+    ) -> Self {
+        let (lo, hi) = (extent.0.min(extent.1), extent.0.max(extent.1));
+        let step = super::tick_step(lo, hi, count);
+        let first = (lo / step).ceil() as i64;
+        let last = (hi / step).floor() as i64;
+        let mut values: Vec<f64> = (first..=last)
+            .map(|i| super::step_value(i as f64, step))
+            .collect();
+        if values.is_empty() {
+            values = vec![lo, hi];
+        }
+        self.ticks = values
+            .into_iter()
+            .filter_map(|value| {
+                let img = image(value);
+                img.is_finite().then(|| RampTick {
+                    t: self.t(img),
+                    value,
+                    label: super::format_with_step(value, step),
+                })
+            })
+            .collect();
+        self
+    }
+
     /// A ramp whose `t` is linear in the value over `(lo, hi)`, with
     /// about `count` ticks.
     pub(crate) fn linear(

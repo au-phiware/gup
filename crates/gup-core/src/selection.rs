@@ -592,8 +592,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
                 continue;
             }
             if let Some(Encoding::Column(c)) = enc
-                && let [link] = c.links().as_slice()
-                && let Some(legend) = link.legend()
+                && let Some(legend) = c.legend()
             {
                 out.push((self.legend_titles[i].clone(), legend));
             }

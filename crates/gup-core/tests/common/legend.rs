@@ -11,12 +11,11 @@
 
 use super::scatter::{self, HEIGHT, WIDTH};
 use super::vr::{metadata, rect, rgba8, role};
-use gup_core::Ramp;
 use gup_core::geom::{Point, Rect};
 use gup_core::prelude::*;
 use gup_core::scene::{
-    Anchor, GradientBar, GradientDirection, HAlign, Item, ItemKind, RectPrim, Rule, TextRole,
-    TextRun, TextStyle, VAlign, Z_GRID, Z_TITLE,
+    Anchor, GradientBar, GradientDirection, HAlign, Item, ItemKind, RectPrim, TextRole, TextRun,
+    TextStyle, VAlign, Z_GRID, Z_TITLE,
 };
 use gup_core::{Layout, Scene};
 use gup_visual_regression::LayoutMetadata;
@@ -108,95 +107,6 @@ pub fn legend_metadata(s: &LegendScene) -> LayoutMetadata {
         .with_guide(rect(s.bar).inflate(0.5))
         .with_expected_color("plot background", rgba8(PLOT_BACKGROUND));
     for run in &s.labels {
-        let ink = font.ink_bounds(&gup_text::Run {
-            text: &run.text,
-            size: run.style.size.0,
-            at: [run.at.x, run.at.y],
-            anchor: run.anchor,
-        });
-        meta = meta.with_text(
-            role(run.role),
-            run.text.to_string(),
-            rect(Rect::new(ink.x, ink.y, ink.width, ink.height)),
-            rgba8(run.style.color),
-        );
-    }
-    meta
-}
-
-/// Colour legends drawn from a scale's `Legend` (RFC-001 S5b), in the
-/// scene items gup-core has today (guides placing them are RFC-001 S7):
-/// what each piece is, so harness metadata can describe it.
-pub struct Placed {
-    /// Swatches, bars and tick rules: guide regions for the harness.
-    pub guides: Vec<Rect>,
-    /// Labels, with their roles and colours.
-    pub labels: Vec<TextRun>,
-}
-
-const LEGEND_INK: Color = Color::hex(0x333333);
-
-fn legend_label(text: &str, at: Point, anchor: Anchor) -> TextRun {
-    TextRun {
-        text: text.into(),
-        at,
-        anchor,
-        style: TextStyle {
-            size: Px(LEGEND_SIZE),
-            color: LEGEND_INK,
-        },
-        role: TextRole::Legend,
-    }
-}
-
-/// A vertical ramp legend in `bar`: the gradient (low end at the bottom),
-/// a short tick to the right of the bar at each of the ramp's ticks, and
-/// its label.
-pub fn ramp(scene: &mut Scene, ramp: &Ramp, bar: Rect) -> Placed {
-    scene.push(Item {
-        z: Z_TITLE,
-        clip: None,
-        kind: ItemKind::Gradient(GradientBar::new(ramp, bar, GradientDirection::Vertical)),
-    });
-    let mut rules = Vec::new();
-    let mut labels = Vec::new();
-    for tick in ramp.ticks() {
-        let y = bar.bottom() - tick.t as f32 * bar.height;
-        let y = y.floor() + 0.5;
-        rules.push(Rule {
-            p0: Point::new(bar.right(), y),
-            p1: Point::new(bar.right() + 4.0, y),
-            width: Px(1.0),
-            color: LEGEND_INK,
-        });
-        labels.push(legend_label(
-            &tick.label,
-            Point::new(bar.right() + 7.0, y),
-            Anchor::new(HAlign::Start, VAlign::Middle),
-        ));
-    }
-    let mut guides = vec![bar];
-    guides.extend(rules.iter().map(Rule::bounds));
-    scene.push(Item {
-        z: Z_TITLE,
-        clip: None,
-        kind: ItemKind::Rules(rules),
-    });
-    scene.push(Item {
-        z: Z_TITLE,
-        clip: None,
-        kind: ItemKind::Text(labels.clone()),
-    });
-    Placed { guides, labels }
-}
-
-/// `meta` plus a placed legend's guide regions and labels.
-pub fn with_legend(mut meta: LayoutMetadata, placed: &Placed) -> LayoutMetadata {
-    let font = gup_text::Font::inter();
-    for g in &placed.guides {
-        meta = meta.with_guide(rect(*g).inflate(0.5));
-    }
-    for run in &placed.labels {
         let ink = font.ink_bounds(&gup_text::Run {
             text: &run.text,
             size: run.style.size.0,
