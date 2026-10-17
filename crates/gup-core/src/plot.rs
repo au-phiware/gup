@@ -115,6 +115,13 @@ pub struct Plot {
     cache: Option<(CacheKey, Resolved)>,
     /// How many full (uncached) resolves have succeeded.
     generation: u64,
+    /// Whether each axis (x, y) was widened by the last resolve: its range
+    /// is the whole plot rect, not inset at the far end.
+    widened: [bool; 2],
+    /// The domain a zoom left on each widened axis. While the axis still
+    /// has it, the axis keeps the widened range policy, so zooming moves
+    /// no pixel. A domain set any other way gets the fixed-domain policy.
+    zoomed: [Option<(f64, f64)>; 2],
 }
 
 /// What a cached [`Resolved`] is valid for.
@@ -270,6 +277,19 @@ impl Plot {
             .find_map(|l| l.as_any_mut().downcast_mut())
     }
 
+    /// The layer at `index`, as a test reaches it (counts as a change).
+    #[cfg(test)]
+    fn layer_at_mut<T: Send + Sync + 'static, M: Mark>(
+        &mut self,
+        index: usize,
+    ) -> &mut Selection<T, M> {
+        self.revision = self.revision.wrapping_add(1);
+        self.layers[index]
+            .as_any_mut()
+            .downcast_mut()
+            .expect("the layer has this type")
+    }
+
     /// Zoom both position scales by `factor` about the logical-pixel point
     /// `at` (`factor < 1` zooms in). The values under `at` stay where they
     /// are; a log scale zooms in log space. Only the scales' domains
@@ -289,6 +309,12 @@ impl Plot {
         }
         if let Some(y) = &self.y {
             y.zoom(f64::from(at.y), factor)?;
+        }
+        for (i, axis) in [&self.x, &self.y].into_iter().enumerate() {
+            self.zoomed[i] = axis
+                .as_ref()
+                .filter(|_| self.widened[i])
+                .and_then(|a| a.current_domain());
         }
         Ok(())
     }
@@ -519,10 +545,15 @@ impl Plot {
         let mut lay = layout(counts.0, counts.1)?;
         // Automatic domains grow in data units to cover the overhang and
         // padding, so the ticks run to both ends of each axis (GUP-435).
+        // A zoom keeps the policy its axis had (see `Plot::zoomed`).
+        let kept = |i: usize, s: &dyn DynPositionScale| {
+            !s.is_auto() && self.zoomed[i].is_some() && self.zoomed[i] == s.current_domain()
+        };
         let widened = (
-            x.widen(lay.plot.left(), lay.plot.right(), mark_overhang),
-            y.widen(lay.plot.bottom(), lay.plot.top(), mark_overhang),
+            x.widen(lay.plot.left(), lay.plot.right(), mark_overhang) || kept(0, &**x),
+            y.widen(lay.plot.bottom(), lay.plot.top(), mark_overhang) || kept(1, &**y),
         );
+        self.widened = [widened.0, widened.1];
         if widened.0 || widened.1 {
             // Tick values stay on the rounded numbers; the margins may change.
             lay = layout(counts.0, counts.1)?;
@@ -606,12 +637,12 @@ impl Plot {
         let (ax_y, ay_x) = (plot.bottom() + 0.5, plot.left() - 0.5);
         // A domain the user fixed is not widened, so its axis line covers
         // only the range (no bare stretch past the end ticks).
-        let (x_from, x_to) = if x.is_auto() {
+        let (x_from, x_to) = if x.is_auto() || widened.0 {
             (ay_x, plot.right() - 0.5)
         } else {
             (ay_x, plot.right() - inset)
         };
-        let (y_from, y_to) = if y.is_auto() {
+        let (y_from, y_to) = if y.is_auto() || widened.1 {
             (plot.top() + 0.5, ax_y)
         } else {
             (plot.top() + inset, ax_y)
@@ -952,8 +983,7 @@ mod tests {
         let mut appended = 0;
         let mut end = 100;
         for n in [1, 27, 36, 100, 300, 5] {
-            let layer: &mut Selection<Pt, Circle> =
-                plot.layers[0].as_any_mut().downcast_mut().unwrap();
+            let layer: &mut Selection<Pt, Circle> = plot.layer_at_mut(0);
             layer.append(points(end..end + n)).unwrap();
             end += n;
             appended += u64::from(n);
@@ -1000,8 +1030,7 @@ mod tests {
         let start = cx.upload_stats();
         let mut end = 10;
         for n in [3, 8, 1] {
-            let layer: &mut Selection<Pt, Line> =
-                plot.layers[0].as_any_mut().downcast_mut().unwrap();
+            let layer: &mut Selection<Pt, Line> = plot.layer_at_mut(0);
             layer.append(points(end..end + n)).unwrap();
             end += n;
             let resolved = plot.resolve(&cx, 400.0, 300.0).unwrap();
@@ -1076,7 +1105,7 @@ mod tests {
         }
         plot.resolve(&cx, 400.0, 300.0).unwrap();
         let start = cx.upload_stats();
-        let layer: &mut Selection<R, Circle> = plot.layers[1].as_any_mut().downcast_mut().unwrap();
+        let layer: &mut Selection<R, Circle> = plot.layer_at_mut(1);
         layer
             .append(vec![("c", 5.0), ("a", 6.0), ("c", 7.0)])
             .unwrap();
@@ -1130,7 +1159,7 @@ mod tests {
     }
 
     fn tracked_layer(plot: &mut Plot) -> &mut Selection<Tracked, Circle> {
-        plot.layers[0].as_any_mut().downcast_mut().unwrap()
+        plot.layer_at_mut(0)
     }
 
     /// Which chunks of the layer still have their CPU copy.
@@ -1273,7 +1302,7 @@ mod tests {
         assert_ne!(*before.get_pixel(x0, y0), white);
         assert_ne!(*before.get_pixel(x1, y1), white);
 
-        let layer: &mut Selection<Pt, Circle> = plot.layers[0].as_any_mut().downcast_mut().unwrap();
+        let layer: &mut Selection<Pt, Circle> = plot.layer_at_mut(0);
         layer.store_mut().unwrap().clear_valid(0, 0);
         let (after, _) = plot.render_resolved(&cx, 300, 200).unwrap();
         assert_eq!(*after.get_pixel(x0, y0), white, "row 0 still drawn");
@@ -1318,7 +1347,7 @@ mod tests {
             assert_ne!(*before.get_pixel(px, py), white, "segment {i} not drawn");
         }
 
-        let layer: &mut Selection<Pt, Line> = plot.layers[0].as_any_mut().downcast_mut().unwrap();
+        let layer: &mut Selection<Pt, Line> = plot.layer_at_mut(0);
         let store = layer.store_mut().unwrap();
         for row in [3, 5, 8] {
             store.clear_valid(row, 1);
@@ -1390,8 +1419,7 @@ mod tests {
 
         let start = cx.upload_stats();
         let linked = cx.pipelines().stats.programs_linked;
-        let layer: &mut Selection<Row, Circle> =
-            plot.layers[0].as_any_mut().downcast_mut().unwrap();
+        let layer: &mut Selection<Row, Circle> = plot.layer_at_mut(0);
         layer.append([(35.0, 2.0, "d"), (36.0, 3.0, "a")]).unwrap();
         let second = plot.resolve(&cx, 400.0, 300.0).unwrap();
         let image = target.render_blocking(&cx, &second.scene).unwrap();
@@ -1475,8 +1503,7 @@ mod tests {
         }
 
         let start = cx.upload_stats();
-        let layer: &mut Selection<Row, crate::Rect> =
-            plot.layers[0].as_any_mut().downcast_mut().unwrap();
+        let layer: &mut Selection<Row, crate::Rect> = plot.layer_at_mut(0);
         layer.append([("D", 7.0), ("A", 9.0)]).unwrap();
         let second = plot.resolve(&cx, 400.0, 300.0).unwrap();
         let after = target.render_blocking(&cx, &second.scene).unwrap();

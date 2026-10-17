@@ -135,6 +135,9 @@ fn a_derived_radius_follows_its_closure_without_column_writes() {
     );
 
     *r.lock().unwrap() = 25.0;
+    // The closure reads state the plot cannot see: touch the layer so the
+    // cached resolve is not reused (see `Derived`).
+    let _ = plot.layer_mut::<(), Circle>();
     let start = cx.upload_stats();
     let second = render(&cx, &mut plot, 300, 200);
     let written = cx.upload_stats() - start;

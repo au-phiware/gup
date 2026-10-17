@@ -21,12 +21,22 @@ struct Fixture {
 }
 
 fn fixture() -> Fixture {
+    fixture_with(Linear::new(), Linear::new())
+}
+
+fn fixture_with(xs: Linear, ys: Linear) -> Fixture {
     let mut plot = Plot::new();
-    let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
+    let (x, y) = (plot.x(xs), plot.y(ys));
     let colour = ScaleRef::new(Sequential::viridis());
     plot.add(Selection::<Row, Circle>::new(
         (0..50)
-            .map(|i| (f64::from(i), f64::from(i * i % 17), f64::from(i % 5)))
+            .map(|i| {
+                (
+                    f64::from(i * 10),
+                    f64::from(i * i % 9 * 10),
+                    f64::from(i % 5),
+                )
+            })
             .collect::<Vec<Row>>(),
     ))
     .attr(Circle::X, x.encode(|r: &Row| r.0))
@@ -151,8 +161,84 @@ fn close(a: f64, b: f64) -> bool {
     (a - b).abs() <= 1e-9 * b.abs().max(a.abs()).max(1.0)
 }
 
+/// `steps` wheel turns of two lines, each resolved: both domains shrink to
+/// 0.85² and the values under the pointer stay put, from the first turn on.
+/// The rows keep the y tick labels the same width: the plot rect follows
+/// the label width, and a rect that moves a pixel moves the mapping with it.
+fn wheel_steps(mut f: Fixture, steps: usize) -> Fixture {
+    let cx = cx();
+    let rect = f.plot.resolve(&cx, W, H).unwrap().layout.plot;
+    let at = Point::new(rect.x + rect.width / 2.0, rect.y + rect.height / 2.0);
+    let domain = |f: &Fixture| {
+        (
+            f.x.read().current_domain().unwrap(),
+            f.y.read().current_domain().unwrap(),
+        )
+    };
+    let under = |f: &Fixture| {
+        (
+            f.x.read().invert(f64::from(at.x)),
+            f.y.read().invert(f64::from(at.y)),
+        )
+    };
+    for step in 0..steps {
+        let (dx, dy) = domain(&f);
+        let (ux, uy) = under(&f);
+        assert_eq!(
+            f.plot.handle(Input::Wheel { at, lines: 2.0 }),
+            Response { redraw: true }
+        );
+        f.plot.resolve(&cx, W, H).unwrap();
+        let (ex, ey) = domain(&f);
+        assert!(
+            close(ex.1 - ex.0, (dx.1 - dx.0) * 0.85 * 0.85),
+            "{step}: {dx:?} {ex:?}"
+        );
+        assert!(
+            close(ey.1 - ey.0, (dy.1 - dy.0) * 0.85 * 0.85),
+            "{step}: {dy:?} {ey:?}"
+        );
+        let (vx, vy) = under(&f);
+        assert!(
+            close(vx, ux) && close(vy, uy),
+            "{step}: {ux} {vx} {uy} {vy}"
+        );
+    }
+    f
+}
+
+fn fixed() -> Fixture {
+    fixture_with(
+        Linear::new().domain(0.0, 490.0),
+        Linear::new().domain(0.0, 80.0),
+    )
+}
+
 #[test]
-fn wheel_zooms_about_the_pointer() {
+fn first_wheel_step_does_not_jump() {
+    wheel_steps(fixture(), 1);
+    wheel_steps(fixed(), 1);
+}
+
+#[test]
+fn wheel_keeps_the_value_under_the_pointer() {
+    wheel_steps(fixture(), 3);
+    wheel_steps(fixed(), 3);
+}
+
+#[test]
+fn a_domain_set_after_a_zoom_gets_the_fixed_policy() {
+    let cx = cx();
+    let mut f = wheel_steps(fixture(), 1);
+    let rect = f.plot.layout().unwrap().plot;
+    f.x.write().set_domain(0.0, 490.0).unwrap();
+    f.plot.resolve(&cx, W, H).unwrap();
+    // A fixed domain ends `inset` short of the plot rect's right edge.
+    assert!(f.x.read().eval(490.0) < f64::from(rect.right()) - 1.0);
+}
+
+#[test]
+fn inputs_that_do_nothing() {
     let cx = cx();
     let mut f = fixture();
     let at = Point::new(130.0, 70.0);
@@ -169,33 +255,7 @@ fn wheel_zooms_about_the_pointer() {
             f.y.read().current_domain().unwrap(),
         )
     };
-    let under = |f: &Fixture| {
-        (
-            f.x.read().invert(f64::from(at.x)),
-            f.y.read().invert(f64::from(at.y)),
-        )
-    };
-    let (dx, dy) = domain(&f);
-    let (_ux, _uy) = under(&f);
-    assert_eq!(
-        f.plot.handle(Input::Wheel { at, lines: 2.0 }),
-        Response { redraw: true }
-    );
-    f.plot.resolve(&cx, W, H).unwrap();
     let (ex, ey) = domain(&f);
-    assert!(
-        close(ex.1 - ex.0, (dx.1 - dx.0) * 0.85 * 0.85),
-        "{dx:?} {ex:?}"
-    );
-    assert!(
-        close(ey.1 - ey.0, (dy.1 - dy.0) * 0.85 * 0.85),
-        "{dy:?} {ey:?}"
-    );
-    let (_vx, _vy) = under(&f);
-    // BLOCKED (GUP-444 AC4): fails for auto domains, see the story.
-    #[cfg(any())]
-    assert!(close(vx, ux) && close(vy, uy), "{ux} {vx} {uy} {vy}");
-
     // Nothing to do for these.
     let generation = f.plot.resolve_generation();
     for lines in [0.0, f32::NAN, f32::INFINITY, f32::NEG_INFINITY] {

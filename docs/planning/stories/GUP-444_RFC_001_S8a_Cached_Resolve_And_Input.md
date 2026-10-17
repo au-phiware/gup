@@ -200,6 +200,10 @@ pub trait Chart: 'static {
   "re-evaluated each resolve that is not cached. A `Derived` reading state other
   than the plot's scales and layers should be paired with a change that
   invalidates the cache".
+- **Range policy**: zoom or any `handle` input changes only an axis's domain,
+  never its range policy. A widened automatic axis keeps the full plot rect
+  after a zoom; only a user call that sets the domain gives the fixed-domain
+  (far-end inset) policy.
 - `Input`, `Button` and `Response` are re-exported at the crate root, not in the
   prelude (hosts need them, chart authors do not).
 
@@ -280,38 +284,15 @@ pub trait Chart: 'static {
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
 
-## Blocked (2026-10-17)
+## Resolved (2026-10-17)
 
-**Question**: AC4 requires that after a wheel zoom and the next resolve the data
-value under `at` is unchanged (1e-9). With automatic domains it moves. How
-should that be met?
-
-**Evidence**: `tests/resolve_cache.rs::wheel_zooms_about_the_pointer` (the
-`#[cfg(any())]`-gated assertion). On a plain linear scatter, the x value under
-the plot centre is 25 before the wheel and 25.5955 after the next resolve; y is
-8 then 8.3317. The domain widths are right (0.85² of old). Cause, pre-existing
-and independent of caching: `Plot::resolve` widens an _automatic_ axis in data
-units to cover the mark overhang and gives it the whole plot rect as its range
-(`widen`, `set_ranges`, plot.rs about line 522). `zoom` makes the domain
-explicit, so the next resolve insets the far end of the range by
-`mark_overhang + plot_padding`, which shifts the mapping. The existing
-`zoom_narrows_both_domains_about_the_anchor` test only checks the anchor before
-re-resolving, so it never saw this. The first wheel step after load therefore
-jumps by the inset.
-
-**Options**:
-
-1. Fix in resolve: an axis that was widened keeps its full-rect range once its
-   domain is explicit (or `zoom` converts the domain into the inset-range
-   frame). Changes `resolve`'s range logic beyond Decisions; may affect goldens
-   and zoom uploads.
-2. Narrow AC4's test to explicit domains. Hides the jump.
-3. Accept the jump, relax AC4 to widths only, and file a follow-up.
-
-**Recommendation**: option 1 as its own small change (or a follow-up story
-before S8c), since tooltips and S9 pan will hit it too.
-
-**State**: everything else is implemented and compiles
-(`cargo check --workspace --all-targets`, the wasm harness). Remaining: AC4
-resolution, then the full test run, lint, `old-path-loc`, `wasm-size`,
-`wasm-browser`, `perf-budget`, and the retrospective.
+AC4 failed for automatic domains: zoom made the domain explicit, so the next
+resolve gave the axis the fixed-domain range (far end inset) instead of the
+widened range it had, and the mapping jumped. The coordinator chose to fix it
+here (Decision below). `Plot` now records which axes the last resolve widened
+and the domain each zoom left on them; an axis that still has that domain keeps
+the widened range and axis-line policy. A domain set any other way gets the
+fixed-domain policy. A second finding: the plot rect follows the y tick-label
+width, so the mapping can shift by a pixel when labels change width. That is
+layout, not range policy, so the wheel tests use rows whose tick labels keep
+their width.
