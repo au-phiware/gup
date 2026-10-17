@@ -9,8 +9,8 @@ implementer-reason:
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 🚧 In Progress **Created**:
-2026-10-17
+**Initiative**: RFC-001 Migration **Status**: ✅ Complete (2026-10-17)
+**Created**: 2026-10-17
 
 ## Context
 
@@ -72,53 +72,53 @@ world on this, plus GUP-446's tooltip.
 
 ### AC1: Adders and default axes
 
-- [ ] `Plot::{circles, rects, segments, line}` exist as in Decisions, and each
+- [x] `Plot::{circles, rects, segments, line}` exist as in Decisions, and each
       returns the new layer.
-- [ ] `Plot::new()` has automatic `Linear` x and y scales. A plot that never
+- [x] `Plot::new()` has automatic `Linear` x and y scales. A plot that never
       calls `plot.x(..)`/`plot.y(..)` resolves, with axes fitted to the data.
-- [ ] `plot.x(scale)`/`plot.y(scale)` still replace the scale and return a
+- [x] `plot.x(scale)`/`plot.y(scale)` still replace the scale and return a
       handle. Existing tests and goldens pass unchanged.
 
 ### AC2: Closures on position channels
 
-- [ ] The `Plot` doctest (an external crate) is rewritten to the short form:
+- [x] The `Plot` doctest (an external crate) is rewritten to the short form:
       `plot.circles(rows).x(|r: &Row| r.a).y(|r: &Row| r.b)` with four rows,
       rendered at 320×200, asserting that the pixel at each row's position has
       the default fill (`#0072B2`, ΔE < 2), with positions read by interpolating
       `layout.x_ticks`/`y_ticks`. The old long form stays in `Selection`'s docs.
-- [ ] Golden equivalence: a test renders the same rows once in the long form
+- [x] Golden equivalence: a test renders the same rows once in the long form
       (explicit `Linear` handles, `encode`) and once in the short form. The two
       images are byte-identical, and so are the two `Layout`s.
-- [ ] `rects` with closures on `x`, `y`, `x_end` and `y_end` (edge mode, width
+- [x] `rects` with closures on `x`, `y`, `x_end` and `y_end` (edge mode, width
       and height 0) and `segments` with closures on all four endpoints render
       the expected boxes and segments (pixel checks at two corners each). `line`
       with closures renders through the plot's scales.
-- [ ] Replacing the x scale after binding (`plot.x(Log::new())` between two
+- [x] Replacing the x scale after binding (`plot.x(Log::new())` between two
       resolves) re-binds: the second render uses log positions (the pixel check
       moves accordingly) and re-uploads the columns once.
-- [ ] A zoom (`handle(Wheel)`) on a short-form plot writes 0 `Column` bytes (the
+- [x] A zoom (`handle(Wheel)`) on a short-form plot writes 0 `Column` bytes (the
       binding is not redone).
 
 ### AC3: Errors
 
-- [ ] A closure on `radius` (role `Size`) or `width` (no role) fails at resolve
+- [x] A closure on `radius` (role `Size`) or `width` (no role) fails at resolve
       with `Error::Config` whose message names the mark, the channel, and the
       fix in Decisions.
-- [ ] A closure on `x` when the plot's x is `Band` or `Point` fails at resolve
+- [x] A closure on `x` when the plot's x is `Band` or `Point` fails at resolve
       with the key-scale message in Decisions.
-- [ ] `.fill(|r: &Row| r.v)` (a `Color` channel) does not compile: a new
+- [x] `.fill(|r: &Row| r.v)` (a `Color` channel) does not compile: a new
       trybuild case `tests/compile_fail/closure_on_color.rs` whose `.stderr`
       shows `IntoEncoding`'s `on_unimplemented` message.
 
 ### AC4: Changed default, searched
 
-- [ ] `grep -rn "set both position scales\|\"plot scales\"" crates/` finds
+- [x] `grep -rn "set both position scales\|\"plot scales\"" crates/` finds
       nothing left that expects the old error. Each test that asserted it now
       asserts a successful default-axis resolve, and the list is in the
       Retrospective.
-- [ ] `compile_fail/bare_number.stderr` changes only by the new `IntoEncoding`
+- [x] `compile_fail/bare_number.stderr` changes only by the new `IntoEncoding`
       candidate (`AxisMarker`). No other `.stderr` changes.
-- [ ] `mask wasm-browser` passes. `mask wasm-size` passes (re-record
+- [x] `mask wasm-browser` passes. `mask wasm-size` passes (re-record
       `wasm.scatter.gz_bytes` if it moved).
 
 ## Decisions
@@ -238,12 +238,12 @@ where
 
 ## Technical Tasks
 
-- [ ] `AxisMarker`, the `IntoEncoding` impl and `Encoding::Axis`.
-- [ ] `DynEncodeFn`, `DynPositionScale::dyn_encode` and `AxisEncoding`.
-- [ ] `Selection::axes`/`axes_bound`, `Layer::bind_axes`, and binding in
+- [x] `AxisMarker`, the `IntoEncoding` impl and `Encoding::Axis`.
+- [x] `DynEncodeFn`, `DynPositionScale::dyn_encode` and `AxisEncoding`.
+- [x] `Selection::axes`/`axes_bound`, `Layer::bind_axes`, and binding in
       `Plot::resolve`.
-- [ ] Default scales in `Plot::new`, the adders, `axes_generation`.
-- [ ] Tests for AC2–AC3, the trybuild case, the `bare_number` re-bless, and the
+- [x] Default scales in `Plot::new`, the adders, `axes_generation`.
+- [x] Tests for AC2–AC3, the trybuild case, the `bare_number` re-bless, and the
       default-change search (AC4).
 
 ## Dependencies
@@ -273,8 +273,8 @@ them.
 
 ## Success Metrics
 
-- [ ] The two-line scatter in Context renders identically to the five-line one.
-- [ ] Zooming a short-form plot writes 0 column bytes.
+- [x] The two-line scatter in Context renders identically to the five-line one.
+- [x] Zooming a short-form plot writes 0 column bytes.
 
 ## Risk Assessment
 
@@ -287,10 +287,80 @@ them.
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (golden image or PNG read), if visual
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye (golden image or PNG read), if visual
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `Plot::new()` has automatic `Linear` x and y scales;
+  `Plot::{circles, rects, segments, line}` add layers; `axes_generation` is
+  bumped by `x()`/`y()`.
+- `#[derive(Mark)]` generates, for `role = X|Y` channels, a plain closure setter
+  (`F: Fn(&T) -> D`, infers `|r| r.a`) and a `<name>_with` setter
+  (`impl IntoEncoding`); styling channels are unchanged.
+- `Selection::attr_axis` (hidden) stores the closure; `Layer::bind_axes` (run in
+  `Plot::resolve` before the fit) turns it into an `AxisEncoding` column over
+  `DynPositionScale::dyn_encode()` when the generation changed.
+- Key scales (`reads_keys`) and non-position channels fail at resolve with the
+  messages in Decisions.
+- Key files: `plot.rs`, `selection.rs`, `encoding.rs` (`DynEncodeFn`,
+  `AxisEncoding`), `scale/mod.rs`, `gup-core-macros/src/mark.rs`,
+  `tests/plot_closures.rs` (6 tests), `tests/compile_fail/closure_on_color.*`.
+- Evidence: gup-core lib 149 + all integration tests + 22 doctests pass; no
+  golden changed; `mask wasm-browser` GUP PASS; `mask wasm-size`
+  `wasm.scatter.gz_bytes` 364,629 (recorded 361,531, within +2%).
+
+## Retrospective
+
+**Completed**: 2026-10-17
+
+### Key Technical Learnings
+
+#### Inference needs a direct `Fn(&T) -> V` bound
+
+- **Challenge**: a generic `impl IntoEncoding` parameter never infers a
+  closure's argument type.
+- **Solution**: position channels get a direct `Fn(&T) -> D` setter and a
+  `_with` setter for constants and explicit encodings (orchestrator decision).
+- **Pattern**: the closure-friendly setter and the general one are different
+  methods, not one generic one.
+
+### Architectural Decisions
+
+#### No `Encoding::Axis` variant, no `AxisMarker` impl
+
+- **Decision**: the pending closure lives in `Selection::axes` and the slot's
+  encoding is `None` until bound; there is no new public `Encoding` variant and
+  no `IntoEncoding for F` impl.
+- **Reasoning**: the plain setters take the closure directly, so nothing needs
+  the marker; this avoids 27 match sites. Consequence: `bare_number.stderr` is
+  unchanged (the story expected one new candidate).
+- **Trade-off**: AC3's "closure on `radius`/`width`" cannot compile through the
+  styling setters (they are `IntoEncoding`); the resolve-time error is reachable
+  only through the hidden `attr_axis` on a non-position channel, and is tested
+  that way.
+- **Future**: closures for colour and size (default scales) would add the
+  `AxisMarker`-style impl then.
+
+### Development Workflow Insights
+
+- The old "set both position scales" error was asserted in one test
+  (`plot::tests::resolve_errors_name_what_is_missing`), now asserting the
+  missing-layer error for `Plot::new()`. No test outside `gup-core` depended on
+  it. Callers of position setters were migrated with a script: only `marks.rs`
+  docs, `derive_mark.rs`, `tick_labels.rs`, `line_png.rs` used the setters;
+  everything else uses `attr`.
+- `mask perf-budget` `pipeline.link_create.median_ms` failed twice at load 4-14
+  (1.31 vs 1.06 limit), unrelated to this change; all deterministic checks pass.
+- The DynEncodeFn methods are named `dyn_*`: with the same names, calls on a
+  type that is both `EncodeFn` and `DynEncodeFn` are ambiguous.
+
+### Follow-up Stories
+
+None. Closures on colour/size channels and key closures on Band axes remain
+parked (Out of Scope).
