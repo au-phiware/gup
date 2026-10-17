@@ -75,8 +75,8 @@ X) or `info` (printed, never fails).
 | `pipeline.link_create.cold_ms`    | 1.04      | <= 10     | `pipeline_timings`, its first run                 |
 | `pipeline.link_create.max_ms`     | 1.06      | info      | `pipeline_timings`                                |
 | `wasm.wgpu.gz_bytes`              | 41,712    | info      | `scripts/wasm_size.sh`, bare wgpu                 |
-| `wasm.scatter.gz_bytes`           | 372,092   | +2%       | `scripts/wasm_size.sh`, the reference scatter     |
-| `wasm.over_wgpu.gz_bytes`         | 330,379   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10       |
+| `wasm.scatter.gz_bytes`           | 398,627   | +2%       | `scripts/wasm_size.sh`, the reference scatter     |
+| `wasm.over_wgpu.gz_bytes`         | 356,914   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10       |
 
 A legitimate change that moves a number (a new guide, a bigger feature) records
 the new value here, in the same commit, with the reason in the story.
@@ -309,3 +309,15 @@ seeded violation (GUP-417 retrospective).
     distinct row/mark type in a program pays for them.
   - That leaves 69,621 B of headroom under the cap. Per-instantiation code is
     now the growth to watch, ahead of S9 to S12.
+- **S8 complete: GUP-446, 448 and 449 merged (2026-10-18)**, re-measured by the
+  orchestrator on the merge. WASM scatter 372,092 to 398,627 B gz (+26,535);
+  over bare wgpu 330,379 to 356,914, leaving **43,086 B of headroom** under the
+  400,000 cap:
+  - GUP-446 (hover, click, tooltips) and GUP-448 (`GupApp`) measured 376,211
+    together (+4,119).
+  - GUP-449 (web canvas host) adds the rest. Its browser scene now drives hover,
+    tooltip, click and wheel, so picking and tooltip code that the scatter
+    harness never reached before is now linked as well as the host's DOM
+    listeners. The split between the two is not measured.
+  - S9 to S12 cannot fit in this headroom at this rate. A WASM size story, to
+    attribute the bytes with `twiggy` and cut them, comes before S9.

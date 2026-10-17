@@ -3349,3 +3349,26 @@ relative.
 
 First pick (index build): 14 ms (budget 50 ms). Mean of 10,000 random picks: 12
 us (budget 20 us; 99% of them hit something, in a dense field).
+
+## S8f findings (2026-10-18, GUP-449)
+
+- **Size.** `wasm.scatter.gz_bytes` 372,092 to 398,657 (+26,565 B gz) with
+  `features = ["web"]` and the interactive harness (hooks, `CanvasApp`, DOM
+  glue, `web-sys` event bindings). `over_wgpu` is 356,944 B against the 400,000
+  B limit. This is under the 30,000 B escalation line; the budget is left to the
+  orchestrator to re-record.
+- **Synthetic events work.** `PointerEvent` and `WheelEvent` dispatched on the
+  canvas reach the listeners in headless Chromium on SwiftShader, and two
+  `requestAnimationFrame`s are enough for a redraw. No flakiness seen. Using
+  `clientX - getBoundingClientRect().left` for coordinates works for synthetic
+  events.
+- **Taken context.** `getContext("webgpu")` on a canvas that already has a
+  `"2d"` context returns null, and wgpu reports it as a `CreateSurfaceError` (no
+  console error), so `CanvasApp::new` returns `Err` naming the canvas.
+- **wasm-bindgen `Option::None`** reaches JavaScript as `undefined`, not `null`;
+  the page compares with `== null`.
+- **API additions to the Decisions.** `CanvasApp::context()` (the harness's
+  awaited `ImageTarget` render needs the app's `Context`, since GPU columns are
+  tied to it) and `plot_centre()` in the harness. `surface_config` lives in
+  `src/surface.rs`, not `window.rs`, because it is shared by two features and
+  `window.rs` is compiled only with `window`.

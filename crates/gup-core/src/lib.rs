@@ -107,10 +107,14 @@ pub mod scene;
 mod scope;
 mod selection;
 mod shader;
+#[cfg(any(feature = "window", all(feature = "web", target_arch = "wasm32")))]
+mod surface;
 mod svg;
 pub mod target;
 mod theme;
 mod tooltip;
+#[cfg(all(feature = "web", target_arch = "wasm32"))]
+pub mod web;
 #[cfg(feature = "window")]
 mod window;
 

@@ -18,6 +18,7 @@
         render_band_categorical,
         render_diverging,
         render_user_function,
+        show_scatter,
       } from "./scatter.js";
       const out = document.getElementById("out");
       const [w, h] = [320, 200];
@@ -133,8 +134,115 @@
         const bandColoured = colouredPx(band);
         const divergingColoured = colouredPx(diverging);
         const userColoured = colouredPx(user);
+        // Interactive scatter on a canvas (RFC-001 S8f): synthetic pointer
+        // and wheel events through the DOM listeners of `CanvasApp`, read
+        // back through hooks and by pixels.
+        const frames = async () => {
+          for (let i = 0; i < 2; i++)
+            await new Promise(r => requestAnimationFrame(r));
+        };
+        let interactive = "ok";
+        let hoverPx = null;
+        try {
+          const canvas = document.createElement("canvas");
+          canvas.style.cssText = `width:${w}px;height:${h}px;display:block`;
+          document.body.appendChild(canvas);
+          // AC3: a canvas that already has a 2d context cannot take a
+          // WebGPU surface; show_scatter must reject, mentioning the canvas.
+          const taken = document.createElement("canvas");
+          taken.style.cssText = `width:${w}px;height:${h}px;display:block`;
+          document.body.appendChild(taken);
+          taken.getContext("2d");
+          let rejected = null;
+          try {
+            await show_scatter(taken);
+          } catch (e) {
+            rejected = String(e);
+          }
+          if (!rejected || !/canvas/i.test(rejected))
+            throw new Error("taken-context: " + rejected);
+          const app = await show_scatter(canvas);
+          const rect = canvas.getBoundingClientRect();
+          const fire = (type, x, y, extra = {}) =>
+            canvas.dispatchEvent(
+              new PointerEvent(type, {
+                bubbles: true,
+                clientX: rect.left + x,
+                clientY: rect.top + y,
+                pointerId: 1,
+                button: 0,
+                ...extra,
+              })
+            );
+          const step = async (name, check) => {
+            if (interactive !== "ok") return;
+            if (!(await check())) interactive = name;
+          };
+          const [rx, ry] = app.row_px(3);
+          fire("pointermove", rx, ry);
+          await frames();
+          await step("hover", async () => {
+            if (app.hovered_row() !== 3) return false;
+            if (app.tooltip_text() !== "Kea\nx 55") return false;
+            const [tx, ty, tw, th] = app.tooltip_rect();
+            hoverPx = await app.render_rgba();
+            let n = 0,
+              white = 0,
+              dark = 0;
+            for (let y = Math.floor(ty); y < Math.ceil(ty + th); y++)
+              for (let x = Math.floor(tx); x < Math.ceil(tx + tw); x++) {
+                const i = (y * w + x) * 4;
+                n++;
+                const [r, g, b] = [hoverPx[i], hoverPx[i + 1], hoverPx[i + 2]];
+                if (r >= 253 && g >= 253 && b >= 253) white++;
+                if (r < 128 && g < 128 && b < 128) dark++;
+              }
+            return n > 0 && white >= 0.5 * n && dark >= 20;
+          });
+          canvas.dispatchEvent(new PointerEvent("pointerleave"));
+          await frames();
+          await step(
+            "leave",
+            async () => {
+              const t = [app.hovered_row(), app.tooltip_text()];
+              return t[0] === -1 && t[1] == null;
+            }
+          );
+          const [cx1, cy1] = app.row_px(1);
+          fire("pointerdown", cx1, cy1);
+          fire("pointerup", cx1, cy1);
+          await frames();
+          await step(
+            "click",
+            async () => app.clicks() === 1 && app.last_clicked() === 1
+          );
+          const [d0, d1] = app.x_domain();
+          const [px, py] = app.plot_centre();
+          const wheel = new WheelEvent("wheel", {
+            bubbles: true,
+            cancelable: true,
+            clientX: rect.left + px,
+            clientY: rect.top + py,
+            deltaY: -120,
+            deltaMode: 0,
+          });
+          canvas.dispatchEvent(wheel);
+          await frames();
+          await step("wheel", async () => {
+            const [e0, e1] = app.x_domain();
+            const want = (d1 - d0) * 0.85 ** 3;
+            return (
+              wheel.defaultPrevented && Math.abs((e1 - e0) / want - 1) <= 1e-9
+            );
+          });
+          await step("last-error", async () => app.last_error() == null);
+          app.free();
+        } catch (e) {
+          console.log("interactive failed: " + e);
+          interactive = "error:" + e;
+        }
         const c = document.createElement("canvas");
-        [c.width, c.height] = [w, 6 * h];
+        [c.width, c.height] = [w, 7 * h];
         const ctx = c.getContext("2d");
         ctx.putImageData(
           new ImageData(new Uint8ClampedArray(chunked), w, h),
@@ -166,9 +274,16 @@
           0,
           5 * h
         );
+        if (hoverPx)
+          ctx.putImageData(
+            new ImageData(new Uint8ClampedArray(hoverPx), w, h),
+            0,
+            6 * h
+          );
         // The PNG is the chunked render, the dictionary render, the scales
-        // render, the band/categorical render, the diverging render and the
-        // user-function render, top to bottom.
+        // render, the band/categorical render, the diverging render, the
+        // user-function render and the hovered interactive scatter, top to
+        // bottom.
         console.log("GUPPNG " + c.toDataURL("image/png"));
         // The scatter covers a fraction of the plot; a flooded plot (a
         // uniform-layout bug) or an empty one fails.
@@ -183,8 +298,9 @@
           scalesColoured > 200 &&
           bandColoured > 300 &&
           divergingColoured > 300 &&
-          userColoured > 300;
-        result = `${ok ? "PASS" : "FAIL"} white=${white} grey=${grey} coloured=${coloured} chunked-diff=${chunkDiff}px/${chunkWorst} dict=${dictCounts.join(",")} dict-null-row-diff=${dictDiff}px scales=${scalesColoured} band=${bandColoured} diverging=${divergingColoured} user=${userColoured}`;
+          userColoured > 300 &&
+          interactive === "ok";
+        result = `${ok ? "PASS" : "FAIL"} white=${white} grey=${grey} coloured=${coloured} chunked-diff=${chunkDiff}px/${chunkWorst} dict=${dictCounts.join(",")} dict-null-row-diff=${dictDiff}px scales=${scalesColoured} band=${bandColoured} diverging=${divergingColoured} user=${userColoured} interactive=${interactive}`;
       } catch (e) {
         result = "FAIL " + e;
       }

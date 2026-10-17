@@ -9,7 +9,8 @@ implementer-reason:
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 📋 Planned **Created**: 2026-10-17
+**Initiative**: RFC-001 Migration **Status**: ✅ Complete 2026-10-18
+**Created**: 2026-10-17
 
 ## Context
 
@@ -63,11 +64,11 @@ host of its own. This host is therefore a canvas surface plus DOM listeners.
 
 ### AC1: API
 
-- [ ] With feature `web` on `wasm32`,
+- [x] With feature `web` on `wasm32`,
       `gup_core::web::{CanvasTarget,     CanvasApp, show}` exist as in
       Decisions. Native builds with `web` enabled compile and export nothing new
       (`cargo check -p gup-core --features web`).
-- [ ] `cargo clippy --target wasm32-unknown-unknown -p gup-core --features web`
+- [x] `cargo clippy --target wasm32-unknown-unknown -p gup-core --features web`
       is clean (part of `mask all-check`).
 
 ### AC2: Browser scenario in the smoke test
@@ -77,38 +78,38 @@ host of its own. This host is therefore a canvas surface plus DOM listeners.
 styled `w × h` CSS pixels (the size of the other renders) and runs, after the
 existing renders:
 
-- [ ] **Hover**: a `PointerEvent("pointermove")` at row 3's client position,
+- [x] **Hover**: a `PointerEvent("pointermove")` at row 3's client position,
       then two `requestAnimationFrame`s. `hovered_row()` is 3, `tooltip_text()`
       is the expected string, and in `render_rgba()`, at least 50% of the pixels
       inside `tooltip_rect()` are within ±2 of white and at least 20 are darker
       than 128 in every channel.
-- [ ] **Leave**: `pointerleave` makes `hovered_row()` −1 and `tooltip_text()`
+- [x] **Leave**: `pointerleave` makes `hovered_row()` −1 and `tooltip_text()`
       `null`.
-- [ ] **Click**: `pointerdown` and `pointerup` (button 0) at row 1 make
+- [x] **Click**: `pointerdown` and `pointerup` (button 0) at row 1 make
       `clicks()` 1 and `last_clicked()` 1.
-- [ ] **Wheel**: a `WheelEvent` with `deltaY: -120`, `deltaMode: 0` at the plot
+- [x] **Wheel**: a `WheelEvent` with `deltaY: -120`, `deltaMode: 0` at the plot
       centre narrows `x_domain()` to `0.85³` of its width (relative error ≤
       1e-9). `defaultPrevented` is `true`.
-- [ ] The result line gains `interactive=ok` (or the failed step's name), and
+- [x] The result line gains `interactive=ok` (or the failed step's name), and
       `ok` requires all four. `mask wasm-browser` passes with no console error.
-- [ ] The `GUPPNG` image gains a seventh row: the hover step's `render_rgba()`.
+- [x] The `GUPPNG` image gains a seventh row: the hover step's `render_rgba()`.
       The six rows above it are unchanged. The implementer reads
       `browser_scatter.png` and sees the tooltip box beside row 3's dot.
 
 ### AC3: Errors and first frame
 
-- [ ] `CanvasApp::new` awaits the first frame's GPU errors (`settle_gpu_errors`)
+- [x] `CanvasApp::new` awaits the first frame's GPU errors (`settle_gpu_errors`)
       and returns them as `Err`, and returns surface errors as `Err` rather than
       panicking. In the page, `show_scatter` on a canvas whose `"2d"` context
       was taken first rejects, and the page catches the rejection and checks
       that its message mentions the canvas.
-- [ ] A later frame's error goes to `console.error` and is kept in
+- [x] A later frame's error goes to `console.error` and is kept in
       `CanvasApp::last_error()`. After the AC2 steps the page asserts
       `last_error()` is `null` (exported as a hook).
 
 ### AC4: Size
 
-- [ ] `mask wasm-size` passes. If the scatter harness grew, re-record
+- [x] `mask wasm-size` passes. If the scatter harness grew, re-record
       `wasm.scatter.gz_bytes` and note the growth in `PERF_BUDGETS.md`'s log.
       Decision rule: growth over 30,000 B gz is an escalation, not a re-record.
 
@@ -256,8 +257,8 @@ GUP-448.
 
 ## Success Metrics
 
-- [ ] All four interactive steps pass in the CI browser job.
-- [ ] Growth stays within the AC4 rule.
+- [x] All four interactive steps pass in the CI browser job.
+- [x] Growth stays within the AC4 rule.
 
 ## Risk Assessment
 
@@ -270,10 +271,63 @@ GUP-448.
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (golden image or PNG read), if visual
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye (golden image or PNG read), if visual
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `gup_core::web::{CanvasTarget, CanvasApp, show}` (`src/web.rs`, feature `web`,
+  wasm32 only, no winit). `surface_config` is shared with `WindowTarget` from
+  the new `src/surface.rs`.
+- `wasm-size/scatter` gains `show_scatter` and `InteractiveScatter`;
+  `index.html` runs hover, leave, click, wheel, taken-context rejection and
+  `last_error`, and the result line gains `interactive=ok`. The PNG gains a
+  seventh row (the hovered tooltip beside row 3's dot, read and checked).
+- Evidence: `mask wasm-browser` PASS, existing numbers unchanged.
+  `mask wasm-size`: scatter 398,657 B gz (+26,565 B over the recorded 372,092;
+  under the 30,000 B escalation line; `PERF_BUDGETS.md` not edited, left for the
+  orchestrator to re-record). `over_wgpu` 356,944 of 400,000. `mask all-fix`
+  clean. `mask old-path-loc` total 28,910 (old path untouched).
+- Not met as written: AC4's re-record is deferred to the orchestrator by
+  instruction; the `null` checks are `== null` because wasm-bindgen yields
+  `undefined`.
+
+## Retrospective
+
+**Completed**: 2026-10-18
+
+### Key Technical Learnings
+
+#### Browser events in headless Chromium
+
+- **Challenge**: whether synthetic events and `requestAnimationFrame` behave.
+- **Solution**: `dispatchEvent` of `PointerEvent`/`WheelEvent` with `clientX`
+  from `getBoundingClientRect` works; two animation frames settle a redraw.
+- **Pattern**: read the page state through hooks, then check pixels from an
+  awaited `ImageTarget` render of the same resolved scene.
+
+### Architectural Decisions
+
+#### `CanvasApp::context()` and `src/surface.rs`
+
+- **Decision**: expose the app's `Context`; put `surface_config` in its own
+  module rather than `window.rs`.
+- **Reasoning**: GPU columns belong to one `Context`, so the harness cannot
+  render the scene with its own; `window.rs` is gated on `window`.
+- **Trade-off**: a small public addition to the Decisions' API.
+- **Future**: the egui and bevy hosts reuse `surface_config`.
+
+### Development Workflow Insights
+
+- Worktree-isolated shells refuse compound commands; use Write/Edit and single
+  simple commands.
+- Pre-commit runs prettier on edited Markdown: run `prettier --write` first.
+
+### Follow-up Stories
+
+None. (The budget re-record is the orchestrator's.)
