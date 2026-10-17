@@ -8,13 +8,13 @@
 use crate::channel::{Channel, Geometry, Mark, Role, Visual};
 use crate::column::{ColumnFormat, ColumnStore};
 use crate::context::Context;
-use crate::encoding::{Encoding, IntoEncoding, Resource};
+use crate::encoding::{AxisEncoding, Encoding, IntoEncoding, Resource};
 use crate::error::{Error, Result};
 use crate::order::{DrawEntry, DrawOrder, chunk_spans, draw_entries, polyline_spans};
 use crate::render::{
     ChunkDraw, Draws, LayerGpu, LayerUniforms, chunk_uniform_offset, chunk_uniforms,
 };
-use crate::scale::Legend;
+use crate::scale::{DynPositionScale, Legend};
 use crate::scene::MarkBatch;
 use crate::shader::glue::{self, ChannelSource, ChunkBase, Glue, GlueChannel, GlueSpec};
 use crate::theme::Theme;
@@ -108,6 +108,12 @@ pub struct Selection<T, M: Mark> {
     /// Draw order among the plot's items (default 0).
     z: i32,
     encodings: Vec<Option<Encoding<T>>>,
+    /// Closures on position channels, by channel slot, waiting to be
+    /// encoded through the plot's scales (GUP-447). A slot with one has no
+    /// encoding until [`Layer::bind_axes`] makes it a column.
+    axes: Vec<Option<AxisFn<T>>>,
+    /// The plot's axes generation the closures were last bound at (0: not).
+    axes_bound: u64,
     /// Legend titles, by channel slot.
     legend_titles: Vec<Option<String>>,
     /// Evaluated columns, one per column-encoded channel in channel order.
@@ -145,6 +151,8 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             retain: Retain::Auto,
             z: 0,
             encodings: M::CHANNELS.iter().map(|_| None).collect(),
+            axes: M::CHANNELS.iter().map(|_| None).collect(),
+            axes_bound: 0,
             legend_titles: vec![None; M::CHANNELS.len()],
             columns: None,
             order: None,
@@ -258,8 +266,29 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
     where
         E: IntoEncoding<T, V, K>,
     {
-        self.encodings[usize::from(channel.slot())] = Some(encoding.into_encoding());
+        let slot = usize::from(channel.slot());
+        self.encodings[slot] = Some(encoding.into_encoding());
+        self.axes[slot] = None;
         // S0a re-evaluates every column; per-column invalidation is S4.
+        self.columns = None;
+        self.gpu = None;
+        self
+    }
+
+    /// Drive a position `channel` with a closure that the plot encodes
+    /// through its own scale for that axis, when the plot resolves. This
+    /// backs the plain setters `#[derive(Mark)]` generates for `x`, `y`,
+    /// `x_end` and `y_end`.
+    #[doc(hidden)]
+    pub fn attr_axis<F, D>(&mut self, channel: Channel<M, crate::channel::Px>, f: F) -> &mut Self
+    where
+        F: Fn(&T) -> D + Send + Sync + 'static,
+        D: crate::ColumnValue,
+    {
+        let slot = usize::from(channel.slot());
+        self.encodings[slot] = None;
+        self.axes[slot] = Some(Arc::new(move |r| f(r).to_f64()));
+        self.axes_bound = 0;
         self.columns = None;
         self.gpu = None;
         self
@@ -503,6 +532,8 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
     }
 }
 
+type AxisFn<T> = Arc<dyn Fn(&T) -> f64 + Send + Sync>;
+
 /// A plot layer: the object-safe face of a [`Selection`] (internal; the
 /// public `Layer`/`Chart` traits are RFC-001 S7).
 pub(crate) trait Layer: wgpu::WasmNotSendSync {
@@ -510,6 +541,15 @@ pub(crate) trait Layer: wgpu::WasmNotSendSync {
     /// shared by several channels or layers unions from scratch. Called
     /// on every layer before any [`fit_domains`](Self::fit_domains).
     fn begin_fit(&self);
+    /// Encode the closures on position channels through the plot's scales
+    /// (see [`Selection::attr_axis`]), unless that was done at this
+    /// `generation` of the plot's scales.
+    fn bind_axes(
+        &mut self,
+        generation: u64,
+        x: &dyn DynPositionScale,
+        y: &dyn DynPositionScale,
+    ) -> Result<()>;
     /// The layer's z-order among the plot's items.
     fn z(&self) -> i32;
     /// Evaluate accessors (chunked for `cx`'s device) and fit every
@@ -538,6 +578,51 @@ pub(crate) trait Layer: wgpu::WasmNotSendSync {
 }
 
 impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
+    fn bind_axes(
+        &mut self,
+        generation: u64,
+        x: &dyn DynPositionScale,
+        y: &dyn DynPositionScale,
+    ) -> Result<()> {
+        if self.axes_bound == generation || self.axes.iter().all(Option::is_none) {
+            return Ok(());
+        }
+        for (slot, f) in self.axes.iter().enumerate() {
+            let Some(f) = f else { continue };
+            let desc = &M::CHANNELS[slot];
+            let channel = format!("{}::{}", M::NAME, desc.name.to_uppercase());
+            let (scale, axis, what) = match desc.role {
+                Some(Role::X) => (x, "x", "plot x"),
+                Some(Role::Y) => (y, "y", "plot y"),
+                _ => {
+                    return Err(Error::config(
+                        "channel",
+                        format!(
+                            "`{channel}` has no plot scale to encode a closure through; give it                              a scale, e.g. `.{}(Pow::sqrt().range(Px(2.0), Px(12.0)).encode(|r:                              &T| ...))`, or a constant such as `Px(4.0)`",
+                            desc.name
+                        ),
+                    ));
+                }
+            };
+            if scale.reads_keys() {
+                return Err(Error::config(
+                    what,
+                    format!(
+                        "the {axis} scale reads dictionary keys (Band or Point); encode keys                          with `{axis}.encode_key(|r: &T| r.key.as_str())` (`{channel}`)"
+                    ),
+                ));
+            }
+            self.encodings[slot] = Some(Encoding::Column(Box::new(AxisEncoding::new(
+                Arc::clone(f),
+                scale.dyn_encode(),
+            ))));
+        }
+        self.axes_bound = generation;
+        self.columns = None;
+        self.gpu = None;
+        Ok(())
+    }
+
     fn begin_fit(&self) {
         for enc in self.encodings.iter().flatten() {
             if let Encoding::Column(c) = enc {
