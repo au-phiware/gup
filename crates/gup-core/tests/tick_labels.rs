@@ -215,8 +215,8 @@ fn a_line_keeps_its_end_ticks_on_the_data_extent() {
         (0.0, 0.0),
         (200.0, 10.0),
     ]))
-    .x(x.encode(|r: &(f64, f64)| r.0))
-    .y(y.encode(|r: &(f64, f64)| r.1))
+    .x_with(x.encode(|r: &(f64, f64)| r.0))
+    .y_with(y.encode(|r: &(f64, f64)| r.1))
     .width(Px(2.0));
     let r = plot.resolve(&cx, 720.0, 400.0).unwrap();
     let t = &r.layout.x_ticks;

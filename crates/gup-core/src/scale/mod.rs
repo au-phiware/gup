@@ -253,6 +253,11 @@ pub(crate) trait DynPositionScale: Send + Sync {
     /// Returns whether the domain changed; an explicit domain and an
     /// ordinal scale never change. Ticks stay on the rounded values.
     fn widen(&self, a: f32, b: f32, overhang: f32) -> bool;
+    /// A clone of the scale as an encoding function; it shares state with
+    /// the plot's scale (GUP-447).
+    fn dyn_encode(&self) -> Box<dyn crate::encoding::DynEncodeFn>;
+    /// Whether the scale reads dictionary keys (`Band`, `Point`).
+    fn reads_keys(&self) -> bool;
 
     /// Zoom by `factor` about pixel `anchor`: the domain becomes the values
     /// now drawn at the range ends pulled towards (`factor < 1`) or pushed
@@ -271,6 +276,16 @@ pub(crate) trait DynPositionScale: Send + Sync {
 impl<S: PositionScale> DynPositionScale for ScaleRef<S> {
     fn revision(&self) -> u64 {
         self.0.revision.load(Ordering::Relaxed)
+    }
+
+    fn dyn_encode(&self) -> Box<dyn crate::encoding::DynEncodeFn> {
+        Box::new(self.clone())
+    }
+
+    fn reads_keys(&self) -> bool {
+        EncodeFn::links(self)
+            .first()
+            .is_some_and(|l| l.input_format() == crate::column::ColumnFormat::U32)
     }
 
     fn is_auto(&self) -> bool {

@@ -16,7 +16,8 @@ use crate::context::{Context, ContextId};
 use crate::error::{Error, Result};
 use crate::geom::{Point, Rect};
 use crate::input::{Input, Response};
-use crate::scale::{DynPositionScale, PositionScale, ScaleRef, Ticks};
+use crate::marks::{Circle, Line, Rect as MarkRect, Segment};
+use crate::scale::{DynPositionScale, Linear, PositionScale, ScaleRef, Ticks};
 use crate::scene::{
     Anchor, HAlign, Item, ItemKind, Rule, Scene, TextRole, TextRun, TextStyle, VAlign, Weight,
     Z_AXES, Z_GRID, Z_TITLE,
@@ -67,8 +68,42 @@ pub struct Resolved {
     pub scene: Scene,
 }
 
-/// A chart with shared x/y position scales, one data layer, axes and an
-/// optional title.
+/// A chart with shared x/y position scales, data layers, axes and an
+/// optional title. A new plot has automatic linear scales, so a layer and
+/// two closures make a chart:
+///
+/// ```
+/// use gup_core::ImageTarget;
+/// use gup_core::prelude::*;
+///
+/// struct Row { a: f64, b: f64 }
+/// let rows = [(1.0, 2.0), (2.0, 5.0), (3.0, 3.0), (4.0, 8.0)]
+///     .map(|(a, b)| Row { a, b });
+///
+/// let cx = Context::new_blocking()?;
+/// let mut plot = Plot::new();
+/// plot.circles(rows).x(|r| r.a).y(|r| r.b);
+/// let resolved = plot.resolve(&cx, 320.0, 200.0)?;
+/// let image = ImageTarget::new(&cx, 320, 200)?.render_blocking(&cx, &resolved.scene)?;
+///
+/// // Each row is a dot of the default fill (#0072B2) at its position.
+/// let at = |ticks: &[(f64, f32)], v: f64| {
+///     let (a, b) = (ticks[0], ticks[ticks.len() - 1]);
+///     f64::from(a.1) + (v - a.0) * f64::from(b.1 - a.1) / (b.0 - a.0)
+/// };
+/// for (a, b) in [(1.0, 2.0), (2.0, 5.0), (3.0, 3.0), (4.0, 8.0)] {
+///     let (x, y) = (at(&resolved.layout.x_ticks, a), at(&resolved.layout.y_ticks, b));
+///     let p = image.get_pixel(x as u32, y as u32).0;
+///     assert!(p[0] < 10 && (100..130).contains(&p[1]) && p[2] > 160, "{p:?}");
+/// }
+/// # Ok::<(), gup_core::Error>(())
+/// ```
+///
+/// A closure on `x`, `y`, `x_end` or `y_end` is encoded through the plot's
+/// scale for that axis. For a constant (`.y_end_with(0.0)`) or an encoding
+/// through another scale (`.x_with(log.encode(..))`), use the `_with` form.
+/// [`x`](Self::x) and [`y`](Self::y) replace the default scales, and
+/// return handles for encoding colour and size:
 ///
 /// ```
 /// use gup_core::prelude::*;
@@ -97,11 +132,13 @@ pub struct Resolved {
 /// assert_eq!(image.dimensions(), (640, 400));
 /// # Ok::<(), gup_core::Error>(())
 /// ```
-#[derive(Default)]
 pub struct Plot {
     title: Option<String>,
-    x: Option<Box<dyn DynPositionScale>>,
-    y: Option<Box<dyn DynPositionScale>>,
+    x: Box<dyn DynPositionScale>,
+    y: Box<dyn DynPositionScale>,
+    /// Bumped whenever `x` or `y` is replaced, so layers re-bind the
+    /// closures they encode through the plot's scales (starts at 1).
+    axes_generation: u64,
     layers: Vec<Box<dyn Layer>>,
     x_title: Option<String>,
     y_title: Option<String>,
@@ -192,10 +229,32 @@ struct TickLayout {
     plot: Rect,
 }
 
+impl Default for Plot {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Plot {
-    /// An empty plot.
+    /// An empty plot with automatic linear x and y scales, fitted to the
+    /// data of its layers. [`x`](Self::x) and [`y`](Self::y) replace them.
     pub fn new() -> Self {
-        Self::default()
+        Self {
+            title: None,
+            x: Box::new(ScaleRef::new(Linear::new())),
+            y: Box::new(ScaleRef::new(Linear::new())),
+            axes_generation: 1,
+            layers: Vec::new(),
+            x_title: None,
+            y_title: None,
+            theme: Theme::default(),
+            legends_off: false,
+            revision: 0,
+            cache: None,
+            generation: 0,
+            widened: [false; 2],
+            zoomed: [None; 2],
+        }
     }
 
     /// Set the title.
@@ -241,10 +300,14 @@ impl Plot {
     }
 
     /// Use `scale` for the x axis and return a handle to encode with.
+    /// Closures on x channels (`.x(|r| r.t)`) re-bind to the new scale at
+    /// the next resolve; an explicit encoding through another handle is
+    /// drawn against this axis as it is.
     pub fn x<S: PositionScale>(&mut self, scale: S) -> ScaleRef<S> {
         self.revision = self.revision.wrapping_add(1);
         let handle = ScaleRef::new(scale);
-        self.x = Some(Box::new(handle.clone()));
+        self.x = Box::new(handle.clone());
+        self.axes_generation += 1;
         handle
     }
 
@@ -252,8 +315,41 @@ impl Plot {
     pub fn y<S: PositionScale>(&mut self, scale: S) -> ScaleRef<S> {
         self.revision = self.revision.wrapping_add(1);
         let handle = ScaleRef::new(scale);
-        self.y = Some(Box::new(handle.clone()));
+        self.y = Box::new(handle.clone());
+        self.axes_generation += 1;
         handle
+    }
+
+    /// Add a layer of circles over `rows` and return it.
+    pub fn circles<T: Send + Sync + 'static>(
+        &mut self,
+        rows: impl IntoIterator<Item = T>,
+    ) -> &mut Selection<T, Circle> {
+        self.add(Selection::new(rows.into_iter().collect::<Vec<_>>()))
+    }
+
+    /// Add a layer of rectangles over `rows` and return it.
+    pub fn rects<T: Send + Sync + 'static>(
+        &mut self,
+        rows: impl IntoIterator<Item = T>,
+    ) -> &mut Selection<T, MarkRect> {
+        self.add(Selection::new(rows.into_iter().collect::<Vec<_>>()))
+    }
+
+    /// Add a layer of line segments over `rows` and return it.
+    pub fn segments<T: Send + Sync + 'static>(
+        &mut self,
+        rows: impl IntoIterator<Item = T>,
+    ) -> &mut Selection<T, Segment> {
+        self.add(Selection::new(rows.into_iter().collect::<Vec<_>>()))
+    }
+
+    /// Add one polyline through `rows`, in order, and return its layer.
+    pub fn line<T: Send + Sync + 'static>(
+        &mut self,
+        rows: impl IntoIterator<Item = T>,
+    ) -> &mut Selection<T, Line> {
+        self.add(Selection::new(rows.into_iter().collect::<Vec<_>>()))
     }
 
     /// Add a data layer and return it for further `attr` calls.
@@ -304,15 +400,10 @@ impl Plot {
                 format!("{factor} must be finite and positive"),
             ));
         }
-        if let Some(x) = &self.x {
-            x.zoom(f64::from(at.x), factor)?;
-        }
-        if let Some(y) = &self.y {
-            y.zoom(f64::from(at.y), factor)?;
-        }
+        self.x.zoom(f64::from(at.x), factor)?;
+        self.y.zoom(f64::from(at.y), factor)?;
         for (i, axis) in [&self.x, &self.y].into_iter().enumerate() {
-            self.zoomed[i] = axis
-                .as_ref()
+            self.zoomed[i] = Some(axis)
                 .filter(|_| self.widened[i])
                 .and_then(|a| a.current_domain());
         }
@@ -378,7 +469,7 @@ impl Plot {
     /// reads changes.
     fn revision_sum(&self) -> u64 {
         let mut sum = self.revision;
-        for scale in [&self.x, &self.y].into_iter().flatten() {
+        for scale in [&self.x, &self.y] {
             sum = sum.wrapping_add(scale.revision());
         }
         for layer in &self.layers {
@@ -390,16 +481,6 @@ impl Plot {
     fn resolve_full(&mut self, cx: &Context, width: f32, height: f32) -> Result<Resolved> {
         // Errors that a browser reported after an earlier call returned.
         cx.take_gpu_errors()?;
-        let (x, y) = match (&self.x, &self.y) {
-            (Some(x), Some(y)) => (x, y),
-            _ => {
-                return Err(Error::config(
-                    "plot scales",
-                    "set both position scales with `plot.x(..)` and `plot.y(..)` and encode \
-                     Circle::X / Circle::Y through the returned handles",
-                ));
-            }
-        };
         if self.layers.is_empty() {
             return Err(Error::config(
                 "plot layers",
@@ -420,6 +501,11 @@ impl Plot {
                 ));
             }
         }
+
+        for layer in &mut self.layers {
+            layer.bind_axes(self.axes_generation, self.x.as_ref(), self.y.as_ref())?;
+        }
+        let (x, y) = (&self.x, &self.y);
 
         let th = self.theme.clone();
         for layer in &mut self.layers {
@@ -1119,8 +1205,9 @@ mod tests {
     #[test]
     fn resolve_errors_name_what_is_missing() {
         let cx = Context::new_blocking().unwrap();
+        // A new plot has default axes: only the missing layer is an error.
         let err = Plot::new().resolve(&cx, 300.0, 200.0).unwrap_err();
-        assert!(err.to_string().contains("plot.x(..)"), "{err}");
+        assert!(err.to_string().contains("plot.add(..)"), "{err}");
         let mut plot = Plot::new();
         plot.x(Linear::new());
         plot.y(Log::new());

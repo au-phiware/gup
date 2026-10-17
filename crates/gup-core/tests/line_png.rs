@@ -47,8 +47,8 @@ fn draw(
     let x = p.x(Linear::new().domain(xd.0, xd.1));
     let y = p.y(Linear::new().domain(yd.0, yd.1));
     let line = p.add(Selection::<Row, Line>::new(rows.to_vec()));
-    line.x(x.encode(|r: &Row| r.0))
-        .y(y.encode(|r: &Row| r.1))
+    line.x_with(x.encode(|r: &Row| r.0))
+        .y_with(y.encode(|r: &Row| r.1))
         .width(Px(width))
         .color(color);
     if let Some(n) = chunk {
@@ -359,8 +359,8 @@ fn line_series_golden() {
     let x = p.x(Linear::new());
     let y = p.y(Linear::new());
     p.add(Selection::<Row, Line>::new(rows))
-        .x(x.encode(|r: &Row| r.0))
-        .y(y.encode(|r: &Row| r.1))
+        .x_with(x.encode(|r: &Row| r.0))
+        .y_with(y.encode(|r: &Row| r.1))
         .width(Px(2.0))
         .max_chunk_rows(64);
     let resolved = p.resolve(&cx, w as f32, h as f32).unwrap();

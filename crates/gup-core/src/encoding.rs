@@ -1071,6 +1071,92 @@ where
         self.func.apply_theme(theme);
     }
 }
+/// The object-safe half of [`EncodeFn`] (no `encode*`, which are generic).
+/// A plot keeps its position scales behind it so a closure on a position
+/// channel can be encoded through them (GUP-447).
+pub(crate) trait DynEncodeFn: Send + Sync {
+    fn dyn_links(&self) -> Vec<&dyn DynShaderFn>;
+    fn dyn_fit(&mut self, extent: (f64, f64)) -> Result<()>;
+    fn dyn_image(&self, extent: (f64, f64)) -> Option<(f64, f64)>;
+    fn dyn_legend(&self) -> Option<crate::Legend>;
+    fn dyn_legend_over(&self, extent: (f64, f64)) -> Option<crate::Legend>;
+    fn dyn_apply_theme(&mut self, theme: &Theme);
+}
+
+impl<E: EncodeFn> DynEncodeFn for E {
+    fn dyn_links(&self) -> Vec<&dyn DynShaderFn> {
+        EncodeFn::links(self)
+    }
+    fn dyn_fit(&mut self, extent: (f64, f64)) -> Result<()> {
+        EncodeFn::fit(self, extent)
+    }
+    fn dyn_image(&self, extent: (f64, f64)) -> Option<(f64, f64)> {
+        EncodeFn::image(self, extent)
+    }
+    fn dyn_legend(&self) -> Option<crate::Legend> {
+        EncodeFn::encode_legend(self)
+    }
+    fn dyn_legend_over(&self, extent: (f64, f64)) -> Option<crate::Legend> {
+        EncodeFn::encode_legend_over(self, extent)
+    }
+    fn dyn_apply_theme(&mut self, theme: &Theme) {
+        EncodeFn::apply_theme(self, theme);
+    }
+}
+
+/// A closure on a position channel, encoded through a plot scale's shared
+/// state (see [`DynPositionScale::dyn_encode`](crate::scale)).
+pub(crate) struct AxisEncoding<T> {
+    pub(crate) accessor: Arc<dyn Fn(&T) -> f64 + Send + Sync>,
+    pub(crate) func: Box<dyn DynEncodeFn>,
+    extent: Option<(f64, f64)>,
+}
+
+impl<T> AxisEncoding<T> {
+    pub(crate) fn new(
+        accessor: Arc<dyn Fn(&T) -> f64 + Send + Sync>,
+        func: Box<dyn DynEncodeFn>,
+    ) -> Self {
+        Self {
+            accessor,
+            func,
+            extent: None,
+        }
+    }
+}
+
+impl<T> DynColumnEncoding<T> for AxisEncoding<T> {
+    fn evaluate(&mut self, rows: &[T]) -> Result<ColumnData> {
+        Ok(ColumnData::Values(
+            rows.iter().map(|r| (self.accessor)(r)).collect(),
+        ))
+    }
+
+    fn links(&self) -> Vec<&dyn DynShaderFn> {
+        self.func.dyn_links()
+    }
+
+    fn fit(&mut self, stats: Option<ColumnStats>) -> Result<()> {
+        let Some(stats) = stats else { return Ok(()) };
+        self.extent = Some(stats.extent());
+        self.func.dyn_fit(stats.extent())
+    }
+
+    fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)> {
+        self.func.dyn_image(extent)
+    }
+
+    fn legend(&self) -> Option<crate::Legend> {
+        self.func
+            .dyn_legend()
+            .or_else(|| self.func.dyn_legend_over(self.extent?))
+    }
+
+    fn apply_theme(&mut self, theme: &Theme) {
+        self.func.dyn_apply_theme(theme);
+    }
+}
+
 /// Object-safe view of a [`ShaderFn`], used by the glue emitter and the
 /// layer's uniform writer.
 pub trait DynShaderFn: Send + Sync {

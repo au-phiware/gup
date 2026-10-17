@@ -1,0 +1,41 @@
+error[E0277]: `{closure@$DIR/tests/compile_fail/closure_on_color.rs:15:45: 15:54}` cannot drive a channel of visual type `gup_core::Color`
+  --> tests/compile_fail/closure_on_color.rs:15:45
+   |
+15 |     plot.circles(vec![Row { v: 1.0 }]).fill(|r: &Row| r.v);
+   |                                        ---- ^^^^^^^^^^^^^ this encoding does not produce `gup_core::Color` for rows of type `Row`
+   |                                        |
+   |                                        required by a bound introduced by this call
+   |
+   = help: the trait `IntoEncoding<Row, gup_core::Color, _>` is not implemented for closure `{closure@$DIR/tests/compile_fail/closure_on_color.rs:15:45: 15:54}`
+   = note: a `gup_core::Color` channel accepts a constant of type `gup_core::Color` (such as `Px(3.0)`) or `f.encode(|row: &Row| …)` (or `f.encode_key(..)` for string keys) where `f: EncodeFn<Output = gup_core::Color>`
+help: the following other types implement trait `IntoEncoding<T, V, K>`
+  --> src/encoding.rs
+   |
+   |   impl<T, V: Visual> IntoEncoding<T, V, DerivedMarker> for Derived<V> {
+   |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `gup_core::Derived<V>` implements `IntoEncoding<T, V, DerivedMarker>`
+...
+   | / impl<T, V, A, D, S> IntoEncoding<T, V, ColumnMarker<D>> for Encoded<A, S>
+   | | where
+   | |     T: 'static,
+   | |     V: Visual,
+   | |     A: Fn(&T) -> D + Send + Sync + 'static,
+   | |     D: ColumnValue,
+   | |     S: EncodeFn<Input = D::Gpu, Output = V>,
+   | |____________________________________________^ `Encoded<A, S>` implements `IntoEncoding<T, V, ColumnMarker<D>>`
+...
+   | / impl<T, V, K, S> IntoEncoding<T, V, KeyMarker> for KeyEncoded<K, S>
+   | | where
+   | |     T: 'static,
+   | |     V: Visual,
+   | |     K: KeyAccessor<T>,
+   | |     S: EncodeFn<Input = u32, Output = V>,
+   | |_________________________________________^ `KeyEncoded<K, S>` implements `IntoEncoding<T, V, KeyMarker>`
+note: required by a bound in `gup_core::CircleAttrs::fill`
+  --> src/marks.rs
+   |
+   | #[derive(Debug, gup_core_macros::Mark)]
+   |                 ^^^^^^^^^^^^^^^^^^^^^ required by this bound in `CircleAttrs::fill`
+...
+   |     fill: Color,
+   |     ---- required by a bound in this associated function
+   = note: this error originates in the derive macro `gup_core_macros::Mark` (in Nightly builds, run with -Z macro-backtrace for more info)

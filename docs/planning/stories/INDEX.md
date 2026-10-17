@@ -320,7 +320,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   `Selection::on(Event::{Enter, Leave, Click})` handlers and
   `Selection::tooltip`, drawn as an overlay on the cached scene, with a tooltip
   golden. Deps: GUP-444 📋, GUP-445 📋.
-- [GUP-447](GUP-447_RFC_001_S8d_Mark_Adders_And_Default_Axes.md) 📋 — RFC-001
+- [GUP-447](GUP-447_RFC_001_S8d_Mark_Adders_And_Default_Axes.md) ✅ — RFC-001
   step S8d: default linear axes, `plot.circles/rects/segments/line(rows)`, and
   plain closures on position channels bound to the plot's scales. Deps: GUP-424
   ✅, GUP-433 ✅.

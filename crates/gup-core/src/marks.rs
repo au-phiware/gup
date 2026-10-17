@@ -27,8 +27,8 @@ use crate::channel::{Color, Px, Unit};
 /// let y = Linear::new().domain(0.0, 4.0);
 /// let mut points = Selection::<Row, Circle>::new(rows);
 /// points
-///     .x(x.encode(|r: &Row| r.x))
-///     .y(y.encode(|r: &Row| r.y))
+///     .x_with(x.encode(|r: &Row| r.x))
+///     .y_with(y.encode(|r: &Row| r.y))
 ///     .radius(Px(4.0))
 ///     .fill(Color::hex(0xd55e00));
 /// # let _ = points;
@@ -87,10 +87,10 @@ impl Circle {
 /// let x = ScaleRef::new(Band::new());
 /// let y = ScaleRef::new(Linear::new().domain(0.0, 5.0));
 /// let mut bars = Selection::<Sale, Rect>::new(sales);
-/// bars.x(x.encode_key(|s: &Sale| s.month).domain(["Jan", "Feb"]))
+/// bars.x_with(x.encode_key(|s: &Sale| s.month).domain(["Jan", "Feb"]))
 ///     .width(x.band_width_px())
-///     .y(y.encode(|s: &Sale| s.total))
-///     .y_end({
+///     .y_with(y.encode(|s: &Sale| s.total))
+///     .y_end_with({
 ///         let y = y.clone();
 ///         Derived::new(move || Px(y.read().eval(0.0) as f32))
 ///     });
@@ -218,8 +218,8 @@ impl Segment {
 /// let mut plot = Plot::new();
 /// let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
 /// plot.add(Selection::<(f64, f64), Line>::new(temps))
-///     .x(x.encode(|r: &(f64, f64)| r.0))
-///     .y(y.encode(|r: &(f64, f64)| r.1))
+///     .x_with(x.encode(|r: &(f64, f64)| r.0))
+///     .y_with(y.encode(|r: &(f64, f64)| r.1))
 ///     .width(Px(2.0));
 /// let cx = Context::new_blocking()?;
 /// let _ = plot.resolve(&cx, 400.0, 300.0)?;

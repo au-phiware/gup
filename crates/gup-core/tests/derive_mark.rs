@@ -93,8 +93,8 @@ fn user_mark_renders_squares() {
     let y = plot.y(Linear::new().domain(0.0, 10.0));
     let palette = Categorical::from_palette(fills.map(Color::hex));
     plot.add(Selection::<(f64, &'static str), Square>::new(rows.clone()))
-        .x(x.encode(|r: &(f64, &'static str)| r.0))
-        .y(y.encode(|_: &(f64, &'static str)| 4.0))
+        .x_with(x.encode(|r: &(f64, &'static str)| r.0))
+        .y_with(y.encode(|_: &(f64, &'static str)| 4.0))
         .size(Px(20.0))
         .fill(palette.encode_key(|r: &(f64, &'static str)| r.1));
     let resolved = plot.resolve(&cx, W as f32, H as f32).unwrap();
