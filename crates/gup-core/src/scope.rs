@@ -320,7 +320,7 @@ mod tests {
         ]))
         .attr(Circle::X, x.encode(|r: &(f64, f64)| r.0))
         .attr(Circle::Y, y.encode(|r: &(f64, f64)| r.1));
-        plot.resolve(cx, 300.0, 200.0).unwrap().scene
+        plot.resolve(cx, 300.0, 200.0).unwrap().scene.clone()
     }
 
     /// `scene` with its mark layer drawn by `seed(program)`.
@@ -448,7 +448,7 @@ mod tests {
         .attr(Circle::X, x.encode(|r: &(f64, f64)| r.0))
         .attr(Circle::Y, y.encode(|r: &(f64, f64)| r.1))
         .attr(Circle::RADIUS, Doubled.encode(|r: &(f64, f64)| r.1));
-        let good = plot.resolve(&cx, 300.0, 200.0).unwrap().scene;
+        let good = plot.resolve(&cx, 300.0, 200.0).unwrap().scene.clone();
         let user = "radius: f32→gup_core::doubled::doubled";
 
         let bad = seeded(&cx, good.clone(), missing_group);

@@ -527,7 +527,7 @@ mod tests {
             .attr(Circle::FILL, palette.encode_key(|d: &Disc| d.key))
             .attr(Circle::FILL_OPACITY, Unit(opacity));
         let render = |plot: &mut Plot| {
-            let resolved = plot.resolve(&cx, 560.0, 450.0).unwrap();
+            let resolved = plot.resolve(&cx, 560.0, 450.0).unwrap().clone();
             let image = ImageTarget::new(&cx, 560, 450)
                 .unwrap()
                 .render_blocking(&cx, &resolved.scene)
@@ -616,7 +616,7 @@ mod tests {
         .attr(Circle::Y, y.encode(|v: &f64| *v))
         .attr(Circle::RADIUS, size.encode(|v: &f64| *v));
         let draws = |plot: &mut Plot| {
-            let resolved = plot.resolve(&cx, 300.0, 200.0).unwrap();
+            let resolved = plot.resolve(&cx, 300.0, 200.0).unwrap().clone();
             let layer = plot.layer_mut::<f64, Circle>().unwrap();
             let segments = layer.draw_order().unwrap().segments().len();
             (resolved, segments)

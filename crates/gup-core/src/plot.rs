@@ -12,9 +12,10 @@
 //! object-safe `Chart` trait are later RFC-001 S7 steps.
 
 use crate::channel::{Mark, Px};
-use crate::context::Context;
+use crate::context::{Context, ContextId};
 use crate::error::{Error, Result};
 use crate::geom::{Point, Rect};
+use crate::input::{Input, Response};
 use crate::scale::{DynPositionScale, PositionScale, ScaleRef, Ticks};
 use crate::scene::{
     Anchor, HAlign, Item, ItemKind, Rule, Scene, TextRole, TextRun, TextStyle, VAlign, Weight,
@@ -58,7 +59,7 @@ pub struct Layout {
 }
 
 /// A layout plus the scene drawn from it.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Resolved {
     /// Where everything went.
     pub layout: Layout,
@@ -107,11 +108,40 @@ pub struct Plot {
     theme: Theme,
     /// Set by `legends(false)`.
     legends_off: bool,
+    /// Bumped by every `&mut self` method that changes the plot, except
+    /// `resolve` and `handle`.
+    revision: u64,
+    /// The last successful resolve and what it was resolved for.
+    cache: Option<(CacheKey, Resolved)>,
+    /// How many full (uncached) resolves have succeeded.
+    generation: u64,
 }
 
+/// What a cached [`Resolved`] is valid for.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+struct CacheKey {
+    context: ContextId,
+    width: u32,
+    height: u32,
+    /// Sum of every revision counter that the plot reads.
+    revisions: u64,
+}
+
+/// Zoom factor per wheel line (scrolling up zooms in).
+const ZOOM_PER_LINE: f64 = 0.85;
+
 impl crate::chart::Chart for Plot {
-    fn resolve(&mut self, cx: &Context, width: f32, height: f32) -> Result<Resolved> {
+    fn resolve(&mut self, cx: &Context, width: f32, height: f32) -> Result<&Resolved> {
         Plot::resolve(self, cx, width, height)
+    }
+    fn layout(&self) -> Option<&Layout> {
+        Plot::layout(self)
+    }
+    fn handle(&mut self, input: Input) -> Response {
+        Plot::handle(self, input)
+    }
+    fn title_text(&self) -> Option<&str> {
+        Plot::title_text(self)
     }
     fn as_any(&self) -> &dyn std::any::Any {
         self
@@ -163,18 +193,21 @@ impl Plot {
 
     /// Set the title.
     pub fn title(&mut self, title: impl Into<String>) -> &mut Self {
+        self.revision = self.revision.wrapping_add(1);
         self.title = Some(title.into());
         self
     }
 
     /// Set the x axis title, centred under the x tick labels.
     pub fn x_title(&mut self, title: impl Into<String>) -> &mut Self {
+        self.revision = self.revision.wrapping_add(1);
         self.x_title = Some(title.into());
         self
     }
 
     /// Set the y axis title: horizontal, left-aligned above the y axis.
     pub fn y_title(&mut self, title: impl Into<String>) -> &mut Self {
+        self.revision = self.revision.wrapping_add(1);
         self.y_title = Some(title.into());
         self
     }
@@ -183,12 +216,14 @@ impl Plot {
     /// `false` the plot rect is as if there were none, for callers who
     /// place their own.
     pub fn legends(&mut self, on: bool) -> &mut Self {
+        self.revision = self.revision.wrapping_add(1);
         self.legends_off = !on;
         self
     }
 
     /// Style the plot with `theme`.
     pub fn theme(&mut self, theme: Theme) -> &mut Self {
+        self.revision = self.revision.wrapping_add(1);
         self.theme = theme;
         self
     }
@@ -200,6 +235,7 @@ impl Plot {
 
     /// Use `scale` for the x axis and return a handle to encode with.
     pub fn x<S: PositionScale>(&mut self, scale: S) -> ScaleRef<S> {
+        self.revision = self.revision.wrapping_add(1);
         let handle = ScaleRef::new(scale);
         self.x = Some(Box::new(handle.clone()));
         handle
@@ -207,6 +243,7 @@ impl Plot {
 
     /// Use `scale` for the y axis and return a handle to encode with.
     pub fn y<S: PositionScale>(&mut self, scale: S) -> ScaleRef<S> {
+        self.revision = self.revision.wrapping_add(1);
         let handle = ScaleRef::new(scale);
         self.y = Some(Box::new(handle.clone()));
         handle
@@ -217,6 +254,7 @@ impl Plot {
         &mut self,
         layer: Selection<T, M>,
     ) -> &mut Selection<T, M> {
+        self.revision = self.revision.wrapping_add(1);
         self.layers.push(Box::new(layer));
         self.layers
             .last_mut()
@@ -226,6 +264,7 @@ impl Plot {
 
     /// The first layer of type `Selection<T, M>`, or `None`.
     pub fn layer_mut<T: Send + Sync + 'static, M: Mark>(&mut self) -> Option<&mut Selection<T, M>> {
+        self.revision = self.revision.wrapping_add(1);
         self.layers
             .iter_mut()
             .find_map(|l| l.as_any_mut().downcast_mut())
@@ -238,6 +277,7 @@ impl Plot {
     /// no column bytes. Does nothing before the first resolve has fitted
     /// and ranged the scales.
     pub fn zoom(&mut self, at: Point, factor: f64) -> Result<()> {
+        self.revision = self.revision.wrapping_add(1);
         if !(factor.is_finite() && factor > 0.0) {
             return Err(Error::config(
                 "zoom factor",
@@ -255,7 +295,73 @@ impl Plot {
 
     /// Resolve domains, ticks, text, the plot rect and GPU state for a
     /// `width × height` logical-pixel chart.
-    pub fn resolve(&mut self, cx: &Context, width: f32, height: f32) -> Result<Resolved> {
+    ///
+    /// Cached: when nothing changed since the last successful resolve
+    /// (same context, size, plot settings, layers and scale writes) this
+    /// returns the previous result and does no work and no GPU writes.
+    pub fn resolve(&mut self, cx: &Context, width: f32, height: f32) -> Result<&Resolved> {
+        let key = |plot: &Self| CacheKey {
+            context: cx.id(),
+            width: width.to_bits(),
+            height: height.to_bits(),
+            revisions: plot.revision_sum(),
+        };
+        if self.cache.as_ref().is_some_and(|(k, _)| *k == key(self)) {
+            // A browser reports errors late.
+            cx.take_gpu_errors()?;
+        } else {
+            self.cache = None;
+            let resolved = self.resolve_full(cx, width, height)?;
+            self.generation += 1;
+            // After resolving: it writes the scales.
+            self.cache = Some((key(self), resolved));
+        }
+        match &self.cache {
+            Some((_, resolved)) => Ok(resolved),
+            None => unreachable!("the cache was just filled"),
+        }
+    }
+
+    /// The layout of the last successful resolve.
+    pub fn layout(&self) -> Option<&Layout> {
+        self.cache.as_ref().map(|(_, r)| &r.layout)
+    }
+
+    /// React to `input`. A wheel turn zooms about the pointer
+    /// ([`zoom`](Self::zoom)); the rest do nothing yet.
+    pub fn handle(&mut self, input: Input) -> Response {
+        match input {
+            Input::Wheel { at, lines }
+                if lines.is_finite() && lines != 0.0 && self.cache.is_some() =>
+            {
+                let redraw = self.zoom(at, ZOOM_PER_LINE.powf(f64::from(lines))).is_ok();
+                Response { redraw }
+            }
+            _ => Response::default(),
+        }
+    }
+
+    /// How many full (uncached) resolves have succeeded. Internal: tests
+    /// and pick indexes use it to see that a resolve did work.
+    #[doc(hidden)]
+    pub fn resolve_generation(&self) -> u64 {
+        self.generation
+    }
+
+    /// The sum of every counter that rises when something the resolve
+    /// reads changes.
+    fn revision_sum(&self) -> u64 {
+        let mut sum = self.revision;
+        for scale in [&self.x, &self.y].into_iter().flatten() {
+            sum = sum.wrapping_add(scale.revision());
+        }
+        for layer in &self.layers {
+            sum = sum.wrapping_add(layer.revision());
+        }
+        sum
+    }
+
+    fn resolve_full(&mut self, cx: &Context, width: f32, height: f32) -> Result<Resolved> {
         // Errors that a browser reported after an earlier call returned.
         cx.take_gpu_errors()?;
         let (x, y) = match (&self.x, &self.y) {
@@ -736,7 +842,7 @@ mod tests {
         ]))
         .attr(Circle::X, x.encode(|r: &(f64, f64)| r.0))
         .attr(Circle::Y, y.encode(|r: &(f64, f64)| r.1));
-        let first = plot.resolve(&cx, 300.0, 200.0).unwrap();
+        let first = plot.resolve(&cx, 300.0, 200.0).unwrap().clone();
         let mut target = ImageTarget::new(&cx, 300, 200).unwrap();
         let image = target.render_blocking(&cx, &first.scene).unwrap();
         let before = cx.pipelines().stats;
@@ -754,7 +860,7 @@ mod tests {
         assert_eq!(after.pipelines_created, before.pipelines_created);
         assert!(after.pipeline_hits > before.pipeline_hits);
         assert!(
-            Arc::ptr_eq(&batch(&first), &batch(&second)),
+            Arc::ptr_eq(&batch(&first), &batch(second)),
             "layer GPU state rebuilt"
         );
         assert_ne!(first.layout.x_ticks, second.layout.x_ticks);
@@ -852,7 +958,7 @@ mod tests {
             end += n;
             appended += u64::from(n);
             let resolved = plot.resolve(&cx, 400.0, 300.0).unwrap();
-            assert_eq!(batch(&resolved).instances(), u64::from(end));
+            assert_eq!(batch(resolved).instances(), u64::from(end));
             target.render_blocking(&cx, &resolved.scene).unwrap();
         }
         let written = cx.upload_stats() - start;
@@ -863,7 +969,7 @@ mod tests {
         assert!(grown.1 > domain.1 + 1000.0, "{domain:?} → {grown:?}");
 
         let resolved = plot.resolve(&cx, 400.0, 300.0).unwrap();
-        assert_eq!(batch(&resolved).chunks.len(), (end as usize).div_ceil(64));
+        assert_eq!(batch(resolved).chunks.len(), (end as usize).div_ceil(64));
         let after = target.render_blocking(&cx, &resolved.scene).unwrap();
         assert_ne!(before, after);
         let (mut fresh, _) = chunked(points(0..end));
@@ -899,7 +1005,7 @@ mod tests {
             layer.append(points(end..end + n)).unwrap();
             end += n;
             let resolved = plot.resolve(&cx, 400.0, 300.0).unwrap();
-            assert_eq!(batch(&resolved).instances(), u64::from(end - 1));
+            assert_eq!(batch(resolved).instances(), u64::from(end - 1));
         }
         let written = cx.upload_stats() - start;
         assert_eq!(
@@ -909,7 +1015,7 @@ mod tests {
         );
         let resolved = plot.resolve(&cx, 400.0, 300.0).unwrap();
         // Chunks of 8, 8 and 6 rows, and two bridges.
-        assert_eq!(batch(&resolved).chunks.len(), 5);
+        assert_eq!(batch(resolved).chunks.len(), 5);
         let after = target.render_blocking(&cx, &resolved.scene).unwrap();
         let expected = line(points(0..end)).render(&cx, 400, 300).unwrap();
         assert!(after == expected, "appending differs from building at once");
@@ -1065,7 +1171,7 @@ mod tests {
         let token = Arc::new(());
         let (mut plot, x) = tracked_plot(tracked(0..150, &token), Retain::GpuOnly);
         assert_eq!(Arc::strong_count(&token), 151);
-        let resolved = plot.resolve(&cx, 400.0, 300.0).unwrap();
+        let resolved = plot.resolve(&cx, 400.0, 300.0).unwrap().clone();
         assert_eq!(Arc::strong_count(&token), 1, "every row was dropped");
         assert!(tracked_layer(&mut plot).rows_released());
         assert_eq!(tracked_layer(&mut plot).len(), 150);
@@ -1085,7 +1191,7 @@ mod tests {
         let start = cx.upload_stats();
         plot.zoom(Point::new(200.0, 150.0), 0.5).unwrap();
         let zoomed = plot.resolve(&cx, 400.0, 300.0).unwrap();
-        assert_eq!(batch(&zoomed).instances(), 150);
+        assert_eq!(batch(zoomed).instances(), 150);
         assert_eq!((cx.upload_stats() - start).columns, Default::default());
 
         // Appending: the new rows are evaluated, uploaded, then dropped.
@@ -1094,7 +1200,7 @@ mod tests {
             .unwrap();
         assert_eq!(Arc::strong_count(&token), 21);
         let grown = plot.resolve(&cx, 400.0, 300.0).unwrap();
-        assert_eq!(batch(&grown).instances(), 170);
+        assert_eq!(batch(grown).instances(), 170);
         assert_eq!(Arc::strong_count(&token), 1);
         assert_eq!(kept(&mut plot), [false, false, true]);
 
@@ -1270,7 +1376,7 @@ mod tests {
             .attr(Circle::RADIUS, Px(4.0))
             .attr(Circle::FILL, colour.encode_key(|r: &Row| r.2));
         let mut target = ImageTarget::new(&cx, 400, 300).unwrap();
-        let first = plot.resolve(&cx, 400.0, 300.0).unwrap();
+        let first = plot.resolve(&cx, 400.0, 300.0).unwrap().clone();
         target.render_blocking(&cx, &first.scene).unwrap();
         let labels = |c: &ScaleRef<Categorical>| -> Vec<String> {
             let legend = c.read().legend().unwrap();
@@ -1303,7 +1409,7 @@ mod tests {
         assert_eq!(cx.pipelines().stats.programs_linked, linked);
         assert_eq!(
             batch(&first).program.glue.signature,
-            batch(&second).program.glue.signature
+            batch(second).program.glue.signature
         );
         let at = |v: (f64, f64)| {
             image
@@ -1415,7 +1521,7 @@ mod tests {
             .attr(Circle::X, on_screen.encode_nullable_key(|r: &Row| r.0))
             .attr(Circle::Y, y.encode(|r: &Row| r.1))
             .attr(Circle::RADIUS, Px(8.0));
-        let resolved = plot.resolve(&cx, 300.0, 200.0).unwrap();
+        let resolved = plot.resolve(&cx, 300.0, 200.0).unwrap().clone();
         let glue = &plot.glue_sources()[0].1;
         assert!(
             glue.contains("let drawn = u32(col.x != 4294967295u);"),

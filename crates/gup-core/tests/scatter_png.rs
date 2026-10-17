@@ -77,14 +77,14 @@ fn multi_chunk_scatter_matches_one_chunk() {
     let cx = Context::new_blocking().expect("headless GPU context");
     let mut single = scatter::plot();
     let resolved = single.resolve(&cx, WIDTH as f32, HEIGHT as f32).unwrap();
-    assert_eq!(marks(&resolved).chunks(), 1);
+    assert_eq!(marks(resolved).chunks(), 1);
     let (one, _) = single.render_resolved(&cx, WIDTH, HEIGHT).unwrap();
 
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     for (chunk_rows, chunks) in [(40, 3), (32, 4)] {
         let mut plot = scatter::plot_chunked(chunk_rows);
         let resolved = plot.resolve(&cx, WIDTH as f32, HEIGHT as f32).unwrap();
-        let batch = marks(&resolved);
+        let batch = marks(resolved);
         assert_eq!(batch.chunks(), chunks, "{chunk_rows} rows per chunk");
         assert_eq!(batch.instances(), 120);
         let (image, _) = plot.render_resolved(&cx, WIDTH, HEIGHT).unwrap();

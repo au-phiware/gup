@@ -40,9 +40,8 @@ pub struct LegendScene {
 /// The scatter, resolved narrower than the image, with the background
 /// under the plot and the legend in the strip to its right.
 pub fn scene(cx: &Context) -> LegendScene {
-    let resolved = scatter::plot()
-        .resolve(cx, PLOT_WIDTH, HEIGHT as f32)
-        .unwrap();
+    let mut plot = scatter::plot();
+    let resolved = plot.resolve(cx, PLOT_WIDTH, HEIGHT as f32).unwrap().clone();
     let (mut scene, layout) = (resolved.scene, resolved.layout);
     scene.width = WIDTH as f32;
     let clip = scene.add_clip(layout.plot);

@@ -87,7 +87,7 @@ fn band_x(keys: Vec<String>, width: f32, height: f32) -> Resolved {
         .attr(Circle::X, x.encode_key(|r: &Row| r.key.as_str()))
         .attr(Circle::Y, y.encode(|r: &Row| r.v))
         .attr(Circle::RADIUS, Px(3.0));
-    plot.resolve(&cx, width, height).unwrap()
+    plot.resolve(&cx, width, height).unwrap().clone()
 }
 
 #[test]
@@ -114,7 +114,7 @@ fn a_linear_x_on_a_tiny_plot_keeps_apart() {
     .attr(Circle::X, x.encode(|r: &(f64, f64)| r.0))
     .attr(Circle::Y, y.encode(|r: &(f64, f64)| r.1));
     let r = plot.resolve(&cx, 120.0, 120.0).unwrap();
-    assert_separated(&r, true, "linear");
+    assert_separated(r, true, "linear");
 }
 
 #[test]
@@ -127,7 +127,7 @@ fn forty_keys_on_a_short_band_y_keep_apart() {
         .attr(Circle::X, x.encode(|r: &Row| r.v))
         .attr(Circle::Y, y.encode_key(|r: &Row| r.key.as_str()))
         .attr(Circle::RADIUS, Px(3.0));
-    assert_separated(&plot.resolve(&cx, 720.0, 200.0).unwrap(), false, "band y");
+    assert_separated(plot.resolve(&cx, 720.0, 200.0).unwrap(), false, "band y");
 }
 
 /// An automatic domain grows to cover the overhang, so the first and last
@@ -152,7 +152,7 @@ fn an_automatic_domain_widens_and_a_fixed_one_does_not() {
         .attr(Circle::X, x.encode(|r: &(f64, f64)| r.0))
         .attr(Circle::Y, y.encode(|r: &(f64, f64)| r.1))
         .attr(Circle::RADIUS, Px(30.0));
-        let resolved = plot.resolve(&cx, 480.0, 320.0).unwrap();
+        let resolved = plot.resolve(&cx, 480.0, 320.0).unwrap().clone();
         let axes: Vec<_> = resolved
             .scene
             .items

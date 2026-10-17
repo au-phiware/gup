@@ -134,7 +134,8 @@ fn image_texture_and_draw_in_pass_agree() {
     let scene = scatter::plot()
         .resolve(&cx, WIDTH as f32, HEIGHT as f32)
         .unwrap()
-        .scene;
+        .scene
+        .clone();
     for samples in [1, 4] {
         let options = TargetOptions {
             samples,
@@ -181,7 +182,8 @@ fn samples_are_part_of_the_pipeline_key() {
     let scene = scatter::plot()
         .resolve(&cx, WIDTH as f32, HEIGHT as f32)
         .unwrap()
-        .scene;
+        .scene
+        .clone();
     let desc = |samples, dpr| TargetDesc {
         format: wgpu::TextureFormat::Rgba8Unorm,
         width: WIDTH,
@@ -244,7 +246,10 @@ fn texture_target_rejects_unusable_textures() {
 fn dpr_scales_geometry_and_text() {
     let cx = Context::new_blocking().unwrap();
     let (w, h) = (WIDTH / 2, HEIGHT / 2);
-    let resolved = scatter::plot().resolve(&cx, w as f32, h as f32).unwrap();
+    let resolved = scatter::plot()
+        .resolve(&cx, w as f32, h as f32)
+        .unwrap()
+        .clone();
     let one = ImageTarget::new(&cx, w, h)
         .unwrap()
         .render_blocking(&cx, &resolved.scene)

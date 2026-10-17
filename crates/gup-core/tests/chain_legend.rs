@@ -147,7 +147,7 @@ fn a_plot_places_the_legend_of_a_chained_colour() {
         .attr(Circle::RADIUS, Px(3.0))
         .attr(Circle::FILL, colour.encode(|r: &(f64, f64)| r.1))
         .legend_title(Circle::FILL, "Cost");
-    let resolved = plot.resolve(&cx, 640.0, 400.0).unwrap();
+    let resolved = plot.resolve(&cx, 640.0, 400.0).unwrap().clone();
     let layout = resolved.layout;
     assert!(layout.legend.is_some());
     let labels: Vec<String> = layout

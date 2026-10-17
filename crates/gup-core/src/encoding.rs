@@ -84,6 +84,14 @@ pub trait ShaderFn: Clone + Send + Sync + 'static {
     /// every link before fitting any layer.
     fn begin_fit(&self) {}
 
+    /// Counts changes made through a shared handle (a
+    /// [`ScaleRef`](crate::ScaleRef) write); `0` for a function that has
+    /// none. Internal: the plot's resolve cache sums it.
+    #[doc(hidden)]
+    fn revision(&self) -> u64 {
+        0
+    }
+
     /// The key dictionary this function shares among the channels that
     /// encode keys through it, if any (a [`ScaleRef`](crate::ScaleRef)
     /// has one). Internal.
@@ -841,10 +849,12 @@ pub enum ConstMarker {}
 /// Marker for [`Derived`] constants (see [`IntoEncoding`]).
 pub enum DerivedMarker {}
 
-/// A constant that is recomputed on every resolve, after the plot has set
+/// A constant that is re-evaluated each resolve that is not cached, after the plot has set
 /// its scales' ranges: a uniform field that follows a scale, such as a bar
 /// width from [`ScaleRef::band_width_px`](crate::ScaleRef). It costs one
-/// closure call per channel per resolve and no column.
+/// closure call per channel per uncached resolve and no column. A `Derived`
+/// reading state other than the plot's scales and layers should be paired
+/// with a change that invalidates the cache.
 pub struct Derived<V>(Arc<dyn Fn() -> V + Send + Sync>);
 
 impl<V: Visual> Derived<V> {
@@ -933,7 +943,7 @@ where
 pub enum Encoding<T> {
     /// A constant (a uniform field, no column).
     Const(ConstValue),
-    /// A constant recomputed on every resolve (see [`Derived`]).
+    /// A constant recomputed on every uncached resolve (see [`Derived`]).
     Derived(Arc<dyn Fn() -> ConstValue + Send + Sync>),
     /// An accessor plus an encoding function (a column plus GPU calls).
     Column(Box<dyn DynColumnEncoding<T>>),
@@ -1083,6 +1093,9 @@ pub trait DynShaderFn: Send + Sync {
     fn resources(&self) -> Vec<Resource>;
     /// See [`ShaderFn::begin_fit`].
     fn begin_fit(&self);
+    /// See [`ShaderFn::revision`].
+    #[doc(hidden)]
+    fn revision(&self) -> u64;
     /// See [`ShaderFn::dictionary_slot`].
     #[doc(hidden)]
     fn dictionary_slot(&self) -> Option<&DictionarySlot>;
@@ -1140,6 +1153,10 @@ impl<S: ShaderFn> DynShaderFn for S {
 
     fn begin_fit(&self) {
         ShaderFn::begin_fit(self);
+    }
+
+    fn revision(&self) -> u64 {
+        ShaderFn::revision(self)
     }
 
     fn legend(&self) -> Option<crate::Legend> {

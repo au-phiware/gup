@@ -92,7 +92,7 @@ fn assert_texts_disjoint_and_inside(layout: &Layout) {
 fn the_legend_column_is_inside_the_canvas_and_clear_of_the_plot() {
     let cx = Context::new_blocking().unwrap();
     let (mut plot, _) = categorical_plot(5, None);
-    let with = plot.resolve(&cx, 640.0, 400.0).unwrap().layout;
+    let with = plot.resolve(&cx, 640.0, 400.0).unwrap().layout.clone();
     let legend = with.legend.expect("a categorical fill has a legend");
     assert!(canvas(&with).contains_rect(&legend), "{legend:?}");
     assert!(
@@ -103,7 +103,7 @@ fn the_legend_column_is_inside_the_canvas_and_clear_of_the_plot() {
     assert!(legend.left() > with.plot.right());
 
     plot.legends(false);
-    let without = plot.resolve(&cx, 640.0, 400.0).unwrap().layout;
+    let without = plot.resolve(&cx, 640.0, 400.0).unwrap().layout.clone();
     assert_eq!(without.legend, None);
     assert!(without.plot.width > with.plot.width);
     assert!(
@@ -120,7 +120,7 @@ fn the_legend_column_is_inside_the_canvas_and_clear_of_the_plot() {
         .attr(Circle::X, x.encode(|r: &Row| r.x))
         .attr(Circle::Y, y.encode(|r: &Row| r.y))
         .attr(Circle::RADIUS, Px(3.5));
-    let plain = plain.resolve(&cx, 640.0, 400.0).unwrap().layout;
+    let plain = plain.resolve(&cx, 640.0, 400.0).unwrap().layout.clone();
     assert_eq!(plain.legend, None);
     assert_eq!(plain.plot, without.plot);
 }
@@ -158,7 +158,7 @@ fn titles_and_a_titled_legend_do_not_overlap() {
 fn a_long_domain_shows_what_fits_and_counts_the_rest() {
     let cx = Context::new_blocking().unwrap();
     let (mut plot, colour) = categorical_plot(60, None);
-    let layout = plot.resolve(&cx, 720.0, 300.0).unwrap().layout;
+    let layout = plot.resolve(&cx, 720.0, 300.0).unwrap().layout.clone();
     let keys = colour.read().legend().unwrap().swatches().len();
     assert_eq!(keys, 60);
     let legend = layout.legend.unwrap();
@@ -281,7 +281,7 @@ fn two_layers_stack_two_legends_and_a_shared_scale_gives_one() {
                 group.encode_owned_key(|r: &Row| r.group.clone()),
             );
     }
-    let layout = shared.resolve(&cx, 720.0, 450.0).unwrap().layout;
+    let layout = shared.resolve(&cx, 720.0, 450.0).unwrap().layout.clone();
     let legend_rows = layout
         .texts
         .iter()

@@ -49,7 +49,10 @@ fn check(cx: &Context, case: &str, scene: &Scene, meta: LayoutMetadata) -> image
 
 /// The plot resolved at the image's size; it places its own legend.
 fn resolve(cx: &Context, plot: &mut Plot) -> (Scene, Layout) {
-    let resolved = plot.resolve(cx, WIDTH as f32, HEIGHT as f32).unwrap();
+    let resolved = plot
+        .resolve(cx, WIDTH as f32, HEIGHT as f32)
+        .unwrap()
+        .clone();
     (resolved.scene, resolved.layout)
 }
 
@@ -358,7 +361,10 @@ fn band_axis_labelled_by_enum_keys() {
                 .midpoint(20.0)
                 .encode(|d: &Day| d.high_c),
         );
-    let resolved = plot.resolve(&cx, WIDTH as f32, HEIGHT as f32).unwrap();
+    let resolved = plot
+        .resolve(&cx, WIDTH as f32, HEIGHT as f32)
+        .unwrap()
+        .clone();
     let (mut scene, layout) = (resolved.scene, resolved.layout);
 
     // The axis is the keys, in first-seen order, at the bands' centres.

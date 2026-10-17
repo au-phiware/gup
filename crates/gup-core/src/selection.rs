@@ -510,6 +510,9 @@ pub(crate) trait Layer: wgpu::WasmNotSendSync {
     /// shared by several channels or layers unions from scratch. Called
     /// on every layer before any [`fit_domains`](Self::fit_domains).
     fn begin_fit(&self);
+    /// The wrapping sum of the revisions of every link of every column
+    /// encoding (see [`ShaderFn::revision`](crate::ShaderFn::revision)).
+    fn revision(&self) -> u64;
     /// The layer's z-order among the plot's items.
     fn z(&self) -> i32;
     /// Evaluate accessors (chunked for `cx`'s device) and fit every
@@ -546,6 +549,18 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
                 }
             }
         }
+    }
+
+    fn revision(&self) -> u64 {
+        let mut sum = 0u64;
+        for enc in self.encodings.iter().flatten() {
+            if let Encoding::Column(c) = enc {
+                for link in c.links() {
+                    sum = sum.wrapping_add(link.revision());
+                }
+            }
+        }
+        sum
     }
 
     fn z(&self) -> i32 {

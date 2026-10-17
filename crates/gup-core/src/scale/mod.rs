@@ -48,6 +48,7 @@ use crate::encoding::{CpuMirror, DictionarySlot, EncodeFn, Resource, ShaderFn};
 use crate::error::Result;
 use crate::shader::WgslModule;
 use crate::theme::Theme;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 /// Tick positions (domain values) and their labels.
@@ -121,6 +122,9 @@ struct Shared<S> {
     fit: Mutex<Option<(f64, f64)>>,
     /// The key dictionary of the layers that encode keys through the scale.
     keys: DictionarySlot,
+    /// Bumped by every [`ScaleRef::write`], so a cache can tell that the
+    /// scale may have changed.
+    revision: AtomicU64,
 }
 
 impl<S> Clone for ScaleRef<S> {
@@ -136,6 +140,7 @@ impl<S> ScaleRef<S> {
             scale: RwLock::new(scale),
             fit: Mutex::new(None),
             keys: DictionarySlot::default(),
+            revision: AtomicU64::new(0),
         }))
     }
 
@@ -146,6 +151,7 @@ impl<S> ScaleRef<S> {
 
     /// Modify the scale.
     pub fn write(&self) -> RwLockWriteGuard<'_, S> {
+        self.0.revision.fetch_add(1, Ordering::Relaxed);
         self.0.scale.write().unwrap_or_else(|p| p.into_inner())
     }
 }
@@ -179,6 +185,10 @@ impl<S: ShaderFn> ShaderFn for ScaleRef<S> {
 
     fn legend(&self) -> Option<Legend> {
         ShaderFn::legend(&*self.read())
+    }
+
+    fn revision(&self) -> u64 {
+        self.0.revision.load(Ordering::Relaxed)
     }
 
     fn begin_fit(&self) {
@@ -228,6 +238,8 @@ impl<S> ColorScale for ScaleRef<S> where S: ColorScale + CpuMirror<Output = <S a
 /// Object-safe position-scale operations the plot needs for its x and y
 /// slots.
 pub(crate) trait DynPositionScale: Send + Sync {
+    /// Counts writes to the scale (see [`ScaleRef::write`]).
+    fn revision(&self) -> u64;
     fn is_auto(&self) -> bool;
     fn nice(&self);
     fn set_range(&self, r0: Px, r1: Px);
@@ -257,6 +269,10 @@ pub(crate) trait DynPositionScale: Send + Sync {
 }
 
 impl<S: PositionScale> DynPositionScale for ScaleRef<S> {
+    fn revision(&self) -> u64 {
+        self.0.revision.load(Ordering::Relaxed)
+    }
+
     fn is_auto(&self) -> bool {
         self.read().is_auto()
     }

@@ -78,6 +78,7 @@ mod encoding;
 mod error;
 pub mod geom;
 mod guide;
+mod input;
 pub mod marks;
 mod order;
 pub mod plot;
@@ -107,6 +108,7 @@ pub use encoding::{
     KeyMarker, KeySource, NullableKey, NullableOwnedKey, OwnedKey, Resource, ShaderFn, Then,
 };
 pub use error::{Error, Result};
+pub use input::{Button, Input, Response};
 pub use marks::{Circle, CircleAttrs, Line, LineAttrs, Rect, RectAttrs, Segment, SegmentAttrs};
 pub use plot::{Layout, PlacedText, Plot, Resolved};
 pub use render::{PipelineStats, Prepared, Renderer, TargetDesc};

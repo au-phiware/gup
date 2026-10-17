@@ -5,9 +5,8 @@
 
 use crate::context::Context;
 use crate::error::Result;
-#[cfg(not(target_arch = "wasm32"))]
-use crate::plot::Layout;
-use crate::plot::Resolved;
+use crate::input::{Input, Response};
+use crate::plot::{Layout, Resolved};
 use std::any::Any;
 #[cfg(not(target_arch = "wasm32"))]
 use std::path::Path;
@@ -21,6 +20,7 @@ use std::path::Path;
 ///
 /// ```
 /// use gup_core::prelude::*;
+/// use gup_core::{Input, Response};
 ///
 /// # fn main() -> gup_core::Result<()> {
 /// let cx = Context::new_blocking()?;
@@ -31,6 +31,14 @@ use std::path::Path;
 ///     .attr(Circle::Y, y.encode(|p: &(f64, f64)| p.1));
 ///
 /// let mut chart: Box<dyn Chart> = Box::new(plot);
+/// let resolved = chart.resolve(&cx, 320.0, 200.0)?;
+/// let at = resolved.layout.plot.center();
+/// let layout = chart.layout().expect("resolved");
+/// assert_eq!((layout.width, layout.height), (320.0, 200.0));
+/// assert_eq!(
+///     chart.handle(Input::Wheel { at, lines: 1.0 }),
+///     Response { redraw: true }
+/// );
 /// let image = chart.render(&cx, 320, 200)?;
 /// assert_eq!((image.width(), image.height()), (320, 200));
 /// assert!(chart.as_any_mut().downcast_mut::<Plot>().is_some());
@@ -38,9 +46,16 @@ use std::path::Path;
 /// # }
 /// ```
 pub trait Chart: 'static {
-    /// Resolve domains, layout and GPU state for a `width × height`
-    /// logical-pixel chart.
-    fn resolve(&mut self, cx: &Context, width: f32, height: f32) -> Result<Resolved>;
+    /// Resolve for a `width × height` logical-pixel chart. Cached: returns
+    /// the previous result, doing no work and no GPU writes, when nothing
+    /// changed.
+    fn resolve(&mut self, cx: &Context, width: f32, height: f32) -> Result<&Resolved>;
+    /// The layout of the last successful resolve.
+    fn layout(&self) -> Option<&Layout>;
+    /// React to input; never fails.
+    fn handle(&mut self, input: Input) -> Response;
+    /// The chart's title, if any (a window title).
+    fn title_text(&self) -> Option<&str>;
     /// The chart as [`Any`], to downcast to its concrete type.
     fn as_any(&self) -> &dyn Any;
     /// The chart as mutable [`Any`], to downcast to its concrete type.
@@ -64,9 +79,10 @@ pub trait ChartExt: Chart {
         height: u32,
     ) -> Result<(image::RgbaImage, Layout)> {
         let resolved = self.resolve(cx, width as f32, height as f32)?;
+        let layout = resolved.layout.clone();
         let image = crate::target::ImageTarget::new(cx, width, height)?
             .render_blocking(cx, &resolved.scene)?;
-        Ok((image, resolved.layout))
+        Ok((image, layout))
     }
 
     /// Resolve, render and write a PNG.

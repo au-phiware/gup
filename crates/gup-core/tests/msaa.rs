@@ -46,7 +46,7 @@ fn scene(cx: &Context) -> Scene {
     .attr(Circle::X, x.encode(|r: &(f64, f64)| r.0))
     .attr(Circle::Y, y.encode(|r: &(f64, f64)| r.1))
     .attr(Circle::RADIUS, Px(14.0));
-    let mut scene = plot.resolve(cx, W as f32, H as f32).unwrap().scene;
+    let mut scene = plot.resolve(cx, W as f32, H as f32).unwrap().scene.clone();
     let rules = (0..7)
         .map(|i| {
             let a = (5.0 + 12.0 * i as f32).to_radians();
@@ -363,7 +363,7 @@ fn scenes_with_msaa_marks_draw_multisampled() {
         ]))
         .attr(StandInArea::X, x.encode(|r: &(f64, f64)| r.0))
         .attr(StandInArea::Y, y.encode(|r: &(f64, f64)| r.1));
-        plot.resolve(cx, W as f32, H as f32).unwrap().scene
+        plot.resolve(cx, W as f32, H as f32).unwrap().scene.clone()
     };
     let target = |cx: &Context, samples| {
         ImageTarget::with_options(cx, W, H, TargetOptions::default().with_samples(samples)).unwrap()

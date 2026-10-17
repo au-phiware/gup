@@ -189,7 +189,10 @@ fn aftershocks_sized_by_energy() {
         .attr(Circle::Y, y.encode(|q: &Quake| q.lat))
         .attr(Circle::RADIUS, radius.encode(|q: &Quake| q.magnitude))
         .attr(Circle::FILL, depth.encode(|q: &Quake| q.depth));
-    let resolved = plot.resolve(&cx, WIDTH as f32, HEIGHT as f32).unwrap();
+    let resolved = plot
+        .resolve(&cx, WIDTH as f32, HEIGHT as f32)
+        .unwrap()
+        .clone();
     let (scene, layout) = (resolved.scene, resolved.layout);
     assert!(
         layout.legend.is_some(),

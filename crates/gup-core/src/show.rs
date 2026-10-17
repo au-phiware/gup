@@ -7,6 +7,7 @@
 use crate::context::Context;
 use crate::error::{Error, Result};
 use crate::geom::Point;
+use crate::input::Input;
 use crate::plot::Plot;
 use crate::render::Renderer;
 use crate::target::save_png;
@@ -25,8 +26,6 @@ const DEFAULT_SIZE: (u32, u32) = (800, 500);
 /// Default `GUP_SCREENSHOT_WIDTH × GUP_SCREENSHOT_HEIGHT`, as for the
 /// examples of the `gup` crate.
 const DEFAULT_SCREENSHOT_SIZE: (u32, u32) = (640, 480);
-/// Zoom factor per wheel line (scrolling up zooms in).
-const ZOOM_PER_LINE: f64 = 0.85;
 
 /// A `GUP_SCREENSHOT_PATH` request: draw one frame in the window, read the
 /// window's surface texture back, write it as PNG and exit.
@@ -228,13 +227,12 @@ impl ApplicationHandler for App {
                     return;
                 };
                 let lines = match delta {
-                    MouseScrollDelta::LineDelta(_, y) => f64::from(y),
-                    MouseScrollDelta::PixelDelta(p) => p.y / 40.0,
+                    MouseScrollDelta::LineDelta(_, y) => y,
+                    MouseScrollDelta::PixelDelta(p) => (p.y / 40.0) as f32,
                 };
                 let window = Arc::clone(state.target.window());
-                match self.plot.zoom(at, ZOOM_PER_LINE.powf(lines)) {
-                    Ok(()) => window.request_redraw(),
-                    Err(e) => self.fail(event_loop, e),
+                if self.plot.handle(Input::Wheel { at, lines }).redraw {
+                    window.request_redraw();
                 }
             }
             WindowEvent::RedrawRequested => match self.redraw() {

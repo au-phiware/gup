@@ -86,7 +86,7 @@ pub async fn render_scatter(
     web_log_text(&format!(
         "GUP CHUNKS {chunks} (max_chunk_rows {max_chunk_rows})"
     ));
-    let (mut scene, plot_rect) = (resolved.scene, resolved.layout.plot);
+    let (mut scene, plot_rect) = (resolved.scene.clone(), resolved.layout.plot);
     scene.width = width as f32;
     let clip = scene.add_clip(plot_rect);
     scene.push(Item {
@@ -339,7 +339,7 @@ pub async fn render_band_categorical(width: u32, height: u32) -> Result<Vec<u8>,
     let resolved = plot
         .resolve(&cx, width as f32 - legend_width, height as f32)
         .map_err(js)?;
-    let mut scene = resolved.scene;
+    let mut scene = resolved.scene.clone();
     scene.width = width as f32;
     let swatches = colour.read().legend().unwrap().swatches().to_vec();
     let left = width as f32 - legend_width + 6.0;
@@ -485,7 +485,7 @@ pub async fn render_diverging(width: u32, height: u32) -> Result<Vec<u8>, JsValu
     let resolved = plot
         .resolve(&cx, width as f32 - LEGEND_WIDTH, height as f32)
         .map_err(js)?;
-    let (mut scene, plot_rect) = (resolved.scene, resolved.layout.plot);
+    let (mut scene, plot_rect) = (resolved.scene.clone(), resolved.layout.plot);
     scene.width = width as f32;
     let clip = scene.add_clip(plot_rect);
     scene.push(Item {

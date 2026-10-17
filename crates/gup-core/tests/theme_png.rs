@@ -203,7 +203,7 @@ fn long_titles_are_truncated_with_an_ellipsis() {
     assert_eq!(long.len(), 300);
     let mut plot = scatter(countries_n(20));
     plot.title(long.clone()).x_title(long.clone()).y_title(long);
-    let layout = plot.resolve(&cx, 320.0, 200.0).unwrap().layout;
+    let layout = plot.resolve(&cx, 320.0, 200.0).unwrap().layout.clone();
     let by_role =
         |role: TextRole| -> Vec<_> { layout.texts.iter().filter(|t| t.run.role == role).collect() };
     let title = by_role(TextRole::Title);
