@@ -75,8 +75,8 @@ X) or `info` (printed, never fails).
 | `pipeline.link_create.cold_ms`    | 1.04      | <= 10     | `pipeline_timings`, its first run                 |
 | `pipeline.link_create.max_ms`     | 1.06      | info      | `pipeline_timings`                                |
 | `wasm.wgpu.gz_bytes`              | 41,712    | info      | `scripts/wasm_size.sh`, bare wgpu                 |
-| `wasm.scatter.gz_bytes`           | 329,548   | +2%       | `scripts/wasm_size.sh`, the reference scatter     |
-| `wasm.over_wgpu.gz_bytes`         | 287,835   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10       |
+| `wasm.scatter.gz_bytes`           | 361,531   | +2%       | `scripts/wasm_size.sh`, the reference scatter     |
+| `wasm.over_wgpu.gz_bytes`         | 319,818   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10       |
 
 A legitimate change that moves a number (a new guide, a bigger feature) records
 the new value here, in the same commit, with the reason in the story.
@@ -283,3 +283,9 @@ seeded violation (GUP-417 retrospective).
     time. It is not re-recorded. Confirm it on an idle machine before treating
     it as a regression in the glue (GUP-431's draw entries and GUP-432's
     next-row reads are the candidates).
+- **GUP-436 (S7g), merged 2026-10-17**: the orchestrator re-measured the merged
+  tree. The WASM scatter grows from 329,548 to 361,531 B gz (+31,983, +9.7%),
+  and over bare wgpu from 287,835 to 319,818, against the 400,000 cap. Almost
+  all of it is the bundled Inter SemiBold subset that year ticks use: the
+  story's 40,000 B allowance for a second weight. The Regular subset line in
+  `wasm_size.sh`'s table does not list the SemiBold subset yet.
