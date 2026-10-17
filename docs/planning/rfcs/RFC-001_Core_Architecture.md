@@ -3300,3 +3300,52 @@ Vulkan).
   between `y` and `y_end` per consecutive pair, bridged the same way.
 - **S12 (`Window`).** Evicting a whole chunk drops its bridge with it. The
   remaining first chunk's segments are unaffected.
+
+## S8b findings (2026-10-17, GUP-445)
+
+CPU picking: `Plot::pick_row`, `pick::<T>`, `pick_anchor` and `Chart::pick_row`.
+
+### Where the values come from
+
+A layer's pick items are built once per resolve (or zoom) from the first source
+that applies, for the whole layer:
+
+| Source                        | When                                                            | Gives                                       |
+| ----------------------------- | --------------------------------------------------------------- | ------------------------------------------- |
+| `ColumnStore::cpu_values`     | every chunk kept its CPU copy (`Auto`, `Columns`, small `Rows`) | stored order; mapped by `DrawOrder::row_of` |
+| `DynColumnEncoding::evaluate` | CPU columns released but rows kept (`Rows` over a full chunk)   | data order, accessors run again             |
+
+XX
+
+`pick::<T>` additionally needs the rows (`released == 0`): `Columns` and
+`GpuOnly` return `None` there but `pick_row` still works under `Columns`.
+
+Stored values go to pixels through `DynColumnEncoding::cpu_eval`, whose default
+is the end point image `image((v, v))` of the encoding chain. Every library
+scale maps a finite in-domain value, and a `Band` or `Point` code to its slot
+centre, through it, so the CPU positions equal the drawn ones: the tests read
+the rendered pixel at each `pick_anchor` and compare it with the row's fill.
+`Const`, `Derived` (called once per build) and unset channels (the `ChannelDesc`
+default) need no column. A hi/lo (`F32x2Relative`) column reads back to 1e-9
+relative.
+
+### Hit shapes and rules
+
+- `Mark::HIT` is `Unpickable`, `Disc`, `AlignedBox`, `Segment` or `Polyline`;
+  `#[mark(hit = ..)]` checks the channels the shape reads and its geometry.
+- The tolerance is 3 px. Among marks that contain the point, the topmost wins
+  (layer `z`, layer index, draw rank); otherwise the nearest within tolerance.
+  Containing beats nearer, so a point inside a lower disc and 2 px from the top
+  disc's edge picks the lower disc.
+- **Line endpoint rule for S9.** The CPU picks, for the segment under the point,
+  the endpoint row nearer to the point (row `i` on a tie). The GPU pick of S9
+  reads a drawn instance, which is the segment's first row, so a GPU line pick
+  should resolve the same way: the instance gives the segment, then the nearer
+  end.
+- A null on any channel the shape reads hides the row, as the vertex stage does,
+  so a null row is never picked and a polyline breaks there.
+
+### Timings (release, 800x500, 100,000 circles)
+
+First pick (index build): 14 ms (budget 50 ms). Mean of 10,000 random picks: 12
+us (budget 20 us; 99% of them hit something, in a dense field).

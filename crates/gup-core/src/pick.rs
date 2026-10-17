@@ -465,11 +465,15 @@ mod tests {
             b: [10.0, 10.0],
             h: 1.0,
         };
-        let corner = 10.0 + std::f32::consts::FRAC_1_SQRT_2 * 2.0 * 0.5 + 0.5;
+        let corner = 10.0 + std::f32::consts::SQRT_2;
         assert!(
-            d.distance([corner, corner]).abs() < 1e-5,
+            d.distance([10.0, corner]).abs() < 1e-5,
             "{}",
-            d.distance([corner, corner])
+            d.distance([10.0, corner])
+        );
+        assert!(
+            d.distance([corner, corner]) > 0.5,
+            "not a round or square-extended box"
         );
         // Zero length: an aligned square of side 2h.
         let z = Shape::Segment {
@@ -548,5 +552,58 @@ mod tests {
             index.query(Point::new(30.0, 20.0)).map(|h| h.row.layer),
             Some(0)
         );
+    }
+
+    struct D {
+        x: f64,
+        y: f64,
+        size: f64,
+    }
+
+    /// A size-encoded layer draws largest first; an appended batch sorts
+    /// into the middle of that order, and picks still return data rows and
+    /// still favour the row drawn later.
+    #[test]
+    fn append_into_a_size_ordered_layer_keeps_data_rows_and_draw_rank() {
+        use crate::prelude::{
+            Circle, Context, CpuMirror, EncodeFn, Linear, Plot, Pow, ScaleRef, Selection,
+        };
+        let cx = Context::new_blocking().unwrap();
+        let mut plot = Plot::new();
+        let x = plot.x(Linear::new().domain(0.0, 10.0));
+        let y = plot.y(Linear::new().domain(0.0, 10.0));
+        let size = ScaleRef::new(Pow::sqrt().domain(0.0, 10.0).range(Px(4.0), Px(12.0)));
+        let d = |x, y, size| D { x, y, size };
+        plot.add(Selection::<D, Circle>::new(vec![
+            d(1.0, 2.0, 1.0),
+            d(4.0, 2.0, 5.0),
+            d(7.0, 2.0, 9.0),
+        ]))
+        .attr(Circle::X, x.encode(|r: &D| r.x))
+        .attr(Circle::Y, y.encode(|r: &D| r.y))
+        .attr(Circle::RADIUS, size.encode(|r: &D| r.size));
+        plot.resolve(&cx, 480.0, 320.0).unwrap();
+        plot.layer_mut::<D, Circle>()
+            .unwrap()
+            .append([d(9.0, 8.0, 7.0), d(7.2, 2.0, 1.0)])
+            .unwrap();
+        plot.resolve(&cx, 480.0, 320.0).unwrap();
+        let rows = [(1.0, 2.0), (4.0, 2.0), (7.0, 2.0), (9.0, 8.0), (7.2, 2.0)];
+        let centre = |i: usize| {
+            Point::new(
+                x.read().eval(rows[i].0) as f32,
+                y.read().eval(rows[i].1) as f32,
+            )
+        };
+        for (i, &(rx, _)) in rows.iter().enumerate() {
+            let got = plot.pick_row(centre(i));
+            assert_eq!(got, Some(RowId { layer: 0, row: i }), "row {i} at x {rx}");
+        }
+        // In the overlap of rows 2 and 4, the smaller, row 4, draws last.
+        let between = Point::new((centre(2).x + centre(4).x) / 2.0 + 1.0, centre(2).y);
+        assert_eq!(plot.pick_row(between).map(|r| r.row), Some(4));
+        // Row 2's own side of the overlap.
+        let left = Point::new(centre(2).x - 9.0, centre(2).y);
+        assert_eq!(plot.pick_row(left).map(|r| r.row), Some(2));
     }
 }

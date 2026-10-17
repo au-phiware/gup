@@ -457,3 +457,15 @@ fn pick_100k_points() {
     assert!(build.as_millis() <= 50, "{build:?}");
     assert!(mean.as_micros() <= 20, "{mean:?}");
 }
+
+#[test]
+fn a_boxed_chart_picks_too() {
+    let cx = Context::new_blocking().unwrap();
+    let (mut plot, x, y) = base();
+    plot.add(circles(vec![p(5.0, 5.0, 0.0)], &x, &y));
+    let mut chart: Box<dyn Chart> = Box::new(plot);
+    chart.resolve(&cx, W as f32, H as f32).unwrap();
+    let c = at(&x, &y, &p(5.0, 5.0, 0.0));
+    assert_eq!(chart.pick_row(c), row(0, 0));
+    assert_eq!(chart.pick_row(off(c, 40.0, 0.0)), None);
+}

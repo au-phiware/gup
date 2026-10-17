@@ -312,7 +312,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   S8a: `Chart::resolve` cached by a revision sum (a clean resolve writes
   nothing), `Input`/`Response`, and `Chart::handle` with wheel zoom moved out of
   `show`. Deps: GUP-434 ✅.
-- [GUP-445](GUP-445_RFC_001_S8b_CPU_Picking.md) 🚧 — RFC-001 step S8b:
+- [GUP-445](GUP-445_RFC_001_S8b_CPU_Picking.md) ✅ — RFC-001 step S8b:
   `Plot::pick_row`/`pick::<T>` on the CPU, with a declared `HitShape` per mark
   (disc, box, square-capped segment, polyline), mapped back to data rows across
   chunks, nulls, draw order and `Retain`, through a lazy grid. Deps: GUP-444 📋.
