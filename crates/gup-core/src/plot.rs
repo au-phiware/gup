@@ -67,8 +67,42 @@ pub struct Resolved {
     pub scene: Scene,
 }
 
-/// A chart with shared x/y position scales, one data layer, axes and an
-/// optional title.
+/// A chart with shared x/y position scales, data layers, axes and an
+/// optional title. A new plot has automatic linear scales, so a layer and
+/// two closures make a chart:
+///
+/// ```
+/// use gup_core::ImageTarget;
+/// use gup_core::prelude::*;
+///
+/// struct Row { a: f64, b: f64 }
+/// let rows = [(1.0, 2.0), (2.0, 5.0), (3.0, 3.0), (4.0, 8.0)]
+///     .map(|(a, b)| Row { a, b });
+///
+/// let cx = Context::new_blocking()?;
+/// let mut plot = Plot::new();
+/// plot.circles(rows).x(|r| r.a).y(|r| r.b);
+/// let resolved = plot.resolve(&cx, 320.0, 200.0)?;
+/// let image = ImageTarget::new(&cx, 320, 200)?.render_blocking(&cx, &resolved.scene)?;
+///
+/// // Each row is a dot of the default fill (#0072B2) at its position.
+/// let at = |ticks: &[(f64, f32)], v: f64| {
+///     let (a, b) = (ticks[0], ticks[ticks.len() - 1]);
+///     f64::from(a.1) + (v - a.0) * f64::from(b.1 - a.1) / (b.0 - a.0)
+/// };
+/// for (a, b) in [(1.0, 2.0), (2.0, 5.0), (3.0, 3.0), (4.0, 8.0)] {
+///     let (x, y) = (at(&resolved.layout.x_ticks, a), at(&resolved.layout.y_ticks, b));
+///     let p = image.get_pixel(x as u32, y as u32).0;
+///     assert!(p[0] < 10 && (100..130).contains(&p[1]) && p[2] > 160, "{p:?}");
+/// }
+/// # Ok::<(), gup_core::Error>(())
+/// ```
+///
+/// A closure on `x`, `y`, `x_end` or `y_end` is encoded through the plot's
+/// scale for that axis. For a constant (`.y_end_with(0.0)`) or an encoding
+/// through another scale (`.x_with(log.encode(..))`), use the `_with` form.
+/// [`x`](Self::x) and [`y`](Self::y) replace the default scales, and
+/// return handles for encoding colour and size:
 ///
 /// ```
 /// use gup_core::prelude::*;
