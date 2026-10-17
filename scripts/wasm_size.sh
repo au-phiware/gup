@@ -11,7 +11,9 @@
 # scripts/perf_budget.sh, and fails when gup-core costs more than the budget
 # over bare wgpu: 400 KB gz, read as 400,000 B (the stricter reading of
 # RFC-001's "≤ +400 KB gz"). `mask wasm-size` and the Visual regression
-# workflow's browser job both run this script.
+# workflow's browser job both run this script. It then checks the `wasm.*` rows
+# of crates/gup-core/PERF_BUDGETS.md (the scatter's +2%) through
+# `perf_budget.sh --wasm-only`, unless GUP_WASM_SIZE_NO_BUDGET=1.
 #
 #   GUP_WASM_OVER_WGPU_MAX_GZ  the budget in bytes (default 400000); lower it
 #                              to see the check fail
@@ -46,7 +48,7 @@ if [[ $have != "$want" ]]; then
 fi
 
 out=$(mktemp -d)
-trap 'rm -rf "$out"' EXIT
+trap 'rm -rf "$out" "${mfile:-}"' EXIT
 measure() { # name, crate dir, crate file name
   local name=$1 dir=$2 file=$3
   (cd "$harnesses/$dir" && cargo build --quiet --release --target wasm32-unknown-unknown)
@@ -66,12 +68,25 @@ font="$root/crates/gup-text/fonts/Inter-Regular-Subset.ttf"
 printf '%-26s %10d B raw %9d B gz\n' "(Inter subset, bundled)" \
   "$(stat -c %s "$font")" "$(gzip -9 -c "$font" | wc -c)"
 
-echo "metric wasm.wgpu.gz_bytes $base_gz"
-echo "metric wasm.scatter.gz_bytes $gz"
-echo "metric wasm.over_wgpu.gz_bytes $over_gz"
+metrics="metric wasm.wgpu.gz_bytes $base_gz
+metric wasm.scatter.gz_bytes $gz
+metric wasm.over_wgpu.gz_bytes $over_gz"
+echo "$metrics"
 
+status=0
 if ((over_gz > budget)); then
   echo "wasm-size: FAIL: gup-core costs $over_gz B gz over bare wgpu, over the $budget B budget (RFC-001 §12 risk 10)" >&2
-  exit 1
+  status=1
+else
+  echo "wasm-size: pass: gup-core costs $over_gz B gz over bare wgpu (budget $budget B)"
 fi
-echo "wasm-size: pass: gup-core costs $over_gz B gz over bare wgpu (budget $budget B)"
+
+# The `wasm.*` rows of PERF_BUDGETS.md (GUP-438): the scatter is held to its
+# recorded size. perf_budget.sh sets GUP_WASM_SIZE_NO_BUDGET when it calls
+# this script, to avoid recursing.
+if [[ -z ${GUP_WASM_SIZE_NO_BUDGET:-} ]]; then
+  mfile=$(mktemp)
+  echo "$metrics" >"$mfile"
+  "$root/scripts/perf_budget.sh" --wasm-only --metrics "$mfile" || status=1
+fi
+exit $status

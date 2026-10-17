@@ -162,8 +162,10 @@ jobs:
           GUP_CHROMIUM: ${{ steps.chrome.outputs.chrome-path }}
         run: ./scripts/wasm_browser.sh
 
-      # gup-core's WASM size budget (GUP-417, RFC-001 §12 risk 10): fails when
-      # the scatter costs more than 400,000 B gz over bare wgpu.
+      # gup-core's WASM size budget (GUP-417, GUP-438): fails when gup-core
+      # costs more than 400,000 B gz over bare wgpu (the RFC-001 §12 risk 10
+      # ceiling), or when wasm.scatter.gz_bytes is over +2% of the value
+      # recorded in crates/gup-core/PERF_BUDGETS.md.
       - name: Check gup-core's WASM size budget (mask wasm-size)
         run: ./scripts/wasm_size.sh
 

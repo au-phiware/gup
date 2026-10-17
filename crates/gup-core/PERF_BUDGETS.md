@@ -154,8 +154,9 @@ sections, `gzip -9`. Recorded: scatter 300,913 B gz, bare wgpu 41,712 B gz, so
 **gup-core costs 259,201 B gz over bare wgpu** against RFC-001 §12 risk 10's
 ceiling of +400 KB gz, read as 400,000 B (the RFC's KB are 1,000 B). Sizes
 depend only on the tree and toolchain, so the scatter is held to +2% (about 5 KB
-gz, smaller than one story's typical growth: S4b added 6.4 KB) and the ceiling
-is enforced in CI.
+gz, smaller than one story's typical growth: S4b added 6.4 KB). CI enforces both
+the scatter row and the ceiling (`mask wasm-size`, GUP-438), so a story that
+changes the size re-records the row in the same commit, against current `main`.
 
 The harness is also the browser smoke test, so its scenes count: GUP-418 (S5a)
 re-recorded the scatter at 271,706 B (from 252,925). Its library changes (the

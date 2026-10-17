@@ -9,11 +9,15 @@
 # runs this script.
 #
 #   scripts/perf_budget.sh [--budgets FILE] [--metrics FILE] [--skip-wasm]
+#                          [--wasm-only]
 #
 #   --budgets FILE  compare against FILE's table instead of PERF_BUDGETS.md
 #   --metrics FILE  compare FILE's `metric` lines instead of measuring
 #   --skip-wasm     do not run scripts/wasm_size.sh (its rows then fail as
 #                   not measured)
+#   --wasm-only     check only the rows whose metric starts with `wasm.`
+#                   (others are skipped); measures only the WASM size, or
+#                   nothing with --metrics. scripts/wasm_size.sh uses it
 #
 # Measuring needs a display and a real GPU: it runs
 #   zoom_bench --present mailbox --uncapped   (release, fullscreen window)
@@ -33,6 +37,7 @@ root=$(cd "$(dirname "$0")/.." && pwd)
 budgets="$root/crates/gup-core/PERF_BUDGETS.md"
 metrics=""
 wasm=1
+wasm_only=0
 while (($#)); do
   case $1 in
   --budgets)
@@ -42,6 +47,10 @@ while (($#)); do
   --metrics)
     metrics=$2
     shift 2
+    ;;
+  --wasm-only)
+    wasm_only=1
+    shift
     ;;
   --skip-wasm)
     wasm=0
@@ -62,55 +71,59 @@ if [[ -z $metrics ]]; then
   : >"$metrics"
   cd "$root"
 
-  echo "perf-budget: zoom_bench (100K points, Mailbox uncapped, fullscreen)" >&2
-  cargo build --quiet -p gup-core --release --example zoom_bench
-  freq=${GUP_GPU_FREQ_FILE:-}
-  if [[ -z $freq ]]; then
-    for f in /sys/class/drm/card*/gt_act_freq_mhz; do
-      if [[ -r $f ]]; then
-        freq=$f
-        break
-      fi
-    done
-  fi
-  if [[ -n $freq ]]; then
-    (while :; do
-      cat "$freq"
-      sleep 0.02
-    done) >"$work/clock" 2>/dev/null &
-    sampler=$!
-  fi
-  "${CARGO_TARGET_DIR:-$root/target}/release/examples/zoom_bench" \
-    --present mailbox --uncapped | tee "$work/zoom" >&2
-  if [[ -n ${sampler:-} ]]; then
-    kill "$sampler"
-    wait "$sampler" 2>/dev/null || true
-    sampler=""
-    sort -n "$work/clock" | awk '{v[NR] = $1} END {
-      if (NR) printf "metric zoom.gpu_clock.median_mhz %d\n", v[int((NR + 1) / 2)]
-    }' >>"$metrics"
-  fi
-  grep '^metric ' "$work/zoom" >>"$metrics"
+  if ((!wasm_only)); then
+    echo "perf-budget: zoom_bench (100K points, Mailbox uncapped, fullscreen)" >&2
+    cargo build --quiet -p gup-core --release --example zoom_bench
+    freq=${GUP_GPU_FREQ_FILE:-}
+    if [[ -z $freq ]]; then
+      for f in /sys/class/drm/card*/gt_act_freq_mhz; do
+        if [[ -r $f ]]; then
+          freq=$f
+          break
+        fi
+      done
+    fi
+    if [[ -n $freq ]]; then
+      (while :; do
+        cat "$freq"
+        sleep 0.02
+      done) >"$work/clock" 2>/dev/null &
+      sampler=$!
+    fi
+    "${CARGO_TARGET_DIR:-$root/target}/release/examples/zoom_bench" \
+      --present mailbox --uncapped | tee "$work/zoom" >&2
+    if [[ -n ${sampler:-} ]]; then
+      kill "$sampler"
+      wait "$sampler" 2>/dev/null || true
+      sampler=""
+      sort -n "$work/clock" | awk '{v[NR] = $1} END {
+        if (NR) printf "metric zoom.gpu_clock.median_mhz %d\n", v[int((NR + 1) / 2)]
+      }' >>"$metrics"
+    fi
+    grep '^metric ' "$work/zoom" >>"$metrics"
 
-  echo "perf-budget: pipeline_timings (release)" >&2
-  cargo test --quiet -p gup-core --release --lib pipeline_timings \
-    -- --ignored --nocapture >"$work/pipeline" 2>&1 || {
-    cat "$work/pipeline" >&2
-    exit 1
-  }
-  grep '^metric ' "$work/pipeline" >>"$metrics"
+    echo "perf-budget: pipeline_timings (release)" >&2
+    cargo test --quiet -p gup-core --release --lib pipeline_timings \
+      -- --ignored --nocapture >"$work/pipeline" 2>&1 || {
+      cat "$work/pipeline" >&2
+      exit 1
+    }
+    grep '^metric ' "$work/pipeline" >>"$metrics"
+
+  fi
 
   if ((wasm)); then
     echo "perf-budget: wasm-size" >&2
     # Its own budget failure still prints the metrics: compare them below.
-    "$root/scripts/wasm_size.sh" >"$work/wasm" 2>&1 || true
+    GUP_WASM_SIZE_NO_BUDGET=1 "$root/scripts/wasm_size.sh" >"$work/wasm" 2>&1 || true
     cat "$work/wasm" >&2
     grep '^metric ' "$work/wasm" >>"$metrics" || true
   fi
 fi
 
 # The budget table: rows whose first cell is a backticked metric name.
-awk -F'|' '
+awk -F'|' -v wasm_only="$wasm_only" '
+  wasm_only && $2 !~ /^ *`wasm\./ { next }
   $2 ~ /^ *`[a-z0-9_.]+` *$/ {
     key = $2; gsub(/[ `]/, "", key)
     rec = $3; gsub(/[ ,]/, "", rec)

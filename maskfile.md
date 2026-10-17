@@ -54,11 +54,12 @@ gup-core (whose shaders are composed at build time, GUP-406). Each goes through
 `wasm-bindgen --target web` without name sections, then `gzip -9`. Prints each
 size, gup-core's cost over bare wgpu and the bundled Inter subset, and **fails**
 when gup-core costs more than 400,000 B gz over bare wgpu
-(`GUP_WASM_OVER_WGPU_MAX_GZ` overrides the budget). The Visual regression
-workflow's browser job runs the same script. Needs `wasm-bindgen` at the
-harnesses' `Cargo.lock` version. Delete
-`$CARGO_TARGET_DIR/wasm32-unknown-unknown/release` afterwards if disk is tight.
-See `scripts/wasm_size.sh` and `crates/gup-core/PERF_BUDGETS.md`.
+(`GUP_WASM_OVER_WGPU_MAX_GZ` overrides the budget), or when the scatter is more
+than 2% over its recorded size in `crates/gup-core/PERF_BUDGETS.md` (GUP-438,
+through `perf_budget.sh --wasm-only`). The Visual regression workflow's browser
+job runs the same script. Needs `wasm-bindgen` at the harnesses' `Cargo.lock`
+version. Delete `$CARGO_TARGET_DIR/wasm32-unknown-unknown/release` afterwards if
+disk is tight. See `scripts/wasm_size.sh` and `crates/gup-core/PERF_BUDGETS.md`.
 
 ```bash
 ./scripts/wasm_size.sh
@@ -77,7 +78,8 @@ a fullscreen window, like `mask gup-core-window`) and `wasm-bindgen` like
 any story that touches gup-core rendering, uploads, pipeline creation or WASM
 size. The timing budgets hold only on the machine `PERF_BUDGETS.md` names; a
 failure on timing alone warrants a second run. Run `scripts/perf_budget.sh`
-directly for its options (`--skip-wasm`, `--budgets FILE`, `--metrics FILE`).
+directly for its options (`--skip-wasm`, `--wasm-only`, `--budgets FILE`,
+`--metrics FILE`).
 
 ```bash
 ./scripts/perf_budget.sh
