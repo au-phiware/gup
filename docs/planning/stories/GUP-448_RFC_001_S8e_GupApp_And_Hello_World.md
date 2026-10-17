@@ -134,8 +134,8 @@ fn main() -> gup_core::Result<()> {
     let points = (0..50).map(|i| f64::from(i) / 5.0).map(|x| (x, x.sin()));
     let mut plot = Plot::new();
     plot.circles(points)
-        .x(|p: &(f64, f64)| p.0)
-        .y(|p: &(f64, f64)| p.1)
+        .x(|p| p.0)
+        .y(|p| p.1)
         .tooltip(|p| format!("sin({:.1}) = {:.2}", p.0, p.1));
     gup_core::show(plot)
 }

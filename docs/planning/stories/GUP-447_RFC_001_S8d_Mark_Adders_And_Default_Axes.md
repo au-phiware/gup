@@ -122,6 +122,30 @@ world on this, plus GUP-446's tooltip.
 
 ## Decisions
 
+### Orchestrator decision (2026-10-17): position closures infer
+
+A closure's argument type is inferred only when the parameter has a direct
+`Fn(&T) -> V` bound. A generic `impl IntoEncoding<..>` parameter, which also
+accepts constants and scale encodings, never infers it, so the short form needed
+`|p: &(f64, f64)|`. The newcomer path must read `.x(|p| p.0)`. So:
+
+- For **position-role** channels (`x`, `y`, `x_end`, `y_end`), the plain setter
+  takes `F: Fn(&T) -> V` directly and encodes through the plot's scale for that
+  axis. `|p| p.0` infers.
+- Each position channel also gets a `<name>_with(e: impl IntoEncoding<..>)`
+  setter for constants and explicit encodings: `.y_end_with(0.0)` for a bar
+  baseline, `.x_with(log.encode(|p: &Row| p.mass))`. `#[derive(Mark)]` generates
+  both, so every mark, user marks included, follows the rule.
+- **Styling** channels (`radius`, `fill`, `stroke`, ...) keep the plain
+  `impl IntoEncoding` setter, because constants are the common case there
+  (`.radius(3.0)`, `.fill(RED)`). A styling closure keeps its annotation.
+- The existing long form changes from `.x(x.encode(..))` to
+  `.x_with(x.encode(..))`. Pre-alpha breaking change (owner decision 2).
+
+Any AC below that shows `|r: &Row|` on a position channel means `|r| ...`
+without the annotation. The escalation trigger "a closure needs more annotation
+than `|r: &T|`" now reads "a position closure needs any annotation".
+
 ```rust
 impl Plot {
     /// Add a layer of circles over `rows` and return it.
@@ -195,7 +219,8 @@ where
 
 ## Escalation Triggers
 
-- A closure needs more annotation than `|r: &T|` to infer, in any AC test.
+- A position-channel closure needs any type annotation to infer, in any AC test
+  (orchestrator decision above).
 - Binding needs a change to `EncodeFn`'s or `ShaderFn`'s public signatures.
 - A short-form plot's image or `Layout` differs from the long form's (AC2's
   byte-identity fails).
