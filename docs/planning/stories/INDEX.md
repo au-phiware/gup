@@ -297,7 +297,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   1-2-5 log `nice()` bounds, "B" for billions, and measured tick-label thinning
   on every axis so labels never overlap. Deps: GUP-425 📋, GUP-418 ✅, GUP-419
   ✅.
-- [GUP-436](GUP-436_RFC_001_S7g_Semibold_Time_Year_Ticks.md) 📋 — RFC-001 step
+- [GUP-436](GUP-436_RFC_001_S7g_Semibold_Time_Year_Ticks.md) ✅ — RFC-001 step
   S7g: bundle Inter SemiBold, add text weights to `gup-text`, and draw `Time`
   year ticks heavier than month ticks within the WASM budget. Deps: GUP-425 📋,
   GUP-407 ✅, GUP-418 ✅.
