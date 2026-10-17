@@ -68,7 +68,7 @@ X) or `info` (printed, never fails).
 | `zoom.validity.bytes`             | 0         | exact     | `zoom_bench`                                      |
 | `zoom.uniforms.bytes_per_frame`   | 136       | exact     | `zoom_bench`                                      |
 | `zoom.uniforms.writes_per_frame`  | 3         | exact     | `zoom_bench`                                      |
-| `zoom.instances.bytes`            | 5,646,396 | exact     | `zoom_bench`, over the 600 measured frames        |
+| `zoom.instances.bytes`            | 5,631,168 | exact     | `zoom_bench`, over the 600 measured frames        |
 | `zoom.instances.writes_per_frame` | 3         | exact     | `zoom_bench`                                      |
 | `zoom.textures.bytes`             | 0         | exact     | `zoom_bench`                                      |
 | `pipeline.link_create.median_ms`  | 0.88      | +20%      | `pipeline_timings`, 20 runs, fresh cache each     |
@@ -273,3 +273,12 @@ seeded violation (GUP-417 retrospective).
     +2,618 respectively.
   - `pipeline.link_create.median_ms` read 1.139 against 1.056 at load 5.2: a
     timing failure under load, not re-recorded.
+- **GUP-435's widening fix (1d9b9ce, 2026-10-17)**: re-measured by the
+  orchestrator. Widened domains are no longer rounded a second time, so there
+  are fewer guide instances: `zoom.instances.bytes` drops from 5,646,396 to
+  5,631,168. WASM scatter is 329,486 B gz, within its +2%.
+  - `pipeline.link_create.median_ms` read 1.085, and has read 1.07–1.16 in most
+    runs since GUP-429, one run passing at 0.98, with the load at 4–6 every
+    time. It is not re-recorded. Confirm it on an idle machine before treating
+    it as a regression in the glue (GUP-431's draw entries and GUP-432's
+    next-row reads are the candidates).
