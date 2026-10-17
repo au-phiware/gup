@@ -288,7 +288,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
 - [GUP-434](GUP-434_RFC_001_S7e_Chart_Trait.md) ✅ — RFC-001 step S7e:
   object-safe `Chart` with a `ChartExt` blanket extension (render, save) and
   `Plot::layer_mut`; caching and input are deferred to S8. Deps: GUP-424 📋.
-- [GUP-435](GUP-435_RFC_001_S7f_Tick_Label_Quality.md) 📋 — RFC-001 step S7f:
+- [GUP-435](GUP-435_RFC_001_S7f_Tick_Label_Quality.md) ✅ — RFC-001 step S7f:
   1-2-5 log `nice()` bounds, "B" for billions, and measured tick-label thinning
   on every axis so labels never overlap. Deps: GUP-425 📋, GUP-418 ✅, GUP-419
   ✅.
