@@ -211,11 +211,11 @@ pub(crate) trait DynPositionScale: Send + Sync {
     fn current_domain(&self) -> Option<(f64, f64)>;
     fn set_domain(&self, d0: f64, d1: f64) -> Result<()>;
     fn invert(&self, px: f64) -> f64;
-    /// Grow an automatic domain, in data units, so that its data extent
-    /// maps `inset` pixels inside the pixel interval `a..b`. Returns
-    /// whether the domain changed; an explicit domain and an ordinal scale
-    /// never change. The caller then re-rounds with [`nice`](Self::nice).
-    fn widen(&self, a: f32, b: f32, inset: f32) -> bool;
+    /// Grow an automatic, already rounded domain, in data units, so that
+    /// its ends map `overhang` pixels inside the pixel interval `a..b`.
+    /// Returns whether the domain changed; an explicit domain and an
+    /// ordinal scale never change. Ticks stay on the rounded values.
+    fn widen(&self, a: f32, b: f32, overhang: f32) -> bool;
 
     /// Zoom by `factor` about pixel `anchor`: the domain becomes the values
     /// now drawn at the range ends pulled towards (`factor < 1`) or pushed
@@ -264,21 +264,19 @@ impl<S: PositionScale> DynPositionScale for ScaleRef<S> {
         self.read().invert(px)
     }
 
-    fn widen(&self, a: f32, b: f32, inset: f32) -> bool {
-        if inset <= 0.0 || !self.read().is_auto() {
+    fn widen(&self, a: f32, b: f32, overhang: f32) -> bool {
+        if overhang <= 0.0 || !self.read().is_auto() {
             return false;
         }
-        let Some(extent) = *self.0.fit.lock().unwrap_or_else(|p| p.into_inner()) else {
-            return false;
-        };
         let sign = if b >= a { 1.0 } else { -1.0 };
         let mut scale = self.write();
-        // Map the raw data extent inside the inset, then read off what the
-        // outer ends show; a scale that cannot take the domain keeps it.
-        scale.set_range(Px(a + sign * inset), Px(b - sign * inset));
-        if scale.fit_domain(extent).is_err() {
+        let Some(extent) = scale.current_domain() else {
             return false;
-        }
+        };
+        // Map the rounded domain `overhang` pixels inside the pixel interval,
+        // then read off what its ends show; a scale that cannot take the
+        // domain keeps it.
+        scale.set_range(Px(a + sign * overhang), Px(b - sign * overhang));
         let (lo, hi) = (scale.invert(f64::from(a)), scale.invert(f64::from(b)));
         if !(lo.is_finite() && hi.is_finite()) || (lo == extent.0 && hi == extent.1) {
             return false;

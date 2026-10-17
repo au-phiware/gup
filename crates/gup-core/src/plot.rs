@@ -410,16 +410,11 @@ impl Plot {
         // Automatic domains grow in data units to cover the overhang and
         // padding, so the ticks run to both ends of each axis (GUP-435).
         let widened = (
-            x.widen(lay.plot.left(), lay.plot.right(), inset),
-            y.widen(lay.plot.bottom(), lay.plot.top(), inset),
+            x.widen(lay.plot.left(), lay.plot.right(), mark_overhang),
+            y.widen(lay.plot.bottom(), lay.plot.top(), mark_overhang),
         );
         if widened.0 || widened.1 {
-            for s in [x, y] {
-                if s.is_auto() {
-                    s.nice();
-                }
-            }
-            // The range keeps the inset until the domain is final.
+            // Tick values stay on the rounded numbers; the margins may change.
             lay = layout(counts.0, counts.1)?;
         }
         set_ranges(lay.plot, widened);
@@ -734,7 +729,7 @@ mod tests {
         let uploads = cx.upload_stats();
 
         // Tick labels reuse the first render's glyphs, so no atlas texels are written.
-        x.write().set_domain(0.5, 2.0).unwrap();
+        x.write().set_domain(1.0, 5.0).unwrap();
         let second = plot.resolve(&cx, 300.0, 200.0).unwrap();
         let zoomed = target.render_blocking(&cx, &second.scene).unwrap();
         let after = cx.pipelines().stats;

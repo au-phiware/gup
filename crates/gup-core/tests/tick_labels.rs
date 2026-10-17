@@ -203,3 +203,28 @@ fn an_automatic_domain_widens_and_a_fixed_one_does_not() {
         }
     }
 }
+
+/// A line's automatic domain is never grown by a tick step: the end ticks
+/// stay on 0 and 200, at the plot's edges (plus the far end's padding).
+#[test]
+fn a_line_keeps_its_end_ticks_on_the_data_extent() {
+    let cx = Context::new_blocking().unwrap();
+    let mut plot = Plot::new();
+    let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
+    plot.add(Selection::<(f64, f64), Line>::new(vec![
+        (0.0, 0.0),
+        (200.0, 10.0),
+    ]))
+    .x(x.encode(|r: &(f64, f64)| r.0))
+    .y(y.encode(|r: &(f64, f64)| r.1))
+    .width(Px(2.0));
+    let r = plot.resolve(&cx, 720.0, 400.0).unwrap();
+    let t = &r.layout.x_ticks;
+    let (first, last) = (t[0], t[t.len() - 1]);
+    assert_eq!((first.0, last.0), (0.0, 200.0));
+    assert!(first.1 - r.layout.plot.left() < 2.0, "{first:?}");
+    // A line's width has no Size role, so its overhang is 0 and the domain
+    // is not widened: the far end only keeps the plot padding.
+    let pad = Theme::default().plot_padding.0;
+    assert!(r.layout.plot.right() - last.1 <= pad + 0.5, "{last:?}");
+}
