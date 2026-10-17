@@ -862,6 +862,50 @@ mod tests {
         assert!(after == expected, "appending differs from building at once");
     }
 
+    /// GUP-432: appending to a line extends it, through the last chunk's
+    /// tail and across new chunks (new bridges), writing only the new rows'
+    /// bytes, and renders what a line built from every row at once does.
+    #[test]
+    fn appended_rows_extend_a_line() {
+        use crate::Line;
+        let line = |rows: Vec<Pt>| {
+            let mut plot = Plot::new();
+            let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
+            plot.add(Selection::<Pt, Line>::new(rows))
+                .attr(Line::X, x.encode(|r: &Pt| r.0))
+                .attr(Line::Y, y.encode(|r: &Pt| r.1))
+                .attr(Line::WIDTH, Px(2.0))
+                .max_chunk_rows(8);
+            plot
+        };
+        let cx = Context::new_blocking().unwrap();
+        let mut plot = line(points(0..10));
+        let mut target = ImageTarget::new(&cx, 400, 300).unwrap();
+        plot.resolve(&cx, 400.0, 300.0).unwrap();
+        let start = cx.upload_stats();
+        let mut end = 10;
+        for n in [3, 8, 1] {
+            let layer: &mut Selection<Pt, Line> =
+                plot.layers[0].as_any_mut().downcast_mut().unwrap();
+            layer.append(points(end..end + n)).unwrap();
+            end += n;
+            let resolved = plot.resolve(&cx, 400.0, 300.0).unwrap();
+            assert_eq!(batch(&resolved).instances(), u64::from(end - 1));
+        }
+        let written = cx.upload_stats() - start;
+        assert_eq!(
+            written.columns.bytes,
+            u64::from(end - 10) * 8,
+            "{written:?}"
+        );
+        let resolved = plot.resolve(&cx, 400.0, 300.0).unwrap();
+        // Chunks of 8, 8 and 6 rows, and two bridges.
+        assert_eq!(batch(&resolved).chunks.len(), 5);
+        let after = target.render_blocking(&cx, &resolved.scene).unwrap();
+        let expected = line(points(0..end)).render(&cx, 400, 300).unwrap();
+        assert!(after == expected, "appending differs from building at once");
+    }
+
     /// GUP-434: `layer_mut` finds a layer by its row and mark types.
     #[test]
     fn layer_mut_matches_layers_by_type() {
@@ -1119,6 +1163,65 @@ mod tests {
         let (after, _) = plot.render_resolved(&cx, 300, 200).unwrap();
         assert_eq!(*after.get_pixel(x0, y0), white, "row 0 still drawn");
         assert_eq!(*after.get_pixel(x1, y1), *before.get_pixel(x1, y1));
+    }
+
+    /// GUP-432 (AC4): a line hides both segments touching a row by its
+    /// validity bit, including across chunk boundaries (the bridge reads
+    /// the next chunk's bits). Rows 3 (the last of chunk 0), 5 (mid-chunk
+    /// in chunk 1) and 8 (the first of chunk 2) keep finite positions but
+    /// have their y bits cleared; the NaN in row 11 makes the store upload
+    /// bits.
+    #[test]
+    fn a_cleared_validity_bit_breaks_a_line() {
+        use crate::Line;
+        let cx = Context::new_blocking().unwrap();
+        let mut plot = Plot::new();
+        let (x, y) = (
+            plot.x(Linear::new().domain(-1.0, 12.0)),
+            plot.y(Linear::new().domain(0.0, 10.0)),
+        );
+        let mut rows: Vec<Pt> = (0..12)
+            .map(|i| (f64::from(i), if i % 2 == 0 { 2.0 } else { 8.0 }))
+            .collect();
+        rows[11].1 = f64::NAN;
+        plot.add(Selection::<Pt, Line>::new(rows.clone()))
+            .attr(Line::X, x.encode(|r: &Pt| r.0))
+            .attr(Line::Y, y.encode(|r: &Pt| r.1))
+            .attr(Line::WIDTH, Px(3.0))
+            .max_chunk_rows(4);
+        let white = image::Rgba([255, 255, 255, 255]);
+        let mid = |i: usize| {
+            let (a, b) = (rows[i], rows[i + 1]);
+            (
+                x.read().eval((a.0 + b.0) / 2.0) as u32,
+                y.read().eval((a.1 + b.1) / 2.0) as u32,
+            )
+        };
+        let (before, _) = plot.render_resolved(&cx, 400, 300).unwrap();
+        for i in 0..10 {
+            let (px, py) = mid(i);
+            assert_ne!(*before.get_pixel(px, py), white, "segment {i} not drawn");
+        }
+
+        let layer: &mut Selection<Pt, Line> = plot.layers[0].as_any_mut().downcast_mut().unwrap();
+        let store = layer.store_mut().unwrap();
+        for row in [3, 5, 8] {
+            store.clear_valid(row, 1);
+        }
+        let (after, _) = plot.render_resolved(&cx, 400, 300).unwrap();
+        for i in 0..10 {
+            let (px, py) = mid(i);
+            let hidden = [2, 3, 4, 5, 7, 8].contains(&i);
+            if hidden {
+                assert_eq!(*after.get_pixel(px, py), white, "segment {i} still drawn");
+            } else {
+                assert_eq!(
+                    *after.get_pixel(px, py),
+                    *before.get_pixel(px, py),
+                    "segment {i}"
+                );
+            }
+        }
     }
 
     /// GUP-419 AC1: the dictionary hook end to end. Appending rows with a

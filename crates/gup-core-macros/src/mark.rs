@@ -15,7 +15,8 @@ use quote::{format_ident, quote, quote_spanned};
 use syn::spanned::Spanned;
 use syn::{Data, DeriveInput, Expr, Fields, Ident, LitStr};
 
-const USAGE: &str = "#[mark(module = \"gup::marks::circle\", geometry = Quad)] (or \
+const USAGE: &str = "#[mark(module = \"gup::marks::circle\", geometry = Quad)] (`geometry` is \
+                     `Quad` or `Polyline`; or \
                      `wgsl = \"…\"` / `file = \"…\"` for your own module, with an optional \
                      `path = \"crate::module\"`), and optionally `antialias = Msaa`";
 
@@ -188,12 +189,17 @@ pub fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             format!("#[mark] needs `geometry = Quad`: {USAGE}"),
         ));
     };
-    if geometry != "Quad" {
-        return Err(syn::Error::new(
-            geometry.span(),
-            "`geometry` is `Quad`, the only geometry so far",
-        ));
-    }
+    let polyline = match geometry.to_string().as_str() {
+        "Quad" => false,
+        "Polyline" => true,
+        _ => {
+            return Err(syn::Error::new(
+                geometry.span(),
+                "`geometry` is `Quad` (one quad per row) or `Polyline` (one per pair of \
+                 consecutive rows)",
+            ));
+        }
+    };
     let antialias = match &args.antialias {
         Some(a) if a == "Msaa" => Some(quote!(#root::Antialias::Msaa)),
         Some(a) if a == "Analytic" => Some(quote!(#root::Antialias::Analytic)),
@@ -363,8 +369,27 @@ pub fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         .iter()
         .map(|m| m.name.clone().unwrap_or_default())
         .collect();
-    for (i, ch) in channels.iter().enumerate() {
-        let field = ch.ident.to_string();
+    // The members: the channels, then (a polyline) each position
+    // channel again, read at the next row, as `<channel>_next`.
+    let mut expected: Vec<(String, &Channel)> =
+        channels.iter().map(|c| (c.ident.to_string(), c)).collect();
+    if polyline {
+        expected.extend(
+            channels
+                .iter()
+                .filter(|c| c.role.as_ref().is_some_and(|r| r == "X" || r == "Y"))
+                .map(|c| (format!("{}_next", c.ident), c)),
+        );
+        if expected.len() == channels.len() {
+            return Err(syn::Error::new(
+                name.span(),
+                "a `Polyline` mark needs a position channel (`role = X` or `role = Y`) to join \
+                 consecutive rows by",
+            ));
+        }
+    }
+    for (i, (field, ch)) in expected.iter().enumerate() {
+        let field = field.clone();
         match member_names.get(i) {
             Some(m) if *m == field => {}
             _ => {
@@ -372,14 +397,24 @@ pub fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                     Some(j) => format!(
                         "`{name_str}`'s channel `{field}` is number {} but `{in_name}.{field}` \
                          is number {} in the WGSL: the struct's members must be the channels, \
-                         in order ({})",
+                         in order{} ({})",
                         i + 1,
                         j + 1,
+                        if polyline {
+                            ", then `<channel>_next` for each position channel"
+                        } else {
+                            ""
+                        },
                         member_names.join(", ")
                     ),
                     None => format!(
-                        "`{name_str}`'s channel `{field}` is missing from `{in_name}` in the \
+                        "`{name_str}`'s {} `{field}` is missing from `{in_name}` in the \
                          WGSL of `{path}`, which has: {}",
+                        if i < channels.len() {
+                            "channel"
+                        } else {
+                            "next-row position"
+                        },
                         member_names.join(", ")
                     ),
                 };
@@ -387,13 +422,13 @@ pub fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             }
         }
     }
-    if member_names.len() > channels.len() {
+    if member_names.len() > expected.len() {
         return Err(syn::Error::new(
             name.span(),
             format!(
                 "`{in_name}` in the WGSL of `{path}` has members that `{name_str}` has no \
                  channel for: {}",
-                member_names[channels.len()..].join(", ")
+                member_names[expected.len()..].join(", ")
             ),
         ));
     }
@@ -465,9 +500,9 @@ pub fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     }
 
     // One assertion per field: the Rust type's WGSL is the member's.
-    let asserts = channels.iter().zip(&members).map(|(ch, member)| {
+    let asserts = expected.iter().zip(&members).map(|((field, ch), member)| {
         let wgsl = type_name(&wgsl_module, member.ty, &prefix);
-        let (ty, field) = (&ch.ty, ch.ident.to_string());
+        let ty = &ch.ty;
         let msg = format!(
             "#[derive(Mark)]: `{name_str}`'s channel `{field}` is `{}` but `{in_name}.{field}` is \
              `{wgsl}` in the WGSL of `{path}`",
@@ -482,6 +517,8 @@ pub fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     });
     let field_idents: Vec<&Ident> = channels.iter().map(|c| &c.ident).collect();
     let antialias_item = antialias.map(|a| quote!(const ANTIALIAS: #root::Antialias = #a;));
+    let geometry_item =
+        polyline.then(|| quote!(const GEOMETRY: #root::Geometry = #root::Geometry::Polyline;));
 
     let trait_ident = format_ident!("{}Attrs", name);
     let trait_doc = format!(
@@ -536,6 +573,7 @@ pub fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 const CHANNELS: &'static [#root::ChannelDesc] = &[#(#descs),*];
                 const VERTICES_PER_INSTANCE: u32 = 6;
                 #antialias_item
+                #geometry_item
             }
 
             #(#asserts)*

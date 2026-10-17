@@ -284,7 +284,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   (design): size-descending and emphasis-last draw order that stays
   append-friendly and correct with translucent fills. Deps: GUP-430 📋; soft:
   GUP-424 📋.
-- [GUP-432](GUP-432_RFC_001_S6f_Line_Mark.md) 📋 — RFC-001 step S6f (design): a
+- [GUP-432](GUP-432_RFC_001_S6f_Line_Mark.md) ✅ — RFC-001 step S6f (design): a
   `Line` mark binding each row with its successor across column chunks, with
   joins and breaks at null rows. Deps: GUP-423 📋, GUP-424 📋.
 - [GUP-433](GUP-433_RFC_001_S7d_Shared_Key_Dictionaries.md) ✅ — RFC-001 step
@@ -305,6 +305,9 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   ramp legends for `then` chains (ticks in data units) and sampled or
   user-supplied legends for `#[wgsl_function]` colour functions. Deps: GUP-426
   📋, GUP-420 ✅.
+- [GUP-439](GUP-439_Line_Translucent_Joins.md) 💡 — translucent `Line`s with
+  even opacity: joins and self-crossings blended once (a per-layer coverage
+  pass), opaque lines unchanged. Deps: GUP-432 ✅.
 
 ## GPU Rendering Pipeline
 

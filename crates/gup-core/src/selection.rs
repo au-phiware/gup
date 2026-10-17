@@ -5,12 +5,12 @@
 //! (RFC-001 §4). S0a scope: data and `attr`; events, transitions and
 //! append are later S-stories.
 
-use crate::channel::{Channel, Mark, Role, Visual};
+use crate::channel::{Channel, Geometry, Mark, Role, Visual};
 use crate::column::{ColumnFormat, ColumnStore};
 use crate::context::Context;
 use crate::encoding::{Encoding, IntoEncoding, Resource};
 use crate::error::{Error, Result};
-use crate::order::{DrawOrder, chunk_spans};
+use crate::order::{DrawEntry, DrawOrder, chunk_spans, draw_entries, polyline_spans};
 use crate::render::{
     ChunkDraw, Draws, LayerGpu, LayerUniforms, chunk_uniform_offset, chunk_uniforms,
 };
@@ -348,6 +348,10 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
     /// the values' extent, end by end; an encoding without an image is
     /// taken as increasing).
     fn size_order(&self, values: &[crate::column::ColumnData]) -> Option<DrawOrder> {
+        // A polyline joins rows in data order, whatever their size.
+        if M::GEOMETRY == Geometry::Polyline {
+            return None;
+        }
         let mut column = 0;
         for (d, e) in M::CHANNELS.iter().zip(&self.encodings) {
             let Some(Encoding::Column(c)) = e else {
@@ -428,14 +432,17 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             mark_module: M::MODULE,
             channels,
             validity: self.columns.as_ref().is_some_and(ColumnStore::has_nulls),
+            polyline: M::GEOMETRY == Geometry::Polyline,
         })
     }
 
-    /// The `Chunk` uniform entries (laid out as `layout`) of every chunk
-    /// of the evaluated store: each chunk's first row and each relative
+    /// The `Chunk` uniform entries (laid out as `layout`) of every draw
+    /// entry of the evaluated store ([`draw_entries`]: one per chunk, plus
+    /// a polyline's bridges): the entry's first row and each relative
     /// link's base in `relative`. A channel's first link reads the stored
-    /// column, so its base is `(origin - d0)` from the chunk's own f64
-    /// origin; a later link reads an absolute value (origin 0). A hi/lo
+    /// column, so its base is `(origin - d0)` from the f64 origin of the
+    /// chunk it reads (a polyline's next-row base, the next chunk's in a
+    /// bridge); a later link reads an absolute value (origin 0). A hi/lo
     /// link gets its base as a hi/lo pair.
     fn chunk_uniform_bytes(
         &self,
@@ -445,6 +452,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         let store = self.columns.as_ref().ok_or_else(|| {
             Error::config("layer", "prepare called before the columns were evaluated")
         })?;
+        let entries = draw_entries(M::GEOMETRY, store.chunks());
         // (base, column index, link function) per relative link.
         let relative: Vec<_> = relative
             .iter()
@@ -457,25 +465,31 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
                 (b, col, c.links()[b.link])
             })
             .collect();
-        let mut bytes = chunk_uniforms(store.chunks().len(), layout.span);
-        for (k, chunk) in store.chunks().iter().enumerate() {
-            let entry = &mut bytes[chunk_uniform_offset(k)..][..layout.span as usize];
-            let row_base = u32::try_from(chunk.row_base()).map_err(|_| {
+        let mut bytes = chunk_uniforms(entries.len(), layout.span);
+        for (e, d) in entries.iter().enumerate() {
+            let (chunk, next) = (&store.chunks()[d.this], &store.chunks()[d.next]);
+            let entry = &mut bytes[chunk_uniform_offset(e)..][..layout.span as usize];
+            let first = chunk.row_base() + u64::from(d.first);
+            let row_base = u32::try_from(first).map_err(|_| {
                 Error::config(
                     "column store",
                     format!(
-                        "{}: chunk {k} starts at row {}, past the u32 row index",
+                        "{}: chunk {} starts at row {first}, past the u32 row index",
                         M::NAME,
-                        chunk.row_base()
+                        d.this
                     ),
                 )
             })?;
             write_field(entry, layout, "row_base", &row_base.to_le_bytes())?;
+            if layout.offset("valid_offset").is_some() {
+                write_field(entry, layout, "valid_offset", &d.first.to_le_bytes())?;
+                write_field(entry, layout, "next_offset", &d.next_first.to_le_bytes())?;
+            }
             for (base, col, func) in &relative {
-                let origin = if base.link == 0 {
-                    chunk.columns()[*col].origin()
-                } else {
-                    0.0
+                let origin = match (base.link, base.next) {
+                    (0, false) => chunk.columns()[*col].origin(),
+                    (0, true) => next.columns()[*col].origin(),
+                    _ => 0.0,
                 };
                 let [hi, lo] = base.format.split(func.chunk_base(origin));
                 write_field(entry, layout, &base.member, &hi.to_le_bytes())?;
@@ -662,13 +676,38 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
 
         let chunks = self.chunk_uniform_bytes(&program.chunk, &glue.relative)?;
 
-        if glue.validity && cx.caps().limits.max_storage_buffers_per_shader_stage == 0 {
+        let limits = &cx.caps().limits;
+        // A polyline reads two rows' validity bits (RFC-001 "GUP-432
+        // findings").
+        let storage = if glue.polyline { 2 } else { 1 };
+        if glue.validity && limits.max_storage_buffers_per_shader_stage < storage {
             return Err(Error::config(
                 "layer",
                 format!(
-                    "{}: its columns have nulls, whose validity bits are read from a storage \
-                     buffer in the vertex stage, and this device allows none",
-                    M::NAME
+                    "{}: its columns have nulls, whose validity bits are read from {storage} \
+                     storage buffer(s) in the vertex stage, and this device allows {}",
+                    M::NAME,
+                    limits.max_storage_buffers_per_shader_stage
+                ),
+            ));
+        }
+        // Every column (and a polyline's next-row column) is a vertex
+        // buffer (RFC-001 §12 risk 7).
+        let slots = glue.columns.len() + glue.successors.len();
+        if slots > limits.max_vertex_buffers as usize {
+            return Err(Error::config(
+                "layer",
+                format!(
+                    "{}: {slots} vertex columns ({} channels read from columns{}), and this \
+                     device has {} vertex buffer slots; make some channels constants",
+                    M::NAME,
+                    glue.columns.len(),
+                    if glue.successors.is_empty() {
+                        String::new()
+                    } else {
+                        format!(", {} read again at the next row", glue.successors.len())
+                    },
+                    limits.max_vertex_buffers
                 ),
             ));
         }
@@ -679,32 +718,31 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         // them, which is exactly when the store has a null.
         let reads_validity = glue.validity;
         let validity = |c| chunk_validity(reads_validity, c, cx);
+        let stored = store.chunks();
+        let entries = draw_entries(M::GEOMETRY, stored);
         let uploaded = || {
-            store
-                .chunks()
-                .iter()
-                .map(|c| (c.buffer(cx).expect("uploaded above"), validity(c), c.rows()))
+            entries.iter().map(|d| {
+                let c = &stored[d.this];
+                (
+                    c.buffer(cx).expect("uploaded above"),
+                    validity(c),
+                    d.instances,
+                )
+            })
         };
-        // Largest first when the size is a column; else each chunk in
+        // A polyline in data order, bridges between its chunks; else
+        // largest first when the size is a column, or each chunk in
         // upload order.
         let spans = match &self.order {
-            Some(order) => order.spans(store.chunks()),
-            None => chunk_spans(store.chunks()),
+            _ if glue.polyline => polyline_spans(stored),
+            Some(order) => order.spans(stored),
+            None => chunk_spans(stored),
         };
         let chunk_draws = || -> Vec<ChunkDraw> {
-            store
-                .chunks()
+            entries
                 .iter()
                 .enumerate()
-                .map(|(k, c)| ChunkDraw {
-                    columns: c.buffer(cx).expect("uploaded above").clone(),
-                    column_ranges: (0..store.formats().len())
-                        .map(|i| c.column_range(i))
-                        .collect(),
-                    instances: c.rows(),
-                    dynamic_offset: chunk_uniform_offset(k) as u32,
-                    validity: validity(c).cloned(),
-                })
+                .map(|(e, d)| chunk_draw(cx, store, &glue, d, e, reads_validity))
                 .collect()
         };
 
@@ -796,6 +834,40 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
 
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
+    }
+}
+
+/// The draw of entry `d` (at index `e` among the layer's entries): its
+/// columns bound from row `d.first` of its chunk, then (a polyline) its
+/// next-row columns from row `d.next_first` of chunk `d.next`.
+fn chunk_draw(
+    cx: &Context,
+    store: &ColumnStore,
+    glue: &Glue,
+    d: &DrawEntry,
+    e: usize,
+    reads_validity: bool,
+) -> ChunkDraw {
+    let (this, next) = (&store.chunks()[d.this], &store.chunks()[d.next]);
+    let buffer = |c: &crate::column::Chunk| c.buffer(cx).expect("uploaded above").clone();
+    let slot = |c: &crate::column::Chunk, i: usize, first: u32| {
+        let range = c.column_range(i);
+        let start = range.start + u64::from(first) * store.formats()[i].stride();
+        (buffer(c), start..range.end)
+    };
+    let mut slots: Vec<_> = (0..store.formats().len())
+        .map(|i| slot(this, i, d.first))
+        .collect();
+    slots.extend(glue.successors.iter().map(|&i| slot(next, i, d.next_first)));
+    ChunkDraw {
+        columns: buffer(this),
+        slots,
+        instances: d.instances,
+        dynamic_offset: chunk_uniform_offset(e) as u32,
+        validity: chunk_validity(reads_validity, this, cx).cloned(),
+        next_validity: (glue.polyline && reads_validity)
+            .then(|| chunk_validity(true, next, cx).cloned())
+            .flatten(),
     }
 }
 
@@ -941,6 +1013,113 @@ mod tests {
         assert_eq!(batch.instances(), 20);
     }
 
+    /// GUP-432: a line in chunks of 8, 8 and 4 rows draws each chunk's own
+    /// segments and one bridge per boundary, in data order. A bridge's
+    /// `Chunk` entry starts at its chunk's last row, takes x from its own
+    /// chunk's origin and the next x from the next chunk's, and reads
+    /// validity from the last row of one chunk and the first of the next.
+    /// The glue links and its `Chunk` layout matches naga's.
+    #[test]
+    fn line_bridges_chunks_with_each_chunks_origin() {
+        use crate::Line;
+        use crate::render::Span;
+        use crate::shader::link;
+        use crate::shader::testing::{parse, struct_layout};
+        let cx = Context::new_blocking().unwrap();
+        let rows: Vec<(f64, f64)> = (0..20)
+            .map(|i| {
+                (
+                    1.7e9 + f64::from(i) * 60.0,
+                    if i == 13 { f64::NAN } else { f64::from(i) },
+                )
+            })
+            .collect();
+        let mut sel = Selection::<(f64, f64), Line>::new(rows);
+        sel.attr(
+            Line::X,
+            ScaleRef::new(Linear::new()).encode(|r: &(f64, f64)| r.0),
+        )
+        .attr(
+            Line::Y,
+            ScaleRef::new(Linear::new()).encode(|r: &(f64, f64)| r.1),
+        )
+        .max_chunk_rows(8);
+        sel.fit_domains(&cx).unwrap();
+        let glue = sel.glue();
+        assert!(glue.polyline && glue.validity);
+        assert_eq!(glue.successors, [0, 1]);
+        let members: Vec<_> = glue
+            .relative
+            .iter()
+            .map(|b| (b.member.as_str(), b.next))
+            .collect();
+        assert_eq!(
+            members,
+            [
+                ("x_base", false),
+                ("y_base", false),
+                ("x_next_base", true),
+                ("y_next_base", true)
+            ]
+        );
+        assert!(
+            glue.source
+                .contains("m.x_next = linear::map_rel(col.x_next, chunk.x_next_base, enc.x);")
+        );
+        let linked = parse(
+            &glue.signature,
+            &link(&glue.signature, &glue.source, &glue.modules).unwrap(),
+        );
+        assert_eq!(Some(glue.chunk.clone()), struct_layout(&linked, "Chunk"));
+
+        let program = cx.program(&glue).unwrap();
+        let layout = &program.chunk;
+        let bytes = sel.chunk_uniform_bytes(layout, &glue.relative).unwrap();
+        assert_eq!(bytes.len(), 4 * 256 + layout.span as usize);
+        let read = |e: usize, member: &str| -> [u8; 4] {
+            let at = e * 256 + layout.offset(member).unwrap() as usize;
+            bytes[at..at + 4].try_into().unwrap()
+        };
+        let u = |e, m| u32::from_le_bytes(read(e, m));
+        let f = |e, m| f32::from_le_bytes(read(e, m));
+        // Chunk 1: its own rows and origin for both ends.
+        assert_eq!(
+            (u(1, "row_base"), u(1, "valid_offset"), u(1, "next_offset")),
+            (8, 0, 1)
+        );
+        assert_eq!(f(1, "x_next_base"), f(1, "x_base"));
+        // Bridge 0 (entry 3): chunk 0's row 7 to chunk 1's row 0.
+        assert_eq!(
+            (u(3, "row_base"), u(3, "valid_offset"), u(3, "next_offset")),
+            (7, 7, 0)
+        );
+        assert_eq!(f(3, "x_base"), f(0, "x_base"));
+        assert_eq!(f(3, "x_next_base"), f(1, "x_base"));
+        assert_ne!(f(0, "x_base"), f(1, "x_base"));
+        // Bridge 1 (entry 4): chunk 1's row 15 to chunk 2's row 16.
+        assert_eq!(u(4, "row_base"), 15);
+        assert_eq!(f(4, "x_next_base"), f(2, "x_base"));
+
+        let batch = sel.prepare(&cx, &Theme::default()).unwrap();
+        let gpu = &batch.gpu;
+        let span = |chunk, n| Span { chunk, rows: 0..n };
+        assert_eq!(
+            gpu.spans,
+            [span(0, 7), span(3, 1), span(1, 7), span(4, 1), span(2, 3)]
+        );
+        assert_eq!(batch.instances(), 19);
+        assert!(
+            gpu.chunks
+                .iter()
+                .all(|c| c.validity.is_some() && c.next_validity.is_some())
+        );
+        // A bridge binds one row of chunk 0 and the first row of chunk 1.
+        let bridge = &gpu.chunks[3];
+        assert_eq!(bridge.slots[0].1.end - bridge.slots[0].1.start, 4);
+        assert_eq!(bridge.slots[2].0, gpu.chunks[1].columns);
+        assert_eq!(bridge.slots[2].1.start, gpu.chunks[1].slots[0].1.start);
+    }
+
     /// AC5 at the layer level: an append evaluates only the new rows,
     /// writes only their bytes and reuses the encodings' GPU state (no
     /// LUT upload); the next zoom-like prepare writes uniforms only.
@@ -1047,6 +1226,7 @@ mod tests {
                 link: 0,
                 format: ColumnFormat::F32Relative,
                 member: "x_base".into(),
+                next: false,
             }]
         );
         check_fixture("scatter_glue.wgsl", &glue.source);

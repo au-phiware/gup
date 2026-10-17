@@ -52,6 +52,12 @@ pub(crate) struct GlueSpec<'a> {
     /// bits (one plane per numeric column, in column order; see
     /// [`crate::column`]).
     pub validity: bool,
+    /// Whether the mark's geometry is [`Geometry::Polyline`]: each
+    /// position channel is read again at the next row, as
+    /// `<channel>_next`.
+    ///
+    /// [`Geometry::Polyline`]: crate::Geometry::Polyline
+    pub polyline: bool,
 }
 
 /// A texture + sampler pair bound for one link's LUT.
@@ -80,6 +86,10 @@ pub(crate) struct ChunkBase {
     pub format: ColumnFormat,
     /// The `Chunk` member holding the (hi) base.
     pub member: String,
+    /// Whether this is the base of a polyline's next-row column
+    /// (`<channel>_next_base`): the next chunk's origin in a bridge
+    /// entry, the chunk's own elsewhere.
+    pub next: bool,
 }
 
 /// The generated top-level module and how to bind it.
@@ -94,6 +104,15 @@ pub(crate) struct Glue {
     /// Channel index and storage format of each vertex column, by
     /// `@location`.
     pub columns: Vec<(usize, ColumnFormat)>,
+    /// A polyline's next-row vertex columns, at the locations after
+    /// `columns`: each an index into `columns`, whose column it reads one
+    /// row on.
+    pub successors: Vec<usize>,
+    /// Whether the glue is a polyline's (see [`GlueSpec::polyline`]).
+    /// With validity, group 2 binds the next row's validity bits at
+    /// binding 2 and the `Chunk` uniform holds `valid_offset` and
+    /// `next_offset`.
+    pub polyline: bool,
     /// Whether group 2 binds the chunk's validity bits at binding 1.
     pub validity: bool,
     /// The per-chunk bases (relative links), in `Chunk` member order.
@@ -185,6 +204,37 @@ impl fmt::Display for Expr {
     }
 }
 
+impl Expr {
+    /// The same expression read at the next row: column `name` becomes
+    /// `name_next`, and its chunk base `name_next_base` (a polyline's
+    /// successor, GUP-432). Uniforms, LUTs and later links' bases are
+    /// shared.
+    fn at_next_row(&self, name: &str) -> Expr {
+        match self {
+            Expr::Column(n) if n == name => Expr::Column(format!("{n}_next")),
+            Expr::ChunkBase { field, pair } if field == name => Expr::ChunkBase {
+                field: format!("{field}_next"),
+                pair: *pair,
+            },
+            Expr::Pair(e) => Expr::Pair(Box::new(e.at_next_row(name))),
+            Expr::Call {
+                alias,
+                function,
+                args,
+            } => Expr::Call {
+                alias: alias.clone(),
+                function,
+                args: args.iter().map(|a| a.at_next_row(name)).collect(),
+            },
+            Expr::OrNull { expr, plane } => Expr::OrNull {
+                expr: Box::new(expr.at_next_row(name)),
+                plane: *plane,
+            },
+            other => other.clone(),
+        }
+    }
+}
+
 /// The `Encodings` field that holds the theme's null colour, present
 /// when any channel is an [`Expr::OrNull`].
 pub(crate) const NULL_COLOR_FIELD: &str = "null_color";
@@ -206,6 +256,11 @@ const RESERVED: &[&str] = &[
     "validity",
     "valid_group",
     "valid_bit",
+    "valid_row",
+    "validity_next",
+    "next_row",
+    "next_group",
+    "next_bit",
     "out",
 ];
 
@@ -252,6 +307,14 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
     // Per-channel expressions and bookkeeping.
     let mut exprs = Vec::new();
     let mut columns = Vec::new();
+    // A polyline's next-row reads of its position channels: the member
+    // (`<channel>_next`) and its expression, and the vertex columns,
+    // chunk bases and key checks they add.
+    let mut next_exprs = Vec::new();
+    let mut successors = Vec::new();
+    let mut next_bases = Vec::new();
+    let mut next_keys = Vec::new();
+    let position = |ch: &GlueChannel<'_>| matches!(ch.role, Some(Role::X | Role::Y));
     // Validity planes (numeric columns, in column order) of channels that
     // position or size the mark: a null in any of them hides the row.
     let mut geometry_planes = Vec::new();
@@ -268,6 +331,12 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
     for (i, ch) in spec.channels.iter().enumerate() {
         match &ch.source {
             ChannelSource::Const => {
+                if spec.polyline && position(ch) {
+                    next_exprs.push((
+                        format!("{}_next", ch.name),
+                        Expr::Uniform(ch.name.to_string()),
+                    ));
+                }
                 fields.push((
                     ch.name.to_string(),
                     ch.wgsl_type.to_string(),
@@ -313,7 +382,17 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
                             link: k,
                             format: input_format,
                             member: format!("{field}_base"),
+                            next: false,
                         });
+                        if spec.polyline && position(ch) && k == 0 {
+                            next_bases.push(ChunkBase {
+                                channel: i,
+                                link: 0,
+                                format: input_format,
+                                member: format!("{field}_next_base"),
+                                next: true,
+                            });
+                        }
                         args.push(Expr::ChunkBase {
                             field: field.clone(),
                             pair: input_format == ColumnFormat::F32x2Relative,
@@ -352,8 +431,15 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
                     Some(plane) => geometry_planes.push(plane),
                     None if format == ColumnFormat::U32 && ch.role != Some(Role::Color) => {
                         geometry_keys.push(ch.name);
+                        if spec.polyline && position(ch) {
+                            next_keys.push(format!("{}_next", ch.name));
+                        }
                     }
                     None => {}
+                }
+                if spec.polyline && position(ch) {
+                    successors.push(columns.len() - 1);
+                    next_exprs.push((format!("{}_next", ch.name), expr.at_next_row(ch.name)));
                 }
                 exprs.push((ch.name, expr));
                 let chain: Vec<String> = links.iter().map(|f| f.signature()).collect();
@@ -369,6 +455,8 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
     // Validity bits only when the columns have a null (and only numeric
     // columns have bits).
     let validity = spec.validity && planes > 0;
+    // The next-row bases follow every other base in `Chunk`.
+    relative.extend(next_bases);
     let mut signature = format!("{} {{{}}}", spec.mark_name, signature_parts.join(", "));
     if validity {
         signature.push_str(" with nulls");
@@ -416,6 +504,16 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
         span: 4,
         members: vec![("row_base".to_string(), 0)],
     };
+    // A polyline's draw may start mid-chunk (a bridge between chunks), so
+    // the validity row of instance 0 in binding 1, and of its next row in
+    // binding 2, are uniforms.
+    if validity && spec.polyline {
+        for member in ["valid_offset", "next_offset"] {
+            let _ = writeln!(w, "    {member}: u32,");
+            chunk.members.push((member.to_string(), chunk.span));
+            chunk.span += 4;
+        }
+    }
     for base in &relative {
         let mut members = vec![base.member.clone()];
         if base.format == ColumnFormat::F32x2Relative {
@@ -450,6 +548,12 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
             w,
             "@group(2) @binding(1) var<storage, read> validity: array<u32>;"
         );
+        if spec.polyline {
+            let _ = writeln!(
+                w,
+                "@group(2) @binding(2) var<storage, read> validity_next: array<u32>;"
+            );
+        }
     }
 
     let col_param = if columns.is_empty() {
@@ -464,6 +568,16 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
                 format.wgsl_type()
             );
         }
+        for (j, &c) in successors.iter().enumerate() {
+            let (i, format) = columns[c];
+            let _ = writeln!(
+                w,
+                "    @location({}) {}_next: {},",
+                columns.len() + j,
+                spec.channels[i].name,
+                format.wgsl_type()
+            );
+        }
         let _ = writeln!(w, "}}");
         ", col: Columns"
     };
@@ -473,7 +587,20 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
         "\n@vertex\nfn vs_main(@builtin(vertex_index) vertex_index: u32, \
          @builtin(instance_index) instance_index: u32{col_param}) -> {mark_alias}::Varyings {{"
     );
-    if validity {
+    if validity && spec.polyline {
+        // A polyline reads this row's bits and the next row's, each at an
+        // offset from the draw's first instance (a bridge between chunks
+        // reads the last row of one chunk and the first of the next).
+        let _ = writeln!(
+            w,
+            "    let valid_row = instance_index + chunk.valid_offset;\n    \
+             let valid_group = (valid_row / 32u) * {planes}u;\n    \
+             let valid_bit = valid_row % 32u;\n    \
+             let next_row = instance_index + chunk.next_offset;\n    \
+             let next_group = (next_row / 32u) * {planes}u;\n    \
+             let next_bit = next_row % 32u;"
+        );
+    } else if validity {
         // This row's bits: its 32-row group of `planes` words, then its bit.
         let _ = writeln!(
             w,
@@ -483,6 +610,9 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
     }
     let _ = writeln!(w, "    var m: {mark_alias}::{}In;", spec.mark_name);
     for (name, expr) in &exprs {
+        let _ = writeln!(w, "    m.{name} = {expr};");
+    }
+    for (name, expr) in &next_exprs {
         let _ = writeln!(w, "    m.{name} = {expr};");
     }
     let vertex =
@@ -495,8 +625,21 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
             .collect::<Vec<_>>()
             .join(" & ");
         drawn.push(format!("(({words}) >> valid_bit) & 1u"));
+        if spec.polyline {
+            // A null on the next row hides the segment too, so a null row
+            // breaks the line.
+            let words = geometry_planes
+                .iter()
+                .map(|p| format!("validity_next[next_group + {p}u]"))
+                .collect::<Vec<_>>()
+                .join(" & ");
+            drawn.push(format!("(({words}) >> next_bit) & 1u"));
+        }
     }
     for name in &geometry_keys {
+        drawn.push(format!("u32(col.{name} != {NULL_CODE}u)"));
+    }
+    for name in &next_keys {
         drawn.push(format!("u32(col.{name} != {NULL_CODE}u)"));
     }
     if !drawn.is_empty() {
@@ -532,6 +675,8 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
         signature,
         modules,
         columns,
+        successors,
+        polyline: spec.polyline,
         validity,
         relative,
         luts,

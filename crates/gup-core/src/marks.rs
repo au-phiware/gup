@@ -1,7 +1,7 @@
 // Copyright (C) 2024 Corin Lawson
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Marks: [`Circle`], [`Rect`] and [`Segment`] (RFC-001 S6). `Line` is GUP-432.
+//! Marks: [`Circle`], [`Rect`], [`Segment`] and [`Line`] (RFC-001 S6).
 
 use crate::channel::{Color, Px, Unit};
 
@@ -196,6 +196,58 @@ impl Segment {
     pub const DEFAULT_COLOR: Color = Color::hex(0x0072b2);
 }
 
+/// A polyline through the rows in data order: one segment from each row to
+/// the next, `N - 1` for `N` rows, in logical pixels, with analytically
+/// antialiased edges.
+///
+/// Ends and joins are round: each segment is a capsule (every point within
+/// `width / 2` of it), so consecutive segments overlap in a disc at their
+/// shared row. An opaque line shows no seam there; a translucent one is
+/// darker where segments meet, by the overlap blended twice. A row with a
+/// null position breaks the line: neither segment touching it is drawn, so a
+/// lone row between two nulls draws nothing. Width and colour come from a
+/// segment's first row. Rows with a column split across buffers (chunks)
+/// join as if they were one (RFC-001 "GUP-432 findings").
+///
+/// ```
+/// use gup_core::prelude::*;
+///
+/// # fn main() -> gup_core::Result<()> {
+/// let temps = vec![(0.0, 12.5), (1.0, 14.0), (2.0, f64::NAN), (3.0, 13.0), (4.0, 15.5)];
+///
+/// let mut plot = Plot::new();
+/// let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
+/// plot.add(Selection::<(f64, f64), Line>::new(temps))
+///     .x(x.encode(|r: &(f64, f64)| r.0))
+///     .y(y.encode(|r: &(f64, f64)| r.1))
+///     .width(Px(2.0));
+/// let cx = Context::new_blocking()?;
+/// let _ = plot.resolve(&cx, 400.0, 300.0)?;
+/// # Ok(())
+/// # }
+/// ```
+#[derive(Debug, gup_core_macros::Mark)]
+#[mark(module = "gup::marks::line", geometry = Polyline)]
+pub struct Line {
+    /// x (logical pixels).
+    #[channel(role = X)]
+    x: Px,
+    /// y (logical pixels).
+    #[channel(role = Y)]
+    y: Px,
+    /// Line width (logical pixels). Default 1.5.
+    #[channel(default = Px(1.5))]
+    width: Px,
+    /// Colour, its alpha the opacity. Default Okabe-Ito blue.
+    #[channel(role = Color, default = Line::DEFAULT_COLOR)]
+    color: Color,
+}
+
+impl Line {
+    /// The default colour (`#0072B2`).
+    pub const DEFAULT_COLOR: Color = Color::hex(0x0072b2);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -262,5 +314,23 @@ mod tests {
         let names: Vec<_> = layout.members.iter().map(|(n, _)| n.clone()).collect();
         let channels: Vec<_> = Circle::CHANNELS.iter().map(|c| c.name).collect();
         assert_eq!(names, channels);
+    }
+
+    /// `Line` is a polyline: its `LineIn` is its channels, then its two
+    /// position channels read at the next row.
+    #[test]
+    fn line_reads_its_positions_at_the_next_row() {
+        use crate::channel::Geometry;
+        use crate::shader::MARKS_LINE;
+        use crate::shader::testing::{parse, struct_layout};
+        assert_eq!(Line::GEOMETRY, Geometry::Polyline);
+        assert_eq!(Segment::GEOMETRY, Geometry::Quad);
+        let module = parse(
+            "line",
+            &crate::shader::link("line", "#import gup::marks::line\n", &[&MARKS_LINE]).unwrap(),
+        );
+        let layout = struct_layout(&module, "gup_marks_line_LineIn").expect("LineIn");
+        let names: Vec<_> = layout.members.iter().map(|(n, _)| n.clone()).collect();
+        assert_eq!(names, ["x", "y", "width", "color", "x_next", "y_next"]);
     }
 }
