@@ -88,6 +88,7 @@ pub use wgpu;
 
 #[cfg(all(feature = "window", not(target_arch = "wasm32")))]
 mod app;
+pub mod builder;
 pub mod channel;
 mod chart;
 pub mod column;
@@ -122,6 +123,7 @@ mod window;
 
 #[cfg(all(feature = "window", not(target_arch = "wasm32")))]
 pub use app::{GupApp, show};
+pub use builder::{ScatterChart, scatter};
 pub use channel::{
     Antialias, Channel, ChannelDesc, Color, ConstValue, Geometry, GpuType, HitShape, Mark, Px,
     Role, Unit, Visual,

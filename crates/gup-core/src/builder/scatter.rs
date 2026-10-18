@@ -1,0 +1,319 @@
+// Copyright (C) 2024 Corin Lawson
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+//! The scatter builder: [`scatter`] and [`ScatterChart`].
+
+use std::any::Any;
+use std::sync::Arc;
+
+use super::{DRAWN, plot_setters};
+use crate::geom::Point;
+use crate::prelude::*;
+use crate::{ColumnValue, Context, Input, Layout, Resolved, Response, Result, RowId};
+
+type Key<T> = Arc<dyn for<'a> Fn(&'a T) -> &'a str + Send + Sync>;
+type Num<T> = Arc<dyn Fn(&T) -> f64 + Send + Sync>;
+type Op<T> = Box<dyn FnOnce(&mut Selection<T, Circle>) + Send>;
+
+/// Fix a closure's signature to the higher-ranked key form.
+fn key_fn<T, F: for<'a> Fn(&'a T) -> &'a str>(f: F) -> F {
+    f
+}
+
+enum ColorSpec<T> {
+    Default,
+    Fill(Color),
+    Key(Key<T>),
+    Value(Num<T>),
+}
+
+enum SizeSpec<T> {
+    Default,
+    Radius(f32),
+    Value(Num<T>),
+}
+
+/// Start a scatter chart over `rows`: discs at `(x, y)`.
+///
+/// See the [module docs](crate::builder) for the pattern and an example.
+pub fn scatter<T: Send + Sync + 'static>(rows: impl IntoIterator<Item = T>) -> ScatterChart<T> {
+    let mut plot = Plot::new();
+    plot.x(Linear::new());
+    plot.y(Linear::new());
+    ScatterChart {
+        plot,
+        rows: Some(rows.into_iter().collect()),
+        ops: Vec::new(),
+        color: ColorSpec::Default,
+        color_scale: Categorical::okabe_ito(),
+        color_value_scale: Sequential::viridis(),
+        size: SizeSpec::Default,
+        size_scale: Pow::sqrt().range(Px(2.0), Px(12.0)),
+        legend_title: None,
+    }
+}
+
+/// A scatter chart under construction, and a [`Chart`].
+///
+/// # Panics
+///
+/// The layer setters (`x`, `y`, `color*`, `fill`, `size*`, `radius`,
+/// `opacity`, `tooltip`, `legend_title`) panic once the chart has been
+/// drawn, with "set layer encodings before the chart is first drawn; change
+/// a drawn chart through layer_mut()". The plot-level setters work at any
+/// time.
+#[must_use]
+pub struct ScatterChart<T> {
+    plot: Plot,
+    rows: Option<Vec<T>>,
+    ops: Vec<Op<T>>,
+    color: ColorSpec<T>,
+    color_scale: Categorical,
+    color_value_scale: Sequential,
+    size: SizeSpec<T>,
+    size_scale: Pow,
+    legend_title: Option<String>,
+}
+
+impl<T> std::fmt::Debug for ScatterChart<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ScatterChart")
+            .field("drawn", &self.rows.is_none())
+            .finish_non_exhaustive()
+    }
+}
+
+impl<T: Send + Sync + 'static> ScatterChart<T> {
+    plot_setters!();
+
+    fn check_open(&self) {
+        assert!(self.rows.is_some(), "{DRAWN}");
+    }
+
+    fn op(mut self, op: impl FnOnce(&mut Selection<T, Circle>) + Send + 'static) -> Self {
+        self.check_open();
+        self.ops.push(Box::new(op));
+        self
+    }
+
+    /// The x position of a row, through the x scale.
+    pub fn x<D: ColumnValue>(self, f: impl Fn(&T) -> D + Send + Sync + 'static) -> Self {
+        self.op(move |s| {
+            s.x(f);
+        })
+    }
+
+    /// The y position of a row, through the y scale.
+    pub fn y<D: ColumnValue>(self, f: impl Fn(&T) -> D + Send + Sync + 'static) -> Self {
+        self.op(move |s| {
+            s.y(f);
+        })
+    }
+
+    /// The x scale (default [`Linear`]).
+    pub fn x_scale<S: PositionScale>(mut self, scale: S) -> Self {
+        self.plot.x(scale);
+        self
+    }
+
+    /// The y scale (default [`Linear`]).
+    pub fn y_scale<S: PositionScale>(mut self, scale: S) -> Self {
+        self.plot.y(scale);
+        self
+    }
+
+    /// Colour by a category key per row, through the colour scale. The last
+    /// of `color`, `color_value` and `fill` wins.
+    pub fn color(mut self, key: impl for<'a> Fn(&'a T) -> &'a str + Send + Sync + 'static) -> Self {
+        self.check_open();
+        self.color = ColorSpec::Key(Arc::new(key));
+        self
+    }
+
+    /// The scale for [`color`](Self::color) (default
+    /// [`Categorical::okabe_ito`]).
+    pub fn color_scale(mut self, scale: Categorical) -> Self {
+        self.check_open();
+        self.color_scale = scale;
+        self
+    }
+
+    /// Colour by a number per row, through the value scale. The last of
+    /// `color`, `color_value` and `fill` wins.
+    pub fn color_value<D: ColumnValue>(
+        mut self,
+        f: impl Fn(&T) -> D + Send + Sync + 'static,
+    ) -> Self {
+        self.check_open();
+        self.color = ColorSpec::Value(Arc::new(move |r| f(r).to_f64()));
+        self
+    }
+
+    /// The scale for [`color_value`](Self::color_value) (default
+    /// [`Sequential::viridis`]).
+    pub fn color_value_scale(mut self, scale: Sequential) -> Self {
+        self.check_open();
+        self.color_value_scale = scale;
+        self
+    }
+
+    /// One fill colour for every disc. The last of `color`, `color_value`
+    /// and `fill` wins.
+    pub fn fill(mut self, color: Color) -> Self {
+        self.check_open();
+        self.color = ColorSpec::Fill(color);
+        self
+    }
+
+    /// Title the colour legend.
+    pub fn legend_title(mut self, title: impl Into<String>) -> Self {
+        self.check_open();
+        self.legend_title = Some(title.into());
+        self
+    }
+
+    /// Size discs by a number per row: their area follows the value. The
+    /// last of `size` and `radius` wins.
+    pub fn size<D: ColumnValue>(mut self, f: impl Fn(&T) -> D + Send + Sync + 'static) -> Self {
+        self.check_open();
+        self.size = SizeSpec::Value(Arc::new(move |r| f(r).to_f64()));
+        self
+    }
+
+    /// The scale for [`size`](Self::size) (default `Pow::sqrt()` onto
+    /// 2 to 12 px).
+    pub fn size_scale(mut self, scale: Pow) -> Self {
+        self.check_open();
+        self.size_scale = scale;
+        self
+    }
+
+    /// One radius, in logical pixels, for every disc (default 3.5). The
+    /// last of `size` and `radius` wins.
+    pub fn radius(mut self, px: f32) -> Self {
+        self.check_open();
+        self.size = SizeSpec::Radius(px);
+        self
+    }
+
+    /// The fill opacity.
+    ///
+    /// # Panics
+    ///
+    /// If `opacity` is outside `0..=1`.
+    pub fn opacity(self, opacity: f32) -> Self {
+        assert!(
+            (0.0..=1.0).contains(&opacity),
+            "opacity must be within 0..=1, not {opacity}"
+        );
+        self.op(move |s| {
+            s.fill_opacity(Unit(opacity));
+        })
+    }
+
+    /// The tooltip text of a row.
+    pub fn tooltip(self, text: impl Fn(&T) -> String + Send + Sync + 'static) -> Self {
+        self.op(move |s| {
+            s.tooltip(text);
+        })
+    }
+
+    /// Build the layer from the recorded settings, once.
+    fn materialise(&mut self) {
+        let Some(rows) = self.rows.take() else {
+            return;
+        };
+        let ops = std::mem::take(&mut self.ops);
+        let sel = self.plot.circles(rows);
+        for op in ops {
+            op(sel);
+        }
+        match &self.color {
+            ColorSpec::Default => {}
+            ColorSpec::Fill(c) => {
+                sel.fill(*c);
+            }
+            ColorSpec::Key(key) => {
+                let key = Arc::clone(key);
+                let scale = ScaleRef::new(self.color_scale.clone());
+                sel.fill(scale.encode_key(key_fn(move |r: &T| key(r))));
+            }
+            ColorSpec::Value(f) => {
+                let f = Arc::clone(f);
+                sel.fill(self.color_value_scale.clone().encode(move |r: &T| f(r)));
+            }
+        }
+        if let Some(title) = self.legend_title.take() {
+            sel.legend_title(Circle::FILL, title);
+        }
+        match &self.size {
+            SizeSpec::Default => {}
+            SizeSpec::Radius(px) => {
+                sel.radius(Px(*px));
+            }
+            SizeSpec::Value(f) => {
+                let f = Arc::clone(f);
+                let scale = ScaleRef::new(self.size_scale.clone());
+                sel.radius(scale.encode(move |r: &T| f(r)));
+            }
+        }
+    }
+
+    /// The circle layer, for settings the builder has no method for (a
+    /// stroke, say). Materialises the chart: layer setters panic after.
+    pub fn layer_mut(&mut self) -> &mut Selection<T, Circle> {
+        self.materialise();
+        self.plot
+            .layer_mut::<T, Circle>()
+            .expect("the scatter layer was added by materialise")
+    }
+
+    /// The inner plot. Materialises the chart.
+    pub fn plot_mut(&mut self) -> &mut Plot {
+        self.materialise();
+        &mut self.plot
+    }
+
+    /// The finished plot.
+    pub fn into_plot(mut self) -> Plot {
+        self.materialise();
+        self.plot
+    }
+
+    /// The row drawn under `at` (logical pixels), once the chart has been
+    /// resolved.
+    pub fn pick(&mut self, at: Point) -> Option<&T> {
+        self.materialise();
+        self.plot.pick::<T>(at)
+    }
+}
+
+impl<T: Send + Sync + 'static> Chart for ScatterChart<T> {
+    fn resolve(&mut self, cx: &Context, width: f32, height: f32) -> Result<&Resolved> {
+        self.materialise();
+        self.plot.resolve(cx, width, height)
+    }
+    fn layout(&self) -> Option<&Layout> {
+        self.plot.layout()
+    }
+    fn handle(&mut self, input: Input) -> Response {
+        self.materialise();
+        self.plot.handle(input)
+    }
+    fn pick_row(&mut self, at: Point) -> Option<RowId> {
+        self.materialise();
+        self.plot.pick_row(at)
+    }
+    fn needs_frame(&self) -> bool {
+        Chart::needs_frame(&self.plot)
+    }
+    fn title_text(&self) -> Option<&str> {
+        self.plot.title_text()
+    }
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+}
