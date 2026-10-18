@@ -60,6 +60,9 @@ pub struct Layout {
     pub x_ticks: Vec<(f64, f32)>,
     /// y tick values and their pixel positions.
     pub y_ticks: Vec<(f64, f32)>,
+    /// The right y axis's tick values and pixel positions; empty without
+    /// a right axis.
+    pub y_right_ticks: Vec<(f64, f32)>,
     /// The legend column, `Some` exactly when a legend is drawn. Lies
     /// inside the canvas, right of [`plot`](Self::plot).
     pub legend: Option<Rect>,
@@ -146,12 +149,15 @@ pub struct Plot {
     title: Option<String>,
     x: Box<dyn DynPositionScale>,
     y: Box<dyn DynPositionScale>,
-    /// Bumped whenever `x` or `y` is replaced, so layers re-bind the
+    /// The scale of the right y axis, if the plot has one.
+    y_right: Option<Box<dyn DynPositionScale>>,
+    /// Bumped whenever `x`, `y` or `y_right` is replaced, so layers re-bind the
     /// closures they encode through the plot's scales (starts at 1).
     axes_generation: u64,
     pub(crate) layers: Vec<Box<dyn Layer>>,
     x_title: Option<String>,
     y_title: Option<String>,
+    y_right_title: Option<String>,
     theme: Theme,
     /// Set by `legends(false)`.
     legends_off: bool,
@@ -162,13 +168,13 @@ pub struct Plot {
     cache: Option<(CacheKey, Resolved)>,
     /// How many full (uncached) resolves have succeeded.
     pub(crate) generation: u64,
-    /// Whether each axis (x, y) was widened by the last resolve: its range
+    /// Whether each axis (x, y, right y) was widened by the last resolve: its range
     /// is the whole plot rect, not inset at the far end.
-    widened: [bool; 2],
+    widened: [bool; 3],
     /// The domain a zoom left on each widened axis. While the axis still
     /// has it, the axis keeps the widened range policy, so zooming moves
     /// no pixel. A domain set any other way gets the fixed-domain policy.
-    zoomed: [Option<(f64, f64)>; 2],
+    zoomed: [Option<(f64, f64)>; 3],
     /// The pick index, and the (generation, revision sum) it was built at.
     pick: Option<((u64, u64), PickIndex)>,
     /// Each layer's z and GPU state at the last resolve, by layer index:
@@ -202,10 +208,10 @@ pub struct Plot {
     drag: Drag,
     /// The domains the drag started from, once the pointer left the click
     /// slop; panning is always from these, by the total movement.
-    dragging: Option<[Option<(f64, f64)>; 2]>,
+    dragging: Option<[Option<(f64, f64)>; 3]>,
     /// How each axis was before the first view change since the last
     /// [`reset_view`](Self::reset_view).
-    home: Option<[Home; 2]>,
+    home: Option<[Home; 3]>,
     /// The brush, in data units, with its rows.
     brush: Option<Brush>,
     /// Bumped by every brush set or clear, and the generation (and layer
@@ -383,6 +389,11 @@ struct TickLayout {
     x_ticks: Ticks,
     y_ticks: Ticks,
     y_label_w: f32,
+    /// The right axis's ticks, its widest label and its whole width (tick,
+    /// gap and label), all absent or zero without a right axis.
+    y_right_ticks: Option<Ticks>,
+    y_right_label_w: f32,
+    right_axis_w: f32,
     plot: Rect,
 }
 
@@ -400,18 +411,20 @@ impl Plot {
             title: None,
             x: Box::new(ScaleRef::new(Linear::new())),
             y: Box::new(ScaleRef::new(Linear::new())),
+            y_right: None,
             axes_generation: 1,
             layers: Vec::new(),
             x_title: None,
             y_title: None,
+            y_right_title: None,
             theme: Theme::default(),
             legends_off: false,
             revision: 0,
             hold: None,
             cache: None,
             generation: 0,
-            widened: [false; 2],
-            zoomed: [None; 2],
+            widened: [false; 3],
+            zoomed: [None; 3],
             pick: None,
             drawn: Vec::new(),
             visible: Vec::new(),
@@ -482,6 +495,14 @@ impl Plot {
         self
     }
 
+    /// Set the right y axis title: horizontal, right-aligned above that
+    /// axis.
+    pub fn y_right_title(&mut self, title: impl Into<String>) -> &mut Self {
+        self.revision = self.revision.wrapping_add(1);
+        self.y_right_title = Some(title.into());
+        self
+    }
+
     /// Draw the colour legends beside the plot (default), or not: with
     /// `false` the plot rect is as if there were none, for callers who
     /// place their own.
@@ -520,6 +541,47 @@ impl Plot {
         self.revision = self.revision.wrapping_add(1);
         let handle = ScaleRef::new(scale);
         self.y = Box::new(handle.clone());
+        self.axes_generation += 1;
+        handle
+    }
+
+    /// Use `scale` for a second y axis on the right of the plot rect and
+    /// return a handle to encode with. Plain closures (`.y(|r| ..)`) still
+    /// bind to the left axis; encode a layer on this one through the
+    /// handle: `.attr(Line::Y, right.encode(|r| r.v))`. The wheel, drags,
+    /// [`zoom`](Self::zoom), [`pan`](Self::pan) and
+    /// [`reset_view`](Self::reset_view) move both y axes; only the left
+    /// axis draws grid lines.
+    ///
+    /// ```
+    /// use gup_core::prelude::*;
+    ///
+    /// struct Month { n: f64, rain: f64, temp: f64 }
+    /// let months: Vec<Month> = (1..=12)
+    ///     .map(|n| Month { n: f64::from(n), rain: 20.0 * f64::from(n), temp: 8.0 + f64::from(n) })
+    ///     .collect();
+    ///
+    /// let cx = Context::new_blocking()?;
+    /// let mut plot = Plot::new();
+    /// let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
+    /// let right = plot.y_right(Linear::new());
+    /// plot.y_title("Temperature (°C)").y_right_title("Rainfall (mm)");
+    /// plot.add(Selection::<Month, Line>::new(months))
+    ///     .attr(Line::X, x.encode(|m: &Month| m.n))
+    ///     .attr(Line::Y, y.encode(|m: &Month| m.temp));
+    /// plot.add(Selection::<(f64, f64), Circle>::new(vec![(3.0, 100.0), (9.0, 200.0)]))
+    ///     .attr(Circle::X, x.encode(|r: &(f64, f64)| r.0))
+    ///     .attr(Circle::Y, right.encode(|r: &(f64, f64)| r.1))
+    ///     .attr(Circle::RADIUS, Px(4.0));
+    /// let resolved = plot.resolve(&cx, 480.0, 300.0)?;
+    /// assert_eq!(resolved.layout.y_right_ticks.len() > 1, true);
+    /// assert!(resolved.layout.y_right_ticks[0].1 < resolved.layout.plot.bottom() + 1.0);
+    /// # Ok::<(), gup_core::Error>(())
+    /// ```
+    pub fn y_right<S: PositionScale>(&mut self, scale: S) -> ScaleRef<S> {
+        self.revision = self.revision.wrapping_add(1);
+        let handle = ScaleRef::new(scale);
+        self.y_right = Some(Box::new(handle.clone()));
         self.axes_generation += 1;
         handle
     }
@@ -619,10 +681,20 @@ impl Plot {
     /// no column bytes. Does nothing before the first resolve has fitted
     /// and ranged the scales.
     pub fn zoom(&mut self, at: Point, factor: f64) -> Result<()> {
-        self.zoom_axes(at, factor, [true, true])
+        self.zoom_axes(at, factor, [true, true, true])
     }
 
-    fn zoom_axes(&mut self, at: Point, factor: f64, which: [bool; 2]) -> Result<()> {
+    /// The axes in the order of the per-axis arrays: x, y, right y.
+    fn scales(&self) -> [Option<&dyn DynPositionScale>; 3] {
+        [Some(&*self.x), Some(&*self.y), self.y_right.as_deref()]
+    }
+
+    /// The current domain of each axis.
+    fn domains(&self) -> [Option<(f64, f64)>; 3] {
+        self.scales().map(|s| s.and_then(|s| s.current_domain()))
+    }
+
+    fn zoom_axes(&mut self, at: Point, factor: f64, which: [bool; 3]) -> Result<()> {
         self.revision = self.revision.wrapping_add(1);
         if !(factor.is_finite() && factor > 0.0) {
             return Err(Error::config(
@@ -631,11 +703,11 @@ impl Plot {
             ));
         }
         self.record_home();
-        if which[0] {
-            self.x.zoom(f64::from(at.x), factor)?;
-        }
-        if which[1] {
-            self.y.zoom(f64::from(at.y), factor)?;
+        let pointer = [at.x, at.y, at.y];
+        for (i, axis) in self.scales().into_iter().enumerate() {
+            if let (true, Some(axis)) = (which[i], axis) {
+                axis.zoom(f64::from(pointer[i]), factor)?;
+            }
         }
         self.record_zoomed();
         Ok(())
@@ -648,24 +720,23 @@ impl Plot {
     /// space. Does nothing before the first resolve has fitted and ranged
     /// the scales; a band or point axis is an error.
     pub fn pan(&mut self, dx: f32, dy: f32) -> Result<()> {
-        let base = [self.x.current_domain(), self.y.current_domain()];
-        self.pan_from(base, (dx, dy), [true, true])
+        self.pan_from(self.domains(), (dx, dy), [true, true, true])
     }
 
     /// Set the `which` axes to `base` panned by `d` pixels.
     fn pan_from(
         &mut self,
-        base: [Option<(f64, f64)>; 2],
+        base: [Option<(f64, f64)>; 3],
         d: (f32, f32),
-        which: [bool; 2],
+        which: [bool; 3],
     ) -> Result<()> {
         self.revision = self.revision.wrapping_add(1);
         self.record_home();
-        let axes = [(&self.x, d.0), (&self.y, d.1)];
-        for (i, (axis, dpx)) in axes.into_iter().enumerate() {
-            if let (true, Some((d0, d1))) = (which[i], base[i]) {
+        let dpx = [d.0, d.1, d.1];
+        for (i, axis) in self.scales().into_iter().enumerate() {
+            if let (true, Some(axis), Some((d0, d1))) = (which[i], axis, base[i]) {
                 axis.set_domain(d0, d1)?;
-                axis.pan(f64::from(dpx))?;
+                axis.pan(f64::from(dpx[i]))?;
             }
         }
         self.record_zoomed();
@@ -674,10 +745,9 @@ impl Plot {
 
     /// Remember a widened axis's domain after a view change (see `zoomed`).
     fn record_zoomed(&mut self) {
-        for (i, axis) in [&self.x, &self.y].into_iter().enumerate() {
-            self.zoomed[i] = Some(axis)
-                .filter(|_| self.widened[i])
-                .and_then(|a| a.current_domain());
+        let domains = self.domains();
+        for (i, domain) in domains.into_iter().enumerate() {
+            self.zoomed[i] = domain.filter(|_| self.widened[i]);
         }
     }
 
@@ -688,7 +758,7 @@ impl Plot {
                 Some((a, b)) if !s.is_auto() => Home::Fixed(a, b),
                 _ => Home::Auto,
             };
-            self.home = Some([home(&*self.x), home(&*self.y)]);
+            self.home = Some(self.scales().map(|s| s.map_or(Home::Auto, home)));
         }
     }
 
@@ -699,14 +769,15 @@ impl Plot {
         let Some(home) = self.home.take() else {
             return self;
         };
-        for (axis, home) in [&self.x, &self.y].into_iter().zip(home) {
+        for (axis, home) in self.scales().into_iter().zip(home) {
+            let Some(axis) = axis else { continue };
             match home {
                 Home::Auto => axis.clear_domain(),
                 // The domain was valid when it was recorded.
                 Home::Fixed(a, b) => drop(axis.set_domain(a, b)),
             }
         }
-        self.zoomed = [None; 2];
+        self.zoomed = [None; 3];
         self.dragging = None;
         self.press = None;
         self.hold = None;
@@ -762,9 +833,13 @@ impl Plot {
 
     /// The axes input may move: [`view_axes`](Self::view_axes) less band and
     /// point axes.
-    fn movable(&self) -> [bool; 2] {
+    fn movable(&self) -> [bool; 3] {
         let [x, y] = self.view_axes.flags();
-        [x && !self.x.reads_keys(), y && !self.y.reads_keys()]
+        [
+            x && !self.x.reads_keys(),
+            y && !self.y.reads_keys(),
+            y && self.y_right.as_ref().is_some_and(|s| !s.reads_keys()),
+        ]
     }
 
     /// The data values drawn at `at` (logical pixels) as of the current
@@ -1021,14 +1096,14 @@ impl Plot {
             Input::PointerMoved { at } => {
                 self.last_at = at;
                 let which = self.movable();
-                let drags = self.drag == Drag::Pan && (which[0] || which[1]);
+                let drags = self.drag == Drag::Pan && which.contains(&true);
                 if let (Some(down), true, true) = (self.press, drags, self.cache.is_some()) {
                     if self.dragging.is_none() && (at.x - down.x).hypot(at.y - down.y) > CLICK_SLOP
                     {
                         self.set_hover(None, at);
                         self.gpu_hover.cancel_hover();
                         self.hold_layout();
-                        self.dragging = Some([self.x.current_domain(), self.y.current_domain()]);
+                        self.dragging = Some(self.domains());
                     }
                     if let Some(base) = self.dragging {
                         redraw = self
@@ -1122,7 +1197,7 @@ impl Plot {
             {
                 self.last_at = at;
                 let which = self.movable();
-                if which[0] || which[1] {
+                if which.contains(&true) {
                     self.set_hover(None, at);
                     self.gpu_hover.cancel_hover();
                     self.hold_layout();
@@ -1188,18 +1263,16 @@ impl Plot {
             return false;
         };
         let which = self.movable();
-        if !(which[0] || which[1]) || r.width <= CLICK_SLOP || r.height <= CLICK_SLOP {
+        if !which.contains(&true) || r.width <= CLICK_SLOP || r.height <= CLICK_SLOP {
             return false;
         }
         self.hold_layout();
         self.record_home();
-        let ends = [
-            (r.left(), r.right()),
-            // The y range runs bottom to top.
-            (r.bottom(), r.top()),
-        ];
-        for (i, axis) in [&self.x, &self.y].into_iter().enumerate() {
-            if which[i] {
+        // The y range runs bottom to top.
+        let y_ends = (r.bottom(), r.top());
+        let ends = [(r.left(), r.right()), y_ends, y_ends];
+        for (i, axis) in self.scales().into_iter().enumerate() {
+            if let (true, Some(axis)) = (which[i], axis) {
                 let (p0, p1) = ends[i];
                 // A rectangle inside the plot is a valid domain.
                 drop(axis.set_domain(axis.invert(f64::from(p0)), axis.invert(f64::from(p1))));
@@ -1518,7 +1591,10 @@ impl Plot {
     /// reads changes.
     fn revision_sum(&self) -> u64 {
         let mut sum = self.revision;
-        for scale in [&self.x, &self.y] {
+        for scale in [Some(&self.x), Some(&self.y), self.y_right.as_ref()]
+            .into_iter()
+            .flatten()
+        {
             sum = sum.wrapping_add(scale.revision());
         }
         for layer in &self.layers {
@@ -1555,6 +1631,7 @@ impl Plot {
             layer.bind_axes(self.axes_generation, self.x.as_ref(), self.y.as_ref())?;
         }
         let (x, y) = (&self.x, &self.y);
+        let right = self.y_right.as_ref();
 
         let th = self.theme.clone();
         for layer in &mut self.layers {
@@ -1569,7 +1646,7 @@ impl Plot {
         for layer in &mut self.layers {
             layer.fit_domains(cx)?;
         }
-        for s in [x, y] {
+        for s in [Some(x), Some(y), right].into_iter().flatten() {
             if s.is_auto() {
                 s.nice();
             }
@@ -1609,7 +1686,7 @@ impl Plot {
         let (has_title, has_x_title, has_y_title) = (
             self.title.is_some(),
             self.x_title.is_some(),
-            self.y_title.is_some(),
+            self.y_title.is_some() || self.y_right_title.is_some(),
         );
         // 4. The plot rect, on whole pixels, from the ticks' label sizes.
         // A hold for this size keeps each horizontal margin unless a label
@@ -1617,9 +1694,10 @@ impl Plot {
         let held = self
             .hold
             .filter(|h| (h.width, h.height) == (width.to_bits(), height.to_bits()));
-        let layout = |x_count: usize, y_count: usize| -> Result<TickLayout> {
-            let x_ticks = x.ticks(x_count);
-            let y_ticks = y.ticks(y_count);
+        let layout = |counts: (usize, usize, usize)| -> Result<TickLayout> {
+            let x_ticks = x.ticks(counts.0);
+            let y_ticks = y.ticks(counts.1);
+            let y_right_ticks = right.map(|r| r.ticks(counts.2));
             let text = cx.text();
             let width_of = |ticks: &Ticks, i: usize| {
                 text.measure_weight(&ticks.labels[i], th.tick_size.0, ticks.weight(i))
@@ -1628,6 +1706,16 @@ impl Plot {
             let y_label_w = (0..y_ticks.labels.len())
                 .map(|i| width_of(&y_ticks, i))
                 .fold(0.0, f32::max);
+            let y_right_label_w = y_right_ticks.as_ref().map_or(0.0, |t| {
+                (0..t.labels.len())
+                    .map(|i| width_of(t, i))
+                    .fold(0.0, f32::max)
+            });
+            let right_axis_w = if right.is_some() {
+                th.tick_len.0 + th.label_gap.0 + y_right_label_w
+            } else {
+                0.0
+            };
             let last_x_label_w = x_ticks
                 .labels
                 .len()
@@ -1653,7 +1741,8 @@ impl Plot {
             };
             let bottom =
                 height - (th.pad.0 + x_label_h + th.label_gap.0 + th.tick_len.0 + x_title_h);
-            let mut right = width - th.pad.0.max(last_x_label_w / 2.0 + 2.0) - legend_w;
+            let mut right =
+                width - (th.pad.0 + right_axis_w).max(last_x_label_w / 2.0 + 2.0) - legend_w;
             if let Some(h) = held
                 && (width - right) - th.pad.0 <= width - h.right
             {
@@ -1670,6 +1759,9 @@ impl Plot {
                 x_ticks,
                 y_ticks,
                 y_label_w,
+                y_right_ticks,
+                y_right_label_w,
+                right_axis_w,
                 plot,
             })
         };
@@ -1680,38 +1772,43 @@ impl Plot {
         // range is the whole plot rect. Any other axis insets only its far
         // end (right, top), so the axes meet at the corner and a baseline
         // sits on its axis.
-        let set_ranges = |plot: Rect, widened: (bool, bool)| {
-            let (ix, iy) = (
-                if widened.0 { 0.0 } else { inset },
-                if widened.1 { 0.0 } else { inset },
-            );
-            x.set_range(Px(plot.left()), Px(plot.right() - ix));
-            y.set_range(Px(plot.bottom()), Px(plot.top() + iy));
+        let set_ranges = |plot: Rect, widened: [bool; 3]| {
+            let far = |i: usize| if widened[i] { 0.0 } else { inset };
+            x.set_range(Px(plot.left()), Px(plot.right() - far(0)));
+            y.set_range(Px(plot.bottom()), Px(plot.top() + far(1)));
+            if let Some(r) = right {
+                r.set_range(Px(plot.bottom()), Px(plot.top() + far(2)));
+            }
         };
+        let y_count = ((height / th.y_tick_spacing.0) as usize).max(2);
         let mut counts = (
             ((width / th.x_tick_spacing.0) as usize).max(2),
-            ((height / th.y_tick_spacing.0) as usize).max(2),
+            y_count,
+            y_count,
         );
-        let mut lay = layout(counts.0, counts.1)?;
+        let mut lay = layout(counts)?;
         // Automatic domains grow in data units to cover the overhang and
         // padding, so the ticks run to both ends of each axis (GUP-435).
         // A zoom keeps the policy its axis had (see `Plot::zoomed`).
         let kept = |i: usize, s: &dyn DynPositionScale| {
             !s.is_auto() && self.zoomed[i].is_some() && self.zoomed[i] == s.current_domain()
         };
-        let widened = (
+        let widened = [
             x.widen(lay.plot.left(), lay.plot.right(), mark_overhang) || kept(0, &**x),
             y.widen(lay.plot.bottom(), lay.plot.top(), mark_overhang) || kept(1, &**y),
-        );
-        self.widened = [widened.0, widened.1];
-        if widened.0 || widened.1 {
+            right.is_some_and(|r| {
+                r.widen(lay.plot.bottom(), lay.plot.top(), mark_overhang) || kept(2, &**r)
+            }),
+        ];
+        self.widened = widened;
+        if widened.contains(&true) {
             // Tick values stay on the rounded numbers; the margins may change.
-            lay = layout(counts.0, counts.1)?;
+            lay = layout(counts)?;
         }
         set_ranges(lay.plot, widened);
         // Thin ticks until no two labels collide; relayout at most once.
         let gap = th.label_gap.0;
-        let thin = |lay: &mut TickLayout, counts: &mut (usize, usize)| {
+        let thin = |lay: &mut TickLayout, counts: &mut (usize, usize, usize)| {
             let text = cx.text();
             let collides = |ticks: &Ticks, s: &dyn DynPositionScale, vertical: bool| {
                 let mut boxes: Vec<(f32, f32)> = ticks
@@ -1741,13 +1838,19 @@ impl Plot {
                 counts.1 -= 1;
                 lay.y_ticks = y.ticks(counts.1);
             }
+            if let (Some(r), Some(ticks)) = (right, lay.y_right_ticks.as_mut()) {
+                while counts.2 > 1 && collides(ticks, &**r, true) {
+                    counts.2 -= 1;
+                    *ticks = r.ticks(counts.2);
+                }
+            }
         };
         let before = counts;
         thin(&mut lay, &mut counts);
         if counts != before {
-            let reserved = lay.y_label_w;
-            let again = layout(counts.0, counts.1)?;
-            if again.y_label_w != reserved || again.plot != lay.plot {
+            let reserved = (lay.y_label_w, lay.y_right_label_w);
+            let again = layout(counts)?;
+            if (again.y_label_w, again.y_right_label_w) != reserved || again.plot != lay.plot {
                 lay = again;
                 set_ranges(lay.plot, widened);
                 thin(&mut lay, &mut counts);
@@ -1756,6 +1859,8 @@ impl Plot {
         let TickLayout {
             x_ticks,
             y_ticks,
+            y_right_ticks,
+            right_axis_w,
             plot,
             ..
         } = lay;
@@ -1815,18 +1920,28 @@ impl Plot {
         let (ax_y, ay_x) = (plot.bottom() + 0.5, plot.left() - 0.5);
         // A domain the user fixed is not widened, so its axis line covers
         // only the range (no bare stretch past the end ticks).
-        let (x_from, x_to) = if x.is_auto() || widened.0 {
+        let (x_from, x_to) = if x.is_auto() || widened[0] {
             (ay_x, plot.right() - 0.5)
         } else {
             (ay_x, plot.right() - inset)
         };
-        let (y_from, y_to) = if y.is_auto() || widened.1 {
+        let (y_from, y_to) = if y.is_auto() || widened[1] {
             (plot.top() + 0.5, ax_y)
         } else {
             (plot.top() + inset, ax_y)
         };
         rules.push(axis(Point::new(x_from, ax_y), Point::new(x_to, ax_y)));
         rules.push(axis(Point::new(ay_x, y_from), Point::new(ay_x, y_to)));
+        // The right axis, on the pixel just outside the plot rect.
+        let by_x = plot.right() + 0.5;
+        if let Some(r) = right {
+            let (from, to) = if r.is_auto() || widened[2] {
+                (plot.top() + 0.5, ax_y)
+            } else {
+                (plot.top() + inset, ax_y)
+            };
+            rules.push(axis(Point::new(by_x, from), Point::new(by_x, to)));
+        }
         let mut x_placed = Vec::new();
         for (i, (v, label)) in x_ticks.values.iter().zip(&x_ticks.labels).enumerate() {
             let px = x.eval(*v) as f32;
@@ -1866,6 +1981,28 @@ impl Plot {
                 role: TextRole::TickLabel,
             });
             y_placed.push((*v, py));
+        }
+        let mut y_right_placed = Vec::new();
+        if let (Some(r), Some(ticks)) = (right, &y_right_ticks) {
+            for (i, (v, label)) in ticks.values.iter().zip(&ticks.labels).enumerate() {
+                let py = r.eval(*v) as f32;
+                let cy = py.floor() + 0.5;
+                rules.push(axis(
+                    Point::new(by_x, cy),
+                    Point::new(by_x + th.tick_len.0, cy),
+                ));
+                labels.push(TextRun {
+                    text: label.as_str().into(),
+                    at: Point::new(by_x + th.tick_len.0 + th.label_gap.0, py),
+                    anchor: Anchor::new(HAlign::Start, VAlign::Middle),
+                    style: TextStyle {
+                        weight: ticks.weight(i),
+                        ..tick_style
+                    },
+                    role: TextRole::TickLabel,
+                });
+                y_right_placed.push((*v, py));
+            }
         }
         let (title, axis_titles) = {
             let text = cx.text();
@@ -1907,6 +2044,15 @@ impl Plot {
                     role: TextRole::AxisTitle,
                 });
             }
+            if let Some(t) = &self.y_right_title {
+                axis_titles.push(TextRun {
+                    text: fit_text(&text, t, th.axis_title_size.0, width - 2.0 * th.pad.0).into(),
+                    at: Point::new(plot.right() + right_axis_w, plot.top() - th.label_gap.0),
+                    anchor: Anchor::new(HAlign::End, VAlign::Bottom),
+                    style: axis_style,
+                    role: TextRole::AxisTitle,
+                });
+            }
             (title, axis_titles)
         };
 
@@ -1915,7 +2061,7 @@ impl Plot {
                 &cx.text(),
                 &th,
                 &legends,
-                plot.right() + crate::guide::COLUMN_GAP,
+                plot.right() + right_axis_w + crate::guide::COLUMN_GAP,
                 plot,
             )
         });
@@ -2014,6 +2160,7 @@ impl Plot {
                 mark_overhang,
                 x_ticks: x_placed,
                 y_ticks: y_placed,
+                y_right_ticks: y_right_placed,
                 legend: legend_bounds,
                 tooltip: None,
             },
