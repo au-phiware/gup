@@ -9,7 +9,6 @@ implementer-reason:
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 🚧 In Progress **Created**:
 2026-10-18
 
 ## Context
@@ -52,42 +51,42 @@ builder pattern.
 
 ### AC1: API
 
-- [ ] `gup_core::bar` and `BarChart<T>` exist as in Decisions, with doctests.
+- [x] `gup_core::bar` and `BarChart<T>` exist as in Decisions, with doctests.
       Closures need no annotations.
 
 ### AC2: Simple bars, byte for byte
 
-- [ ] `bar(rows).x(|r| r.month.as_str()).y(|r| r.total)` renders byte-identical
+- [x] `bar(rows).x(|r| r.month.as_str()).y(|r| r.total)` renders byte-identical
       to the equivalent hand-built `Plot`, in `tests/builders.rs`: one
       `plot.rects`, x through `Band` with `encode_key`, width `band_width_px()`,
       `.y(..)`, `.y_end(|_| 0.0)`.
-- [ ] The y domain includes 0 when every value is positive (bars start at the x
+- [x] The y domain includes 0 when every value is positive (bars start at the x
       axis) and when every value is negative (bars hang from 0).
 
 ### AC3: Grouped
 
-- [ ] 4 quarters × 4 regions at 800 × 500 with `.group(|r| r.region.as_str())`:
+- [x] 4 quarters × 4 regions at 800 × 500 with `.group(|r| r.region.as_str())`:
       along a row through every bar, the dogfood `count_runs` rule
       (reimplemented in the test) counts exactly 16 runs.
-- [ ] Each region's bars have one Okabe-Ito colour, in first-seen region order,
+- [x] Each region's bars have one Okabe-Ito colour, in first-seen region order,
       and there is one legend listing the four regions.
-- [ ] Byte-identical to a hand-built plot of 4 `Rect` layers using
+- [x] Byte-identical to a hand-built plot of 4 `Rect` layers using
       `x.sub_band(i, 4)` and `x.sub_band_width_px(4, 0.1)`.
 
 ### AC4: Stacked
 
-- [ ] The same data with `.stack(|r| r.region.as_str())`:
+- [x] The same data with `.stack(|r| r.region.as_str())`:
   - exactly 4 runs along a row near the baseline;
   - in Q1's band, each region's colour at the vertical middle of its segment;
   - each stack's top edge within 1 px of `y.eval(sum of Q1)`.
-- [ ] A negative value stacks downward from 0, separately from the positive ones
+- [x] A negative value stacks downward from 0, separately from the positive ones
       (pixel check below the axis).
-- [ ] Two rows with the same (quarter, region) draw as one segment of their
+- [x] Two rows with the same (quarter, region) draw as one segment of their
       summed height.
 
 ### AC5: Golden
 
-- [ ] A golden, `gup_core/builder_bars`, 800 × 500: the grouped chart on the
+- [x] A golden, `gup_core/builder_bars`, 800 × 500: the grouped chart on the
       left half and the stacked chart on the right half, rendered as two
       `ImageTarget` renders composed side by side in the test, each with a
       title, `.grid(Axes::Y)` and a legend. The implementer reads it: 16 grouped
@@ -96,9 +95,9 @@ builder pattern.
 
 ### AC6: Escape hatches
 
-- [ ] `layers_mut()` returns one layer per group or stack key, in first-seen
+- [x] `layers_mut()` returns one layer per group or stack key, in first-seen
       order, or one layer for simple bars.
-- [ ] `pick(at)` at a bar's centre returns that row. A layer setter after the
+- [x] `pick(at)` at a bar's centre returns that row. A layer setter after the
       first render panics with GUP-462's message.
 
 ## Decisions
@@ -177,10 +176,10 @@ builder pattern.
 
 ## Technical Tasks
 
-- [ ] `builder/bar.rs`: `bar`, `BarChart`, simple, grouped and stacked
+- [x] `builder/bar.rs`: `bar`, `BarChart`, simple, grouped and stacked
       materialisation, `Chart` impl.
-- [ ] Stack tables and their unit tests (signs, duplicates, nulls).
-- [ ] Integration tests and golden (AC2–AC6).
+- [x] Stack tables and their unit tests (signs, duplicates, nulls).
+- [x] Integration tests and golden (AC2–AC6).
 
 ## Dependencies
 
@@ -204,7 +203,7 @@ builder pattern.
 
 ## Success Metrics
 
-- [ ] Dogfood task 2's grouped and stacked charts need no workaround.
+- [x] Dogfood task 2's grouped and stacked charts need no workaround.
 
 ## Risk Assessment
 
@@ -214,13 +213,71 @@ builder pattern.
 
 ## Definition of Done
 
-- [ ] First code commit within 30 minutes of starting; then commit at each
+- [x] First code commit within 30 minutes of starting; then commit at each
       checkpoint (story-worker "Checkpoint rule")
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -p gup-core -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye: `gup_core/builder_bars.png`
-- [ ] `mask old-path-loc` recorded (expected unchanged, 28,910)
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -p gup-core -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye: `gup_core/builder_bars.png`
+- [x] `mask old-path-loc` recorded (expected unchanged, 28,910)
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+`gup_core::bar` and `BarChart<T>` in `crates/gup-core/src/builder/bar.rs`,
+exported from the crate root. Simple bars are one `Rect` layer (x through
+`Band::encode_key`, width `band_width_px()`, `y_end` a zero column); `group`
+makes one layer per key using `sub_band(i, k)` and `sub_band_width_px(k, 0.1)`;
+`stack` makes one layer per key with `(base, top)` tables from `stack_tables`
+(positives up, negatives down, per-category sums). All layers share one band
+domain (first-seen order over all rows) and one colour `ScaleRef`. Tests: 2 unit
+(stack tables) and 11 in `tests/builders.rs` (`mod bars`), plus the doctest;
+golden `tests/golden/gup_core/builder_bars.png` (800 x 500, grouped left,
+stacked right).
+
+Evidence: gup-core tests all pass; `mask old-path-loc` 28,910 (unchanged);
+`mask wasm-size` scatter 320,243 (budget 325,467, pass); `mask wasm-browser`
+PASS; `mask perf-budget` every check passed (uptime load 2.10, 2.96, 3.11).
+Golden read: 16 grouped bars with gaps between bands, four stacks with all four
+colours, baseline flush on the axis, legend and quarter labels present; zoomed
+crops of the baseline and of the segment joins show no gap and no floating bar.
+
+## Retrospective
+
+**Completed**: 2026-10-19
+
+### Key Technical Learnings
+
+#### Shared band domain across layers
+
+- **Challenge**: each group or stack layer sees only its own rows, so a layer
+  missing a category could reorder the band axis.
+- **Solution**: the builder computes first-seen categories over all rows and
+  sets that domain on every layer's x encoding.
+- **Pattern**: when one scale serves several layers, fix its dictionary up
+  front.
+
+### Architectural Decisions
+
+#### The value accessor is held as `Fn(&T) -> f64`
+
+- **Decision**: `y` stores `to_f64`, so the stack tables can sum it on the CPU.
+- **Reasoning**: stacking needs the numbers before upload; same trade as
+  scatter's `color_value`.
+- **Trade-off**: a non-f64 `D` is uploaded as f64-converted f32.
+
+### Development Workflow Insights
+
+- Grouped bars have a 10 percent slot padding (Decision), so the gap between
+  neighbours in a group is about 1 to 2 px at 400 px wide. It reads fine, but a
+  `group_padding` setter would be a cheap follow-up if wanted.
+- Rows sharing (x, key) overdraw the same summed bar; with opacity below 1 they
+  would look darker. Not handled.
+- Tick marks sit at the band centre, so pixel checks on the axis must step off
+  the centre column.
+
+### Follow-up Stories
+
+None.

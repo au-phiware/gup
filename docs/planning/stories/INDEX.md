@@ -390,7 +390,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   `gup_core::line` splitting long-format rows into one line per key with one
   legend, `Option<f64>` values as nulls, and `Plot::layers_mut`. Deps: GUP-462
   📋, GUP-432 ✅, GUP-460 📋.
-- [GUP-464](GUP-464_RFC_001_S10e_Bar_Builder.md) 🚧 — RFC-001 step S10e:
+- [GUP-464](GUP-464_RFC_001_S10e_Bar_Builder.md) ✅ — RFC-001 step S10e:
   `gup_core::bar` with a zero baseline, `.group(..)` on sub-bands and
   `.stack(..)` from CPU-computed stack tables. Deps: GUP-462 📋, GUP-461 📋,
   GUP-463 📋.
