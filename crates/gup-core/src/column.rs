@@ -1039,7 +1039,18 @@ impl ColumnStore {
     /// validity bit, or [`NULL_CODE`]) is NaN. `None` if any chunk's CPU
     /// copy was released (see [`release`](Self::release)), or `column` is
     /// out of range.
+    #[cfg(test)]
     pub(crate) fn cpu_values(&self, column: usize) -> Option<Vec<f64>> {
+        self.cpu_values_where(column, |_| true)
+    }
+
+    /// [`cpu_values`](Self::cpu_values), decoding only the chunks `keep`
+    /// accepts; the rows of the others are NaN.
+    pub(crate) fn cpu_values_where(
+        &self,
+        column: usize,
+        keep: impl Fn(usize) -> bool,
+    ) -> Option<Vec<f64>> {
         let format = *self.formats.get(column)?;
         let plane = self.formats[..column]
             .iter()
@@ -1047,7 +1058,11 @@ impl ColumnStore {
             .count();
         let planes = self.validity_planes();
         let mut out = Vec::with_capacity(self.rows as usize);
-        for chunk in &self.chunks {
+        for (k, chunk) in self.chunks.iter().enumerate() {
+            if !keep(k) {
+                out.resize(out.len() + chunk.len as usize, f64::NAN);
+                continue;
+            }
             let cpu = chunk.cpu.as_ref()?;
             let col = &chunk.columns[column];
             let origin = col.origin();

@@ -92,6 +92,7 @@ pub mod channel;
 mod chart;
 pub mod column;
 mod context;
+mod cull;
 mod encoding;
 mod error;
 pub mod geom;

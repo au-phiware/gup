@@ -237,7 +237,7 @@ impl Plot {
             ));
         };
         let (plot, size) = (layout.plot, [layout.width, layout.height]);
-        if self.drawn.iter().any(|(_, gpu)| gpu.context != cx.id()) {
+        if self.drawn.iter().any(|(_, gpu, _)| gpu.context != cx.id()) {
             return Err(Error::config(
                 "gpu pick",
                 "the plot was resolved on a different Context; resolve it again with this one",
@@ -286,7 +286,7 @@ impl Plot {
         for &i in &order {
             let gpu = &self.drawn[i].1;
             if let Some(pipeline) = cx.pick_pipeline(&gpu.program)? {
-                draws.push((i, pipeline, Arc::clone(gpu)));
+                draws.push((i, pipeline, Arc::clone(gpu), Arc::clone(&self.drawn[i].2)));
             }
         }
 
@@ -343,7 +343,7 @@ impl Plot {
                 timestamp_writes: None,
                 occlusion_query_set: None,
             });
-            for (layer, pipeline, gpu) in &draws {
+            for (layer, pipeline, gpu, spans) in &draws {
                 pass.set_pipeline(pipeline);
                 pass.set_bind_group(0, &picker.view_bind_group, &[]);
                 pass.set_bind_group(
@@ -351,7 +351,7 @@ impl Plot {
                     &picker.pick_bind_group,
                     &[(DYNAMIC_ALIGN as usize * layer) as u32],
                 );
-                gpu.record(&mut pass);
+                gpu.record(&mut pass, spans);
             }
         }
         let buffer = &picker.slots[slot].buffer;

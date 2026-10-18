@@ -8,10 +8,13 @@
 use crate::channel::{Channel, ConstValue, Geometry, HitShape, Mark, Role, Visual};
 use crate::column::{ColumnFormat, ColumnStore};
 use crate::context::Context;
+use crate::cull::{self, PixelBox};
 use crate::encoding::{AxisEncoding, Encoding, IntoEncoding, Resource};
 use crate::error::{Error, Result};
+use crate::geom::Rect;
 use crate::input::{Event, EventInfo};
 use crate::order::{DrawEntry, DrawOrder, chunk_spans, draw_entries, polyline_spans};
+use crate::pick::PICK_TOLERANCE;
 use crate::pick::{Chan, Chans, PickItem, build_items};
 use crate::render::{
     ChunkDraw, Draws, LayerGpu, LayerUniforms, chunk_uniform_offset, chunk_uniforms,
@@ -594,6 +597,15 @@ pub(crate) trait Layer: wgpu::WasmNotSendSync {
     /// How far marks may extend past their position (e.g. a constant
     /// radius), in pixels.
     fn overhang(&self) -> f32;
+    /// The largest value any non-position `f32` channel can take (a
+    /// radius, a width, a stroke width, an opacity): how far a mark can
+    /// reach from its position. `INFINITY` when a channel's range is not
+    /// known.
+    fn cull_margin(&self) -> f32;
+    /// Which of the layer's draw entries (`order::draw_entries`) can put a
+    /// pixel inside `plot`, from the chunks' position stats and the
+    /// current scales. Empty when the layer has no column store.
+    fn visible_entries(&self, plot: Rect) -> Vec<bool>;
     /// Generate the glue, link it (cached), write uniforms and upload.
     fn prepare(&mut self, cx: &Context, theme: &Theme) -> Result<MarkBatch>;
     /// Apply the plot's theme to every column encoding (see
@@ -611,7 +623,10 @@ pub(crate) trait Layer: wgpu::WasmNotSendSync {
     /// Push the layer's drawn marks as pick items (RFC-001 §9): nothing for
     /// an unpickable mark, an unevaluated layer, or one whose rows and CPU
     /// columns were both released.
-    fn hit_items(&mut self, layer: usize, out: &mut Vec<PickItem>) -> Result<()>;
+    ///
+    /// `visible` is [`visible_entries`](Self::visible_entries)'s result
+    /// (empty: every entry): rows of culled entries are skipped.
+    fn hit_items(&mut self, layer: usize, visible: &[bool], out: &mut Vec<PickItem>) -> Result<()>;
     /// Whether the layer's mark has a GPU pick (`#[mark(.., gpu_pick)]`).
     fn gpu_pickable(&self) -> bool;
     /// Whether the CPU can pick the layer: it kept its CPU columns or its
@@ -751,6 +766,92 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             overhang = overhang.max(r);
         }
         overhang
+    }
+
+    fn cull_margin(&self) -> f32 {
+        let mut column = 0;
+        let mut margin = 0.0f32;
+        for (d, e) in M::CHANNELS.iter().zip(&self.encodings) {
+            let is_column = matches!(e, Some(Encoding::Column(_)));
+            let position = matches!(d.role, Some(Role::X | Role::Y));
+            if is_column {
+                column += 1;
+            }
+            if position || d.wgsl_type != "f32" {
+                continue;
+            }
+            let f32_of = |v: &ConstValue| match v {
+                ConstValue::F32(r) => r.abs(),
+                ConstValue::Vec4(_) => 0.0,
+            };
+            let m = match e {
+                Some(Encoding::Column(c)) => self
+                    .columns
+                    .as_ref()
+                    .and_then(|s| s.stats(column - 1))
+                    .map_or(Some(0.0), |s| {
+                        c.image(s.extent())
+                            .map(|(lo, hi)| lo.abs().max(hi.abs()) as f32)
+                    })
+                    .unwrap_or(f32::INFINITY),
+                Some(Encoding::Const(v)) => f32_of(v),
+                Some(Encoding::Derived(f)) => f32_of(&f()),
+                None => f32_of(&d.default),
+            };
+            margin = margin.max(m);
+        }
+        margin
+    }
+
+    fn visible_entries(&self, plot: Rect) -> Vec<bool> {
+        let Some(store) = &self.columns else {
+            return Vec::new();
+        };
+        let stored = store.chunks();
+        let px = |v: &ConstValue| match v {
+            ConstValue::F32(r) => (f64::from(*r), f64::from(*r)),
+            ConstValue::Vec4(_) => (f64::NEG_INFINITY, f64::INFINITY),
+        };
+        let boxes: Vec<Option<PixelBox>> = (0..stored.len())
+            .map(|k| {
+                let mut b = PixelBox::EMPTY;
+                let mut column = 0;
+                for (d, e) in M::CHANNELS.iter().zip(&self.encodings) {
+                    let axis = match d.role {
+                        Some(Role::X) => 0,
+                        Some(Role::Y) => 1,
+                        _ => {
+                            if matches!(e, Some(Encoding::Column(_))) {
+                                column += 1;
+                            }
+                            continue;
+                        }
+                    };
+                    let v = match e {
+                        Some(Encoding::Column(c)) => {
+                            column += 1;
+                            // A column with no finite value draws nothing.
+                            let stats = stored[k].columns()[column - 1].stats()?;
+                            c.image(stats.extent())
+                                .map_or((f64::NEG_INFINITY, f64::INFINITY), |(a, b)| {
+                                    (a.min(b), a.max(b))
+                                })
+                        }
+                        Some(Encoding::Const(v)) => px(v),
+                        Some(Encoding::Derived(f)) => px(&f()),
+                        None => px(&d.default),
+                    };
+                    b.grow(axis, v);
+                }
+                Some(b)
+            })
+            .collect();
+        cull::visible_entries(
+            &boxes,
+            &draw_entries(M::GEOMETRY, stored),
+            self.cull_margin() + PICK_TOLERANCE.0 + 1.0,
+            plot,
+        )
     }
 
     fn legends(&self) -> Vec<(Option<String>, Legend)> {
@@ -908,10 +1009,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             // uniform values into the existing buffers.
             if gpu.draws_chunks(uploaded(), &spans) {
                 gpu.write_uniforms(cx, &encodings, &chunks);
-                return Ok(MarkBatch {
-                    gpu: Arc::clone(gpu),
-                    antialias: M::ANTIALIAS,
-                });
+                return Ok(MarkBatch::new(Arc::clone(gpu), M::ANTIALIAS));
             }
             // Appended rows: new chunk draws and `Chunk` entries over the
             // same encodings, which take their new values in place.
@@ -930,10 +1028,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             let grown = Arc::new(gpu.with_chunks(cx, &chunks, draws)?);
             grown.write_encodings(cx, &encodings);
             self.gpu = Some((Arc::clone(&grown), luts));
-            return Ok(MarkBatch {
-                gpu: grown,
-                antialias: M::ANTIALIAS,
-            });
+            return Ok(MarkBatch::new(grown, M::ANTIALIAS));
         }
         #[cfg_attr(
             target_arch = "wasm32",
@@ -961,10 +1056,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             )?,
         );
         self.gpu = Some((Arc::clone(&gpu), luts));
-        Ok(MarkBatch {
-            gpu,
-            antialias: M::ANTIALIAS,
-        })
+        Ok(MarkBatch::new(gpu, M::ANTIALIAS))
     }
 
     fn release(&mut self) {
@@ -982,7 +1074,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         }
     }
 
-    fn hit_items(&mut self, layer: usize, out: &mut Vec<PickItem>) -> Result<()> {
+    fn hit_items(&mut self, layer: usize, visible: &[bool], out: &mut Vec<PickItem>) -> Result<()> {
         if M::HIT == HitShape::Unpickable {
             return Ok(());
         }
@@ -1000,6 +1092,29 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             HitShape::Segment => &["x", "y", "x_end", "y_end", "width"],
             HitShape::Polyline => &["x", "y", "width"],
         };
+        // The stored rows of the visible draw entries (RFC-001 S9f). A
+        // polyline's ranges are read in pairs of consecutive rows.
+        let polyline = M::GEOMETRY == Geometry::Polyline;
+        let chunk_rows: Vec<(usize, usize)> = store
+            .chunks()
+            .iter()
+            .map(|c| (c.row_base() as usize, c.rows() as usize))
+            .collect();
+        let ranges = if visible.is_empty() {
+            std::iter::once(0..n).collect()
+        } else {
+            cull::pick_ranges(polyline, &chunk_rows, visible)
+        };
+        let mut chunk_needed = vec![visible.is_empty(); chunk_rows.len()];
+        for r in &ranges {
+            let first = chunk_rows.partition_point(|&(b, rows)| b + rows <= r.start);
+            for (k, &(b, _)) in chunk_rows.iter().enumerate().skip(first) {
+                if b >= r.end {
+                    break;
+                }
+                chunk_needed[k] = true;
+            }
+        }
         let slot_of = |name: &str| M::CHANNELS.iter().position(|d| d.name == name);
         // Column index of each column-encoded slot.
         let mut col_of = vec![None; M::CHANNELS.len()];
@@ -1020,15 +1135,19 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         // columns if every chunk kept them, else the accessors over the
         // rows, else nothing to pick.
         let mut raw: Vec<Vec<f64>> = Vec::with_capacity(needed.len());
-        let from_store: Option<Vec<Vec<f64>>> =
-            needed.iter().map(|&(_, k)| store.cpu_values(k)).collect();
+        let from_store: Option<Vec<Vec<f64>>> = needed
+            .iter()
+            .map(|&(_, k)| store.cpu_values_where(k, |c| chunk_needed[c]))
+            .collect();
         if let Some(stored) = from_store {
             for v in stored {
                 raw.push(match &self.order {
                     Some(order) => {
                         let mut data = vec![f64::NAN; n];
-                        for (s, v) in v.into_iter().enumerate() {
-                            data[order.row_of(s as u64) as usize] = v;
+                        for r in &ranges {
+                            for s in r.clone() {
+                                data[order.row_of(s as u64) as usize] = v[s];
+                            }
                         }
                         data
                     }
@@ -1079,18 +1198,20 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
                         .iter()
                         .position(|&(s, _)| s == slot)
                         .expect("a needed column");
-                    Chan::Col(
-                        raw[at]
-                            .iter()
-                            .map(|&v| {
-                                if v.is_nan() {
-                                    f64::NAN
-                                } else {
-                                    c.cpu_eval(v).unwrap_or(f64::NAN)
-                                }
-                            })
-                            .collect(),
-                    )
+                    let mut col = vec![f64::NAN; n];
+                    for r in &ranges {
+                        for s in r.clone() {
+                            let d = match &self.order {
+                                Some(order) => order.row_of(s as u64) as usize,
+                                None => s,
+                            };
+                            let v = raw[at][d];
+                            if !v.is_nan() {
+                                col[d] = c.cpu_eval(v).unwrap_or(f64::NAN);
+                            }
+                        }
+                    }
+                    Chan::Col(col)
                 }
             }
         };
@@ -1105,23 +1226,26 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         };
 
         // Stored rows with their data row and rank in the draw order.
-        let slots: Vec<(usize, u64)> = match &self.order {
-            Some(order) => {
-                let mut rank = vec![0u64; n];
-                let mut next = 0;
-                for seg in order.segments() {
-                    for s in seg.clone() {
-                        rank[s as usize] = next;
-                        next += 1;
-                    }
+        let rank = self.order.as_ref().map(|order| {
+            let mut rank = vec![0u64; n];
+            let mut next = 0;
+            for seg in order.segments() {
+                for s in seg.clone() {
+                    rank[s as usize] = next;
+                    next += 1;
                 }
-                (0..n)
-                    .map(|s| (order.row_of(s as u64) as usize, rank[s]))
-                    .collect()
             }
-            None => (0..n).map(|s| (s, s as u64)).collect(),
-        };
-        build_items(M::HIT, layer, self.z, &slots, &chans, out);
+            rank
+        });
+        for r in ranges {
+            let slots: Vec<(usize, u64)> = match (&self.order, &rank) {
+                (Some(order), Some(rank)) => r
+                    .map(|s| (order.row_of(s as u64) as usize, rank[s]))
+                    .collect(),
+                _ => r.map(|s| (s, s as u64)).collect(),
+            };
+            build_items(M::HIT, layer, self.z, &slots, &chans, out);
+        }
         Ok(())
     }
 

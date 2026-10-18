@@ -283,13 +283,13 @@ pub(crate) fn build_items(
             }
         }
         HitShape::Polyline => {
-            for (i, pair) in slots.windows(2).enumerate() {
-                let ((d, _), (e, _)) = (pair[0], pair[1]);
+            for pair in slots.windows(2) {
+                let ((d, rank), (e, _)) = (pair[0], pair[1]);
                 let v = [c.x.at(d), c.y.at(d), c.x.at(e), c.y.at(e), c.width.at(d)];
                 if finite(&v) && v[4] >= 0.0 {
                     push(
                         d,
-                        i as u64,
+                        rank,
                         Shape::Capsule {
                             a: [v[0], v[1]],
                             b: [v[2], v[3]],
@@ -320,6 +320,11 @@ pub(crate) struct PickIndex {
 }
 
 impl PickIndex {
+    /// Number of items indexed.
+    pub(crate) fn len(&self) -> usize {
+        self.items.len()
+    }
+
     pub(crate) fn new(plot: Rect, items: Vec<PickItem>) -> Self {
         let cols = ((plot.width / CELL).ceil() as usize).max(1);
         let rows = ((plot.height / CELL).ceil() as usize).max(1);

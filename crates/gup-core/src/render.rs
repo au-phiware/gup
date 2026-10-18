@@ -886,10 +886,10 @@ impl LayerGpu {
     /// pipeline and group 0 (and a pick's group 3) are set: one instanced
     /// draw per span of a chunk's rows, with the chunk's `Chunk` entry
     /// (row base, relative bases) and columns bound when the chunk changes.
-    pub(crate) fn record(&self, pass: &mut wgpu::RenderPass<'_>) {
+    pub(crate) fn record(&self, pass: &mut wgpu::RenderPass<'_>, spans: &[Span]) {
         pass.set_bind_group(1, self.enc_bind_group(), &[]);
         let mut bound = None;
-        for span in &self.spans {
+        for span in spans {
             let k = span.chunk as usize;
             if bound != Some(k) {
                 let chunk = &self.chunks[k];
@@ -990,6 +990,8 @@ enum Draw {
     Marks {
         pipeline: wgpu::RenderPipeline,
         layer: Arc<LayerGpu>,
+        /// The layer's spans that can be seen (`MarkBatch::visible`).
+        spans: Arc<[Span]>,
     },
     Instanced {
         pipeline: wgpu::RenderPipeline,
@@ -1188,6 +1190,7 @@ impl Renderer {
                     Some(Draw::Marks {
                         pipeline,
                         layer: Arc::clone(&batch.gpu),
+                        spans: Arc::clone(&batch.visible),
                     })
                 }
                 ItemKind::Rules(rules) => {
@@ -1451,7 +1454,7 @@ impl Prepared {
         self.draws
             .iter()
             .map(|(_, draw)| match draw {
-                Draw::Marks { layer, .. } => layer.spans.len(),
+                Draw::Marks { spans, .. } => spans.len(),
                 Draw::Instanced { .. } | Draw::Text(_) => 1,
             })
             .sum()
@@ -1463,10 +1466,14 @@ impl Prepared {
         for ([x, y, w, h], draw) in &self.draws {
             pass.set_scissor_rect(*x, *y, *w, *h);
             match draw {
-                Draw::Marks { pipeline, layer } => {
+                Draw::Marks {
+                    pipeline,
+                    layer,
+                    spans,
+                } => {
                     pass.set_pipeline(pipeline);
                     pass.set_bind_group(0, &self.view_bind_group, &[]);
-                    layer.record(pass);
+                    layer.record(pass, spans);
                 }
                 Draw::Instanced {
                     pipeline,

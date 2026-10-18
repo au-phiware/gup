@@ -7,7 +7,7 @@
 
 use crate::channel::{Antialias, Color, Px};
 use crate::geom::{Point, Rect};
-use crate::render::LayerGpu;
+use crate::render::{LayerGpu, Span};
 use crate::scale::Ramp;
 use crate::scale::sequential::sample_lut;
 use std::sync::Arc;
@@ -148,12 +148,30 @@ pub struct MarkBatch {
     pub(crate) gpu: Arc<LayerGpu>,
     /// The mark's [`Mark::ANTIALIAS`](crate::Mark::ANTIALIAS).
     pub(crate) antialias: Antialias,
+    /// The layer's spans that can put a pixel inside the plot rect, in draw
+    /// order (RFC-001 S9f): what a draw, a CPU pick and a GPU pick use.
+    pub(crate) visible: Arc<[Span]>,
 }
 
 impl MarkBatch {
+    /// A batch that draws every span of `gpu`.
+    pub(crate) fn new(gpu: Arc<LayerGpu>, antialias: Antialias) -> Self {
+        let visible = gpu.spans.as_slice().into();
+        Self {
+            gpu,
+            antialias,
+            visible,
+        }
+    }
+
     /// Number of mark instances, across every chunk.
     pub fn instances(&self) -> u64 {
         self.gpu.instances()
+    }
+
+    /// Number of draw calls the batch records: its spans that can be seen.
+    pub fn visible_spans(&self) -> usize {
+        self.visible.len()
     }
 
     /// Number of column chunks. Each is one instanced draw, unless the

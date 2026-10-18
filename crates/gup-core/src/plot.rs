@@ -13,13 +13,14 @@
 
 use crate::channel::{Mark, Px};
 use crate::context::{Context, ContextId};
+use crate::cull;
 use crate::error::{Error, Result};
 use crate::geom::{Point, Rect};
 use crate::gpu_pick::{GpuPicker, PickTicket};
 use crate::input::{Axes, Brush, Button, Drag, Event, EventInfo, Input, Response};
 use crate::marks::{Circle, Line, Rect as MarkRect, Segment};
 use crate::pick::{PickIndex, RowId};
-use crate::render::LayerGpu;
+use crate::render::{LayerGpu, Span};
 use crate::scale::{DynPositionScale, Linear, PositionScale, ScaleRef, Ticks};
 use crate::scene::{
     Anchor, HAlign, Item, ItemKind, RectPrim, Rule, Scene, TextRole, TextRun, TextStyle, VAlign,
@@ -171,7 +172,12 @@ pub struct Plot {
     pick: Option<((u64, u64), PickIndex)>,
     /// Each layer's z and GPU state at the last resolve, by layer index:
     /// what a GPU pick draws.
-    pub(crate) drawn: Vec<(i32, Arc<LayerGpu>)>,
+    pub(crate) drawn: Vec<(i32, Arc<LayerGpu>, Arc<[Span]>)>,
+    /// Each layer's visible draw entries at the last resolve (empty: all),
+    /// shared by draws, CPU picks and GPU picks.
+    visible: Vec<Vec<bool>>,
+    /// Whether chunks outside the plot rect are skipped.
+    cull: bool,
     /// GPU pick state, made on the first `request_pick`.
     pub(crate) gpu_pick: Option<GpuPicker>,
     /// The hovered row, where its tooltip attaches, and the generation that
@@ -401,6 +407,8 @@ impl Plot {
             zoomed: [None; 2],
             pick: None,
             drawn: Vec::new(),
+            visible: Vec::new(),
+            cull: true,
             gpu_pick: None,
             hover: None,
             press: None,
@@ -417,6 +425,16 @@ impl Plot {
             last_at: Point::new(0.0, 0.0),
             overlay: None,
         }
+    }
+
+    /// Skip (`true`, the default) or draw and pick every chunk, whether or
+    /// not it can reach the plot rect. For tests and benchmarks: the image
+    /// is the same either way (RFC-001 S9f).
+    #[doc(hidden)]
+    pub fn chunk_culling(&mut self, on: bool) -> &mut Self {
+        self.revision = self.revision.wrapping_add(1);
+        self.cull = on;
+        self
     }
 
     /// Set the title.
@@ -1388,6 +1406,12 @@ impl Plot {
         self.pick.as_ref()?.1.anchor(row)
     }
 
+    /// How many items the CPU pick index holds for the current resolve.
+    #[doc(hidden)]
+    pub fn pick_item_count(&mut self) -> Option<usize> {
+        self.pick_index().map(PickIndex::len)
+    }
+
     fn pick_hit(&mut self, at: Point) -> Option<crate::pick::Hit> {
         self.pick_index()?.query(at)
     }
@@ -1404,7 +1428,8 @@ impl Plot {
             self.pick = None;
             let mut items = Vec::new();
             for (i, layer) in self.layers.iter_mut().enumerate() {
-                layer.hit_items(i, &mut items).ok()?;
+                let visible = self.visible.get(i).map_or(&[][..], Vec::as_slice);
+                layer.hit_items(i, visible, &mut items).ok()?;
             }
             self.pick = Some((key, PickIndex::new(plot, items)));
         }
@@ -1675,6 +1700,7 @@ impl Plot {
 
         // 6. Uniforms and columns, inside a GPU error scope (GUP-410).
         let mut batches = Vec::with_capacity(self.layers.len());
+        let mut visible = Vec::with_capacity(self.layers.len());
         for layer in &mut self.layers {
             let batch = cx.scoped(
                 || "layer resolution (column upload, uniforms)".to_owned(),
@@ -1683,11 +1709,24 @@ impl Plot {
             // Only after the upload succeeded: CPU data the layer's
             // `Retain` policy does not keep.
             layer.release();
+            // Chunks that cannot reach the plot rect are neither drawn nor
+            // picked (RFC-001 S9f).
+            let mask = if self.cull {
+                layer.visible_entries(plot)
+            } else {
+                Vec::new()
+            };
+            let mut batch = batch;
+            if !mask.is_empty() {
+                batch.visible = cull::visible_spans(&batch.gpu.spans, &mask).into();
+            }
+            visible.push(mask);
             batches.push((layer.z(), batch));
         }
+        self.visible = visible;
         self.drawn = batches
             .iter()
-            .map(|(z, b)| (*z, Arc::clone(&b.gpu)))
+            .map(|(z, b)| (*z, Arc::clone(&b.gpu), Arc::clone(&b.visible)))
             .collect();
 
         // 7. The scene.
