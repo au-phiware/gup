@@ -176,6 +176,22 @@ pub struct Plot {
     /// The cached resolve with the tooltip composed on, and the generation
     /// of the base it was made from. Dropped when the hover changes.
     overlay: Option<(u64, Resolved)>,
+    /// The plot rect's horizontal margins, held while the pointer drives the
+    /// view so a change in tick-label width does not move the rect.
+    hold: Option<Hold>,
+}
+
+/// The horizontal margins held for one chart size (see `Plot::hold_layout`).
+#[derive(Copy, Clone, Debug)]
+struct Hold {
+    /// The size, as `f32::to_bits` (as `CacheKey` stores it).
+    width: u32,
+    height: u32,
+    /// The plot rect's left edge.
+    left: f32,
+    /// The plot rect's right edge. Equivalent to the right margin
+    /// (`width - right`) for one size, and exact.
+    right: f32,
 }
 
 /// How far (px) the pointer may move between press and release for the
@@ -274,6 +290,7 @@ impl Plot {
             theme: Theme::default(),
             legends_off: false,
             revision: 0,
+            hold: None,
             cache: None,
             generation: 0,
             widened: [false; 2],
@@ -439,6 +456,51 @@ impl Plot {
         Ok(())
     }
 
+    /// The data values drawn at `at` (logical pixels) as of the current
+    /// scales: `None` before the first resolve or outside the plot rect
+    /// (edges inclusive). Band and point axes give a code.
+    ///
+    /// ```
+    /// use gup_core::geom::Point;
+    /// use gup_core::prelude::*;
+    ///
+    /// let cx = Context::new_blocking()?;
+    /// let mut plot = Plot::new();
+    /// let (x, y) = (
+    ///     plot.x(Linear::new()),
+    ///     plot.y(Linear::new()),
+    /// );
+    /// plot.add(Selection::<(f64, f64), Circle>::new(vec![(1.0, 1.0), (9.0, 3.0)]))
+    ///     .attr(Circle::X, x.encode(|r: &(f64, f64)| r.0))
+    ///     .attr(Circle::Y, y.encode(|r: &(f64, f64)| r.1))
+    ///     .attr(Circle::RADIUS, Px(4.0));
+    /// assert!(plot.invert(Point::new(100.0, 100.0)).is_none());
+    /// let r = plot.resolve(&cx, 400.0, 300.0)?.layout.plot;
+    /// let c = Point::new(r.x + r.width / 2.0, r.y + r.height / 2.0);
+    /// let (vx, vy) = plot.invert(c).unwrap();
+    /// // Fitted domains are widened, so the centre is the domain's midpoint.
+    /// let mid = |s: &ScaleRef<Linear>| {
+    ///     let (a, b) = s.read().current_domain().unwrap();
+    ///     (a + b) / 2.0
+    /// };
+    /// let (mx, my) = (mid(&x), mid(&y));
+    /// assert!((vx - mx).abs() <= 1e-9 * mx.abs().max(1.0), "{vx} {mx}");
+    /// assert!((vy - my).abs() <= 1e-9 * my.abs().max(1.0), "{vy} {my}");
+    /// assert!(plot.invert(Point::new(r.x - 1.0, c.y)).is_none());
+    /// # Ok::<(), gup_core::Error>(())
+    /// ```
+    pub fn invert(&self, at: Point) -> Option<(f64, f64)> {
+        let plot = self.layout()?.plot;
+        let inside = (plot.left()..=plot.right()).contains(&at.x)
+            && (plot.top()..=plot.bottom()).contains(&at.y);
+        inside.then(|| {
+            (
+                self.x.invert(f64::from(at.x)),
+                self.y.invert(f64::from(at.y)),
+            )
+        })
+    }
+
     /// Resolve domains, ticks, text, the plot rect and GPU state for a
     /// `width × height` logical-pixel chart.
     ///
@@ -457,6 +519,12 @@ impl Plot {
             cx.take_gpu_errors()?;
         } else {
             self.cache = None;
+            if self
+                .hold
+                .is_some_and(|h| (h.width, h.height) != (key(self).width, key(self).height))
+            {
+                self.hold = None;
+            }
             let resolved = self.resolve_full(cx, width, height)?;
             self.generation += 1;
             // After resolving: it writes the scales.
@@ -563,6 +631,10 @@ impl Plot {
             Input::PointerLeft => {
                 redraw = self.set_hover(None, self.last_at);
                 self.press = None;
+                if self.hold.take().is_some() {
+                    self.revision = self.revision.wrapping_add(1);
+                    redraw = true;
+                }
             }
             Input::PointerDown {
                 at,
@@ -590,11 +662,30 @@ impl Plot {
             {
                 self.last_at = at;
                 self.set_hover(None, at);
+                self.hold_layout();
                 redraw = self.zoom(at, ZOOM_PER_LINE.powf(f64::from(lines))).is_ok();
             }
             _ => {}
         }
         Response { redraw }
+    }
+
+    /// Hold the cached layout's horizontal margins until the pointer leaves
+    /// or the size changes. Does nothing without a cached layout or with a
+    /// hold already taken.
+    fn hold_layout(&mut self) {
+        if self.hold.is_some() {
+            return;
+        }
+        if let Some((key, resolved)) = &self.cache {
+            let plot = resolved.layout.plot;
+            self.hold = Some(Hold {
+                width: key.width,
+                height: key.height,
+                left: plot.left(),
+                right: plot.right(),
+            });
+        }
     }
 
     /// Move the hover to `row`: `Leave` the old row, `Enter` the new one.
@@ -828,6 +919,11 @@ impl Plot {
             self.y_title.is_some(),
         );
         // 4. The plot rect, on whole pixels, from the ticks' label sizes.
+        // A hold for this size keeps each horizontal margin unless a label
+        // would not fit even with the outer padding (GUP-452).
+        let held = self
+            .hold
+            .filter(|h| (h.width, h.height) == (width.to_bits(), height.to_bits()));
         let layout = |x_count: usize, y_count: usize| -> Result<TickLayout> {
             let x_ticks = x.ticks(x_count);
             let y_ticks = y.ticks(y_count);
@@ -851,7 +947,12 @@ impl Plot {
                 } else {
                     0.0
                 };
-            let left = th.pad.0 + y_label_w + th.label_gap.0 + th.tick_len.0;
+            let mut left = th.pad.0 + y_label_w + th.label_gap.0 + th.tick_len.0;
+            if let Some(h) = held
+                && left - th.pad.0 <= h.left
+            {
+                left = h.left;
+            }
             let x_title_h = if has_x_title {
                 axis_title_h + th.label_gap.0
             } else {
@@ -859,7 +960,12 @@ impl Plot {
             };
             let bottom =
                 height - (th.pad.0 + x_label_h + th.label_gap.0 + th.tick_len.0 + x_title_h);
-            let right = width - th.pad.0.max(last_x_label_w / 2.0 + 2.0) - legend_w;
+            let mut right = width - th.pad.0.max(last_x_label_w / 2.0 + 2.0) - legend_w;
+            if let Some(h) = held
+                && (width - right) - th.pad.0 <= width - h.right
+            {
+                right = h.right;
+            }
             let plot = Rect::from_edges(left.round(), top.round(), right.round(), bottom.round());
             if plot.width < 10.0 || plot.height < 10.0 {
                 return Err(Error::config(
@@ -960,6 +1066,15 @@ impl Plot {
             plot,
             ..
         } = lay;
+        if self.hold.is_some() {
+            // Only ever grows: the held margins, or what a label needed.
+            self.hold = Some(Hold {
+                width: width.to_bits(),
+                height: height.to_bits(),
+                left: plot.left(),
+                right: plot.right(),
+            });
+        }
 
         // 6. Uniforms and columns, inside a GPU error scope (GUP-410).
         let mut batches = Vec::with_capacity(self.layers.len());

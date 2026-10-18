@@ -283,3 +283,180 @@ fn inputs_that_do_nothing() {
     assert_eq!(f.plot.resolve_generation(), generation);
     assert_eq!(domain(&f), (ex, ey));
 }
+
+// ---- GUP-452: a stable plot rect during interaction ----
+
+use gup_core::geom::Rect;
+use gup_core::scene::{HAlign, TextRole};
+
+/// The widest y tick label's ink width, and the leftmost ink edge of any.
+fn y_labels(plot: &Plot) -> (f32, f32) {
+    let layout = plot.layout().unwrap();
+    let ys = layout
+        .texts
+        .iter()
+        .filter(|t| t.run.role == TextRole::TickLabel && t.run.anchor.h == HAlign::End);
+    ys.fold((0.0, f32::MAX), |(w, l), t| {
+        (w.max(t.bounds.width), l.min(t.bounds.x))
+    })
+}
+
+/// Explicit domains: `fixed` data with x in `(0, 100)` and y in `(0, 8)`.
+fn held_fixture() -> Fixture {
+    fixture_with(
+        Linear::new().domain(0.0, 100.0),
+        Linear::new().domain(0.0, 8.0),
+    )
+}
+
+const ANCHOR: Point = Point::new(150.0, 120.0);
+
+const SIZE: (f32, f32) = (400.0, 300.0);
+
+fn resolve_at(f: &mut Fixture, cx: &Context, size: (f32, f32)) -> Rect {
+    f.plot.resolve(cx, size.0, size.1).unwrap().layout.plot
+}
+
+fn wheel(f: &mut Fixture, lines: f32) {
+    assert_eq!(
+        f.plot.handle(Input::Wheel { at: ANCHOR, lines }),
+        Response { redraw: true }
+    );
+}
+
+/// A fresh plot with the domains `f` has now, resolved at `size`.
+fn fresh_like(f: &Fixture, cx: &Context, size: (f32, f32)) -> Rect {
+    let (dx, dy) = (
+        f.x.read().current_domain().unwrap(),
+        f.y.read().current_domain().unwrap(),
+    );
+    let mut g = fixture_with(
+        Linear::new().domain(dx.0, dx.1),
+        Linear::new().domain(dy.0, dy.1),
+    );
+    resolve_at(&mut g, cx, size)
+}
+
+fn bits(r: Rect) -> [u32; 4] {
+    [r.x, r.y, r.width, r.height].map(f32::to_bits)
+}
+
+/// Wheel in six steps, then out six (anchor fixed): the value under the
+/// pointer holds within 0.01 px and the plot rect never moves, though the y
+/// labels change width. Without the hold (control) the rect moves.
+#[test]
+fn the_value_under_the_pointer_holds_across_label_width_changes() {
+    let cx = cx();
+    let theme_pad = Theme::default().pad.0;
+    for control in [false, true] {
+        let mut f = held_fixture();
+        let first = resolve_at(&mut f, &cx, SIZE);
+        let mut prev = first;
+        let (mut widened, mut narrowed, mut moved) = (false, false, false);
+        for lines in [1.0f32; 6].into_iter().chain([-1.0f32; 6]) {
+            let (w0, _) = y_labels(&f.plot);
+            let v = f.plot.invert(ANCHOR).unwrap();
+            wheel(&mut f, lines);
+            if control {
+                assert_eq!(f.plot.handle(Input::PointerLeft), Response { redraw: true });
+            }
+            let rect = resolve_at(&mut f, &cx, SIZE);
+            let (w1, left) = y_labels(&f.plot);
+            widened |= w1 > w0;
+            narrowed |= w1 < w0;
+            assert!(w1 - w0 <= theme_pad, "{w0} {w1}");
+            assert!(left >= 0.0, "{left}");
+            if control {
+                moved |= bits(rect) != bits(prev);
+                prev = rect;
+                continue;
+            }
+            assert_eq!(bits(rect), bits(first), "the rect moved");
+            let u = f.plot.invert(ANCHOR).unwrap();
+            let (dx, dy) = (
+                f.x.read().current_domain().unwrap(),
+                f.y.read().current_domain().unwrap(),
+            );
+            let ppu = (
+                f64::from(rect.width) / (dx.1 - dx.0),
+                f64::from(rect.height) / (dy.1 - dy.0),
+            );
+            assert!((u.0 - v.0).abs() * ppu.0 <= 0.01, "{v:?} {u:?}");
+            assert!((u.1 - v.1).abs() * ppu.1 <= 0.01, "{v:?} {u:?}");
+        }
+        assert!(widened && narrowed, "the data must change label widths");
+        assert!(!control || moved, "without the hold the rect should move");
+    }
+}
+
+#[test]
+fn the_hold_grows_for_a_label_that_cannot_fit() {
+    let cx = cx();
+    let mut f = held_fixture();
+    let first = resolve_at(&mut f, &cx, SIZE);
+    wheel(&mut f, 1.0);
+    let held = resolve_at(&mut f, &cx, SIZE);
+    assert_eq!(bits(held), bits(first));
+    // Twenty lines at once: the labels grow past the padding.
+    wheel(&mut f, 20.0);
+    let grown = resolve_at(&mut f, &cx, SIZE);
+    let (_, left) = y_labels(&f.plot);
+    assert!(grown.x > held.x && left >= 0.0, "{grown:?} {left}");
+    // Exactly what a fresh layout of those labels needs.
+    assert_eq!(grown.x, fresh_like(&f, &cx, SIZE).x);
+    // Grown margins stay grown (the hold only grows).
+    wheel(&mut f, -1.0);
+    assert!(resolve_at(&mut f, &cx, SIZE).x >= grown.x);
+}
+
+#[test]
+fn the_hold_is_released_on_leave_and_resize() {
+    let cx = cx();
+    let mut f = held_fixture();
+    resolve_at(&mut f, &cx, SIZE);
+    for _ in 0..6 {
+        wheel(&mut f, 1.0);
+        resolve_at(&mut f, &cx, SIZE);
+    }
+    assert_ne!(
+        bits(f.plot.layout().unwrap().plot),
+        bits(fresh_like(&f, &cx, SIZE))
+    );
+    assert_eq!(f.plot.handle(Input::PointerLeft), Response { redraw: true });
+    let released = resolve_at(&mut f, &cx, SIZE);
+    assert_eq!(bits(released), bits(fresh_like(&f, &cx, SIZE)));
+    // Nothing is held now.
+    assert_eq!(f.plot.handle(Input::PointerLeft), Response::default());
+
+    // Resize.
+    wheel(&mut f, 1.0);
+    resolve_at(&mut f, &cx, SIZE);
+    let other = (360.0, 280.0);
+    let resized = resolve_at(&mut f, &cx, other);
+    assert_eq!(bits(resized), bits(fresh_like(&f, &cx, other)));
+}
+
+#[test]
+fn zoom_called_directly_does_not_hold() {
+    let cx = cx();
+    let mut f = held_fixture();
+    resolve_at(&mut f, &cx, SIZE);
+    for _ in 0..6 {
+        f.plot.zoom(ANCHOR, 0.85).unwrap();
+        let rect = resolve_at(&mut f, &cx, SIZE);
+        assert_eq!(bits(rect), bits(fresh_like(&f, &cx, SIZE)));
+    }
+}
+
+#[test]
+fn invert_is_none_before_resolve_and_outside_the_plot() {
+    let cx = cx();
+    let mut f = held_fixture();
+    assert_eq!(f.plot.invert(ANCHOR), None);
+    let r = resolve_at(&mut f, &cx, SIZE);
+    assert!(f.plot.invert(ANCHOR).is_some());
+    assert!(f.plot.invert(Point::new(r.left(), r.top())).is_some());
+    assert!(f.plot.invert(Point::new(r.right(), r.bottom())).is_some());
+    assert_eq!(f.plot.invert(Point::new(r.left() - 1.0, ANCHOR.y)), None);
+    assert_eq!(f.plot.invert(Point::new(ANCHOR.x, r.bottom() + 1.0)), None);
+}
