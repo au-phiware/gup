@@ -422,7 +422,7 @@ findings", GUP-396).
   `Plot::y_right` and `y_right_title`, a right axis with its own fit, ticks and
   margin that zoom and pan move with the left; S11's deletions are reassigned to
   GUP-466, GUP-483/484 and GUP-486. Deps: GUP-466 ✅ (soft).
-- [GUP-480](GUP-480_RFC_001_S12a_Appender_Handle.md) 📋 — RFC-001 step S12a:
+- [GUP-480](GUP-480_RFC_001_S12a_Appender_Handle.md) 🚧 — RFC-001 step S12a:
   public `Selection::append`, a `Clone + Send` `Appender` for scatter and line
   charts drained at resolve, `Chart::set_waker` with a window waker, and dogfood
   t5 on it. Deps: GUP-414 ✅, GUP-465 ✅.
