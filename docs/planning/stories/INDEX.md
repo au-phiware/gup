@@ -386,7 +386,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   step S10c: the builder pattern (by-value setters, default colour and size
   scales, escape hatches, `Chart` impl) and `gup_core::scatter`, byte-identical
   to the hand-built reference scatter. Deps: GUP-447 ✅, GUP-434 ✅, GUP-460 📋.
-- [GUP-463](GUP-463_RFC_001_S10d_Line_Builder.md) 📋 — RFC-001 step S10d:
+- [GUP-463](GUP-463_RFC_001_S10d_Line_Builder.md) 🚧 — RFC-001 step S10d:
   `gup_core::line` splitting long-format rows into one line per key with one
   legend, `Option<f64>` values as nulls, and `Plot::layers_mut`. Deps: GUP-462
   📋, GUP-432 ✅, GUP-460 📋.
