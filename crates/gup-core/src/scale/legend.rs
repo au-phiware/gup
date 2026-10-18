@@ -132,6 +132,7 @@ impl Ramp {
         extent: (f64, f64),
         image: impl Fn(f64) -> f64,
         count: usize,
+        format: Option<&super::TickFormat>,
     ) -> Self {
         let (lo, hi) = (extent.0.min(extent.1), extent.0.max(extent.1));
         let step = super::tick_step(lo, hi, count);
@@ -150,7 +151,8 @@ impl Ramp {
                 img.is_finite().then(|| RampTick {
                     t: self.t(img),
                     value,
-                    label: super::format_with_step(value, step),
+                    label: format
+                        .map_or_else(|| super::format_with_step(value, step), |f| f.apply(value)),
                 })
             })
             .collect();
