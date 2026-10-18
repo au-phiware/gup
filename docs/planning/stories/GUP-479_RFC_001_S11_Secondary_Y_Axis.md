@@ -196,7 +196,7 @@ In `crates/gup-core/tests/secondary_y.rs`:
 
 ### Prerequisite Stories
 
-- GUP-466: RFC-001 S10g Delete Old Builders 📋 — its migration table entry for
+- GUP-466: RFC-001 S10g Delete Old Builders ✅ — its migration table entry for
   `.layer_with_y2` (soft: only AC5's first line needs it).
 - GUP-452/GUP-453: hold, zoom and pan ✅.
 

@@ -20,7 +20,7 @@ deleted").
 
 After GUP-486 (S14b), the old path that `mask old-path-loc` measures is the
 render core: `selection.rs`, `mark/`, `shader_function/`, `shader_pipeline.rs`,
-`context.rs` and `render.rs` (18,504 lines at `c693695`). Almost everything else
+`context.rs` and `render.rs` (18,504 lines at `d133343`). Almost everything else
 in `src/` depends on them: of the 57 top-level modules, all but a handful of
 leaves (`math`, `zoom`, `spatial_index`, `tick_generator`, `color_descriptor`,
 `depth`, `lighting`, `gpu_timer`, the `performance*` reports) import the old

@@ -31,11 +31,10 @@ It is split so that every step leaves the gates green:
 After GUP-466, `chart_builder` holds the area, boxplot, violin, density, GPU
 density, heatmap and choropleth builders, `ComposedChart`, `AccessorFunction`,
 `ConfigurableBuilder`, the colour bar, labels and the old builders' golden
-harness: about 8,300 of the 28,910 old-path lines measured by
-`mask old-path-loc`. RFC-001 §11 says these builders come back as T5 stories
-after the flip, on `gup-core`; the orchestrator review requires the flip to land
-first. The strategic review approved breaking changes with no deprecation
-(Decision 2).
+harness: 8,097 of the 26,601 old-path lines measured by `mask old-path-loc`.
+RFC-001 §11 says these builders come back as T5 stories after the flip, on
+`gup-core`; the orchestrator review requires the flip to land first. The
+strategic review approved breaking changes with no deprecation (Decision 2).
 
 ## Read First
 
@@ -45,7 +44,7 @@ first. The strategic review approved breaking changes with no deprecation
   (the same deletion pattern, one level smaller) and its Implementation Summary
   once it lands.
 - `scripts/old_path_loc.pl`, INDEX.md "RFC-001 Migration" header paragraph.
-- Who depends on `chart_builder` outside it (at `c693695`): `src/lib.rs`,
+- Who depends on `chart_builder` outside it (at `d133343`): `src/lib.rs`,
   `src/prelude.rs`, `src/scale.rs` (`AccessorValue`), `src/grid.rs` (a doc
   example), `src/export/svg/renderer.rs`, `src/export/html/*`,
   `src/export/pdf/renderer.rs`. Re-run:
@@ -99,7 +98,7 @@ first. The strategic review approved breaking changes with no deprecation
 ### AC3: The metric went down
 
 - [ ] `mask old-path-loc` TOTAL is **at most 18,504** (no `chart_builder` file
-      left; the other old-path files measured 18,504 at `c693695`). Record the
+      left; the other old-path files measured 18,504 at `d133343`). Record the
       figure in INDEX.md's "RFC-001 Migration" header with the date and this
       story.
 - [ ] RFC-001's S14 row gains a one-line note that S14 is split into GUP-485 to
@@ -151,7 +150,7 @@ first. The strategic review approved breaking changes with no deprecation
 
 ### Prerequisite Stories
 
-- GUP-466: RFC-001 S10g Delete Old Builders 📋 — scatter, line, bar and
+- GUP-466: RFC-001 S10g Delete Old Builders ✅ — scatter, line, bar and
   composite builders gone; four examples ported.
 - GUP-485: RFC-001 S14a Dogfood Residue 📋 — no dogfood task uses
   `ComposedChart`.
