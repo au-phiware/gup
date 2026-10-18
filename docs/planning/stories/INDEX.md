@@ -414,7 +414,7 @@ findings", GUP-396).
   `Unbrushed::Fade(f32) | Grey(Color)` (default `Fade(0.3)`, images unchanged),
   with a grey-brush golden, and dogfood t4 greys rather than hides unbrushed
   rows. Deps: GUP-458 ✅, GUP-465 ✅.
-- [GUP-478](GUP-478_Style_Agnostic_Tooltip_Check.md) 📋 — A dogfood
+- [GUP-478](GUP-478_Style_Agnostic_Tooltip_Check.md) 🚧 — A dogfood
   `Measure::Tooltip` that recognises a tooltip panel of any colours with five
   text lines, so t3 checks the default tooltip without its dark theme. Deps:
   GUP-465 ✅.
