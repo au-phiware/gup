@@ -98,6 +98,59 @@ impl Retain {
     }
 }
 
+/// How many rows a selection keeps as rows are appended (RFC-001 §3).
+///
+/// A windowed layer caps its chunks at `max(1024, n / 4)` rows (or the
+/// device's cap, if smaller), so whole chunks can leave: between `n` and
+/// about `1.25 × n` rows are held, plus up to one chunk the last append
+/// has not filled.
+///
+/// ```
+/// use gup_core::prelude::*;
+/// # fn main() -> gup_core::Result<()> {
+/// let cx = Context::new_blocking()?;
+/// let mut plot = Plot::new();
+/// plot.circles(Vec::<(f64, f64)>::new())
+///     .x(|p: &(f64, f64)| p.0)
+///     .y(|p: &(f64, f64)| p.1)
+///     .window(Window::LastRows(2_000));
+/// for k in 0..10 {
+///     let layer = plot.layer_mut::<(f64, f64), Circle>().unwrap();
+///     layer.append((0..1_000).map(|i| (f64::from(k * 1_000 + i), 1.0)))?;
+///     plot.resolve(&cx, 320.0, 200.0)?;
+/// }
+/// // 10,000 rows appended; whole 1,024-row chunks left the front.
+/// let layer = plot.layer_mut::<(f64, f64), Circle>().unwrap();
+/// assert!((2_000..=2_000 + 2 * 1_024).contains(&layer.len()), "{}", layer.len());
+/// # Ok(())
+/// # }
+/// ```
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub enum Window {
+    /// Keep every row (the default).
+    #[default]
+    All,
+    /// Keep at least the newest `n` rows. Older rows go a whole chunk at a
+    /// time, so between `n` and about `1.25 × n` rows are held.
+    LastRows(usize),
+}
+
+impl Window {
+    /// The fewest rows per chunk a window allows (RFC-001 S12c).
+    const MIN_CHUNK_ROWS: u32 = 1024;
+
+    /// The cap on rows per chunk: whole-chunk eviction with device-sized
+    /// chunks (millions of rows) would never evict a small window.
+    fn chunk_cap(self) -> u32 {
+        match self {
+            Window::All => u32::MAX,
+            Window::LastRows(n) => {
+                u32::try_from(n.div_ceil(4)).map_or(u32::MAX, |c| c.max(Self::MIN_CHUNK_ROWS))
+            }
+        }
+    }
+}
+
 /// Rows of `T` drawn as mark `M`.
 ///
 /// ```
@@ -114,8 +167,20 @@ impl Retain {
 pub struct Selection<T, M: Mark> {
     /// The rows not yet released: rows `released..` of the selection.
     rows: Vec<T>,
-    /// How many leading rows were dropped after upload ([`Retain`]).
+    /// How many leading rows are not in `rows`: dropped after upload
+    /// ([`Retain`]) or evicted ([`Window`]). At least `evicted`.
     released: usize,
+    /// How many leading rows the [`Window`] evicted. Row ids count from
+    /// the selection's first row ever, so an id stays valid until its row
+    /// leaves; the column store numbers the kept rows from 0.
+    evicted: u64,
+    /// Bumped whenever stored rows are renumbered (an eviction, or the
+    /// columns evaluated again), so a GPU pick drawn before it is dropped.
+    epoch: u64,
+    /// Whether the brushed-row bits must be written whole at the next
+    /// prepare (the stored rows were renumbered).
+    bits_stale: bool,
+    window: Window,
     retain: Retain,
     /// Draw order among the plot's items (default 0).
     z: i32,
@@ -163,7 +228,11 @@ impl<T, M: Mark> std::fmt::Debug for Selection<T, M> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Selection")
             .field("mark", &M::NAME)
-            .field("rows", &(self.released + self.rows.len()))
+            .field(
+                "rows",
+                &(self.released + self.rows.len() - self.evicted as usize),
+            )
+            .field("window", &self.window)
             .field("retain", &self.retain)
             .field("encodings", &self.encodings)
             .finish_non_exhaustive()
@@ -177,6 +246,10 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         Self {
             rows: rows.into(),
             released: 0,
+            evicted: 0,
+            epoch: 0,
+            bits_stale: false,
+            window: Window::All,
             retain: Retain::Auto,
             z: 0,
             encodings: M::CHANNELS.iter().map(|_| None).collect(),
@@ -244,17 +317,64 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
                 })
                 .collect::<Result<Vec<_>>>()?;
             if let Some(order) = &mut self.order {
-                order.push_batch(&mut values);
+                let runs = runs(self.window, store, new.len());
+                order.push_runs(&mut values, &runs);
             }
             store.append(new.len(), &values)?;
             // Appends interleaved with the stored rows into many draws:
             // evaluate every row again, in one sorted run (while the rows
             // are kept).
-            if self.released == 0 && self.order.as_ref().is_some_and(DrawOrder::needs_compaction) {
+            if self.all_rows_held() && self.order.as_ref().is_some_and(DrawOrder::needs_compaction)
+            {
                 self.columns = None;
+                return Ok(());
             }
+            self.evict();
         }
         Ok(())
+    }
+
+    /// Keep at least the newest `n` rows (default [`Window::All`]): after
+    /// each append, whole chunks whose rows are all older than the newest
+    /// `n` leave the front. Kept rows keep their [`RowId`](crate::RowId)s
+    /// (counted from the first row ever); an evicted row's id picks and
+    /// reads nothing. Changing the window changes the chunk size, so the
+    /// columns are evaluated again at the next resolve: set it before the
+    /// first resolve, or keep the rows (see [`Retain`]).
+    ///
+    /// See [`Window`] for an example.
+    pub fn window(&mut self, window: Window) -> &mut Self {
+        self.window = window;
+        self
+    }
+
+    /// Whether every row not evicted is still in `rows` (none released).
+    fn all_rows_held(&self) -> bool {
+        self.released as u64 == self.evicted
+    }
+
+    /// Evict the whole chunks the [`Window`] lets go, from the front, and
+    /// renumber what stays (RFC-001 S12c): chunk row bases, the draw order
+    /// and, at the next prepare, the brushed-row bits. Writes no column
+    /// bytes.
+    fn evict(&mut self) {
+        let (Window::LastRows(n), Some(store)) = (self.window, &mut self.columns) else {
+            return;
+        };
+        let chunks = store.evictable(n as u64);
+        if chunks == 0 {
+            return;
+        }
+        let rows = store.evict_front(chunks);
+        if let Some(order) = &mut self.order {
+            order.evict(rows);
+        }
+        self.evicted += rows;
+        let drop = (self.evicted as usize).saturating_sub(self.released);
+        self.rows.drain(..drop.min(self.rows.len()));
+        self.released = self.released.max(self.evicted as usize);
+        self.epoch = self.epoch.wrapping_add(1);
+        self.bits_stale = true;
     }
 
     /// A handle that appends rows to this selection from any thread. Rows
@@ -268,9 +388,10 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         feed.appender()
     }
 
-    /// Number of rows, including any dropped after upload.
+    /// Number of rows, including any dropped after upload but not those
+    /// the [`Window`] evicted.
     pub fn len(&self) -> usize {
-        self.released + self.rows.len()
+        self.released + self.rows.len() - self.evicted as usize
     }
 
     /// Whether there are no rows.
@@ -326,7 +447,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
 
     /// Whether the rows were dropped after upload (see [`Retain`]).
     pub fn rows_released(&self) -> bool {
-        self.released > 0
+        !self.all_rows_held()
     }
 
     /// The evaluated column store, for tests.
@@ -406,12 +527,13 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             .map(|(_, c)| c.links()[0].input_format())
             .collect();
         let chunk_rows = ColumnStore::chunk_rows_for(&cx.caps().limits, &formats)
+            .min(self.window.chunk_cap())
             .min(self.max_chunk_rows.unwrap_or(u32::MAX));
         let stale = match &self.columns {
             None => Some("a channel was encoded, or `max_chunk_rows` changed"),
-            Some(c) if c.chunk_rows() != chunk_rows => {
-                Some("this device (or `max_chunk_rows`) needs a different chunk size")
-            }
+            Some(c) if c.chunk_rows() != chunk_rows => Some(
+                "this device (or the window, or `max_chunk_rows`) needs a different chunk size",
+            ),
             // Released CPU columns (`Retain::Rows`, `GpuOnly`) cannot go to
             // another context; with the rows, evaluate them again.
             Some(c) if !c.uploadable_to(cx) => {
@@ -420,7 +542,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             Some(_) => None,
         };
         if let Some(reason) = stale {
-            if self.released > 0 {
+            if !self.all_rows_held() {
                 return Err(Error::config(
                     "layer",
                     format!(
@@ -443,12 +565,17 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
                 })
                 .collect::<Result<Vec<_>>>()?;
             self.order = self.size_order(&values);
-            if let Some(order) = &mut self.order {
-                order.push_batch(&mut values);
-            }
             let mut store = ColumnStore::new(formats, chunk_rows)?;
+            if let Some(order) = &mut self.order {
+                order.push_runs(&mut values, &runs(self.window, &store, self.rows.len()));
+                order.mark_evaluated();
+            }
             store.append(self.rows.len(), &values)?;
             self.columns = Some(store);
+            // Stored rows (and so GPU pick ids) are new.
+            self.epoch = self.epoch.wrapping_add(1);
+            self.bits_stale = true;
+            self.evict();
         }
         Ok(self.columns.as_mut().expect("evaluated above"))
     }
@@ -539,18 +666,27 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         };
         let mut bits = vec![0u32; words];
         let mut set = |stored: u64| bits[(stored / 32) as usize] |= 1 << (stored % 32);
+        // Brushed rows are row ids; stored rows count from the first kept.
+        let first = self.evicted;
         match &self.order {
             // Stored rows are in size order: find each one's data row.
             Some(order) => {
                 for s in 0..store.rows() {
-                    if brushed.binary_search(&(order.row_of(s) as usize)).is_ok() {
+                    if brushed
+                        .binary_search(&((first + order.row_of(s)) as usize))
+                        .is_ok()
+                    {
                         set(s);
                     }
                 }
             }
             None => {
-                for &r in brushed.iter().filter(|&&r| (r as u64) < store.rows()) {
-                    set(r as u64);
+                for &r in brushed {
+                    if let Some(s) = (r as u64).checked_sub(first)
+                        && s < store.rows()
+                    {
+                        set(s);
+                    }
                 }
             }
         }
@@ -654,6 +790,28 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
 
 type AxisFn<T> = Arc<dyn Fn(&T) -> f64 + Send + Sync>;
 
+/// The runs a batch of `rows` rows appended to `store` is sorted in (see
+/// [`DrawOrder::push_runs`]): one under [`Window::All`]; under a window,
+/// one per chunk the batch fills, so each chunk holds a contiguous run of
+/// data rows and whole chunks leave in data order.
+fn runs(window: Window, store: &ColumnStore, rows: usize) -> Vec<usize> {
+    if window == Window::All {
+        return vec![rows];
+    }
+    // Every chunk but the last is full, and the first starts at row 0.
+    let chunk = store.chunk_rows() as usize;
+    let mut room = chunk - (store.rows() % chunk as u64) as usize;
+    let mut left = rows;
+    let mut out = Vec::with_capacity(rows.div_ceil(chunk) + 1);
+    while left > 0 {
+        let take = left.min(room);
+        out.push(take);
+        left -= take;
+        room = chunk;
+    }
+    out
+}
+
 /// A plot layer: the object-safe face of a [`Selection`] (internal; the
 /// public `Layer`/`Chart` traits are RFC-001 S7).
 pub(crate) trait Layer: wgpu::WasmNotSendSync {
@@ -735,9 +893,22 @@ pub(crate) trait Layer: wgpu::WasmNotSendSync {
     /// Row `row` (an index into the rows the selection was given), if the
     /// layer still holds it.
     fn row_any(&self, row: usize) -> Option<&dyn Any>;
-    /// The layer's draw order, if it draws by size: how a GPU pick maps a
-    /// stored row back to its data row (`None` maps a row to itself).
+    /// The layer's draw order, if it draws by size.
+    #[cfg(test)]
     fn draw_order(&self) -> Option<&DrawOrder>;
+
+    /// The row id of stored row `stored`: through the draw order, if the
+    /// layer draws by size, from the first row the window kept. How a GPU
+    /// pick maps a drawn instance (`row_base + instance_index`) to a row.
+    fn row_id(&self, stored: u64) -> usize;
+
+    /// Bumped whenever the stored rows are renumbered (an eviction, or the
+    /// columns evaluated again): a GPU pick drawn before is dropped.
+    fn epoch(&self) -> u64;
+
+    /// Whether row id `row` is one the layer holds (not evicted, not past
+    /// the end).
+    fn holds(&self, row: usize) -> bool;
     /// Run the layer's handlers for `info.event` on the row `info.row`.
     /// Does nothing when the layer no longer holds the row.
     fn dispatch(&mut self, info: &EventInfo);
@@ -1290,9 +1461,10 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             )]
             let grown = Arc::new(gpu.with_chunks(cx, &chunks, draws, brush_words)?);
             grown.write_encodings(cx, &encodings);
-            if grown.brush_words() != gpu.brush_words() {
+            if grown.brush_words() != gpu.brush_words() || self.bits_stale {
                 self.write_bits(cx, &grown);
             }
+            self.bits_stale = false;
             self.gpu = Some((Arc::clone(&grown), luts));
             return Ok(MarkBatch::new(grown, M::ANTIALIAS, vector));
         }
@@ -1323,6 +1495,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             )?,
         );
         self.write_bits(cx, &gpu);
+        self.bits_stale = false;
         self.gpu = Some((Arc::clone(&gpu), luts));
         Ok(MarkBatch::new(gpu, M::ANTIALIAS, vector))
     }
@@ -1444,7 +1617,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
                     None => v,
                 });
             }
-        } else if self.released == 0 && self.rows.len() == n {
+        } else if self.all_rows_held() && self.rows.len() == n {
             let rows = &self.rows;
             for &(slot, _) in &needed {
                 let Some(Encoding::Column(c)) = &mut self.encodings[slot] else {
@@ -1515,7 +1688,9 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             y_end: chan("y_end"),
         };
 
-        // Stored rows with their data row and rank in the draw order.
+        // Stored rows with their data row (from the first kept row; ids
+        // count from `first`) and rank in the draw order.
+        let first = self.evicted as usize;
         let rank = self.order.as_ref().map(|order| {
             let mut rank = vec![0u64; n];
             let mut next = 0;
@@ -1534,13 +1709,27 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
                     .collect(),
                 _ => r.map(|s| (s, s as u64)).collect(),
             };
-            build_items(M::HIT, layer, self.z, &slots, &chans, out);
+            build_items(M::HIT, layer, self.z, first, &slots, &chans, out);
         }
         Ok(())
     }
 
+    #[cfg(test)]
     fn draw_order(&self) -> Option<&DrawOrder> {
         self.order.as_ref()
+    }
+
+    fn row_id(&self, stored: u64) -> usize {
+        let data = self.order.as_ref().map_or(stored, |o| o.row_of(stored));
+        (self.evicted + data) as usize
+    }
+
+    fn epoch(&self) -> u64 {
+        self.epoch
+    }
+
+    fn holds(&self, row: usize) -> bool {
+        (self.evicted as usize..self.released + self.rows.len()).contains(&row)
     }
 
     fn gpu_pickable(&self) -> bool {

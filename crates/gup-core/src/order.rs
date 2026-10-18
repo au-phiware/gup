@@ -41,6 +41,10 @@ pub(crate) struct DrawOrder {
     local: Vec<u32>,
     /// The stored rows in draw order, as ranges of consecutive rows.
     segments: Vec<Range<u64>>,
+    /// The segments right after the last full evaluation: the fewest a
+    /// compaction can reach (more than one when a windowed layer sorts
+    /// each chunk on its own).
+    floor: usize,
 }
 
 impl DrawOrder {
@@ -53,14 +57,29 @@ impl DrawOrder {
             batches: Vec::new(),
             local: Vec::new(),
             segments: Vec::new(),
+            floor: 0,
         }
+    }
+
+    /// [`push_runs`](Self::push_runs) with the whole batch as one run.
+    #[cfg(test)]
+    pub(crate) fn push_batch(&mut self, columns: &mut [ColumnData]) {
+        let n = columns[self.column].len();
+        self.push_runs(columns, &[n]);
     }
 
     /// Sort a batch of rows about to be appended to the store, largest
     /// first (stable, so equal sizes keep data order), permuting every
     /// column alike, and merge it into the draw order after the stored
     /// rows: a new row draws after every stored row at least its size.
-    pub(crate) fn push_batch(&mut self, columns: &mut [ColumnData]) {
+    ///
+    /// Each of `runs` (lengths of consecutive rows, summing to the batch)
+    /// is sorted on its own, as a batch of its own. A windowed layer gives
+    /// one run per chunk the batch fills, so every chunk holds a
+    /// contiguous run of data rows and whole chunks leave in data order
+    /// (RFC-001 S12c, GUP-482); others give one run. The draw order is the
+    /// same either way: largest first, equal sizes in data order.
+    pub(crate) fn push_runs(&mut self, columns: &mut [ColumnData], runs: &[usize]) {
         let keys: Vec<f32> = match &columns[self.column] {
             ColumnData::Values(v) => v.iter().map(|&v| self.key(v)).collect(),
             ColumnData::Codes(c) => c
@@ -74,28 +93,68 @@ impl DrawOrder {
                 })
                 .collect(),
         };
-        let n = keys.len();
-        // Largest first and, for equal keys, data order: sort each row's
-        // inverted, order-preserving key bits above its index (an unstable
-        // sort of `u64`s is several times faster than a stable sort by
-        // `f32`).
-        let mut packed: Vec<u64> = keys
-            .iter()
-            .enumerate()
-            .map(|(i, &k)| (u64::from(!ordered_bits(k)) << 32) | i as u64)
-            .collect();
-        packed.sort_unstable();
-        let perm: Vec<u32> = packed.into_iter().map(|p| p as u32).collect();
-        if perm.iter().enumerate().any(|(i, &p)| i as u32 != p) {
-            for column in columns.iter_mut() {
-                permute(column, &perm);
+        debug_assert_eq!(runs.iter().sum::<usize>(), keys.len());
+        let mut at = 0;
+        for &len in runs {
+            let run = at..at + len;
+            at += len;
+            let keys = &keys[run.clone()];
+            // Largest first and, for equal keys, data order: sort each
+            // row's inverted, order-preserving key bits above its index (an
+            // unstable sort of `u64`s is several times faster than a
+            // stable sort by `f32`).
+            let mut packed: Vec<u64> = keys
+                .iter()
+                .enumerate()
+                .map(|(i, &k)| (u64::from(!ordered_bits(k)) << 32) | i as u64)
+                .collect();
+            packed.sort_unstable();
+            let perm: Vec<u32> = packed.into_iter().map(|p| p as u32).collect();
+            if perm.iter().enumerate().any(|(i, &p)| i as u32 != p) {
+                for column in columns.iter_mut() {
+                    permute(column, run.clone(), &perm);
+                }
+            }
+            let start = self.keys.len() as u64;
+            self.keys.extend(perm.iter().map(|&i| keys[i as usize]));
+            self.local.extend(perm);
+            self.batches.push(start);
+            self.merge(start..start + len as u64);
+        }
+    }
+
+    /// Drop the first `rows` stored rows, which must end a batch (a
+    /// windowed layer evicts whole chunks, each a whole number of runs),
+    /// and renumber the rest from 0: keys, batches and segments shift
+    /// down, a segment that started among the evicted rows is cut, and
+    /// segments the eviction made adjacent join. `O(rows kept + segments)`.
+    pub(crate) fn evict(&mut self, rows: u64) {
+        if rows == 0 {
+            return;
+        }
+        let n = rows as usize;
+        debug_assert!(
+            n == self.keys.len() || self.batches.binary_search(&rows).is_ok(),
+            "eviction of {rows} rows splits a batch"
+        );
+        self.keys.drain(..n);
+        self.local.drain(..n);
+        self.batches.retain(|&b| b >= rows);
+        for b in &mut self.batches {
+            *b -= rows;
+        }
+        let mut out: Vec<Range<u64>> = Vec::with_capacity(self.segments.len());
+        for seg in std::mem::take(&mut self.segments) {
+            if seg.end <= rows {
+                continue;
+            }
+            let seg = seg.start.max(rows) - rows..seg.end - rows;
+            match out.last_mut() {
+                Some(last) if last.end == seg.start => last.end = seg.end,
+                _ => out.push(seg),
             }
         }
-        let start = self.keys.len() as u64;
-        self.keys.extend(perm.iter().map(|&i| keys[i as usize]));
-        self.local.extend(perm);
-        self.batches.push(start);
-        self.merge(start..start + n as u64);
+        self.segments = out;
     }
 
     fn key(&self, v: f64) -> f32 {
@@ -156,8 +215,19 @@ impl DrawOrder {
     /// stored rows) that the layer should evaluate its rows again into
     /// one sorted run: more than 64 segments, plus one per 1024 rows, so
     /// re-uploading costs `O(1)` bytes per appended row on average.
+    ///
+    /// Compaction must also at least halve the segments: a windowed layer
+    /// sorts each chunk on its own, so its fewest segments can be about
+    /// one per row, and evaluating again would not reduce them.
     pub(crate) fn needs_compaction(&self) -> bool {
-        self.segments.len() > COMPACT_SEGMENTS + self.keys.len() / 1024
+        let n = self.segments.len();
+        n > COMPACT_SEGMENTS + self.keys.len() / 1024 && n > 2 * self.floor
+    }
+
+    /// Record the segments of a full evaluation (see
+    /// [`needs_compaction`](Self::needs_compaction)).
+    pub(crate) fn mark_evaluated(&mut self) {
+        self.floor = self.segments.len();
     }
 
     /// The data row (index into the selection's rows) stored at `stored`:
@@ -282,10 +352,15 @@ fn ordered_bits(k: f32) -> u32 {
     }
 }
 
-fn permute(column: &mut ColumnData, perm: &[u32]) {
+/// Permute rows `run` of `column` by `perm` (indices within the run).
+fn permute(column: &mut ColumnData, run: Range<usize>, perm: &[u32]) {
+    fn apply<V: Copy>(v: &mut [V], perm: &[u32]) {
+        let moved: Vec<V> = perm.iter().map(|&i| v[i as usize]).collect();
+        v.copy_from_slice(&moved);
+    }
     match column {
-        ColumnData::Values(v) => *v = perm.iter().map(|&i| v[i as usize]).collect(),
-        ColumnData::Codes(c) => *c = perm.iter().map(|&i| c[i as usize]).collect(),
+        ColumnData::Values(v) => apply(&mut v[run], perm),
+        ColumnData::Codes(c) => apply(&mut c[run], perm),
     }
 }
 
@@ -304,6 +379,66 @@ mod tests {
             .into_iter()
             .map(|r| order.keys[r as usize])
             .collect()
+    }
+
+    /// Data rows in the draw order a fresh build of `sizes` gives: largest
+    /// first, equal sizes in data order.
+    fn fresh(sizes: &[f64]) -> Vec<u64> {
+        let mut rows: Vec<u64> = (0..sizes.len() as u64).collect();
+        rows.sort_by(|&a, &b| sizes[b as usize].total_cmp(&sizes[a as usize]));
+        rows
+    }
+
+    /// The data rows in draw order.
+    fn data_rows(order: &DrawOrder) -> Vec<u64> {
+        drawn(order).into_iter().map(|s| order.row_of(s)).collect()
+    }
+
+    /// GUP-482: batches sorted in chunk-sized runs merge to the order of
+    /// a fresh build, and evicting whole runs from the front renumbers the
+    /// rest, so `row_of` and the segments match a fresh build of the kept
+    /// rows.
+    #[test]
+    fn runs_and_eviction_keep_the_fresh_order() {
+        let sizes: Vec<f64> = (0..40).map(|i| f64::from((i * 7) % 11)).collect();
+        let mut order = DrawOrder::new(0, false);
+        // Chunks of 8: batches of 5, 20 and 15 rows, split at chunk edges.
+        let batches: [(Range<usize>, &[usize]); 3] =
+            [(0..5, &[5]), (5..25, &[3, 8, 8, 1]), (25..40, &[7, 8])];
+        for (range, runs) in batches {
+            let mut columns = vec![ColumnData::Values(sizes[range].to_vec())];
+            order.push_runs(&mut columns, runs);
+        }
+        assert_eq!(data_rows(&order), fresh(&sizes));
+        // Each stored row's data row lies in its own chunk.
+        for s in 0..40 {
+            assert_eq!(order.row_of(s) / 8, s / 8, "stored row {s}");
+        }
+        // Evict chunks 0 and 1, then chunk 2.
+        for (evicted, total) in [(16, 16), (8, 24)] {
+            order.evict(evicted);
+            let kept = &sizes[total..];
+            assert_eq!(
+                data_rows(&order),
+                fresh(kept),
+                "after evicting {total} rows"
+            );
+            assert_eq!(order.keys.len(), kept.len());
+            // Adjacent segments were joined.
+            assert!(
+                order.segments().windows(2).all(|w| w[0].end != w[1].start),
+                "{:?}",
+                order.segments()
+            );
+        }
+        // Appends after an eviction land after the renumbered rows.
+        let mut columns = vec![ColumnData::Values(vec![5.0, 9.0])];
+        order.push_runs(&mut columns, &[2]);
+        let mut all = sizes[24..].to_vec();
+        all.extend([5.0, 9.0]);
+        assert_eq!(data_rows(&order), fresh(&all));
+        order.evict(order.keys.len() as u64);
+        assert!(order.segments().is_empty() && order.batches.is_empty());
     }
 
     #[test]

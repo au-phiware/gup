@@ -290,7 +290,7 @@ pub enum ColumnData {
 }
 
 impl ColumnData {
-    fn len(&self) -> usize {
+    pub(crate) fn len(&self) -> usize {
         match self {
             Self::Values(v) => v.len(),
             Self::Codes(c) => c.len(),
@@ -1071,6 +1071,39 @@ impl ColumnStore {
         Ok(())
     }
 
+    /// Drop the first `chunks` chunks (their buffers, CPU copies, origins
+    /// and stats) and renumber the rest from row 0: every remaining
+    /// chunk's [`row_base`](Chunk::row_base) drops by the rows removed,
+    /// which the next prepare writes into the chunk uniforms. No column
+    /// bytes move. Returns the rows removed (RFC-001 S12c, GUP-482).
+    pub fn evict_front(&mut self, chunks: usize) -> u64 {
+        let chunks = chunks.min(self.chunks.len());
+        let removed: u64 = self.chunks.drain(..chunks).map(|c| u64::from(c.len)).sum();
+        for c in &mut self.chunks {
+            c.row_base -= removed;
+        }
+        self.rows -= removed;
+        removed
+    }
+
+    /// How many leading chunks hold only rows older than the newest
+    /// `keep`, when every chunk's rows are a contiguous run of data rows
+    /// (a windowed layer's): whole chunks, from the front.
+    pub fn evictable(&self, keep: u64) -> usize {
+        let mut left = self.rows;
+        self.chunks
+            .iter()
+            .take_while(|c| {
+                let after = left - u64::from(c.len);
+                let go = after >= keep;
+                if go {
+                    left = after;
+                }
+                go
+            })
+            .count()
+    }
+
     /// Total rows across every chunk.
     pub fn rows(&self) -> u64 {
         self.rows
@@ -1400,6 +1433,35 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// GUP-482: evicting front chunks renumbers the rest from row 0, keeps
+    /// their origins, stats and bytes, and the store's stats follow.
+    #[test]
+    fn evicting_front_chunks_renumbers_the_rest() {
+        let values: Vec<f64> = (0..250).map(|i| 1.7e9 + f64::from(i) * 10.0).collect();
+        let mut store =
+            ColumnStore::from_columns(vec![(ColumnFormat::F32Relative, values.clone())], 64)
+                .unwrap();
+        // Newest 100 rows: chunks 0 and 1 (rows 0..128) are older; chunk 2
+        // (128..192) holds row 150, which is in the window.
+        assert_eq!(store.evictable(100), 2);
+        assert_eq!(store.evictable(250), 0);
+        assert_eq!(store.evictable(0), 4);
+        assert_eq!(store.evict_front(2), 128);
+        assert_eq!(store.rows(), 122);
+        let bases: Vec<_> = store.chunks().iter().map(Chunk::row_base).collect();
+        assert_eq!(bases, [0, 64]);
+        assert_eq!(store.chunks()[0].columns()[0].origin(), values[128]);
+        assert_eq!(store.stats(0).unwrap().extent(), (values[128], values[249]));
+        let kept: Vec<f64> = store.cpu_values(0).unwrap();
+        assert_eq!(kept, values[128..]);
+        // Appends continue after the renumbered rows.
+        store
+            .append(10, &[ColumnData::Values(values[..10].to_vec())])
+            .unwrap();
+        assert_eq!(store.rows(), 132);
+        assert_eq!(store.chunks()[2].row_base(), 128);
     }
 
     /// AC1: a forced small chunk size splits the rows; every chunk has its

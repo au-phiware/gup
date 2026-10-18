@@ -200,11 +200,14 @@ pub(crate) struct Chans {
 }
 
 /// The items of one layer of `slots.len()` stored rows. `slots` lists, per
-/// stored row, its data row and its rank in the draw order.
+/// stored row, its data row (counted from the layer's first kept row, the
+/// index into `c`) and its rank in the draw order; ids add `first`, the
+/// rows a window evicted.
 pub(crate) fn build_items(
     hit: HitShape,
     layer: usize,
     z: i32,
+    first: usize,
     slots: &[(usize, u64)],
     c: &Chans,
     out: &mut Vec<PickItem>,
@@ -212,7 +215,10 @@ pub(crate) fn build_items(
     let finite = |vs: &[f32]| vs.iter().all(|v| v.is_finite());
     let mut push = |row: usize, rank: u64, shape: Shape| {
         out.push(PickItem {
-            row: RowId { layer, row },
+            row: RowId {
+                layer,
+                row: first + row,
+            },
             z,
             rank,
             shape,

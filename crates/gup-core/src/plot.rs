@@ -182,6 +182,9 @@ pub struct Plot {
     /// Each layer's z and GPU state at the last resolve, by layer index:
     /// what a GPU pick draws.
     pub(crate) drawn: Vec<(i32, Arc<LayerGpu>, Arc<[Span]>)>,
+    /// Each layer's stored-row epoch at the last resolve: a GPU pick of a
+    /// layer that renumbered its rows since reports no row (GUP-482).
+    pub(crate) drawn_epochs: Vec<u64>,
     /// Each layer's visible draw entries at the last resolve (empty: all),
     /// shared by draws, CPU picks and GPU picks.
     visible: Vec<Vec<bool>>,
@@ -436,6 +439,7 @@ impl Plot {
             zoomed: [None; 3],
             pick: None,
             drawn: Vec::new(),
+            drawn_epochs: Vec::new(),
             visible: Vec::new(),
             cull: true,
             gpu_pick: None,
@@ -1025,8 +1029,13 @@ impl Plot {
             self.overlay = None;
             match self.pick_anchor(row) {
                 Some(a) => self.hover = Some((row, a, self.generation)),
-                // A GPU-picked row has no anchor but the pointer's.
-                None if self.gpu_mode => self.hover = Some((row, anchor, self.generation)),
+                // A GPU-picked row has no anchor but the pointer's, while
+                // the layer holds it (a window may have evicted it).
+                None if self.gpu_mode
+                    && self.layers.get(row.layer).is_some_and(|l| l.holds(row.row)) =>
+                {
+                    self.hover = Some((row, anchor, self.generation));
+                }
                 None => self.hover = None,
             }
         }
@@ -1923,6 +1932,7 @@ impl Plot {
             .iter()
             .map(|(z, b)| (*z, Arc::clone(&b.gpu), Arc::clone(&b.visible)))
             .collect();
+        self.drawn_epochs = self.layers.iter().map(|l| l.epoch()).collect();
 
         // 7. The scene.
         let mut scene = Scene::new(width, height, th.background);
