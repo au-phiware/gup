@@ -53,9 +53,11 @@
 //! gup_core::show(chart).unwrap();
 //! ```
 
+pub(crate) mod bar;
 pub(crate) mod line;
 pub(crate) mod scatter;
 
+pub use bar::{BarChart, bar};
 pub use line::{LineChart, line};
 pub use scatter::{ScatterChart, scatter};
 

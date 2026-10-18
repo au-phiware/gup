@@ -125,7 +125,7 @@ mod window;
 
 #[cfg(all(feature = "window", not(target_arch = "wasm32")))]
 pub use app::{GupApp, show};
-pub use builder::{LineChart, ScatterChart, line, scatter};
+pub use builder::{BarChart, LineChart, ScatterChart, bar, line, scatter};
 pub use channel::{
     Antialias, Channel, ChannelDesc, Color, ConstValue, Geometry, GpuType, HitShape, Mark, Px,
     Role, Unit, Visual,
