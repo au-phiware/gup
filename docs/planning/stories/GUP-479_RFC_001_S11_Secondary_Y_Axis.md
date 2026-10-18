@@ -9,8 +9,8 @@ implementer-reason:
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 🚧 In Progress **Created**:
-2026-10-19
+**Initiative**: RFC-001 Migration **Status**: ✅ Complete (2026-10-19)
+**Created**: 2026-10-19
 
 ## Context
 
@@ -61,15 +61,15 @@ scales with independent domains over one x axis and one plot rect.
 
 ### AC1: API
 
-- [ ] `Plot::y_right` and `Plot::y_right_title` exist with the signatures in
+- [x] `Plot::y_right` and `Plot::y_right_title` exist with the signatures in
       Decisions, each with a doctest that renders a two-axis plot (doctests
       compile as an external crate).
-- [ ] `Layout::y_right_ticks: Vec<(f64, f32)>` holds the right axis's tick
+- [x] `Layout::y_right_ticks: Vec<(f64, f32)>` holds the right axis's tick
       values and pixel positions, and is empty without a right axis.
 
 ### AC2: Nothing changes without a right axis
 
-- [ ] Every existing gup-core golden passes unchanged (none re-blessed), and so
+- [x] Every existing gup-core golden passes unchanged (none re-blessed), and so
       does `mask wasm-browser`.
 
 ### AC3: The golden
@@ -84,12 +84,12 @@ A new `crates/gup-core/tests/secondary_y.rs`, golden
 - Temperature (`Line`, 2 px) on the left axis, `y_title("Temperature (°C)")`,
   values 8–26.
 
-- [ ] Layout checks in the test: every right tick label's ink box lies right of
+- [x] Layout checks in the test: every right tick label's ink box lies right of
       `layout.plot.right()` and inside the canvas; every left one left of
       `plot.left()`; the right tick pixels are those of the right scale
       (`y_right.read().eval(v)`); the top of the 180 mm bar and the 26 °C line
       vertex are both within 1 px of their axes' pixels.
-- [ ] The implementer reads the golden: two labelled y axes, the bars against
+- [x] The implementer reads the golden: two labelled y axes, the bars against
       the right one and the line against the left one, both titles, x ticks,
       nothing overlapping.
 
@@ -97,21 +97,21 @@ A new `crates/gup-core/tests/secondary_y.rs`, golden
 
 In `crates/gup-core/tests/secondary_y.rs`:
 
-- [ ] A wheel zoom at the plot centre changes both y domains about the pointer:
+- [x] A wheel zoom at the plot centre changes both y domains about the pointer:
       the data value under the pointer is unchanged on both axes (to 1e-9
       relative).
-- [ ] A drag pan of `dy` pixels moves both y domains by `dy` pixels' worth.
-- [ ] `view_axes(Axes::X)` leaves both y domains alone; `reset_view` restores
+- [x] A drag pan of `dy` pixels moves both y domains by `dy` pixels' worth.
+- [x] `view_axes(Axes::X)` leaves both y domains alone; `reset_view` restores
       both.
-- [ ] `Drag::Zoom` to a rectangle sets both y domains to the rectangle's pixel
+- [x] `Drag::Zoom` to a rectangle sets both y domains to the rectangle's pixel
       bounds.
-- [ ] A clean resolve after a zoom writes no column bytes (`upload_stats`).
+- [x] A clean resolve after a zoom writes no column bytes (`upload_stats`).
 
 ### AC5: Docs and RFC
 
-- [ ] `crates/gup-core/src/builder/mod.rs`'s migration table entry for
+- [x] `crates/gup-core/src/builder/mod.rs`'s migration table entry for
       `.layer_with_y2(..)` (added by GUP-466) points to `Plot::y_right`.
-- [ ] RFC-001 gains "S11 findings (GUP-479)": what S11 delivered, and where each
+- [x] RFC-001 gains "S11 findings (GUP-479)": what S11 delivered, and where each
       named deletion went (GUP-466, GUP-483/484, GUP-486), with a one-line note
       on the S11 row of §11's table.
 
@@ -186,12 +186,12 @@ In `crates/gup-core/tests/secondary_y.rs`:
 
 ## Technical Tasks
 
-- [ ] Fields, `y_right`, `y_right_title`, revision and generation.
-- [ ] Fit, nice, widen, range, ticks and thinning for the right scale.
-- [ ] Layout arithmetic, guides, title, legend offset, `Layout::y_right_ticks`.
-- [ ] Zoom, pan, drag-zoom, reset, view axes.
-- [ ] `secondary_y.rs`: golden and AC3–AC4 checks; bless and read.
-- [ ] Migration-table entry, RFC findings.
+- [x] Fields, `y_right`, `y_right_title`, revision and generation.
+- [x] Fit, nice, widen, range, ticks and thinning for the right scale.
+- [x] Layout arithmetic, guides, title, legend offset, `Layout::y_right_ticks`.
+- [x] Zoom, pan, drag-zoom, reset, view axes.
+- [x] `secondary_y.rs`: golden and AC3–AC4 checks; bless and read.
+- [x] Migration-table entry, RFC findings.
 
 ## Dependencies
 
@@ -214,8 +214,8 @@ In `crates/gup-core/tests/secondary_y.rs`:
 
 ## Success Metrics
 
-- [ ] A two-axis chart in about 15 lines on `Plot`.
-- [ ] No existing image changes.
+- [x] A two-axis chart in about 15 lines on `Plot`.
+- [x] No existing image changes.
 
 ## Risk Assessment
 
@@ -228,18 +228,83 @@ In `crates/gup-core/tests/secondary_y.rs`:
 
 ## Definition of Done
 
-- [ ] First code commit within 30 minutes of starting; then commit at each
+- [x] First code commit within 30 minutes of starting; then commit at each
       checkpoint (story-worker "Checkpoint rule")
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1` and
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1` and
       `cargo test -p gup-core -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] `mask wasm-browser` passes (this story changes layout and input)
-- [ ] `mask wasm-size` run and the scatter and per-row-type figures reported in
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] `mask wasm-browser` passes (this story changes layout and input)
+- [x] `mask wasm-size` run and the scatter and per-row-type figures reported in
       the Implementation Summary (the orchestrator re-records the budget)
-- [ ] `mask perf-budget` table pasted (story-worker step 9)
-- [ ] Rendered output verified by eye: `secondary_y.png`
-- [ ] `mask old-path-loc` recorded (expected unchanged)
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] `mask perf-budget` table pasted (story-worker step 9)
+- [x] Rendered output verified by eye: `secondary_y.png`
+- [x] `mask old-path-loc` recorded (expected unchanged)
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `Plot::y_right`, `Plot::y_right_title`, `Layout::y_right_ticks`; the right
+  scale is fitted, niced, widened, ranged, thinned and ticked like `y`; layout,
+  guides, title and legend offset per Decisions. Per-axis arrays are three wide;
+  `scales()` and `domains()` helpers iterate x, y, right.
+- Key files: `crates/gup-core/src/plot.rs`,
+  `crates/gup-core/tests/secondary_y.rs` (6 tests), golden
+  `tests/golden/gup_core/secondary_y.png`, the migration table in
+  `builder/mod.rs`, RFC-001 "S11 findings".
+- No existing golden changed; trybuild snapshots unchanged;
+  `cargo test -p gup-core` and `mask wasm-browser` pass.
+- Evidence: `mask old-path-loc` TOTAL 26601. `mask wasm-size`:
+  `wasm.scatter.gz_bytes` 321,521, `wasm.per_row_type.gz_bytes` 1,386.
+  `mask perf-budget` ran twice on a busy machine (GPU at 350 MHz): the size rows
+  pass; the timing rows fail by noise (`pipeline.link_create` 1.1 ms recorded,
+  2.4 then 5.4 ms measured, code this story does not touch); nothing
+  re-recorded.
+- Golden read: two labelled y axes (°C left, mm right with outward ticks), both
+  titles above their axes, bars against the right and the orange line against
+  the left, x ticks 1 to 12, no overlap. The x domain is fixed at 0.5..12.5 so
+  the end bars are not clipped by the plot rect.
+
+## Retrospective
+
+**Completed**: 2026-10-19
+
+### Key Technical Learnings
+
+#### A derived baseline is not fitted
+
+- **Challenge**: with `Rect::Y_END` as `Derived(eval(0.0))` the auto right
+  domain was 20..180, so the 20 mm bar had no height.
+- **Solution**: encode the baseline through the scale (`right.encode(|_| 0.0)`).
+- **Pattern**: anything that must be inside a fitted domain goes through the
+  scale's encoding.
+
+#### Marks at the domain ends are clipped
+
+- **Challenge**: x 1..12 puts the first and last 18 px bars half outside the
+  plot rect (a `Rect`'s width is not an overhang).
+- **Solution**: a fixed x domain of 0.5..12.5 in the golden.
+- **Pattern**: `Rect` could report half its constant width as overhang; not done
+  here.
+
+### Architectural Decisions
+
+#### Index 2 of the per-axis arrays is the right axis
+
+- **Decision**: widen the arrays to 3 and add `scales()` and `domains()`, so
+  zoom, pan, drag, home and reset loop over axes.
+- **Reasoning**: one code path per operation, so a missing array cannot make a
+  right axis that zooms but does not reset (the story's risk).
+- **Trade-off**: `movable()` returns `[bool; 3]`.
+- **Future**: a third axis would be one more entry.
+
+### Development Workflow Insights
+
+- The hook refused the Start commit (prettier on the story file); run
+  `prettier --write` on edited docs first.
+
+### Follow-up Stories
+
+None.
