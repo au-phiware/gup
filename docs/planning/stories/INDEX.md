@@ -426,7 +426,7 @@ findings", GUP-396).
   public `Selection::append`, a `Clone + Send` `Appender` for scatter and line
   charts drained at resolve, `Chart::set_waker` with a window waker, and dogfood
   t5 on it. Deps: GUP-414 ✅, GUP-465 ✅.
-- [GUP-481](GUP-481_RFC_001_S12b_Web_Canvas_Waker.md) 📋 — RFC-001 step S12b:
+- [GUP-481](GUP-481_RFC_001_S12b_Web_Canvas_Waker.md) 🚧 — RFC-001 step S12b:
   `CanvasApp` wakes on appended rows through a wasm32 thread-local registry,
   checked by a browser step with no input. Deps: GUP-480 ✅.
 - [GUP-482](GUP-482_RFC_001_S12c_Window_Eviction.md) 📋 — RFC-001 step S12c
