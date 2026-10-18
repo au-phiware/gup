@@ -402,6 +402,14 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   delete the old scatter, line, bar and composite builders with their goldens,
   tests, bench and ten examples; port four examples; a migration table; old-path
   LOC ≤ 26,900. Deps: GUP-465 📋.
+- [GUP-467](GUP-467_SVG_Output_Draws_Marks.md) 📋 — `SvgTarget` writes data
+  marks as vector shapes from the CPU mirrors, matching the PNG goldens via
+  resvg, and the dogfood t3 SVG expected failure is removed. Deps: GUP-445 ✅,
+  GUP-430 ✅, GUP-431 ✅.
+- [GUP-474](GUP-474_Custom_Tick_Label_Formats.md) 📋 — `tick_format` on position
+  scales and `Time` overrides the SI-style default for axes, legend ramps and
+  measurement, with currency, percent and date goldens. Deps: GUP-435 ✅,
+  GUP-452 ✅, GUP-426 ✅.
 
 ## GPU Rendering Pipeline
 
