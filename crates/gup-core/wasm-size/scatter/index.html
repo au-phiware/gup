@@ -143,6 +143,23 @@
             await new Promise(r => requestAnimationFrame(r));
         };
         let interactive = "ok";
+        // Async GPU results (SwiftShader runs on the CPU) arrive after a
+        // load-dependent number of frames: poll each frame until the hook
+        // is true, failing only on a generous timeout, and report the
+        // frames taken (max per step name) so latency stays visible.
+        const taken = {};
+        const within = async (name, hook) => {
+          const t0 = performance.now();
+          for (let f = 1; f <= 120 || performance.now() - t0 < 10000; f++) {
+            await new Promise(r => requestAnimationFrame(r));
+            if (hook()) {
+              taken[name] = Math.max(taken[name] ?? 0, f);
+              return true;
+            }
+            if (f >= 120 && performance.now() - t0 >= 10000) break;
+          }
+          return false;
+        };
         let hoverPx = null;
         try {
           const canvas = document.createElement("canvas");
@@ -222,12 +239,12 @@
           for (const [[gx, gy], want] of targets) {
             await step("gpu-pick", async () => {
               app.request_pick(gx, gy);
-              for (let f = 0; f < 30; f++) {
-                await new Promise(r => requestAnimationFrame(r));
-                const done = app.poll_picks();
-                if (done.length) return done.length === 1 && done[0] === want;
-              }
-              return false;
+              let done = [];
+              const got = await within(
+                "gpu-pick",
+                () => (done = app.poll_picks()).length > 0
+              );
+              return got && done.length === 1 && done[0] === want;
             });
           }
           const [d0, d1] = app.x_domain();
@@ -366,32 +383,26 @@
               })
             );
           const rowPx = i => gpu.px_of(5 + 8 * i, [3, 7, 4, 8, 2][i % 5]);
-          // Up to 8 animation frames for the hook to reach the value.
-          const within8 = async hook => {
-            for (let f = 0; f < 8; f++) {
-              await new Promise(r => requestAnimationFrame(r));
-              if (hook()) {
-                console.log("GUP gpu hook after " + (f + 1) + " frames");
-                return true;
-              }
-            }
-            return false;
-          };
           await frames();
           const [h5x, h5y] = rowPx(5);
           gfire("pointermove", h5x, h5y);
           // Nothing lands synchronously: the rows are not CPU-readable.
           await step("gpu-async", async () => gpu.hovered_row() === -1);
-          await step("gpu-hover", () => within8(() => gpu.hovered_row() === 5));
+          await step("gpu-hover", () =>
+            within("gpu-hover", () => gpu.hovered_row() === 5)
+          );
           const [h7x, h7y] = rowPx(7);
           gfire("pointerdown", h7x, h7y);
           gfire("pointerup", h7x, h7y);
           await step("gpu-click", () =>
-            within8(() => gpu.clicks() === 1 && gpu.last_clicked() === 7)
+            within(
+              "gpu-click",
+              () => gpu.clicks() === 1 && gpu.last_clicked() === 7
+            )
           );
           gcanvas.dispatchEvent(new PointerEvent("pointerleave"));
           await step("gpu-leave", () =>
-            within8(() => gpu.hovered_row() === -1)
+            within("gpu-leave", () => gpu.hovered_row() === -1)
           );
           await step("gpu-clicks-once", async () => gpu.clicks() === 1);
           await step("gpu-last-error", async () => gpu.last_error() == null);
@@ -400,6 +411,9 @@
           console.log("interactive failed: " + e);
           interactive = "error:" + e;
         }
+        const takenText = Object.entries(taken)
+          .map(([k, v]) => ` ${k}-frames=${v}`)
+          .join("");
         const c = document.createElement("canvas");
         [c.width, c.height] = [w, 7 * h];
         const ctx = c.getContext("2d");
@@ -459,7 +473,7 @@
           divergingColoured > 300 &&
           userColoured > 300 &&
           interactive === "ok";
-        result = `${ok ? "PASS" : "FAIL"} white=${white} grey=${grey} coloured=${coloured} chunked-diff=${chunkDiff}px/${chunkWorst} dict=${dictCounts.join(",")} dict-null-row-diff=${dictDiff}px scales=${scalesColoured} band=${bandColoured} diverging=${divergingColoured} user=${userColoured} interactive=${interactive}`;
+        result = `${ok ? "PASS" : "FAIL"} white=${white} grey=${grey} coloured=${coloured} chunked-diff=${chunkDiff}px/${chunkWorst} dict=${dictCounts.join(",")} dict-null-row-diff=${dictDiff}px scales=${scalesColoured} band=${bandColoured} diverging=${divergingColoured} user=${userColoured} interactive=${interactive}${takenText}`;
       } catch (e) {
         result = "FAIL " + e;
       }
