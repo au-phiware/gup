@@ -218,6 +218,7 @@
           );
           const [d0, d1] = app.x_domain();
           const [px, py] = app.plot_centre();
+          const rect0 = app.plot_rect();
           const wheel = new WheelEvent("wheel", {
             bubbles: true,
             cancelable: true,
@@ -235,6 +236,14 @@
               wheel.defaultPrevented && Math.abs((e1 - e0) / want - 1) <= 1e-9
             );
           });
+          // The y labels lose their widest ("10"), yet the rect stays put
+          // while the pointer is on the canvas (GUP-452).
+          await step("held-rect", async () =>
+            app.plot_rect().every((v, i) => v === rect0[i])
+          );
+          canvas.dispatchEvent(new PointerEvent("pointerleave"));
+          await frames();
+          await step("release", async () => app.plot_rect()[0] < rect0[0]);
           await step("last-error", async () => app.last_error() == null);
           app.free();
         } catch (e) {

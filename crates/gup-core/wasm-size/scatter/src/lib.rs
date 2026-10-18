@@ -851,6 +851,12 @@ impl InteractiveScatter {
         Ok(vec![r.x + r.width / 2.0, r.y + r.height / 2.0])
     }
 
+    /// The plot rectangle: `[x, y, width, height]`.
+    pub fn plot_rect(&self) -> Result<Vec<f32>, JsValue> {
+        let r = self.resolved()?.layout.plot;
+        Ok(vec![r.x, r.y, r.width, r.height])
+    }
+
     /// The hovered row, or -1.
     pub fn hovered_row(&self) -> i32 {
         self.hovered.load(Ordering::SeqCst)
