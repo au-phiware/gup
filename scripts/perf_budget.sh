@@ -121,8 +121,12 @@ if [[ -z $metrics ]]; then
   fi
 fi
 
-# The budget table: rows whose first cell is a backticked metric name.
+# The budget table: rows whose first cell is a backticked metric name, inside
+# the "## Budget table" section only (other tables, such as GUP-450's crate
+# breakdown, also start with backticked names).
 awk -F'|' -v wasm_only="$wasm_only" '
+  /^## / { in_table = ($0 ~ /^## Budget table/); next }
+  !in_table { next }
   wasm_only && $2 !~ /^ *`wasm\./ { next }
   $2 ~ /^ *`[a-z0-9_.]+` *$/ {
     key = $2; gsub(/[ `]/, "", key)

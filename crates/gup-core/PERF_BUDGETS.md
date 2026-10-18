@@ -74,10 +74,10 @@ X) or `info` (printed, never fails).
 | `pipeline.link_create.median_ms`  | 1.11      | +20%      | `pipeline_timings`, 20 runs, fresh cache each       |
 | `pipeline.link_create.cold_ms`    | 1.04      | <= 10     | `pipeline_timings`, its first run                   |
 | `pipeline.link_create.max_ms`     | 1.06      | info      | `pipeline_timings`                                  |
-| `wasm.wgpu.gz_bytes`              | 41,712    | info      | `scripts/wasm_size.sh`, bare wgpu                   |
-| `wasm.scatter.gz_bytes`           | 398,627   | +2%       | `scripts/wasm_size.sh`, the reference scatter       |
-| `wasm.over_wgpu.gz_bytes`         | 356,914   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10         |
-| `wasm.per_row_type.gz_bytes`      | 3,674     | info      | `scripts/wasm_size.sh`, one more Selection row type |
+| `wasm.wgpu.gz_bytes`              | 32,360    | info      | `scripts/wasm_size.sh`, bare wgpu                   |
+| `wasm.scatter.gz_bytes`           | 295,904   | +2%       | `scripts/wasm_size.sh`, the reference scatter       |
+| `wasm.over_wgpu.gz_bytes`         | 263,544   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10         |
+| `wasm.per_row_type.gz_bytes`      | 941       | info      | `scripts/wasm_size.sh`, one more Selection row type |
 
 A legitimate change that moves a number (a new guide, a bigger feature) records
 the new value here, in the same commit, with the reason in the story.
@@ -394,3 +394,18 @@ seeded violation (GUP-417 retrospective).
     listeners. The split between the two is not measured.
   - S9 to S12 cannot fit in this headroom at this rate. A WASM size story, to
     attribute the bytes with `twiggy` and cut them, comes before S9.
+- **GUP-451, WASM size cuts (2026-10-18)**, re-measured by the orchestrator.
+  Over bare wgpu: 356,914 to 263,544 B gz (−93,370, −26%), with no change to
+  rendered output (`mask wasm-browser` pixel counts identical; native goldens
+  unblessed):
+  - `z` + LTO + `codegen-units = 1` in both harnesses: −64,322.
+  - ASCII-only SemiBold subset, with per-glyph Regular fallback: −21,385.
+  - `to_ascii_uppercase` for channel names, which drops the Unicode case tables:
+    −7,664.
+  - The per-row-type cost falls to 941 B gz, so moving `Selection` behind a
+    T-free trait (AC3) was not needed. Bare wgpu itself is 32,360 under the same
+    profile.
+  - Headroom under the 400,000 cap is now 136,456. These figures assume the
+    harnesses' release profile, which `web.rs` documents for users.
+  - perf_budget.sh now reads only the "Budget table" section, so the crate
+    breakdown above no longer shows as unmeasured budget rows.
