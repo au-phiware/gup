@@ -3564,3 +3564,36 @@ Layers of marks without `gpu_pick` are skipped.
   `wasm.per_row_type.gz_bytes` read 2,569 against 1,502 for the same measurement
   on the S9d commit; stubbing `cpu_readable` did not move it, so it is not these
   methods and is probably the gzip of the two binaries differing.
+
+## S9f findings (GUP-457)
+
+### The rule
+
+An entry (`order::draw_entries`) is visible when its pixel box, grown by
+`PICK_TOLERANCE + 1 + m`, meets the plot rect. The box is the union over the
+position channels of `image(chunk stats extent)`, constants and defaults; a
+bridge is the union of its two chunks; a chunk with no finite position is
+culled; an `image` of `None` keeps the chunk. `m` is the largest non-position
+`f32` channel. A `Rect` with a constant non-zero width or height is boxed as
+centre +- extent. The result is computed in `Plot::resolve` and shared by draws
+(`MarkBatch::visible`), the CPU pick (`hit_items`) and the GPU pick
+(`Plot::drawn`). Images are byte-identical with culling on and off.
+
+### Results
+
+4,194,304 sorted rows, 64 chunks, mailbox uncapped, three alternating runs (load
+1.3 to 3.1), GPU pass median:
+
+| Culling | Run 1    | Run 2    | Run 3    | Draws per frame |
+| ------- | -------- | -------- | -------- | --------------- |
+| on      | 9.89 ms  | 9.87 ms  | 10.31 ms | 14              |
+| off     | 58.68 ms | 59.30 ms | 59.75 ms | 67              |
+
+CPU median 0.72 to 0.82 ms on, 0.79 to 1.15 ms off. CPU pick index at the
+deepest zoom: 196,608 items in 92 ms with culling, 4,194,304 items in 1,150 ms
+without. Zoom writes 0 column, validity and texture bytes either way.
+
+### Size
+
+`mask wasm-size`: scatter 312,427 to 315,608 B gz (+3,181, over the 2,000 B
+trigger; accepted), over wgpu 280,067 to 283,248.

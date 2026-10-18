@@ -9,7 +9,7 @@ implementer-reason:
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 🚧 In Progress
+**Initiative**: RFC-001 Migration **Status**: ✅ Complete (2026-10-18)
 
 ## Context
 
@@ -252,31 +252,64 @@ range and nothing is culled. That case must cost almost nothing.
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
 
-## Blocked (2026-10-18)
+## Resolved (2026-10-18)
 
-**Question**: `wasm.scatter.gz_bytes` grew by 3,181 B gz (over the 2,000 B
-escalation trigger). Accept the growth, or have it trimmed?
+Accepted by the orchestrator: `wasm.scatter.gz_bytes` 312,427 to 315,608 B gz
+(+3,181; over wgpu 280,067 to 283,248). The orchestrator re-records the budget
+row at merge.
 
-- Measured at the story's start commit (`d2400da`, worktree): 312,427 B gz. With
-  the change: 315,608 B gz (+3,181, +1.0%, within the +2% budget row).
-  `wasm.over_wgpu.gz_bytes` 280,067 to 283,248.
-- Everything else is done and green: unit tests, `zoom_uploads` (4 new), `pick`
-  (4 new), `mask perf-budget` (all rows pass, including the new `zoom_culled.*`
-  rows), `mask wasm-browser` (`interactive=ok`), `mask old-path-loc` (28,910
-  unchanged).
-- AC5 numbers (4,194,304 sorted rows, 64 chunks, mailbox uncapped, three
-  alternating runs, load 1.3 to 3.1): GPU pass median culled 9.89, 9.87, 10.31
-  ms; unculled 58.68, 59.30, 59.75 ms (about 83% lower). Draws per frame 14
-  against 67. CPU pick index at the deepest zoom: 196,608 items in 92 ms against
-  4,194,304 items in 1,150 ms.
-- Options: (a) accept +3,181 B gz and re-record `wasm.scatter.gz_bytes`; (b) I
-  trim (for example merge `cpu_values_where` into `cpu_values`, drop the
-  per-chunk range machinery in `hit_items` in favour of a boolean filter), which
-  costs part of the pick-index speedup; (c) feature-gate nothing (the code is in
-  every build).
-- Recommendation: (a). The growth is about 1% for the largest-effect change in
-  the series (GPU pass 6x lower at depth), and the budget row's own tolerance is
-  +2%.
+## Implementation Summary
 
-Remaining once decided: RFC-001 "S9f findings" (AC7), the retrospective, and the
-status change.
+- `src/cull.rs`: `PixelBox`, `visible_entries`, `pick_ranges`, `visible_spans`
+  (10 unit tests). `Layer::cull_margin` and `Layer::visible_entries`;
+  `hit_items` takes `visible` and decodes and builds items only for visible
+  chunks.
+- `MarkBatch::visible` feeds `Draw::Marks` and `Plot::drawn` (GPU pick), so
+  draws and both picks share one result. `Plot::chunk_culling` and
+  `pick_item_count` are doc(hidden).
+- A `Rect` with a constant non-zero width or height is boxed as centre +- extent
+  (its unset far edge is ignored).
+- `zoom_bench`: `--sorted`, `--no-cull`, `--metric-prefix`, `draws.median`,
+  pick-index timing. `perf_budget.sh` runs a second `zoom_culled` pass; five
+  `zoom_culled.*` rows added.
+- Tests: 5 in `zoom_uploads.rs`, 4 in `pick.rs`; no golden changed.
+
+## Retrospective
+
+**Completed**: 2026-10-18
+
+### Key Technical Learnings
+
+#### Unset channels widen boxes
+
+- **Challenge**: The Decisions rule boxes an unset position channel at its
+  default, which stretched bars toward pixel 0 so only left chunks culled.
+- **Solution**: For `AlignedBox` marks, ignore `x_end`/`y_end` when width/height
+  is a non-zero constant.
+- **Pattern**: Derive the box from what the shader draws, per mark mode.
+
+#### Pick index cost
+
+- **Challenge**: Culled pick index still took 92 ms at 4M rows.
+- **Solution**: Decode only needed chunks; the NaN-filled per-channel vectors
+  and `rank` table remain O(rows).
+- **Pattern**: Make those sparse for a further win (follow-up).
+
+### Architectural Decisions
+
+#### Culling result lives in the MarkBatch
+
+- **Decision**: `visible: Arc<[Span]>` per batch; `LayerGpu` unchanged.
+- **Reasoning**: No GPU write; one result for three consumers.
+- **Trade-off**: A small allocation per uncached resolve.
+- **Future**: S12 appends cost nothing off screen.
+
+### Development Workflow Insights
+
+- An unknown `image` (None) keeps the chunk, so culling never hides a mark.
+- Escalation on wasm size (+3,181 B) was accepted by the orchestrator.
+
+### Follow-up Stories
+
+None written; sparse pick-index vectors are noted above (GUP-468 reserved,
+unused).
