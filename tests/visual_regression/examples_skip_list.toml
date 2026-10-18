@@ -18,6 +18,22 @@
 # Known windowed failures are tracked in expected_failures.toml.
 
 [[skip]]
+name = "01_hello_chart"
+reason = "Windowed (gup_core::show); its GUP_SCREENSHOT_PATH capture needs a display"
+
+[[skip]]
+name = "03_line_chart"
+reason = "Windowed (gup_core::show); its GUP_SCREENSHOT_PATH capture needs a display"
+
+[[skip]]
+name = "04_bar_chart"
+reason = "Windowed (gup_core::show); its GUP_SCREENSHOT_PATH capture needs a display"
+
+[[skip]]
+name = "composite_mixed_data"
+reason = "Windowed (gup_core::show); its GUP_SCREENSHOT_PATH capture needs a display"
+
+[[skip]]
 name = "02_scatter_window"
 reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
 

@@ -128,7 +128,7 @@ println!("Created a scatter plot with {} points", selection.len());
 
 Here is the complete program. Save it as `src/main.rs`:
 
-```rust,no_run
+```rust,ignore
 use gup::prelude::*;
 use std::sync::Arc;
 

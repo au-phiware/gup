@@ -105,18 +105,17 @@ survives into `gup-core`.
 
 ## RFC-001 Migration
 
-**Old-path LOC remaining: 28935 (re-measured 2026-10-06 after GUP-400: Δ 0; S2
-adds the `gup-text` crate and leaves the frozen path untouched. The 28935 was
-already the count when GUP-400 started, 59 above the 28876 recorded after
-GUP-399)**. Measured as the non-blank, non-comment-only,
-non-`#[cfg(test)]`-block line count of the old render path (`src/selection.rs`,
-`src/mark/`, `src/shader_function/`, `src/shader_pipeline.rs`,
-`src/chart_builder*`, `src/context.rs`, `src/render.rs`). Re-measure with
-`mask old-path-loc` (`scripts/old_path_loc.pl`) after each RFC-001 story. This
-metric exists per [RFC-001](../rfcs/RFC-001_Core_Architecture.md)'s Orchestrator
-review point 1 ("parallel-system risk"): it must trend to 0 as S14 (the flip and
-delete) lands, or the old and new paths will ossify side by side the way four
-scale systems and three composition systems did before.
+**Old-path LOC remaining: 26601 (re-measured 2026-10-19 after GUP-466: the old
+scatter, line, bar and composite builders deleted, 28910 to 26601, Δ -2309)**.
+Measured as the non-blank, non-comment-only, non-`#[cfg(test)]`-block line count
+of the old render path (`src/selection.rs`, `src/mark/`, `src/shader_function/`,
+`src/shader_pipeline.rs`, `src/chart_builder*`, `src/context.rs`,
+`src/render.rs`). Re-measure with `mask old-path-loc`
+(`scripts/old_path_loc.pl`) after each RFC-001 story. This metric exists per
+[RFC-001](../rfcs/RFC-001_Core_Architecture.md)'s Orchestrator review point 1
+("parallel-system risk"): it must trend to 0 as S14 (the flip and delete) lands,
+or the old and new paths will ossify side by side the way four scale systems and
+three composition systems did before.
 
 Stories implementing
 [RFC-001: Core Architecture](../rfcs/RFC-001_Core_Architecture.md) (accepted
