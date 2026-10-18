@@ -612,6 +612,11 @@ pub(crate) trait Layer: wgpu::WasmNotSendSync {
     /// an unpickable mark, an unevaluated layer, or one whose rows and CPU
     /// columns were both released.
     fn hit_items(&mut self, layer: usize, out: &mut Vec<PickItem>) -> Result<()>;
+    /// Whether the layer's mark has a GPU pick (`#[mark(.., gpu_pick)]`).
+    fn gpu_pickable(&self) -> bool;
+    /// Whether the CPU can pick the layer: it kept its CPU columns or its
+    /// rows (or has nothing to pick).
+    fn cpu_readable(&self) -> bool;
     /// Row `row` (an index into the rows the selection was given), if the
     /// layer still holds it.
     fn row_any(&self, row: usize) -> Option<&dyn Any>;
@@ -1122,6 +1127,16 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
 
     fn draw_order(&self) -> Option<&DrawOrder> {
         self.order.as_ref()
+    }
+
+    fn gpu_pickable(&self) -> bool {
+        M::GPU_PICK
+    }
+
+    fn cpu_readable(&self) -> bool {
+        self.columns
+            .as_ref()
+            .is_none_or(|store| store.cpu_kept() || !self.rows.is_empty())
     }
 
     fn row_any(&self, row: usize) -> Option<&dyn Any> {

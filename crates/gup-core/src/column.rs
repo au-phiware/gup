@@ -1087,6 +1087,12 @@ impl ColumnStore {
             .count()
     }
 
+    /// Whether every chunk still holds its CPU copy, so
+    /// [`cpu_values`](Self::cpu_values) can read any column.
+    pub(crate) fn cpu_kept(&self) -> bool {
+        self.chunks.iter().all(|c| c.cpu.is_some())
+    }
+
     /// Clear row `row`'s validity bit in `plane`, whatever its value, and
     /// have the next upload rewrite that chunk's bits: a seam for proving
     /// the vertex stage reads the bit, not the value.

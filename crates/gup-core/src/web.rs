@@ -310,9 +310,15 @@ fn frame(state: &Rc<RefCell<State>>) {
     if st.closed {
         return;
     }
+    let mut again = false;
     match st.draw() {
-        Ok(()) => {}
+        // A pick in flight: look again next frame.
+        Ok(()) => again = st.chart.needs_frame(),
         Err(e) => report(&mut st, e.to_string()),
+    }
+    drop(st);
+    if again {
+        schedule(state);
     }
 }
 

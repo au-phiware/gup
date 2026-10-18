@@ -690,3 +690,235 @@ fn brush_golden() {
         .run("gup_core/brush", Ok((vr, layout_metadata(&layout))))
         .assert_ok();
 }
+
+// ---- GPU-picked hover and click (GUP-456) ------------------------------
+
+type RowLog = Arc<Mutex<Vec<(Event, usize)>>>;
+
+/// 12 circles, `GpuOnly` in chunks of 4 (so the CPU cannot read them), with
+/// `on_row` logging; or the same rows kept (`Retain::Auto`) for the CPU
+/// path.
+fn gpu_fixture(retain: Retain) -> (Context, Plot, RowLog) {
+    let (cx, plot, seen, _) = gpu_fixture_scales(retain);
+    (cx, plot, seen)
+}
+
+fn gpu_fixture_scales(retain: Retain) -> (Context, Plot, RowLog, [ScaleRef<Linear>; 2]) {
+    let cx = Context::new_blocking().expect("headless GPU context");
+    let seen = RowLog::default();
+    let mut plot = Plot::new();
+    let sink = Arc::clone(&seen);
+    plot.on_row(move |info| sink.lock().unwrap().push((info.event, info.row.row)));
+    let mut sel = Selection::<Row, Circle>::new(rows(12));
+    sel.max_chunk_rows(4).retain(retain);
+    let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
+    plot.add(sel)
+        .attr(Circle::X, x.encode(|r: &Row| r.x))
+        .attr(Circle::Y, y.encode(|r: &Row| r.y))
+        .attr(Circle::RADIUS, Px(8.0));
+    plot.resolve(&cx, W, H).unwrap();
+    (cx, plot, seen, [x, y])
+}
+
+fn row_at(plot: &Plot, i: usize) -> Pt {
+    let l = plot.layout().unwrap();
+    let r = rows(12);
+    Pt::new(px(&l.x_ticks, r[i].x), px(&l.y_ticks, r[i].y))
+}
+
+/// Resolve until nothing is in flight, at most 10 times.
+fn settle(plot: &mut Plot, cx: &Context) {
+    for _ in 0..10 {
+        if !Chart::needs_frame(plot) {
+            return;
+        }
+        // A frame's time: the GPU finishes what was submitted.
+        std::thread::sleep(std::time::Duration::from_millis(10));
+        plot.resolve(cx, W, H).unwrap();
+    }
+    panic!("a pick was still in flight after 10 resolves");
+}
+
+fn events(seen: &RowLog) -> Vec<(Event, usize)> {
+    std::mem::take(&mut *seen.lock().unwrap())
+}
+
+fn row_id(row: usize) -> Option<RowId> {
+    Some(RowId { layer: 0, row })
+}
+
+#[test]
+fn cpu_readable_plots_keep_the_synchronous_path() {
+    let (cx, mut plot, seen) = gpu_fixture(Retain::Auto);
+    let at = row_at(&plot, 5);
+    let before = cx.submissions();
+    moved(&mut plot, at);
+    assert!(!Chart::needs_frame(&plot));
+    assert_eq!(plot.hovered(), row_id(5));
+    assert_eq!(events(&seen), [(Event::Enter, 5)]);
+    assert_eq!(cx.submissions(), before);
+}
+
+#[test]
+fn a_gpu_only_layer_hovers_after_a_resolve() {
+    let (cx, mut plot, seen) = gpu_fixture(Retain::GpuOnly);
+    assert!(Chart::needs_frame(&plot) || plot.hovered().is_none());
+    let at = row_at(&plot, 5);
+    assert!(moved(&mut plot, at));
+    assert!(Chart::needs_frame(&plot));
+    assert_eq!(plot.hovered(), None);
+    settle(&mut plot, &cx);
+    assert_eq!(plot.hovered(), row_id(5));
+    assert_eq!(events(&seen), [(Event::Enter, 5)]);
+    // Leaving works the same way.
+    let space = empty_space(&plot);
+    assert!(moved(&mut plot, space));
+    settle(&mut plot, &cx);
+    assert_eq!(plot.hovered(), None);
+    assert_eq!(events(&seen), [(Event::Leave, 5)]);
+}
+
+#[test]
+fn moves_between_resolves_submit_one_pick_for_the_last_position() {
+    let (cx, mut plot, seen) = gpu_fixture(Retain::GpuOnly);
+    let before = cx.submissions();
+    for i in 0..10 {
+        let at = row_at(&plot, i);
+        assert!(moved(&mut plot, at));
+    }
+    let last = row_at(&plot, 11);
+    moved(&mut plot, last);
+    plot.resolve(&cx, W, H).unwrap();
+    settle(&mut plot, &cx);
+    assert_eq!(cx.submissions() - before, 1);
+    assert_eq!(plot.hovered(), row_id(11));
+    assert_eq!(events(&seen), [(Event::Enter, 11)]);
+}
+
+#[test]
+fn a_result_for_an_older_position_is_dropped() {
+    let (cx, mut plot, seen) = gpu_fixture(Retain::GpuOnly);
+    let at = row_at(&plot, 5);
+    moved(&mut plot, at);
+    plot.resolve(&cx, W, H).unwrap(); // submitted
+    let space = empty_space(&plot);
+    moved(&mut plot, space);
+    settle(&mut plot, &cx);
+    assert_eq!(plot.hovered(), None);
+    let seen = events(&seen);
+    assert!(
+        seen.is_empty() || seen == [(Event::Enter, 5), (Event::Leave, 5)],
+        "{seen:?}"
+    );
+}
+
+/// A pick drawn before a view change must not hover: the view moved under it.
+#[test]
+fn a_pick_older_than_the_last_resolve_is_dropped() {
+    let (cx, mut plot, seen) = gpu_fixture(Retain::GpuOnly);
+    let at = row_at(&plot, 5);
+    moved(&mut plot, at);
+    plot.resolve(&cx, W, H).unwrap(); // submitted at generation g
+    let g = plot.resolve_generation();
+    // Row 5 and its neighbours: 18 px is nothing's hit.
+    plot.pan(18.0, 0.0).unwrap();
+    settle(&mut plot, &cx);
+    assert!(plot.resolve_generation() > g);
+    assert!(
+        events(&seen).iter().all(|e| *e != (Event::Enter, 5)),
+        "the stale pick hovered row 5"
+    );
+    assert_ne!(plot.hovered(), row_id(5));
+    // The hover is what a fresh pick finds where the pointer is.
+    assert_eq!(plot.hovered(), plot.pick_row_gpu(&cx, at).unwrap());
+}
+
+#[test]
+fn a_gpu_click_needs_a_press_and_release_within_four_pixels() {
+    let (cx, mut plot, seen) = gpu_fixture(Retain::GpuOnly);
+    let at = row_at(&plot, 7);
+    let button = Button::Primary;
+    feed(&mut plot, Input::PointerDown { at, button });
+    feed(
+        &mut plot,
+        Input::PointerUp {
+            at: off(at, 2.0, 0.0),
+            button,
+        },
+    );
+    assert!(Chart::needs_frame(&plot));
+    settle(&mut plot, &cx);
+    assert_eq!(events(&seen), [(Event::Click, 7)]);
+
+    // A pan (beyond 4 px) is no click.
+    feed(&mut plot, Input::PointerDown { at, button });
+    feed(
+        &mut plot,
+        Input::PointerMoved {
+            at: off(at, 10.0, 0.0),
+        },
+    );
+    feed(
+        &mut plot,
+        Input::PointerUp {
+            at: off(at, 10.0, 0.0),
+            button,
+        },
+    );
+    settle(&mut plot, &cx);
+    assert!(events(&seen).iter().all(|e| e.0 != Event::Click));
+}
+
+#[test]
+fn a_drag_cancels_a_pending_hover_pick() {
+    let (cx, mut plot, seen) = gpu_fixture(Retain::GpuOnly);
+    let at = row_at(&plot, 5);
+    let button = Button::Primary;
+    feed(&mut plot, Input::PointerDown { at, button });
+    feed(
+        &mut plot,
+        Input::PointerMoved {
+            at: off(at, 2.0, 0.0),
+        },
+    );
+    assert!(Chart::needs_frame(&plot));
+    feed(
+        &mut plot,
+        Input::PointerMoved {
+            at: off(at, 12.0, 0.0),
+        },
+    );
+    assert!(!Chart::needs_frame(&plot));
+    plot.resolve(&cx, W, H).unwrap();
+    settle(&mut plot, &cx);
+    feed(
+        &mut plot,
+        Input::PointerUp {
+            at: off(at, 12.0, 0.0),
+            button,
+        },
+    );
+    settle(&mut plot, &cx);
+    assert_eq!(plot.hovered(), None);
+    assert!(events(&seen).is_empty());
+}
+
+/// CPU and GPU picks hover the same row for the same input sequence.
+#[test]
+fn cpu_and_gpu_hover_agree() {
+    let (cx, mut cpu, _) = gpu_fixture(Retain::Auto);
+    let (cx2, mut gpu, _) = gpu_fixture(Retain::GpuOnly);
+    let mut points = Vec::new();
+    for i in 0..12 {
+        let c = row_at(&cpu, i);
+        points.extend([c, off(c, 6.0, 5.0), off(c, 14.0, 0.0), off(c, 18.0, 0.0)]);
+    }
+    points.push(empty_space(&cpu));
+    for at in points {
+        moved(&mut cpu, at);
+        moved(&mut gpu, at);
+        settle(&mut cpu, &cx);
+        settle(&mut gpu, &cx2);
+        assert_eq!(cpu.hovered(), gpu.hovered(), "at {at:?}");
+    }
+}

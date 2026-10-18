@@ -15,7 +15,7 @@ use crate::channel::{Mark, Px};
 use crate::context::{Context, ContextId};
 use crate::error::{Error, Result};
 use crate::geom::{Point, Rect};
-use crate::gpu_pick::GpuPicker;
+use crate::gpu_pick::{GpuPicker, PickTicket};
 use crate::input::{Axes, Brush, Button, Drag, Event, EventInfo, Input, Response};
 use crate::marks::{Circle, Line, Rect as MarkRect, Segment};
 use crate::pick::{PickIndex, RowId};
@@ -204,9 +204,45 @@ pub struct Plot {
     /// The rectangle being dragged (logical pixels, clamped to the plot
     /// rect), once the pointer left the click slop in `Brush` or `Zoom` mode.
     marquee: Option<Rect>,
+    /// Whether the last resolve found a `gpu_pick` layer the CPU cannot
+    /// read: then hover and click are picked on the GPU, for every layer.
+    gpu_mode: bool,
+    /// Pending and in-flight GPU hover and click picks.
+    gpu_hover: GpuHover,
+    /// Called for every `Enter`, `Leave` and `Click`, with the row's id.
+    row_handlers: Vec<RowHandler>,
 }
 
 type BrushHandler = Box<dyn FnMut(Option<&Brush>) + Send + Sync>;
+type RowHandler = Box<dyn FnMut(&EventInfo) + Send + Sync>;
+
+/// Hover and click picks asked of the GPU (see `Plot::gpu_mode`).
+#[derive(Default)]
+struct GpuHover {
+    /// The latest pointer position not yet submitted.
+    hover: Option<Point>,
+    /// The hover pick in flight. A result with another ticket is dropped.
+    hover_ticket: Option<PickTicket>,
+    /// Clicks not yet submitted, oldest first.
+    clicks: Vec<Point>,
+    /// The click pick in flight.
+    click_ticket: Option<PickTicket>,
+}
+
+impl GpuHover {
+    fn busy(&self) -> bool {
+        self.hover.is_some()
+            || self.hover_ticket.is_some()
+            || !self.clicks.is_empty()
+            || self.click_ticket.is_some()
+    }
+
+    /// Forget the hover pick, pending and in flight (its result is dropped).
+    fn cancel_hover(&mut self) {
+        self.hover = None;
+        self.hover_ticket = None;
+    }
+}
 
 /// The brush rectangle `rect` (logical pixels) as a scene item: a
 /// translucent fill inside a 1 px border, on whole pixels.
@@ -288,6 +324,9 @@ impl crate::chart::Chart for Plot {
     }
     fn pick_row(&mut self, at: Point) -> Option<RowId> {
         Plot::pick_row(self, at)
+    }
+    fn needs_frame(&self) -> bool {
+        self.gpu_hover.busy()
     }
     fn title_text(&self) -> Option<&str> {
         Plot::title_text(self)
@@ -372,6 +411,9 @@ impl Plot {
             brush: None,
             brush_handlers: Vec::new(),
             marquee: None,
+            gpu_mode: false,
+            gpu_hover: GpuHover::default(),
+            row_handlers: Vec::new(),
             last_at: Point::new(0.0, 0.0),
             overlay: None,
         }
@@ -735,6 +777,7 @@ impl Plot {
             // After resolving: it writes the scales.
             self.cache = Some((key(self), resolved));
         }
+        self.gpu_step(cx)?;
         self.sync_overlay(cx);
         match (&self.overlay, &self.cache) {
             (Some((g, composed)), _) if *g == self.generation => Ok(composed),
@@ -743,17 +786,68 @@ impl Plot {
         }
     }
 
+    /// Apply finished GPU hover and click picks, then submit the pending
+    /// ones (one hover and one click in flight at a time).
+    fn gpu_step(&mut self, cx: &Context) -> Result<()> {
+        self.gpu_mode = self
+            .layers
+            .iter()
+            .any(|l| l.gpu_pickable() && !l.cpu_readable());
+        if !self.gpu_mode {
+            self.gpu_hover = GpuHover::default();
+            return Ok(());
+        }
+        if !self.gpu_hover.busy() {
+            return Ok(());
+        }
+        for pick in self.poll_picks(cx) {
+            if Some(pick.ticket) == self.gpu_hover.hover_ticket {
+                self.gpu_hover.hover_ticket = None;
+                if pick.generation != self.generation {
+                    // The view changed since: look again where the pointer is.
+                    if self.gpu_hover.hover.is_none()
+                        && self.dragging.is_none()
+                        && self.marquee.is_none()
+                    {
+                        self.gpu_hover.hover = Some(self.last_at);
+                    }
+                } else if self.gpu_hover.hover.is_none() && pick.row != self.hovered() {
+                    self.set_hover(pick.row, pick.at);
+                }
+            } else if Some(pick.ticket) == self.gpu_hover.click_ticket {
+                // The user clicked what they saw: applied whatever the view
+                // is now.
+                self.gpu_hover.click_ticket = None;
+                if let Some(row) = pick.row {
+                    self.dispatch(Event::Click, pick.at, row);
+                }
+            }
+        }
+        if self.gpu_hover.hover_ticket.is_none()
+            && let Some(at) = self.gpu_hover.hover.take()
+        {
+            self.gpu_hover.hover_ticket = Some(self.request_pick(cx, at)?);
+        }
+        if self.gpu_hover.click_ticket.is_none() && !self.gpu_hover.clicks.is_empty() {
+            let at = self.gpu_hover.clicks.remove(0);
+            self.gpu_hover.click_ticket = Some(self.request_pick(cx, at)?);
+        }
+        Ok(())
+    }
+
     /// Bring the hover and the composed overlay scene (brush and tooltip)
     /// up to date with the base resolve: re-anchor after a full resolve, and
     /// compose the overlay when it is missing. Costs nothing when neither
     /// changed.
     fn sync_overlay(&mut self, cx: &Context) {
-        if let Some((row, _, at_gen)) = self.hover
+        if let Some((row, anchor, at_gen)) = self.hover
             && at_gen != self.generation
         {
             self.overlay = None;
             match self.pick_anchor(row) {
                 Some(a) => self.hover = Some((row, a, self.generation)),
+                // A GPU-picked row has no anchor but the pointer's.
+                None if self.gpu_mode => self.hover = Some((row, anchor, self.generation)),
                 None => self.hover = None,
             }
         }
@@ -846,6 +940,7 @@ impl Plot {
                     if self.dragging.is_none() && (at.x - down.x).hypot(at.y - down.y) > CLICK_SLOP
                     {
                         self.set_hover(None, at);
+                        self.gpu_hover.cancel_hover();
                         self.hold_layout();
                         self.dragging = Some([self.x.current_domain(), self.y.current_domain()]);
                     }
@@ -864,20 +959,28 @@ impl Plot {
                 {
                     if self.marquee.is_none() {
                         self.set_hover(None, at);
+                        self.gpu_hover.cancel_hover();
                     }
                     self.marquee = self.clamped_rect(down, at);
                     self.overlay = None;
                     redraw = true;
                 }
                 if self.dragging.is_none() && self.marquee.is_none() {
-                    let row = self.pick_row(at);
-                    if row != self.hovered() {
-                        redraw = self.set_hover(row, at);
+                    if self.gpu_mode {
+                        // Picked at the next resolve; the latest point wins.
+                        self.gpu_hover.hover = Some(at);
+                        redraw = true;
+                    } else {
+                        let row = self.pick_row(at);
+                        if row != self.hovered() {
+                            redraw = self.set_hover(row, at);
+                        }
                     }
                 }
             }
             Input::PointerLeft => {
                 redraw = self.set_hover(None, self.last_at);
+                self.gpu_hover.cancel_hover();
                 self.press = None;
                 self.dragging = None;
                 if self.marquee.take().is_some() {
@@ -919,7 +1022,10 @@ impl Plot {
                     let (dx, dy) = (at.x - down.x, at.y - down.y);
                     if dx.hypot(dy) <= CLICK_SLOP {
                         redraw |= self.drop_brush();
-                        if let Some(row) = self.pick_row(at) {
+                        if self.gpu_mode {
+                            self.gpu_hover.clicks.push(at);
+                            redraw = true;
+                        } else if let Some(row) = self.pick_row(at) {
                             self.dispatch(Event::Click, at, row);
                         }
                     }
@@ -932,6 +1038,7 @@ impl Plot {
                 let which = self.movable();
                 if which[0] || which[1] {
                     self.set_hover(None, at);
+                    self.gpu_hover.cancel_hover();
                     self.hold_layout();
                     redraw = self
                         .zoom_axes(at, ZOOM_PER_LINE.powf(f64::from(lines)), which)
@@ -1137,7 +1244,8 @@ impl Plot {
     /// Whether the tooltip shown changes.
     fn set_hover(&mut self, row: Option<RowId>, at: Point) -> bool {
         let old = self.hover.take();
-        let anchor = row.and_then(|r| self.pick_anchor(r));
+        // A GPU-picked row without an index entry attaches at the pointer.
+        let anchor = row.and_then(|r| self.pick_anchor(r).or(self.gpu_mode.then_some(at)));
         self.hover = row.zip(anchor).map(|(r, a)| (r, a, self.generation));
         self.overlay = None;
         if let Some((old, _, _)) = old {
@@ -1161,6 +1269,50 @@ impl Plot {
         if let Some(layer) = self.layers.get_mut(row.layer) {
             layer.dispatch(&EventInfo { event, at, row });
         }
+        let info = EventInfo { event, at, row };
+        for handler in &mut self.row_handlers {
+            handler(&info);
+        }
+    }
+
+    /// Call `f` for every `Enter`, `Leave` and `Click`, with the row's id,
+    /// whether or not its layer kept the rows (unlike
+    /// [`Selection::on`](crate::Selection::on), which runs no handler for a
+    /// layer that dropped them). Handlers run after the layer's own, in
+    /// registration order.
+    ///
+    /// When a plot has a layer the CPU cannot read
+    /// ([`Retain::GpuOnly`](crate::Retain::GpuOnly) past one chunk), hover
+    /// and click are picked on the GPU, and the handlers run from
+    /// [`resolve`](Self::resolve) a frame or two after the input
+    /// ([`Chart::needs_frame`](crate::Chart::needs_frame)); then do not call
+    /// [`poll_picks`](Self::poll_picks) yourself.
+    ///
+    /// ```
+    /// use gup_core::geom::Point;
+    /// use gup_core::prelude::*;
+    /// use gup_core::{Event, Input, RowId};
+    /// use std::sync::{Arc, Mutex};
+    ///
+    /// struct Row { x: f64, y: f64 }
+    /// # fn main() -> gup_core::Result<()> {
+    /// let rows = vec![Row { x: 1.0, y: 1.0 }, Row { x: 2.0, y: 3.0 }];
+    /// let cx = Context::new_blocking()?;
+    /// let mut plot = Plot::new();
+    /// let seen = Arc::new(Mutex::new(Vec::new()));
+    /// let log = Arc::clone(&seen);
+    /// plot.on_row(move |info| log.lock().unwrap().push((info.event, info.row)));
+    /// plot.circles(rows).x(|r| r.x).y(|r| r.y);
+    /// plot.resolve(&cx, 320.0, 200.0)?;
+    /// let at = plot.pick_anchor(RowId { layer: 0, row: 1 }).expect("drawn");
+    /// plot.handle(Input::PointerMoved { at });
+    /// assert_eq!(seen.lock().unwrap()[0], (Event::Enter, RowId { layer: 0, row: 1 }));
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn on_row(&mut self, f: impl FnMut(&EventInfo) + Send + Sync + 'static) -> &mut Self {
+        self.row_handlers.push(Box::new(f));
+        self
     }
 
     /// The topmost row drawn under `at` (logical pixels), or `None`: before

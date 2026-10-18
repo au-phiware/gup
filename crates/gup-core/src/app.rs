@@ -265,6 +265,9 @@ impl App {
             target.capture_next_frame()?;
         }
         self.renderer.render(cx, &resolved.scene, target)?;
+        if redraw_again(&**chart) {
+            target.window().request_redraw();
+        }
         let Some(shot) = &self.screenshot else {
             return Ok(None);
         };
@@ -279,6 +282,12 @@ impl App {
         );
         Ok(Some(shot.path.clone()))
     }
+}
+
+/// Whether the chart wants another frame after a render: it is waiting on
+/// the GPU ([`Chart::needs_frame`]).
+fn redraw_again(chart: &dyn Chart) -> bool {
+    chart.needs_frame()
 }
 
 impl ApplicationHandler for App {
@@ -361,6 +370,54 @@ mod tests {
     use super::*;
     use winit::dpi::PhysicalPosition;
     use winit::event::{DeviceId, TouchPhase};
+
+    /// A chart that is waiting on the GPU for `waits` more frames.
+    struct Waiting {
+        waits: std::cell::Cell<u32>,
+    }
+
+    impl Chart for Waiting {
+        fn resolve(&mut self, _: &Context, _: f32, _: f32) -> Result<&crate::plot::Resolved> {
+            self.waits.set(self.waits.get().saturating_sub(1));
+            Err(Error::config("test", "nothing to resolve"))
+        }
+        fn layout(&self) -> Option<&crate::plot::Layout> {
+            None
+        }
+        fn handle(&mut self, _: Input) -> crate::input::Response {
+            crate::input::Response { redraw: false }
+        }
+        fn pick_row(&mut self, _: Point) -> Option<crate::pick::RowId> {
+            None
+        }
+        fn needs_frame(&self) -> bool {
+            self.waits.get() > 0
+        }
+        fn title_text(&self) -> Option<&str> {
+            None
+        }
+        fn as_any(&self) -> &dyn std::any::Any {
+            self
+        }
+        fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
+            self
+        }
+    }
+
+    /// GUP-456: the host asks for another frame while the chart waits on
+    /// the GPU, and stops when it is done.
+    #[test]
+    fn redraw_again_follows_needs_frame() {
+        let cx = Context::new_blocking().unwrap();
+        let mut chart = Waiting {
+            waits: std::cell::Cell::new(2),
+        };
+        assert!(redraw_again(&chart));
+        let _ = chart.resolve(&cx, 1.0, 1.0);
+        assert!(redraw_again(&chart));
+        let _ = chart.resolve(&cx, 1.0, 1.0);
+        assert!(!redraw_again(&chart));
+    }
 
     fn dev() -> DeviceId {
         DeviceId::dummy()

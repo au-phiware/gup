@@ -61,6 +61,22 @@ pub trait Chart: 'static {
     /// The topmost row drawn under `at` (logical pixels), if the chart can
     /// say; see [`Plot::pick_row`](crate::Plot::pick_row).
     fn pick_row(&mut self, at: Point) -> Option<RowId>;
+    /// The chart is waiting on the GPU (a pick in flight) and wants another
+    /// [`resolve`](Self::resolve) soon even without input. Hosts redraw while
+    /// it is true; it is `false` unless a plot has a layer the CPU cannot
+    /// read (see [`Plot::on_row`](crate::Plot::on_row)).
+    ///
+    /// ```
+    /// use gup_core::prelude::*;
+    ///
+    /// struct Row { x: f64, y: f64 }
+    /// let mut plot = Plot::new();
+    /// plot.circles(vec![Row { x: 1.0, y: 2.0 }]).x(|r| r.x).y(|r| r.y);
+    /// assert!(!Chart::needs_frame(&plot));
+    /// ```
+    fn needs_frame(&self) -> bool {
+        false
+    }
     /// The chart's title, if any (a window title).
     fn title_text(&self) -> Option<&str>;
     /// The chart as [`Any`], to downcast to its concrete type.
