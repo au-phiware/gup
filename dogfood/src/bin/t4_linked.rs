@@ -3,132 +3,125 @@
 
 //! Task 4: two linked views in egui. Brushing in the left scatter
 //! (income vs spend) highlights the same customers in the right scatter
-//! (weight vs spend). Uses gup's SharedSelectionState for the link.
+//! (weight vs spend).
 //!
 //! DOGFOOD_AUTO=1 performs a scripted brush drag and saves a screenshot.
 
 use eframe::egui;
-use gup::chart_builder::accessor::AccessorValue;
-use gup::chart_builder::builders::{AccessorFunction, scatter};
-use gup::chart_builder::{ChartBuilder, ComposedChart, ConfigurableBuilder};
-use gup::linked_selection::SharedSelectionState;
-use gup::shader_function::math::{LinearScale, LogScale};
+use gup_core::geom::Point;
+use gup_core::prelude::*;
+use gup_core::{Button, Input, ScatterChart};
 use gup_dogfood::*;
-use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 const N: usize = 30_000;
 const W: f32 = 560.0;
 const H: f32 = 480.0;
+const GREY: u32 = 0xbfbfbf;
 
-type Chart = ComposedChart<Pt, gup::Circle>;
+/// The brushed row indices and a counter that changes with them.
+#[derive(Default)]
+struct Shared {
+    rows: Mutex<Vec<usize>>,
+    generation: AtomicU64,
+}
 
-struct View {
-    tex: ChartTexture,
-    chart: Chart,
-    frac: PlotFrac,
-    unit: Vec<(f32, f32)>,
+/// A customer and whether it is highlighted in the right view.
+#[derive(Clone)]
+struct R {
+    pt: Pt,
+    hot: bool,
+}
+
+fn palette() -> impl Iterator<Item = Color> {
+    PALETTE_HEX.into_iter().map(Color::hex)
+}
+
+fn left_chart(data: &[Pt], shared: Arc<Shared>) -> ScatterChart<Pt> {
+    let mut chart = gup_core::scatter(data.to_vec())
+        .x(|p| p.income)
+        .x_scale(Log::new())
+        .y(|p| p.spend)
+        .color(|p| p.segment.as_str())
+        .color_scale(Categorical::from_palette(palette()))
+        .size(|p| p.weight)
+        .opacity(0.6);
+    let plot = chart.plot_mut();
+    plot.drag(Drag::Brush);
+    plot.on_brush(move |b| {
+        let rows = b
+            .map(|b| b.rows.iter().map(|r| r.row).collect())
+            .unwrap_or_default();
+        *shared.rows.lock().unwrap() = rows;
+        shared.generation.fetch_add(1, Ordering::SeqCst);
+    });
+    chart
+}
+
+/// Rebuilt from the rows whenever the selection changes: unselected
+/// customers first (so the grey key takes the palette's first colour), then
+/// the selected ones in colour. With no selection everything is in colour.
+fn right_chart(data: &[Pt], selected: &[usize]) -> ScatterChart<R> {
+    let mut hot = vec![selected.is_empty(); data.len()];
+    for &i in selected {
+        hot[i] = true;
+    }
+    let mut rows: Vec<R> = data
+        .iter()
+        .zip(hot)
+        .map(|(pt, hot)| R {
+            pt: pt.clone(),
+            hot,
+        })
+        .collect();
+    rows.sort_by_key(|r| r.hot);
+    let colors: Vec<Color> = if selected.is_empty() {
+        palette().collect()
+    } else {
+        std::iter::once(Color::hex(GREY)).chain(palette()).collect()
+    };
+    gup_core::scatter(rows)
+        .x(|r| r.pt.weight)
+        .y(|r| r.pt.spend)
+        .color(|r| {
+            if r.hot {
+                r.pt.segment.as_str()
+            } else {
+                "unselected"
+            }
+        })
+        .color_scale(Categorical::from_palette(colors))
+        .size(|r| r.pt.weight)
+        .opacity(0.6)
 }
 
 struct App {
-    left: View,
-    right: View,
-    shared: SharedSelectionState<u32>,
-    brush: Option<(egui::Pos2, egui::Pos2)>,
+    tex_left: ChartTexture,
+    tex_right: ChartTexture,
+    data: Vec<Pt>,
+    left: ScatterChart<Pt>,
+    right: ScatterChart<R>,
+    shared: Arc<Shared>,
     last_gen: u64,
     frame: u32,
     auto: bool,
     status: String,
 }
 
-fn ext(it: impl Iterator<Item = f32>) -> (f32, f32) {
-    it.fold((f32::MAX, f32::MIN), |(a, b), v| (a.min(v), b.max(v)))
-}
-
-fn make_view(
-    data: &[Pt],
-    ctx: Arc<gup::RenderContext>,
-    shared: SharedSelectionState<u32>,
-    log_x: bool,
-    fx: fn(&Pt) -> f32,
-) -> View {
-    let (x0, x1) = ext(data.iter().map(fx));
-    let (y0, y1) = ext(data.iter().map(|p| p.spend));
-    let b = scatter()
-        .x(AccessorFunction::new(move |p: &Pt| {
-            AccessorValue::Float(fx(p))
-        }))
-        .y(AccessorFunction::new(|p: &Pt| {
-            AccessorValue::Float(p.spend)
-        }))
-        .size(AccessorFunction::new(|p: &Pt| {
-            AccessorValue::Float(0.06 * p.weight)
-        }));
-    let b = if log_x {
-        b.x_scale(LogScale::base10(x0, x1, -1.0, 1.0))
-    } else {
-        b.x_scale(LinearScale::new(x0, x1, -1.0, 1.0))
-    };
-    let mut chart = b
-        .y_scale(LinearScale::new(y0, y1, -1.0, 1.0))
-        .width(W)
-        .height(H)
-        .show_axes(true)
-        .build_with_data(data.to_vec(), ctx)
-        .expect("chart");
-    // Highlight = re-bind colour against the shared selection state. The
-    // closure is re-evaluated on every prepare_render_bound.
-    let any = shared.clone();
-    chart.visualization.attr("color", move |p: &Pt| {
-        if any.is_empty() || any.is_selected(&p.id) {
-            rgba(seg_index(&p.segment), 0.6)
-        } else {
-            [0.75, 0.75, 0.75, 0.15]
-        }
-    });
-    chart.visualization.attr("stroke_width", |_: &Pt| 0.0f32);
-    prepare(&mut chart);
-    let frac = plot_frac(&chart);
-    let unit = data
-        .iter()
-        .map(|p| {
-            let ux = if log_x {
-                (fx(p).log10() - x0.log10()) / (x1.log10() - x0.log10())
-            } else {
-                (fx(p) - x0) / (x1 - x0)
-            };
-            (ux, (p.spend - y0) / (y1 - y0))
-        })
-        .collect();
-    View {
-        tex: ChartTexture::default(),
-        chart,
-        frac,
-        unit,
-    }
-}
-
-fn prepare(chart: &mut Chart) {
-    let c = chart.visualization.context().cloned().unwrap();
-    chart
-        .visualization
-        .prepare_render_bound(c.device(), c.queue(), None, None)
-        .expect("prepare");
-}
-
 impl App {
     fn new() -> Self {
-        let gctx = Arc::new(pollster::block_on(gup::RenderContext::new()).expect("gpu"));
         let mut data = load_points().expect("points.csv");
         data.truncate(N);
-        let shared = SharedSelectionState::<u32>::new();
-        let left = make_view(&data, gctx.clone(), shared.clone(), true, |p| p.income);
-        let right = make_view(&data, gctx.clone(), shared.clone(), false, |p| p.weight);
+        let shared = Arc::new(Shared::default());
         Self {
-            left,
-            right,
+            tex_left: ChartTexture::new(),
+            tex_right: ChartTexture::new(),
+            left: left_chart(&data, shared.clone()),
+            right: right_chart(&data, &[]),
+            data,
             shared,
-            brush: None,
             last_gen: 0,
             frame: 0,
             auto: std::env::var("DOGFOOD_AUTO").is_ok(),
@@ -166,72 +159,54 @@ impl eframe::App for App {
         egui::TopBottomPanel::bottom("status").show(ctx, |ui| ui.label(&self.status));
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.horizontal(|ui| {
-                // Left view with brush.
-                let (rect, resp) = ui.allocate_exact_size(egui::vec2(W, H), egui::Sense::drag());
-                self.left.tex.show(ui, rect, &mut self.left.chart);
-                if resp.drag_started() {
-                    if let Some(p) = resp.interact_pointer_pos() {
-                        self.brush = Some((p, p));
+                let (rect, _) = ui.allocate_exact_size(egui::vec2(W, H), egui::Sense::drag());
+                self.tex_left.show(ui, rect, &mut self.left);
+                // Pointer events to the left chart, in texture-local pixels.
+                let local = |p: egui::Pos2| Point::new(p.x - rect.min.x, p.y - rect.min.y);
+                let events = ctx.input(|i| i.events.clone());
+                for e in events {
+                    let input = match e {
+                        egui::Event::PointerMoved(p) => Input::PointerMoved { at: local(p) },
+                        egui::Event::PointerButton {
+                            pos,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            ..
+                        } if pressed && rect.contains(pos) => Input::PointerDown {
+                            at: local(pos),
+                            button: Button::Primary,
+                        },
+                        egui::Event::PointerButton {
+                            pos,
+                            button: egui::PointerButton::Primary,
+                            pressed: false,
+                            ..
+                        } => Input::PointerUp {
+                            at: local(pos),
+                            button: Button::Primary,
+                        },
+                        _ => continue,
+                    };
+                    if self.left.handle(input).redraw {
+                        self.tex_left.dirty = true;
                     }
-                }
-                if resp.dragged() {
-                    if let (Some((a, _)), Some(p)) = (self.brush, resp.interact_pointer_pos()) {
-                        self.brush = Some((a, p));
-                        let r = egui::Rect::from_two_pos(a, p);
-                        let (ux0, uy1) = self.left.frac.unit_unclamped(
-                            r.min.x - rect.min.x,
-                            r.min.y - rect.min.y,
-                            W,
-                            H,
-                        );
-                        let (ux1, uy0) = self.left.frac.unit_unclamped(
-                            r.max.x - rect.min.x,
-                            r.max.y - rect.min.y,
-                            W,
-                            H,
-                        );
-                        let t0 = Instant::now();
-                        let ids: Vec<u32> = self
-                            .left
-                            .unit
-                            .iter()
-                            .enumerate()
-                            .filter(|(_, (x, y))| {
-                                (ux0..=ux1).contains(x) && (uy0..=uy1).contains(y)
-                            })
-                            .map(|(i, _)| i as u32)
-                            .collect();
-                        let n = ids.len();
-                        self.shared.set(ids);
-                        self.status = format!("brushed {n} of {N} (query {:?})", t0.elapsed());
-                    }
-                }
-                if let Some((a, b)) = self.brush {
-                    ui.painter().rect_stroke(
-                        egui::Rect::from_two_pos(a, b),
-                        0.0,
-                        egui::Stroke::new(1.5, egui::Color32::from_rgb(40, 40, 40)),
-                        egui::StrokeKind::Middle,
-                    );
                 }
                 let r2 = egui::Rect::from_min_size(
                     rect.right_top() + egui::vec2(10.0, 0.0),
                     egui::vec2(W, H),
                 );
-                self.right.tex.show(ui, r2, &mut self.right.chart);
+                self.tex_right.show(ui, r2, &mut self.right);
             });
         });
-        // Propagate selection changes: re-evaluate both charts' bindings.
-        let g = self.shared.generation();
+        // Propagate selection changes: rebuild the right chart.
+        let g = self.shared.generation.load(Ordering::SeqCst);
         if g != self.last_gen {
             self.last_gen = g;
             let t0 = Instant::now();
-            prepare(&mut self.left.chart);
-            prepare(&mut self.right.chart);
-            self.left.tex.dirty = true;
-            self.right.tex.dirty = true;
-            self.status
-                .push_str(&format!(" | re-prepare {:?}", t0.elapsed()));
+            let rows = self.shared.rows.lock().unwrap().clone();
+            self.right = right_chart(&self.data, &rows);
+            self.tex_right.dirty = true;
+            self.status = format!("brushed {} of {N} (rebuild {:?})", rows.len(), t0.elapsed());
         }
         if self.auto {
             if self.frame == 20 {

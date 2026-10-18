@@ -250,14 +250,6 @@ const DOUBLE_GAMMA: Gap = Gap(
 const NO_GRID: Gap = Gap(
     "grid is configured but not drawn in PNG/texture output; SVG has it (RFC-001 S3/S7 guides)",
 );
-const SVG_NO_MARKS: Gap =
-    Gap("SVG export has axes, grid and text but no data marks (RFC-001 S3 SvgTarget)");
-const NO_LEGEND: Gap = Gap("no legend API (T5; RFC-001 S7 guides)");
-const NO_GROUPING: Gap =
-    Gap("bar group_by does not change geometry: one overlapping bar per x band (T5)");
-const NO_STACKING: Gap = Gap("bar stack_by does not stack; bars overlap (T5)");
-const CATEGORICAL_GREY: Gap =
-    Gap("bar .color() with a String value renders grey instead of using a palette (T5)");
 const STREAM_NEVER_READY: Gap = Gap(
     "a DataStream-fed Selection never becomes render-ready: prepare_render_bound fails with \
      \"No attribute bindings set\" (RFC-001 S12 append replaces this route)",
@@ -359,28 +351,26 @@ fn t0_smoke() -> Task {
                 f,
                 "points drawn inside the plot",
                 Measure::Coverage {
-                    region: Region::new(0.17, 0.08, 0.94, 0.8),
+                    region: Region::new(0.055, 0.084, 0.985, 0.934),
                     min: 0.01,
                     max: 0.5,
                 },
             ),
-            gap(
+            check(
                 f,
                 "title text present",
                 Measure::Ink {
                     region: title_band(0.06),
                     min_px: 30,
                 },
-                NO_TEXT,
             ),
-            gap(
+            check(
                 f,
                 "x tick labels present",
                 Measure::Ink {
-                    region: Region::new(0.17, 0.85, 0.97, 0.97),
+                    region: Region::new(0.05, 0.945, 0.99, 0.99),
                     min_px: 30,
                 },
-                NO_TEXT,
             ),
         ],
     }
@@ -469,8 +459,10 @@ fn ref_export_png() -> Task {
 }
 
 fn t1() -> Task {
-    let (png, svg) = ("t1.png", "t1_svg.png");
-    let plot = Region::new(0.13, 0.08, 0.96, 0.78);
+    let png = "t1.png";
+    // The plot rect of a fresh render's `Layout` (1000x500): the legend sits
+    // at the right, so the plot ends at 0.913 instead of 0.96.
+    let plot = Region::new(0.044, 0.084, 0.913, 0.934);
     Task {
         name: "t1_timeseries",
         bin: "t1_timeseries",
@@ -511,7 +503,7 @@ fn t1() -> Task {
                     min_px: 300,
                 },
             ),
-            gap(
+            check(
                 png,
                 "blue series renders as configured",
                 Measure::Colour {
@@ -520,68 +512,38 @@ fn t1() -> Task {
                     tol: 24,
                     min_px: 50,
                 },
-                DOUBLE_GAMMA,
             ),
-            gap(
+            check(
                 png,
                 "title text present",
                 Measure::Ink {
                     region: title_band(0.07),
                     min_px: 30,
                 },
-                NO_TEXT,
             ),
-            gap(
+            // x tick labels: y 0.954..0.974 in the Layout.
+            check(
                 png,
                 "date tick labels present",
                 Measure::Ink {
-                    region: Region::new(0.15, 0.81, 0.97, 0.95),
+                    region: Region::new(0.044, 0.945, 0.95, 0.99),
                     min_px: 30,
                 },
-                NO_TEXT,
             ),
-            gap(
+            // Legend column: x 0.929..0.983, y 0.084..0.188 in the Layout.
+            check(
                 png,
                 "legend present",
                 Measure::Ink {
-                    region: Region::new(0.13, 0.08, 0.19, 0.16),
+                    region: Region::new(0.925, 0.084, 0.99, 0.19),
                     min_px: 30,
                 },
-                NO_LEGEND,
             ),
-            gap(
+            check(
                 png,
                 "horizontal grid drawn",
                 Measure::Grey {
                     region: Region::new(0.5, 0.1, 0.9, 0.4),
-                    min_px: 300,
-                },
-                NO_GRID,
-            ),
-            // The workaround: gup's SVG export (axes + text) plus hand-built
-            // line paths and legend, rasterised in-process with resvg.
-            check(
-                svg,
-                "workaround SVG: title text present",
-                Measure::Ink {
-                    region: title_band(0.07),
-                    min_px: 30,
-                },
-            ),
-            check(
-                svg,
-                "workaround SVG: date tick labels present",
-                Measure::Ink {
-                    region: Region::new(0.15, 0.81, 0.97, 0.95),
-                    min_px: 30,
-                },
-            ),
-            check(
-                svg,
-                "workaround SVG: three series drawn",
-                Measure::Hue {
-                    region: plot,
-                    rgb: GREEN,
                     min_px: 300,
                 },
             ),
@@ -591,14 +553,16 @@ fn t1() -> Task {
 
 fn t2() -> Task {
     let (grouped, stacked) = ("t2_grouped.png", "t2_stacked.png");
-    let (grouped_wa, stacked_wa) = ("t2_grouped_wa.png", "t2_stacked_wa.png");
-    let plot = Region::new(0.165, 0.08, 0.95, 0.78);
+    // The plot rect of a fresh render's `Layout` (800x500): x 0.054..0.901,
+    // y 0.084..0.934 (the legend sits at the right).
+    let (px0, px1) = (0.054, 0.901);
+    let plot = Region::new(px0, 0.084, px1, 0.934);
     // The first x band (Q1); a stacked bar shows every region's colour here.
-    let q1 = Region::new(0.165, 0.08, 0.3, 0.78);
+    let q1 = Region::new(px0, 0.084, px0 + (px1 - px0) / 4.0, 0.934);
     let bars = |min, max| Measure::Runs {
         y: 0.77,
-        x0: 0.165,
-        x1: 0.95,
+        x0: px0,
+        x1: px1,
         min,
         max,
     };
@@ -607,22 +571,20 @@ fn t2() -> Task {
         bin: "t2_bars",
         env: &[],
         kind: Kind::Headless,
-        intent: "task 2: grouped and stacked bar chart (region x quarter) with legend and value labels, PNG",
+        intent: "task 2: grouped and stacked bar chart (region x quarter) with legend, PNG; value labels are not available",
         exit: Exit::Success,
         checks: vec![
-            // Part A: the documented API.
             check(
                 grouped,
                 "grouped chart is not blank",
                 Measure::NotBlank { min_fraction: 0.05 },
             ),
-            gap(
+            check(
                 grouped,
                 "grouped: 16 bars (4 quarters x 4 regions)",
                 bars(16, 16),
-                NO_GROUPING,
             ),
-            gap(
+            check(
                 grouped,
                 "grouped: North bars in palette blue",
                 Measure::Hue {
@@ -630,9 +592,8 @@ fn t2() -> Task {
                     rgb: BLUE,
                     min_px: 2000,
                 },
-                CATEGORICAL_GREY,
             ),
-            gap(
+            check(
                 grouped,
                 "grouped: West bars in palette red",
                 Measure::Hue {
@@ -640,68 +601,43 @@ fn t2() -> Task {
                     rgb: RED,
                     min_px: 2000,
                 },
-                CATEGORICAL_GREY,
-            ),
-            gap(
-                grouped,
-                "title text present",
-                Measure::Ink {
-                    region: title_band(0.07),
-                    min_px: 30,
-                },
-                NO_TEXT,
-            ),
-            gap(
-                grouped,
-                "legend present above the plot",
-                Measure::Ink {
-                    region: Region::new(0.16, 0.0, 0.6, 0.08),
-                    min_px: 30,
-                },
-                NO_LEGEND,
             ),
             check(
-                stacked,
-                "stacked chart is not blank",
-                Measure::NotBlank { min_fraction: 0.05 },
-            ),
-            gap(
-                stacked,
-                "stacked: Q1 shows all four region colours",
-                Measure::Hue {
-                    region: q1,
-                    rgb: GREEN,
-                    min_px: 1000,
-                },
-                NO_STACKING,
-            ),
-            // Part B: the workaround (one band per quarter/region, explicit
-            // colours, overlapping cumulative bars).
-            check(grouped_wa, "workaround: 16 grouped bars", bars(16, 16)),
-            check(
-                grouped_wa,
-                "workaround: four region colours",
-                Measure::Hue {
-                    region: plot,
-                    rgb: RED,
-                    min_px: 2000,
-                },
-            ),
-            gap(
-                grouped_wa,
-                "workaround: North bars render palette blue exactly",
+                grouped,
+                "grouped: North bars render palette blue exactly",
                 Measure::Colour {
                     region: plot,
                     rgb: BLUE,
                     tol: 8,
                     min_px: 2000,
                 },
-                DOUBLE_GAMMA,
             ),
-            check(stacked_wa, "workaround: 4 stacks", bars(4, 4)),
             check(
-                stacked_wa,
-                "workaround: Q1 stack shows green layer",
+                grouped,
+                "title text present",
+                Measure::Ink {
+                    region: title_band(0.07),
+                    min_px: 30,
+                },
+            ),
+            // Legend column: x 0.921..0.985, y 0.084..0.228 in the Layout.
+            check(
+                grouped,
+                "legend present at the right of the plot",
+                Measure::Ink {
+                    region: Region::new(0.915, 0.084, 0.99, 0.23),
+                    min_px: 30,
+                },
+            ),
+            check(
+                stacked,
+                "stacked chart is not blank",
+                Measure::NotBlank { min_fraction: 0.05 },
+            ),
+            check(stacked, "stacked: 4 stacks", bars(4, 4)),
+            check(
+                stacked,
+                "stacked: Q1 shows the green layer",
                 Measure::Hue {
                     region: q1,
                     rgb: GREEN,
@@ -709,8 +645,8 @@ fn t2() -> Task {
                 },
             ),
             check(
-                stacked_wa,
-                "workaround: Q1 stack shows red layer",
+                stacked,
+                "stacked: Q1 shows the red layer",
                 Measure::Hue {
                     region: q1,
                     rgb: RED,
@@ -723,7 +659,8 @@ fn t2() -> Task {
 
 fn t3_png() -> Task {
     let (png, svg) = ("t3_scatter.png", "t3_scatter.svg");
-    let plot = Region::new(0.13, 0.06, 0.96, 0.84);
+    // The plot rect of a fresh render's `Layout` (1000x700); the legend sits at the right.
+    let plot = Region::new(0.041, 0.06, 0.895, 0.953);
     Task {
         name: "t3_scatter_png",
         bin: "t3_scatter_png",
@@ -739,7 +676,7 @@ fn t3_png() -> Task {
             ),
             check(
                 png,
-                "retail (blue) points",
+                "blue points (first segment seen)",
                 Measure::Hue {
                     region: plot,
                     rgb: BLUE,
@@ -748,7 +685,7 @@ fn t3_png() -> Task {
             ),
             check(
                 png,
-                "wholesale (orange) points",
+                "orange points",
                 Measure::Hue {
                     region: plot,
                     rgb: ORANGE,
@@ -757,7 +694,7 @@ fn t3_png() -> Task {
             ),
             check(
                 png,
-                "online (green) points",
+                "green points",
                 Measure::Hue {
                     region: plot,
                     rgb: GREEN,
@@ -766,7 +703,7 @@ fn t3_png() -> Task {
             ),
             check(
                 png,
-                "partner (red) points",
+                "red points",
                 Measure::Hue {
                     region: plot,
                     rgb: RED,
@@ -775,48 +712,44 @@ fn t3_png() -> Task {
             ),
             check(
                 png,
-                "other (purple) points",
+                "purple points",
                 Measure::Hue {
                     region: plot,
                     rgb: PURPLE,
                     min_px: 5000,
                 },
             ),
-            gap(
+            check(
                 png,
                 "title text present",
                 Measure::Ink {
                     region: title_band(0.05),
                     min_px: 30,
                 },
-                NO_TEXT,
             ),
-            gap(
+            check(
                 png,
                 "x tick labels present",
                 Measure::Ink {
-                    region: Region::new(0.15, 0.86, 0.97, 0.97),
+                    region: Region::new(0.04, 0.96, 0.9, 0.99),
                     min_px: 30,
                 },
-                NO_TEXT,
             ),
-            gap(
+            check(
                 png,
                 "grid drawn",
                 Measure::Grey {
                     region: Region::new(0.2, 0.08, 0.5, 0.28),
                     min_px: 300,
                 },
-                NO_GRID,
             ),
-            gap(
+            check(
                 svg,
                 "SVG contains the data points",
                 Measure::SvgElements {
                     tag: "circle",
                     min: 1000,
                 },
-                SVG_NO_MARKS,
             ),
         ],
     }

@@ -226,3 +226,32 @@ vector marks.
 - [ ] `mask old-path-loc` recorded (expected unchanged, 28,910)
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
+
+## Blocked (2026-10-19)
+
+**Question**: `t0_smoke`'s check "points drawn inside the plot"
+(`Coverage min 0.01`) fails on the new core. May the task pass a larger
+`.radius(..)`, or may the region or threshold change?
+
+**Evidence**: with the Layout plot rect `x 0.055..0.985, y 0.084..0.934` of the
+800x500 render, 20 default-size points cover 0.31% (need 1.00%..=50%). The old
+builder's points were larger. The old region (0.17,0.08,0.94,0.8) is replaced by
+the Layout plot rect, so this is not a region-tuning problem. 1% of that region
+is about 3,160 px, which is about 158 px per point (radius about 7 px) against
+the default radius of about 3.5 px.
+
+**Options**:
+
+1. `t0_smoke` sets `.radius(7.0)`. This is not in the Decisions for t0 and
+   changes what the task renders, so I did not do it.
+2. Lower `min` for this check. Forbidden.
+3. Shrink the region to the points' extent. That is tuning to pass.
+
+**Recommendation**: option 1, a one-line change in `t0_smoke`, if the
+orchestrator accepts "user picks a bigger dot" as part of the control task.
+
+**State**: tasks t0 to t3_scatter_png are ported and pass all other checks (t1,
+t2, t3_scatter_png all PASS, including the SVG circles check: 200000 `<circle>`
+from a full-scene `SvgTarget`, no tracked gap). `dogfood/src/lib.rs` now has
+`ChartTexture` over `gup_core::Chart`; `t3_scatter_window`, `t4_linked` and
+`t5_live` are ported, built, but not yet run or their regions re-derived.
