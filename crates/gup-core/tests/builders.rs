@@ -514,3 +514,438 @@ fn option_positions_skip_none_rows() {
         }
     }
 }
+
+// ---- GUP-464: the bar builder --------------------------------------------
+
+mod bars {
+    use super::{at, harness};
+    use gup_core::geom::Point;
+    use gup_core::prelude::*;
+    use gup_core::{ChartExt, Context, Layout, OKABE_ITO, ScaleRef};
+    use gup_visual_regression::RgbaImage;
+
+    #[derive(Clone, Debug)]
+    pub struct Sale {
+        pub quarter: &'static str,
+        pub region: &'static str,
+        pub total: f64,
+    }
+
+    pub const QUARTERS: [&str; 4] = ["Q1", "Q2", "Q3", "Q4"];
+    pub const REGIONS: [&str; 4] = ["North", "South", "East", "West"];
+    const TOTALS: [[f64; 4]; 4] = [
+        [32.0, 24.0, 18.0, 40.0],
+        [45.0, 51.0, 22.0, 35.0],
+        [28.0, 39.0, 30.0, 26.0],
+        [50.0, 41.0, 36.0, 44.0],
+    ];
+
+    /// Sales by quarter, then region.
+    pub fn sales() -> Vec<Sale> {
+        let mut rows = Vec::new();
+        for (q, quarter) in QUARTERS.iter().enumerate() {
+            for (r, region) in REGIONS.iter().enumerate() {
+                rows.push(Sale {
+                    quarter,
+                    region,
+                    total: TOTALS[q][r],
+                });
+            }
+        }
+        rows
+    }
+
+    fn sale(quarter: &'static str, region: &'static str, total: f64) -> Sale {
+        Sale {
+            quarter,
+            region,
+            total,
+        }
+    }
+
+    pub fn grouped(rows: Vec<Sale>) -> gup_core::BarChart<Sale> {
+        gup_core::bar(rows)
+            .x(|r| r.quarter)
+            .y(|r| r.total)
+            .group(|r| r.region)
+    }
+
+    pub fn stacked(rows: Vec<Sale>) -> gup_core::BarChart<Sale> {
+        gup_core::bar(rows)
+            .x(|r| r.quarter)
+            .y(|r| r.total)
+            .stack(|r| r.region)
+    }
+
+    pub fn near(p: [u8; 4], c: Color, tolerance: u8) -> bool {
+        let [r, g, b, _] = c.to_rgba8();
+        p[0].abs_diff(r) <= tolerance
+            && p[1].abs_diff(g) <= tolerance
+            && p[2].abs_diff(b) <= tolerance
+    }
+
+    /// Non-background runs of at least 3 px along row `y` (the dogfood rule).
+    fn count_runs(image: &image::RgbaImage, y: u32, x0: u32, x1: u32) -> usize {
+        let bg = image.get_pixel(0, 0).0;
+        let (mut runs, mut len) = (0, 0);
+        for x in x0..x1 {
+            let p = image.get_pixel(x, y).0;
+            if (0..3).any(|c| p[c].abs_diff(bg[c]) > 8) {
+                len += 1;
+            } else {
+                if len >= 3 {
+                    runs += 1;
+                }
+                len = 0;
+            }
+        }
+        if len >= 3 {
+            runs += 1;
+        }
+        runs
+    }
+
+    fn runs_near_baseline(image: &image::RgbaImage, layout: &Layout) -> usize {
+        let floor = at(&layout.y_ticks, 0.0) as u32;
+        let plot = layout.plot;
+        count_runs(
+            image,
+            floor - 3,
+            plot.left() as u32 + 2,
+            plot.right() as u32 - 2,
+        )
+    }
+
+    fn pixel(image: &image::RgbaImage, x: f64, y: f64) -> [u8; 4] {
+        image.get_pixel(x as u32, y as u32).0
+    }
+
+    /// The reference for simple bars: a `Plot` built by hand.
+    fn reference_simple(rows: Vec<Sale>) -> Plot {
+        let mut plot = Plot::new();
+        let x = plot.x(Band::new());
+        plot.y(Linear::new());
+        plot.rects(rows)
+            .x_with(x.encode_key(|r: &Sale| r.quarter).domain(QUARTERS))
+            .width(x.band_width_px())
+            .y(|r: &Sale| r.total)
+            .y_end(|_: &Sale| 0.0f64);
+        plot
+    }
+
+    #[test]
+    fn simple_bars_are_byte_identical_to_the_hand_built_plot() {
+        let cx = Context::new_blocking().unwrap();
+        let rows: Vec<Sale> = sales()
+            .into_iter()
+            .filter(|r| r.region == "North")
+            .collect();
+        let mut chart = gup_core::bar(rows.clone()).x(|r| r.quarter).y(|r| r.total);
+        let (built, layout) = chart.render_resolved(&cx, 400, 300).unwrap();
+        let (reference, ref_layout) = reference_simple(rows)
+            .render_resolved(&cx, 400, 300)
+            .unwrap();
+        assert!(built.as_raw() == reference.as_raw(), "pixels differ");
+        assert_eq!(format!("{layout:?}"), format!("{ref_layout:?}"));
+        assert_eq!(chart.layers_mut().len(), 1);
+    }
+
+    #[test]
+    fn the_value_axis_includes_zero_for_all_positive_and_all_negative_bars() {
+        let cx = Context::new_blocking().unwrap();
+        for sign in [1.0, -1.0] {
+            let rows: Vec<Sale> = sales()
+                .into_iter()
+                .filter(|r| r.region == "East")
+                .map(|r| Sale {
+                    total: sign * (r.total + 100.0),
+                    ..r
+                })
+                .collect();
+            let mut chart = gup_core::bar(rows).x(|r| r.quarter).y(|r| r.total);
+            let (image, layout) = chart.render_resolved(&cx, 400, 300).unwrap();
+            assert!(
+                layout.y_ticks.iter().any(|t| t.0 == 0.0),
+                "sign {sign}: no tick at 0 in {:?}",
+                layout.y_ticks
+            );
+            // The bars sit on the 0 line: flush with it, one side only.
+            let zero = at(&layout.y_ticks, 0.0);
+            let x = f64::from(layout.x_ticks[1].1) + 10.0; // off the tick mark
+            let (inside, outside) = if sign > 0.0 {
+                (zero - 3.0, zero + 3.0)
+            } else {
+                (zero + 3.0, zero - 3.0)
+            };
+            assert!(
+                near(pixel(&image, x, inside), Color::hex(0x0072b2), 3),
+                "sign {sign}"
+            );
+            assert!(
+                pixel(&image, x, outside)[0] > 240,
+                "sign {sign}: bar crosses 0"
+            );
+        }
+    }
+
+    #[test]
+    fn grouped_bars_are_sixteen_runs_in_okabe_ito_order_with_a_legend() {
+        let cx = Context::new_blocking().unwrap();
+        let mut chart = grouped(sales());
+        let (image, layout) = chart.render_resolved(&cx, 800, 500).unwrap();
+        assert_eq!(runs_near_baseline(&image, &layout), 16);
+        for name in REGIONS {
+            assert_eq!(
+                layout.texts.iter().filter(|t| &*t.run.text == name).count(),
+                1,
+                "legend entry {name}"
+            );
+        }
+        // Slot r of Q2 is region r's bar, in its own colour.
+        let band = f64::from(layout.x_ticks[1].1 - layout.x_ticks[0].1);
+        let centre = f64::from(layout.x_ticks[1].1);
+        for (r, region_colour) in OKABE_ITO.iter().take(4).enumerate() {
+            let x = centre + ((r as f64 + 0.5) / 4.0 - 0.5) * band * 0.8;
+            let y = at(&layout.y_ticks, 0.0) - 6.0;
+            // Allow for the padding in the band width: look for the colour
+            // within the slot rather than at its exact centre.
+            let found =
+                (-6..=6).any(|d| near(pixel(&image, x + f64::from(d), y), *region_colour, 3));
+            assert!(found, "region {r}: no {region_colour:?} near x = {x}");
+        }
+    }
+
+    #[test]
+    fn grouped_bars_are_byte_identical_to_four_hand_built_layers() {
+        let cx = Context::new_blocking().unwrap();
+        let mut chart = grouped(sales());
+        let (built, layout) = chart.render_resolved(&cx, 800, 500).unwrap();
+
+        let mut plot = Plot::new();
+        let x = plot.x(Band::new());
+        plot.y(Linear::new());
+        let colours = ScaleRef::new(Categorical::okabe_ito());
+        for (i, region) in REGIONS.iter().enumerate() {
+            let part: Vec<Sale> = sales()
+                .into_iter()
+                .filter(|r| r.region == *region)
+                .collect();
+            plot.rects(part)
+                .x_with(
+                    x.sub_band(i as u32, 4)
+                        .encode_key(|r: &Sale| r.quarter)
+                        .domain(QUARTERS),
+                )
+                .width(x.sub_band_width_px(4, 0.1))
+                .y(|r: &Sale| r.total)
+                .y_end(|_: &Sale| 0.0f64)
+                .fill(colours.encode_key(|r: &Sale| r.region));
+        }
+        let (reference, ref_layout) = plot.render_resolved(&cx, 800, 500).unwrap();
+        assert!(built.as_raw() == reference.as_raw(), "pixels differ");
+        assert_eq!(format!("{layout:?}"), format!("{ref_layout:?}"));
+    }
+
+    #[test]
+    fn stacked_bars_start_each_segment_where_the_previous_ended() {
+        let cx = Context::new_blocking().unwrap();
+        let mut chart = stacked(sales());
+        let (image, layout) = chart.render_resolved(&cx, 800, 500).unwrap();
+        assert_eq!(runs_near_baseline(&image, &layout), 4);
+        let y = |v: f64| at(&layout.y_ticks, v);
+        for (q, totals) in TOTALS.iter().enumerate() {
+            let x = f64::from(layout.x_ticks[q].1);
+            let mut base = 0.0;
+            for (r, total) in totals.iter().enumerate() {
+                let top = base + total;
+                let mid = y((base + top) / 2.0);
+                assert!(
+                    near(pixel(&image, x, mid), OKABE_ITO[r], 3),
+                    "{} {}: middle is {:?}, wanted {:?}",
+                    QUARTERS[q],
+                    REGIONS[r],
+                    pixel(&image, x, mid),
+                    OKABE_ITO[r]
+                );
+                if r > 0 {
+                    // The join: the segment below ends exactly where this
+                    // one starts, with no gap showing the background.
+                    let join = y(base);
+                    for dy in [-0.5, 0.0, 0.5] {
+                        let p = pixel(&image, x, join + dy);
+                        assert!(
+                            p[..3].iter().any(|&c| c < 200),
+                            "{} {}: a light gap at the join: {p:?}",
+                            QUARTERS[q],
+                            REGIONS[r]
+                        );
+                    }
+                    assert!(near(pixel(&image, x, join + 2.0), OKABE_ITO[r - 1], 3));
+                    assert!(near(pixel(&image, x, join - 2.0), OKABE_ITO[r], 3));
+                }
+                base = top;
+            }
+            // The stack's top edge is at the sum, within a pixel.
+            let ink_top = (0..image.height())
+                .find(|&py| {
+                    let p = image.get_pixel(x as u32, py).0;
+                    py as f32 > layout.plot.top() && near(p, OKABE_ITO[3], 3)
+                })
+                .unwrap();
+            assert!(
+                (f64::from(ink_top) - y(base)).abs() <= 1.0,
+                "{} top edge at {ink_top}, wanted {}",
+                QUARTERS[q],
+                y(base)
+            );
+        }
+    }
+
+    #[test]
+    fn negative_values_stack_downward_from_zero_separately() {
+        let cx = Context::new_blocking().unwrap();
+        let rows = vec![
+            sale("Q1", "North", 30.0),
+            sale("Q1", "South", -20.0),
+            sale("Q1", "East", 20.0),
+            sale("Q1", "West", -10.0),
+        ];
+        let mut chart = stacked(rows);
+        let (image, layout) = chart.render_resolved(&cx, 400, 300).unwrap();
+        let x = f64::from(layout.x_ticks[0].1);
+        let y = |v: f64| at(&layout.y_ticks, v);
+        for (v, colour, what) in [
+            (15.0, OKABE_ITO[0], "North above"),
+            (40.0, OKABE_ITO[2], "East above North"),
+            (-10.0, OKABE_ITO[1], "South below"),
+            (-25.0, OKABE_ITO[3], "West below South"),
+        ] {
+            assert!(
+                near(pixel(&image, x, y(v)), colour, 3),
+                "{what}: {:?}",
+                pixel(&image, x, y(v))
+            );
+        }
+    }
+
+    #[test]
+    fn rows_sharing_a_category_and_key_draw_as_one_summed_segment() {
+        let cx = Context::new_blocking().unwrap();
+        let rows = vec![
+            sale("Q1", "North", 20.0),
+            sale("Q1", "North", 30.0),
+            sale("Q1", "South", 10.0),
+        ];
+        let mut chart = stacked(rows);
+        let (image, layout) = chart.render_resolved(&cx, 400, 300).unwrap();
+        let x = f64::from(layout.x_ticks[0].1);
+        let y = |v: f64| at(&layout.y_ticks, v);
+        assert!(near(pixel(&image, x, y(25.0)), OKABE_ITO[0], 3));
+        assert!(near(pixel(&image, x, y(55.0)), OKABE_ITO[1], 3));
+        assert!(pixel(&image, x, y(65.0))[0] > 240, "taller than the sum");
+    }
+
+    #[test]
+    fn layers_follow_first_seen_key_order() {
+        let rows = vec![
+            sale("Q1", "B", 1.0),
+            sale("Q1", "A", 1.0),
+            sale("Q2", "A", 2.0),
+        ];
+        let lens = |mut chart: gup_core::BarChart<Sale>| {
+            chart
+                .layers_mut()
+                .iter()
+                .map(|l| l.len())
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(lens(grouped(rows.clone())), [1, 2]);
+        assert_eq!(lens(stacked(rows.clone())), [1, 2]);
+        assert_eq!(
+            lens(gup_core::bar(rows).x(|r| r.quarter).y(|r| r.total)),
+            [3]
+        );
+    }
+
+    #[test]
+    fn pick_returns_the_row_under_a_bar() {
+        let cx = Context::new_blocking().unwrap();
+        let mut chart = grouped(sales());
+        let (_, layout) = chart.render_resolved(&cx, 800, 500).unwrap();
+        let band = f64::from(layout.x_ticks[1].1 - layout.x_ticks[0].1);
+        for (q, r) in [(0usize, 0usize), (2, 3), (3, 1)] {
+            let x = f64::from(layout.x_ticks[q].1) + ((r as f64 + 0.5) / 4.0 - 0.5) * band * 0.8;
+            let y = at(&layout.y_ticks, TOTALS[q][r] / 2.0);
+            let row = chart.pick(Point::new(x as f32, y as f32)).expect("a bar");
+            assert_eq!((row.quarter, row.region), (QUARTERS[q], REGIONS[r]));
+        }
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "set layer encodings before the chart is first drawn; change a drawn chart through layer_mut()"
+    )]
+    fn layer_setters_panic_after_the_first_draw() {
+        let cx = Context::new_blocking().unwrap();
+        let mut chart = grouped(sales());
+        chart.render(&cx, 200, 150).unwrap();
+        let _ = chart.padding(0.3);
+    }
+
+    /// Two renders side by side: grouped on the left, stacked on the right.
+    #[test]
+    fn bar_golden_has_gaps_a_legend_and_bars_on_the_axis() {
+        let cx = Context::new_blocking().unwrap();
+        let build = |chart: gup_core::BarChart<Sale>, title: &str| {
+            chart
+                .title(title)
+                .y_title("Sales")
+                .legend_title("Region")
+                .grid(Axes::Y)
+        };
+        let (left, ll) = build(grouped(sales()), "Grouped")
+            .render_resolved(&cx, 400, 500)
+            .unwrap();
+        let (right, rl) = build(stacked(sales()), "Stacked")
+            .render_resolved(&cx, 400, 500)
+            .unwrap();
+        let mut image = image::RgbaImage::new(800, 500);
+        image::imageops::replace(&mut image, &left, 0, 0);
+        image::imageops::replace(&mut image, &right, 400, 0);
+
+        // One metadata for the composite: the plot rect spans both plots
+        // (so the confinement check is weaker than for one chart), and the
+        // right chart's texts and guides are shifted into place.
+        use crate::common::vr::{rect, rgba8, role};
+        use gup_core::geom::Rect as GRect;
+        let plot = GRect::new(
+            ll.plot.x,
+            ll.plot.y.min(rl.plot.y),
+            rl.plot.right() + 400.0 - ll.plot.x,
+            ll.plot.bottom().max(rl.plot.bottom()) - ll.plot.y.min(rl.plot.y),
+        );
+        let mut meta = gup_visual_regression::LayoutMetadata::new(rect(plot))
+            .with_background(gup_visual_regression::Rgba8::WHITE);
+        for (layout, dx) in [(&ll, 0.0), (&rl, 400.0)] {
+            let shift = |r: GRect| GRect { x: r.x + dx, ..r };
+            for t in &layout.texts {
+                meta = meta.with_text(
+                    role(t.run.role),
+                    t.run.text.to_string(),
+                    rect(shift(t.bounds)),
+                    rgba8(t.run.style.color),
+                );
+            }
+            for g in &layout.guides {
+                meta = meta.with_guide(rect(shift(*g)).inflate(0.5));
+            }
+        }
+        for (i, region) in REGIONS.iter().enumerate() {
+            meta = meta.with_expected_color(format!("{region} fill"), rgba8(OKABE_ITO[i]));
+        }
+        let vr = RgbaImage::new(800, 500, image.into_raw()).unwrap();
+        harness()
+            .run("gup_core/builder_bars", Ok((vr, meta)))
+            .assert_ok();
+    }
+}
