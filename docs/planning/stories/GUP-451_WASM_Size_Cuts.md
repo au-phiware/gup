@@ -75,11 +75,22 @@ cut 2 already removes two thirds of SemiBold's bytes.
 
 ### AC1: Spike — release profile
 
-- [ ] Measure `mask wasm-size` with each of the three profiles in Decisions,
+- [x] Measure `mask wasm-size` with each of the three profiles in Decisions,
       applied to both harnesses, and record all three rows (wgpu, scatter,
       over_wgpu, per_row_type) in the story.
-- [ ] Apply the profile that the decision rule picks to both harness
+- [x] Apply the profile that the decision rule picks to both harness
       `Cargo.toml`s, with a comment naming this story and the measurement.
+
+#### AC1 measurements (2026-10-18)
+
+| Profile | wgpu gz | scatter gz | over_wgpu gz |           per_row_type gz |
+| ------- | ------: | ---------: | -----------: | ------------------------: |
+| default |  41,712 |    398,627 |      356,914 |                     3,674 |
+| s+LTO   |  30,460 |    340,719 |      310,259 | 2,531 (343,250 - 340,719) |
+| z+LTO   |  32,360 |    324,952 |      292,592 | 1,078 (326,030 - 324,952) |
+
+`z` is 5.7% under `s` (rule: at least 1%), so both harnesses use `z`+LTO,
+`codegen-units = 1`. The target (320,000) is met by this cut alone.
 
 ### AC2: SemiBold subset
 

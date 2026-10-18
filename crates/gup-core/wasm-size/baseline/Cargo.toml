@@ -21,4 +21,11 @@ wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 futures-channel = "0.3"
 
+# GUP-451 AC1: a size-conscious release profile (default profile: 356,914 B gz
+# over wgpu; s+LTO 310,259; z+LTO 292,592, 5.7% under s, so z).
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+
 [workspace]
