@@ -22,6 +22,8 @@ pub struct Theme {
     pub background: Color,
     /// Axis lines and ticks.
     pub axis: Color,
+    /// Grid lines (see `Plot::grid`).
+    pub grid: Color,
     /// Tick labels and axis titles.
     pub label: Color,
     /// The chart title.
@@ -68,6 +70,7 @@ impl Default for Theme {
         Self {
             background: Color::WHITE,
             axis: Color::hex(0x333333),
+            grid: Color::hex(0xe5e5e5),
             label: Color::hex(0x333333),
             title: Color::hex(0x111111),
             title_size: Px(18.0),
