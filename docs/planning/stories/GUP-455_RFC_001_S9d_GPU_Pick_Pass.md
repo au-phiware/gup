@@ -391,3 +391,70 @@ An in-crate GPU test, `gpu_pick::tests::agrees_with_cpu_pick`, at 400 × 300:
   builds. AC5's `layer.rs` premise does not hold: GUP-451 skipped that split.
 - `mask all-check` passes; `cargo check --examples` passes; `mask old-path-loc`
   TOTAL 28,910. Root-crate tests left to CI (brief).
+
+## Retrospective
+
+**Completed**: 2026-10-18
+
+### Key Technical Learnings
+
+#### Rasteriser snapping limits interpolated varyings
+
+- **Challenge**: at one texel per logical pixel, the per-shape check failed at
+  5e-4 px, and the oracle had one disagreement: the GPU found a line containing
+  the point (d ≤ 0) where the CPU measured d = 0.00023 px.
+- **Solution**: scale the pick's clip space by 256 texels per pixel. Vertices
+  snap to 1/256 of a texel, so the snap is now 1/65,536 px; the worst per-shape
+  error fell to 3e-5 px and the oracle agrees on every point.
+- **Pattern**: when a fragment stage measures analytic geometry, the precision
+  is set by subpixel snapping in the target's units, not by float precision.
+  Zoom the target so a pixel spans many texels.
+
+#### Depth as the comparison function
+
+- **Challenge**: reproduce `PickIndex::query` (containing beats near, topmost
+  breaks ties) on the GPU without a custom reduction.
+- **Solution**: depth 0 for containing marks, `0.5 + 0.5 · d / 3` otherwise,
+  `LessEqual`, drawn in the colour order. Ties go to the later draw, which is
+  the topmost.
+- **Pattern**: a lexicographic "best" over draws maps onto a depth test when the
+  order of draws supplies the tie-break.
+
+### Architectural Decisions
+
+#### A separate pick glue, linked lazily
+
+- **Decision**: `Glue::pick` holds a pick-only source (`vs_pick`/`fs_pick`,
+  group 3), linked on the first pick into the colour program's bind group
+  layouts.
+- **Reasoning**: WGSL entry points cannot be called, so sharing them means
+  restructuring `vs_main`. Colour pipelines then stay unchanged: the same
+  fixtures, link time and parse.
+- **Trade-off**: a second link the first time a layer is picked (about 1 ms).
+- **Future**: GUP-456 can pick on hover without touching colour pipelines.
+
+#### Rows mapped at poll time
+
+- **Decision**: the texel holds the stored row; `poll_picks` maps it through the
+  current `DrawOrder`.
+- **Reasoning**: snapshotting the order costs O(rows) per pick.
+- **Trade-off**: a pick that is still in flight across a compaction can map
+  wrongly. `GpuPick::generation` lets a host drop such picks.
+
+### Development Workflow Insights
+
+- The oracle test with near-tie diagnostics (all marks within 6 px printed on
+  failure) found the precision problem at once.
+- `GUP_BLESS=1` over every gup-core test plus `git diff --stat tests/golden` is
+  a quick proof that colour output is byte-identical.
+- WASM attribution: `twiggy diff` is useless across builds because every
+  function's hash changes. Grouping `twiggy top -f csv` by name with the hash
+  stripped works.
+- The shared machine skews timings: the first `perf-budget` run failed four
+  timing checks under load, and the second passed them all.
+
+### Follow-up Stories
+
+None. The scatter WASM budget (+3.2% from linking the pick API into the browser
+harness) is for the orchestrator to record in `PERF_BUDGETS.md`. GUP-456 already
+covers hover, click and hosts.
