@@ -16,8 +16,8 @@ use crate::scale::NULL_COLOR;
 ///     unbrushed: Unbrushed::Grey(Color::hex(0xbfbfbf)),
 ///     ..Theme::default()
 /// };
-/// let plot = Plot::new().drag(Drag::Brush).theme(theme);
-/// # let _ = plot;
+/// let mut plot = Plot::new();
+/// plot.drag(Drag::Brush).theme(theme);
 /// ```
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Unbrushed {

@@ -410,7 +410,7 @@ findings", GUP-396).
   scales and `Time` overrides the SI-style default for axes, legend ramps and
   measurement, with currency, percent and date goldens. Deps: GUP-435 ✅,
   GUP-452 ✅, GUP-426 ✅.
-- [GUP-477](GUP-477_Grey_Unbrushed_Rows.md) 🚧 — `Theme::unbrushed` becomes
+- [GUP-477](GUP-477_Grey_Unbrushed_Rows.md) ✅ — `Theme::unbrushed` becomes
   `Unbrushed::Fade(f32) | Grey(Color)` (default `Fade(0.3)`, images unchanged),
   with a grey-brush golden, and dogfood t4 greys rather than hides unbrushed
   rows. Deps: GUP-458 ✅, GUP-465 ✅.
