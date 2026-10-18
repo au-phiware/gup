@@ -421,3 +421,27 @@ fn svg_of_the_comparison_scene_is_unchanged() {
         artifacts.join("msaa_guides.svg").display()
     );
 }
+
+/// GUP-467: the comparison scene's circles are written as `<circle>`s too,
+/// and the SVG rasterised matches the 1-sample render (the scene without
+/// its tick labels, whose glyphs two rasterisers draw differently).
+#[test]
+fn svg_of_the_comparison_scene_draws_its_circles() {
+    let cx = Context::new_blocking().unwrap();
+    let mut scene = scene(&cx);
+    scene.items.retain(|i| !matches!(i.kind, ItemKind::Text(_)));
+    let mut target = SvgTarget::new();
+    target.render(&scene).unwrap();
+    assert_eq!(target.svg().matches("<circle ").count(), 3);
+    let gpu = render(&cx, &scene, 1);
+    let gpu = RgbaImage::new(W, H, gpu.into_raw()).unwrap();
+    let meta = LayoutMetadata::new(PxRect {
+        x: 0.0,
+        y: 0.0,
+        width: W as f32,
+        height: H as f32,
+    });
+    let (_, stats, _) = common::svg_marks::compare(target.svg(), &gpu, &meta);
+    eprintln!("msaa scene, SVG vs GPU in blocks: {stats:?}");
+    assert!(common::svg_marks::within(&stats), "{stats:?}");
+}

@@ -67,13 +67,12 @@ fn guides_svg_matches_the_png() {
     let s = legend::scene(&cx);
     let mut target = SvgTarget::new();
 
-    // Marks are refused, not dropped.
-    let err = target.render(&s.scene).unwrap_err().to_string();
-    assert!(
-        err.contains("1 data layer") && err.contains("scene.guides()"),
-        "{err}"
-    );
-    assert!(target.svg().is_empty(), "a refused scene wrote something");
+    // The whole scene writes its data too (GUP-467); this test is about
+    // the guides, which `Scene::guides` writes alone, so the GPU render
+    // below, of the guides only, is what the SVG is compared with.
+    let mut full = SvgTarget::new();
+    full.render(&s.scene).unwrap();
+    assert!(full.svg().contains("<circle "), "the marks are written");
 
     let guides = s.scene.guides();
     target.render(&guides).unwrap();

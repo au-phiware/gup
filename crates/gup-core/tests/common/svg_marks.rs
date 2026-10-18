@@ -9,8 +9,9 @@
 #![allow(dead_code)] // each includer uses a different subset
 
 use gup_core::{Scene, SvgTarget, VectorTarget};
+use gup_visual_regression::diff::{DiffStats, perceptual_diff};
 use gup_visual_regression::golden::default_artifact_dir;
-use gup_visual_regression::{DiffTolerance, LayoutMetadata, RgbaImage, diff::perceptual_diff};
+use gup_visual_regression::{DiffTolerance, LayoutMetadata, RgbaImage};
 use std::path::Path;
 
 /// Rasterise `svg` at its own size, with only the bundled Inter loaded.
@@ -34,33 +35,20 @@ pub fn rasterise(svg: &str) -> RgbaImage {
     RgbaImage::new(size.width(), size.height(), data).unwrap()
 }
 
-/// Write `scene` as SVG, rasterise it and compare it with `gpu` (the
-/// scene as the GPU drew it) within the harness's default tolerance
-/// ([`DiffTolerance::default`]). Glyph pixels (the text regions of `meta`,
-/// plus one pixel) are not compared: the GPU draws bitmaps and resvg
-/// outlines, and `tests/svg.rs` checks text by its ink. Writes
-/// `<case>.svg` and `<case>_svg.png` to the artifact directory. Returns
-/// the SVG.
-pub fn assert_matches(case: &str, scene: &Scene, gpu: &RgbaImage, meta: &LayoutMetadata) -> String {
-    let mut target = SvgTarget::new();
-    target.render(scene).unwrap();
-    let svg = target.svg().to_owned();
-    let artifacts =
-        default_artifact_dir(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")).join(case);
-    target.save(artifacts.with_extension("svg")).unwrap();
-    let raster = rasterise(&svg);
-    raster
-        .save_png(artifacts.with_file_name(format!(
-            "{}_svg.png",
-            artifacts.file_name().unwrap().to_string_lossy()
-        )))
-        .unwrap();
+/// Block statistics of the rasterised `svg` against `gpu`, with the text
+/// regions of `meta` (plus one pixel) made equal first. Also returns the
+/// per-pixel statistics, for the log.
+pub fn compare(
+    svg: &str,
+    gpu: &RgbaImage,
+    meta: &LayoutMetadata,
+) -> (DiffStats, DiffStats, RgbaImage) {
+    let raster = rasterise(svg);
     assert_eq!(
         (raster.width(), raster.height()),
         (gpu.width(), gpu.height()),
-        "{case}: the SVG is not the PNG's size"
+        "the SVG is not the PNG's size"
     );
-    // Make the text regions equal, then compare everything else.
     let regions: Vec<_> = meta
         .text_regions
         .iter()
@@ -79,16 +67,52 @@ pub fn assert_matches(case: &str, scene: &Scene, gpu: &RgbaImage, meta: &LayoutM
     let tol = DiffTolerance::default();
     let whole = perceptual_diff(gpu, &masked, &tol).unwrap();
     let (a, b) = (blocks(gpu, BLOCK), blocks(&masked, BLOCK));
-    let stats = perceptual_diff(&a, &b, &tol).unwrap();
+    (whole, perceptual_diff(&a, &b, &tol).unwrap(), masked)
+}
+
+/// The largest block ΔE a correct SVG may have: resvg's quarter-step
+/// vertical coverage moves a block by up to 4.7 (measured over every
+/// golden scene).
+pub const MAX_BLOCK_DE: f32 = 5.0;
+
+/// Whether block statistics are within the harness tolerance
+/// ([`DiffTolerance::default`]) and `MAX_BLOCK_DE`.
+pub fn within(stats: &DiffStats) -> bool {
+    stats.differing_fraction() <= DiffTolerance::default().max_differing_fraction
+        && stats.max_delta_e <= MAX_BLOCK_DE
+}
+
+/// Write `scene` as SVG, rasterise it and compare it with `gpu` (the
+/// scene as the GPU drew it): both are averaged over 4×4 blocks (resvg
+/// quantises vertical coverage to quarter steps, which moves single edge
+/// pixels past the per-pixel ΔE 3 while the geometry is right), then
+/// compared within the harness's default tolerance and `MAX_BLOCK_DE`.
+/// Glyph pixels are not compared: the GPU draws bitmaps and resvg
+/// outlines, and `tests/svg.rs` checks text by its ink. Writes
+/// `<case>.svg` and `<case>_svg.png` to the artifact directory. Returns
+/// the SVG.
+pub fn assert_matches(case: &str, scene: &Scene, gpu: &RgbaImage, meta: &LayoutMetadata) -> String {
+    let mut target = SvgTarget::new();
+    target.render(scene).unwrap();
+    let svg = target.svg().to_owned();
+    let artifacts =
+        default_artifact_dir(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")).join(case);
+    target.save(artifacts.with_extension("svg")).unwrap();
+    let (whole, stats, masked) = compare(&svg, gpu, meta);
+    masked
+        .save_png(artifacts.with_file_name(format!(
+            "{}_svg.png",
+            artifacts.file_name().unwrap().to_string_lossy()
+        )))
+        .unwrap();
     eprintln!(
         "{case}: SVG raster vs GPU image: per pixel {whole:?}; in {BLOCK}x{BLOCK} blocks {stats:?}"
     );
     assert!(
-        stats.differing_fraction() <= tol.max_differing_fraction,
-        "{case}: {} of {} blocks differ by more than ΔE {} (max ΔE {:.1}); see {}",
+        within(&stats),
+        "{case}: {} of {} blocks differ by more than ΔE 3 (max ΔE {:.1}); see {}",
         stats.differing_pixels,
         stats.total_pixels,
-        tol.pixel_delta_e,
         stats.max_delta_e,
         artifacts.display()
     );

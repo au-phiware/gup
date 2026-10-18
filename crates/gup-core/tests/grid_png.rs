@@ -184,6 +184,7 @@ fn zooming_a_grid_writes_no_columns_and_only_grid_rules() {
 fn svg_writes_one_clipped_line_per_grid_line() {
     let cx = Context::new_blocking().unwrap();
     let svg = |mut plot: Plot| {
+        // Guides only, on purpose: this test counts the grid's lines.
         let guides = plot
             .resolve(&cx, WIDTH as f32, HEIGHT as f32)
             .unwrap()
