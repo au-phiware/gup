@@ -108,7 +108,7 @@ impl GlyphAtlas {
         if let Some(r) = self.glyphs.get(&(c, px.to_bits(), weight)) {
             return Ok(*r);
         }
-        let (metrics, bitmap) = font.face().rasterize(c, px);
+        let (metrics, bitmap) = font.face_for(c).rasterize(c, px);
         let (w, h) = (metrics.width as u32, metrics.height as u32);
         let (x, y) = self.allocate(w, h).ok_or(Error::AtlasFull {
             ch: c,

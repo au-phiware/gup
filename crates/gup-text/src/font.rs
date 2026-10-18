@@ -27,9 +27,11 @@ use std::sync::{Arc, OnceLock};
 pub const INTER_REGULAR: &[u8] = include_bytes!("../fonts/Inter-Regular-Subset.ttf");
 
 /// The bundled bold face: a subset of Inter SemiBold 4.1 (weight 600), made
-/// by `mask subset-inter` with the same character list and features as
-/// [`INTER_REGULAR`]. It draws [`Weight::SemiBold`](crate::Weight::SemiBold)
-/// text.
+/// by `mask subset-inter` with the same features as [`INTER_REGULAR`] but a
+/// much shorter character list (`fonts/inter-semibold-subset.txt`): printable
+/// ASCII, thin space, narrow no-break space and minus. It draws
+/// [`Weight::SemiBold`](crate::Weight::SemiBold) text; [`Font::inter_semibold`]
+/// draws any other character from the Regular subset.
 pub const INTER_SEMIBOLD: &[u8] = include_bytes!("../fonts/Inter-SemiBold-Subset.ttf");
 
 /// The complete Inter Regular 4.1, for text the [`INTER_REGULAR`] subset
@@ -43,15 +45,19 @@ pub const INTER_REGULAR_FULL: &[u8] = include_bytes!("../fonts/Inter-Regular.ttf
 ///
 /// A character the face has no glyph for is measured and drawn as the
 /// face's missing-glyph box (`.notdef`, a visible box in both bundled
-/// faces): never as nothing, and never as another face's glyph, because
-/// there is no font fallback. [`missing_glyphs`](Self::missing_glyphs)
-/// finds such characters; load a face that covers them (such as
-/// [`Font::inter_full`]) to draw them.
+/// faces): never as nothing. The one exception is the bundled SemiBold
+/// ([`Font::inter_semibold`]), which draws characters its small subset
+/// lacks from the Inter Regular subset. [`missing_glyphs`](Self::missing_glyphs)
+/// finds characters that draw as the box; load a face that covers them
+/// (such as [`Font::inter_full`]) to draw them.
 #[derive(Clone)]
 pub struct Font {
     name: Arc<str>,
     data: Data,
     face: Arc<fontdue::Font>,
+    /// Draws the characters `face` lacks (the bundled SemiBold subset
+    /// falls back to Regular), so they are not missing-glyph boxes.
+    fallback: Option<Arc<Font>>,
 }
 
 /// The font file a face was parsed from.
@@ -112,9 +118,23 @@ impl Font {
     /// The bundled semibold face, the Inter SemiBold subset
     /// ([`INTER_SEMIBOLD`]). It is parsed on first use, once per process,
     /// and shared. Named "Inter" like the regular face.
+    ///
+    /// The SemiBold subset covers printable ASCII and U+2009, U+202F and
+    /// U+2212 only. Any other character draws from the Inter Regular subset
+    /// (so a non-ASCII label is lighter than its neighbours, not a
+    /// missing-glyph box), and a character neither subset has draws as the
+    /// box. Pass a fuller face to
+    /// [`TextSystem::with_fonts`](crate::TextSystem::with_fonts) to draw
+    /// more characters in SemiBold.
     pub fn inter_semibold() -> Self {
         static INTER: OnceLock<Font> = OnceLock::new();
-        INTER.get_or_init(|| Font::bundled(INTER_SEMIBOLD)).clone()
+        INTER
+            .get_or_init(|| {
+                let mut font = Font::bundled(INTER_SEMIBOLD);
+                font.fallback = Some(Arc::new(Font::inter()));
+                font
+            })
+            .clone()
     }
 
     fn bundled(data: &'static [u8]) -> Self {
@@ -140,6 +160,7 @@ impl Font {
             name: name.into(),
             data,
             face: Arc::new(face),
+            fallback: None,
         })
     }
 
@@ -157,6 +178,12 @@ impl Font {
     /// Whether the font has a glyph for `c` (otherwise `c` draws as the
     /// font's missing-glyph box).
     pub fn has_glyph(&self, c: char) -> bool {
+        self.face.has_glyph(c) || self.fallback.as_ref().is_some_and(|f| f.has_glyph(c))
+    }
+
+    /// Whether the font itself has a glyph for `c`, not counting a fallback
+    /// face ([`inter_semibold`](Self::inter_semibold) falls back to Regular).
+    pub fn has_own_glyph(&self, c: char) -> bool {
         self.face.has_glyph(c)
     }
 
@@ -200,8 +227,20 @@ impl Font {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn face(&self) -> &fontdue::Font {
         &self.face
+    }
+
+    /// The face that draws `c`: this one, or the fallback when this one
+    /// lacks `c` and the fallback has it.
+    pub(crate) fn face_for(&self, c: char) -> &fontdue::Font {
+        match &self.fallback {
+            Some(fallback) if !self.face.has_glyph(c) && fallback.face.has_glyph(c) => {
+                &fallback.face
+            }
+            _ => &self.face,
+        }
     }
 }
 
@@ -213,9 +252,13 @@ mod tests {
     /// The characters `fonts/inter-subset.txt` lists, read as pyftsubset
     /// reads them: hex code points or `lo-hi` ranges, `#` comments.
     fn listed() -> BTreeSet<char> {
+        listed_in(include_str!("../fonts/inter-subset.txt"))
+    }
+
+    fn listed_in(list: &str) -> BTreeSet<char> {
         let hex = |s: &str| u32::from_str_radix(s, 16).unwrap_or_else(|e| panic!("{s:?}: {e}"));
         let mut chars = BTreeSet::new();
-        for line in include_str!("../fonts/inter-subset.txt").lines() {
+        for line in list.lines() {
             let item = line.split('#').next().unwrap_or_default().trim();
             if item.is_empty() {
                 continue;
@@ -257,24 +300,50 @@ mod tests {
     }
 
     #[test]
-    fn semibold_subset_covers_what_regular_covers() {
-        let regular: BTreeSet<char> = Font::inter().face().chars().keys().copied().collect();
-        let semibold: BTreeSet<char> = Font::inter_semibold()
-            .face()
-            .chars()
-            .keys()
-            .copied()
-            .collect();
-        assert_eq!(Font::inter_semibold().data(), INTER_SEMIBOLD);
+    fn semibold_subset_maps_exactly_its_list() {
+        let listed = listed_in(include_str!("../fonts/inter-semibold-subset.txt"));
+        let semibold = Font::inter_semibold();
+        let mapped: BTreeSet<char> = semibold.face().chars().keys().copied().collect();
+        let unmapped: Vec<_> = listed.difference(&mapped).collect();
+        let extra: Vec<_> = mapped.difference(&listed).collect();
         assert!(
-            regular.is_subset(&semibold),
-            "SemiBold lacks {:?}",
-            regular.difference(&semibold).collect::<Vec<_>>()
+            unmapped.is_empty() && extra.is_empty(),
+            "the SemiBold subset is stale (run `mask subset-inter`) or the list names \
+             characters Inter lacks: listed but unmapped {unmapped:?}, mapped but \
+             unlisted {extra:?}"
         );
-        assert!(Arc::ptr_eq(
-            &Font::inter_semibold().face,
-            &Font::inter_semibold().face
-        ));
+        assert_eq!(semibold.data(), INTER_SEMIBOLD);
+        assert!(Arc::ptr_eq(&semibold.face, &Font::inter_semibold().face));
+    }
+
+    #[test]
+    fn semibold_draws_what_it_lacks_from_regular() {
+        let semibold = Font::inter_semibold();
+        for c in ['–', 'é', 'µ', 'α'] {
+            assert!(!semibold.face().has_glyph(c), "{c:?} is in the subset");
+            assert!(semibold.has_glyph(c));
+            let (m, bitmap) = semibold.face_for(c).rasterize(c, 16.0);
+            let regular = Font::inter().face().rasterize(c, 16.0);
+            assert_eq!((m, bitmap), regular, "{c:?} comes from Regular");
+        }
+        // Mapped glyphs are SemiBold's own, and the box is the last resort.
+        let a = semibold.face_for('A').rasterize('A', 16.0);
+        assert_eq!(a, semibold.face().rasterize('A', 16.0));
+        assert_ne!(a, Font::inter().face().rasterize('A', 16.0));
+        assert_eq!(semibold.missing_glyphs("2024–Q1"), Vec::<char>::new());
+        assert_eq!(semibold.missing_glyphs("Київ"), ['К', 'и', 'ї', 'в']);
+        // A mixed run has ink for every glyph and measures non-empty.
+        let mut ink = Vec::new();
+        let run = crate::Run {
+            text: "2024–Q1",
+            size: 16.0,
+            at: [0.0, 20.0],
+            anchor: crate::Anchor::new(crate::HAlign::Start, crate::VAlign::Baseline),
+            weight: crate::Weight::SemiBold,
+        };
+        semibold.walk(&run, 1.0, |g| ink.push((g.c, g.metrics.width > 0)));
+        assert_eq!(ink.len(), 7);
+        assert!(ink.iter().all(|&(_, has)| has), "{ink:?}");
     }
 
     #[test]

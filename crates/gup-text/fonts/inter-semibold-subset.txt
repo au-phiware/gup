@@ -1,0 +1,15 @@
+# The characters of gup-text's bundled Inter SemiBold subset (GUP-451). One
+# code point or range per line, in hex; anything after '#' is a comment.
+# `mask subset-inter` passes this file to pyftsubset, and gup-text's tests
+# check that the subset maps exactly these characters, each to a real glyph.
+# SemiBold draws only years (major `Time` ticks) and ASCII titles users set
+# in it, so the list is short. A SemiBold run draws any other character
+# from the Regular subset (see `Font::inter_semibold`).
+
+# Basic Latin: printable ASCII.
+0020-007E
+# Thin space and narrow no-break space (the Time tick label separators).
+2009
+202F
+# Minus sign, for negative years.
+2212

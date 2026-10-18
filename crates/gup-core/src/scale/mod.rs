@@ -453,6 +453,41 @@ mod tests {
         assert_eq!(format_with_step(2500.0, 500.0), "2500");
     }
 
+    /// GUP-451: the bundled SemiBold subset is ASCII plus a few spaces, and
+    /// the major `Time` tick labels (years) are the only SemiBold text the
+    /// library draws, so every one must map to a real glyph in it.
+    #[test]
+    fn major_tick_labels_fit_the_semibold_subset() {
+        let font = gup_text::Font::inter_semibold();
+        let year = |y: f64| (y - 1970.0) * 365.2425 * 86_400.0;
+        let mut majors = 0;
+        for start in [1850.0, 1970.0] {
+            for span_years in [1.0 / 12.0, 1.0, 10.0, 200.0] {
+                for count in [2, 5, 10, 20] {
+                    let t0 = year(start);
+                    let ticks = Time::new()
+                        .domain(t0, t0 + span_years * 365.2425 * 86_400.0)
+                        .ticks(count);
+                    for (label, _) in ticks
+                        .labels
+                        .iter()
+                        .zip(&ticks.major)
+                        .filter(|(_, major)| **major)
+                    {
+                        majors += 1;
+                        let missing: Vec<char> =
+                            label.chars().filter(|&c| !font.has_own_glyph(c)).collect();
+                        assert!(
+                            missing.is_empty(),
+                            "{label:?} (start {start}, span {span_years} y) needs {missing:?}"
+                        );
+                    }
+                }
+            }
+        }
+        assert!(majors > 0, "no major ticks were generated");
+    }
+
     /// GUP-407: the bundled font is a subset, so every character a tick
     /// formatter can emit must be in it. Sweeps linear and log domains
     /// from 1e-12 to 1e15, positive, negative and straddling zero.

@@ -95,7 +95,11 @@ pub enum Weight {
     /// Inter Regular.
     #[default]
     Regular,
-    /// Inter SemiBold (CSS weight 600).
+    /// Inter SemiBold (CSS weight 600). The bundled SemiBold covers printable
+    /// ASCII and U+2009, U+202F and U+2212 only; any other character draws
+    /// from the Regular face (and as the missing-glyph box if Regular lacks
+    /// it too). [`TextSystem::with_fonts`](crate::TextSystem::with_fonts)
+    /// takes a fuller face.
     SemiBold,
 }
 
@@ -133,15 +137,17 @@ pub(crate) struct PlacedGlyph {
 impl Font {
     /// Measure `text` at `size` pixels.
     pub fn measure(&self, text: &str, size: f32) -> TextMetrics {
-        let face = self.face();
         let mut width = 0.0;
-        let mut prev = None;
+        let mut prev: Option<(char, &fontdue::Font)> = None;
         for c in text.chars() {
-            if let Some(p) = prev {
+            let face = self.face_for(c);
+            if let Some((p, pface)) = prev
+                && std::ptr::eq(face, pface)
+            {
                 width += face.horizontal_kern(p, c, size).unwrap_or(0.0);
             }
             width += face.metrics(c, size).advance_width;
-            prev = Some(c);
+            prev = Some((c, face));
         }
         let line = self.line_metrics(size);
         TextMetrics {
@@ -203,14 +209,16 @@ impl Font {
     /// Visit the glyphs of `run` laid out at `scale` physical pixels per
     /// logical pixel, in physical pixels.
     pub(crate) fn walk(&self, run: &Run<'_>, scale: f32, mut f: impl FnMut(PlacedGlyph)) {
-        let face = self.face();
         let px = run.size * scale;
         let [x, y] = self.origin(run, scale);
         // Whole pixels: bitmap glyphs are drawn 1:1.
         let (mut pen, baseline) = (x.round(), y.round());
-        let mut prev = None;
+        let mut prev: Option<(char, &fontdue::Font)> = None;
         for c in run.text.chars() {
-            if let Some(p) = prev {
+            let face = self.face_for(c);
+            if let Some((p, pface)) = prev
+                && std::ptr::eq(face, pface)
+            {
                 pen += face.horizontal_kern(p, c, px).unwrap_or(0.0);
             }
             let metrics = face.metrics(c, px);
@@ -222,7 +230,7 @@ impl Font {
                 y: baseline - (metrics.ymin as f32 + metrics.height as f32),
             });
             pen += metrics.advance_width;
-            prev = Some(c);
+            prev = Some((c, face));
         }
     }
 }

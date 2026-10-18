@@ -76,6 +76,9 @@ printf '%-26s %10d B raw %9d B gz\n' "(gup-core over wgpu)" "$over_raw" "$over_g
 font="$root/crates/gup-text/fonts/Inter-Regular-Subset.ttf"
 printf '%-26s %10d B raw %9d B gz\n' "(Inter subset, bundled)" \
   "$(stat -c %s "$font")" "$(gzip -9 -c "$font" | wc -c)"
+semibold="$root/crates/gup-text/fonts/Inter-SemiBold-Subset.ttf"
+printf '%-26s %10d B raw %9d B gz\n' "(Inter SemiBold subset)" \
+  "$(stat -c %s "$semibold")" "$(gzip -9 -c "$semibold" | wc -c)"
 
 metrics="metric wasm.wgpu.gz_bytes $base_gz
 metric wasm.scatter.gz_bytes $gz

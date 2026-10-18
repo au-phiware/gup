@@ -125,10 +125,11 @@ harness's `Cargo.lock` version. See `scripts/wasm_browser.sh` and
 
 Regenerate `gup-text`'s bundled font (GUP-407): subset the full Inter Regular
 and SemiBold (GUP-436) to the characters listed in
-`crates/gup-text/fonts/inter-subset.txt`. Keeps GPOS `kern` and GSUB `tnum` (for
-shaping, GUP-405) and every other OpenType feature is dropped, as is hinting
-(fontdue and resvg don't hint). The missing-glyph box keeps its outline, so a
-character outside the subset draws as a visible box, not as nothing. The
+`crates/gup-text/fonts/inter-subset.txt` and `inter-semibold-subset.txt`
+(GUP-451: ASCII and a few spaces only) respectively. Keeps GPOS `kern` and GSUB
+`tnum` (for shaping, GUP-405) and every other OpenType feature is dropped, as is
+hinting (fontdue and resvg don't hint). The missing-glyph box keeps its outline,
+so a character outside the subset draws as a visible box, not as nothing. The
 copyright, trademark and licence names (IDs 0, 7, 13 and 14) are kept, so an
 embedded copy carries its OFL notice. The output is byte-for-byte reproducible
 with the dev shell's fonttools (pinned by `flake.lock`). Commit the result with
@@ -138,8 +139,10 @@ the character list.
 set -euo pipefail
 fonts=crates/gup-text/fonts
 for w in Regular SemiBold; do
+  list="$fonts/inter-subset.txt"
+  [[ $w == SemiBold ]] && list="$fonts/inter-semibold-subset.txt"
   pyftsubset "$fonts/Inter-$w.ttf" \
-    --unicodes-file="$fonts/inter-subset.txt" \
+    --unicodes-file="$list" \
     --layout-features=kern,tnum \
     --no-hinting \
     --notdef-outline \

@@ -92,8 +92,10 @@ pub struct SvgOptions {
     pub font: gup_text::Font,
     /// The face of [`Weight::SemiBold`](crate::scene::Weight::SemiBold)
     /// runs (major tick labels), written with `font-weight="600"`.
-    /// Default: the bundled Inter SemiBold subset. Name it like `font`, so
-    /// both share one `font-family`.
+    /// Default: the bundled Inter SemiBold subset, which covers printable
+    /// ASCII and U+2009, U+202F and U+2212 only (the GPU path draws other
+    /// characters from Regular; an embedded copy does not). Name it like
+    /// `font`, so both share one `font-family`.
     pub semibold_font: gup_text::Font,
     /// Embed `font` in the document as an `@font-face` with a base64 data
     /// URL (only when the scene has text). Default: off; the document
