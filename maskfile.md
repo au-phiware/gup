@@ -80,8 +80,21 @@ The name section itself is listed apart, since it is not shipped. Sizes are
 **raw** bytes: find targets with this, and judge a cut by the gz totals of
 `mask wasm-size`. Local only, not a CI job. See `scripts/wasm_attrib.sh`.
 
+`--row-type` (GUP-459) builds the harness with and without its `extra-row-type`
+feature instead, and prints one section, `== row type`: the per-group raw byte
+and instantiation-count differences (hashes and `.NNNN` suffixes stripped), the
+30 largest by absolute size, and the total. It is the item-by-item account of
+`wasm.per_row_type.gz_bytes`; the instantiations for the extra row type of
+`bind_axes`, `tooltip_text` and `dispatch` show that the vtable was linked.
+
+OPTIONS
+
+- row_type
+  - flags: --row-type
+  - desc: Diff the build with and without the extra row type
+
 ```bash
-./scripts/wasm_attrib.sh
+./scripts/wasm_attrib.sh ${row_type:+--row-type}
 ```
 
 ## perf-budget

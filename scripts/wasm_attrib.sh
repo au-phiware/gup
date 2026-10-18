@@ -9,6 +9,12 @@
 # name section is not shipped, so it is reported apart and left out of the
 # crate totals. Local diagnostic only; judge a cut by `mask wasm-size`.
 #
+# `--row-type` (GUP-459) instead builds the harness with and without its
+# `extra-row-type` feature and prints `== row type`: the per-group raw byte and
+# instantiation-count differences (hashes and `.NNNN` suffixes stripped), the 30
+# largest by absolute size, and the total. That is what one more `Selection` row
+# type costs, item by item; `wasm.per_row_type.gz_bytes` is its gz total.
+#
 # Needs: twiggy (the dev shell), and what wasm_size.sh needs.
 
 set -euo pipefail
@@ -29,12 +35,69 @@ if [[ $have != "$want" ]]; then
   exit 1
 fi
 
+row_type=
+case "${1:-}" in
+  "") ;;
+  --row-type) row_type=1 ;;
+  *)
+    echo "usage: wasm_attrib.sh [--row-type]" >&2
+    exit 2
+    ;;
+esac
+
 out=$(mktemp -d)
 trap 'rm -rf "$out"' EXIT
-(cd "$harness" && cargo build --quiet --release --target wasm32-unknown-unknown)
-wasm-bindgen --target web --out-dir "$out" --out-name scatter \
-  "$target/wasm32-unknown-unknown/release/gup_core_wasm_size_scatter.wasm"
-twiggy top -n 1000000 -f csv "$out/scatter_bg.wasm" >"$out/items.csv"
+bind() { # output name, extra cargo args
+  local name=$1
+  shift
+  (cd "$harness" && cargo build --quiet --release --target wasm32-unknown-unknown "$@")
+  wasm-bindgen --target web --out-dir "$out" --out-name "$name" \
+    "$target/wasm32-unknown-unknown/release/gup_core_wasm_size_scatter.wasm"
+  twiggy top -n 1000000 -f csv "$out/${name}_bg.wasm" >"$out/$name.csv"
+}
+
+if [[ -n $row_type ]]; then
+  bind with --features extra-row-type
+  bind without
+  python3 -I - "$out/with.csv" "$out/without.csv" <<'PY'
+import csv, re, sys
+from collections import defaultdict
+
+hash_re = re.compile(r"::h[0-9a-f]{16}(\.\d+)?$")
+# Imports are named after the file wasm-bindgen wrote, and may end in a hash.
+import_re = re.compile(r"\./(?:with|without)_bg\.js::(.*?)(?:_[0-9a-f]{16})?$")
+mid_re = re.compile(r"::h[0-9a-f]{16}(?=\s)")
+
+def groups(path):
+    g = defaultdict(lambda: [0, 0])
+    for r in list(csv.reader(open(path)))[1:]:
+        if r[0] == "\"function names\" subsection":
+            continue
+        e = g[mid_re.sub("", import_re.sub(r"import \1", hash_re.sub("", r[0])))]
+        e[0] += 1
+        e[1] += int(r[1])
+    return g
+
+with_t, without = groups(sys.argv[1]), groups(sys.argv[2])
+diff = []
+for k in set(with_t) | set(without):
+    c = with_t[k][0] - without[k][0] if k in without else with_t[k][0]
+    b = with_t[k][1] - (without[k][1] if k in without else 0)
+    if k in without and k not in with_t:
+        c, b = -without[k][0], -without[k][1]
+    if b or c:
+        diff.append((k, c, b))
+print("== row type")
+print(f"{'raw B':>8} {'count':>6}  group")
+for k, c, b in sorted(diff, key=lambda i: -abs(i[2]))[:30]:
+    print(f"{b:+8d} {c:+6d}  {k}")
+print(f"{sum(b for _, _, b in diff):+8d} {sum(c for _, c, _ in diff):+6d}  total (raw, outside the name section)")
+PY
+  exit 0
+fi
+
+bind scatter
+mv "$out/scatter.csv" "$out/items.csv"
 
 python3 -I - "$out/items.csv" "$(stat -c %s "$out/scatter_bg.wasm")" <<'PY'
 import csv, re, sys

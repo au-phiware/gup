@@ -5,7 +5,7 @@
 //! (RFC-001 §4). S0a scope: data and `attr`; events, transitions and
 //! append are later S-stories.
 
-use crate::channel::{Channel, ConstValue, Geometry, HitShape, Mark, Role, Visual};
+use crate::channel::{Channel, ChannelDesc, ConstValue, Geometry, HitShape, Mark, Role, Visual};
 use crate::column::{ColumnFormat, ColumnStore};
 use crate::context::Context;
 use crate::cull::{self, PixelBox};
@@ -649,6 +649,40 @@ pub(crate) trait Layer: wgpu::WasmNotSendSync {
     fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
+/// The plot scale a closure-encoded channel reads through, or the error that
+/// says why it has none. Not generic, so every `Selection` row type shares one
+/// copy (GUP-459).
+fn axis_scale_for<'s>(
+    mark: &'static str,
+    desc: &ChannelDesc,
+    x: &'s dyn DynPositionScale,
+    y: &'s dyn DynPositionScale,
+) -> Result<&'s dyn DynPositionScale> {
+    let channel = format!("{}::{}", mark, desc.name.to_ascii_uppercase());
+    let (scale, axis, what) = match desc.role {
+        Some(Role::X) => (x, "x", "plot x"),
+        Some(Role::Y) => (y, "y", "plot y"),
+        _ => {
+            return Err(Error::config(
+                "channel",
+                format!(
+                    "`{channel}` has no plot scale to encode a closure through; give it                              a scale, e.g. `.{}(Pow::sqrt().range(Px(2.0), Px(12.0)).encode(|r:                              &T| ...))`, or a constant such as `Px(4.0)`",
+                    desc.name
+                ),
+            ));
+        }
+    };
+    if scale.reads_keys() {
+        return Err(Error::config(
+            what,
+            format!(
+                "the {axis} scale reads dictionary keys (Band or Point); encode keys                          with `{axis}.encode_key(|r: &T| r.key.as_str())` (`{channel}`)"
+            ),
+        ));
+    }
+    Ok(scale)
+}
+
 impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
     fn bind_axes(
         &mut self,
@@ -661,29 +695,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         }
         for (slot, f) in self.axes.iter().enumerate() {
             let Some(f) = f else { continue };
-            let desc = &M::CHANNELS[slot];
-            let channel = format!("{}::{}", M::NAME, desc.name.to_ascii_uppercase());
-            let (scale, axis, what) = match desc.role {
-                Some(Role::X) => (x, "x", "plot x"),
-                Some(Role::Y) => (y, "y", "plot y"),
-                _ => {
-                    return Err(Error::config(
-                        "channel",
-                        format!(
-                            "`{channel}` has no plot scale to encode a closure through; give it                              a scale, e.g. `.{}(Pow::sqrt().range(Px(2.0), Px(12.0)).encode(|r:                              &T| ...))`, or a constant such as `Px(4.0)`",
-                            desc.name
-                        ),
-                    ));
-                }
-            };
-            if scale.reads_keys() {
-                return Err(Error::config(
-                    what,
-                    format!(
-                        "the {axis} scale reads dictionary keys (Band or Point); encode keys                          with `{axis}.encode_key(|r: &T| r.key.as_str())` (`{channel}`)"
-                    ),
-                ));
-            }
+            let scale = axis_scale_for(M::NAME, &M::CHANNELS[slot], x, y)?;
             self.encodings[slot] = Some(Encoding::Column(Box::new(AxisEncoding::new(
                 Arc::clone(f),
                 scale.dyn_encode(),

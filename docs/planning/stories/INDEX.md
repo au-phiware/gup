@@ -370,7 +370,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   rows outside a brush fade to `Theme::unbrushed_opacity` (default 0.3) through
   per-row brushed bits read in the glue, for every mark's colour channels; the
   `brush` golden is re-blessed. Deps: GUP-454 ✅, GUP-430 ✅, GUP-431 ✅.
-- [GUP-459](GUP-459_Per_Row_Type_WASM_Budget.md) 📋 — Attributes the
+- [GUP-459](GUP-459_Per_Row_Type_WASM_Budget.md) ✅ — Attributes the
   `wasm.per_row_type.gz_bytes` drift (941 → 2,569) to the harness's own async
   export, measures library code only, slims `bind_axes`, adds
   `wasm_attrib.sh --row-type` and makes the row a `<=` budget that fails CI.
