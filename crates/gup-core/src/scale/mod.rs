@@ -129,7 +129,41 @@ struct Shared<S> {
     /// Bumped by every [`ScaleRef::write`], so a cache can tell that the
     /// scale may have changed.
     revision: AtomicU64,
+    /// The user's tick label format ([`ScaleRef::tick_format`]).
+    format: RwLock<Option<TickFormat>>,
 }
+
+/// A user's tick label format: shared by the clones of a [`ScaleRef`],
+/// applied to every tick value the scale labels.
+#[derive(Clone)]
+pub struct TickFormat(Arc<dyn Fn(f64) -> String + Send + Sync>);
+
+impl TickFormat {
+    pub(crate) fn new(f: impl Fn(f64) -> String + Send + Sync + 'static) -> Self {
+        Self(Arc::new(f))
+    }
+
+    /// The label of `value`.
+    pub fn apply(&self, value: f64) -> String {
+        (self.0)(value)
+    }
+}
+
+impl std::fmt::Debug for TickFormat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("TickFormat(..)")
+    }
+}
+
+/// The position scales whose tick labels a user may format
+/// ([`ScaleRef::tick_format`]): those labelled from numbers. [`Band`] and
+/// [`Point`] are labelled from keys.
+pub trait NumericTicks: PositionScale {}
+impl NumericTicks for Linear {}
+impl NumericTicks for Pow {}
+impl NumericTicks for Log {}
+impl NumericTicks for Symlog {}
+impl NumericTicks for Time {}
 
 impl<S> Clone for ScaleRef<S> {
     fn clone(&self) -> Self {
@@ -145,6 +179,7 @@ impl<S> ScaleRef<S> {
             fit: Mutex::new(None),
             keys: DictionarySlot::default(),
             revision: AtomicU64::new(0),
+            format: RwLock::new(None),
         }))
     }
 
@@ -157,6 +192,43 @@ impl<S> ScaleRef<S> {
     pub fn write(&self) -> RwLockWriteGuard<'_, S> {
         self.0.revision.fetch_add(1, Ordering::Relaxed);
         self.0.scale.write().unwrap_or_else(|p| p.into_inner())
+    }
+}
+
+impl<S: NumericTicks> ScaleRef<S> {
+    /// Label this scale's ticks with `f` instead of the default labels:
+    /// axis labels and, when the scale feeds a colour legend, the legend's
+    /// ticks. `f` receives the tick value in the scale's domain units
+    /// (for [`Time`], Unix seconds as `f64`) and its string is used as is,
+    /// also to measure and thin labels. Clones of the `ScaleRef` share the
+    /// format; setting it counts as a write, so caches rebuild.
+    ///
+    /// ```
+    /// use gup_core::prelude::*;
+    /// let x = ScaleRef::new(Linear::new().domain(0.0, 3.0e6));
+    /// x.tick_format(|v| format!("${:.1}M", v / 1e6));
+    /// assert_eq!(x.tick_labels(3)[1], "$1.0M");
+    /// ```
+    ///
+    /// Band and point scales are labelled from their keys:
+    ///
+    /// ```compile_fail
+    /// use gup_core::prelude::*;
+    /// let x = ScaleRef::new(Band::new());
+    /// x.tick_format(|v| v.to_string());
+    /// ```
+    pub fn tick_format(&self, f: impl Fn(f64) -> String + Send + Sync + 'static) -> &Self {
+        *self.0.format.write().unwrap_or_else(|p| p.into_inner()) = Some(TickFormat::new(f));
+        self.0.revision.fetch_add(1, Ordering::Relaxed);
+        self
+    }
+}
+
+impl<S: PositionScale> ScaleRef<S> {
+    /// The labels of about `count` ticks, formatted as set by
+    /// [`tick_format`](Self::tick_format).
+    pub fn tick_labels(&self, count: usize) -> Vec<String> {
+        DynPositionScale::ticks(self, count).labels
     }
 }
 
@@ -193,6 +265,14 @@ impl<S: ShaderFn> ShaderFn for ScaleRef<S> {
 
     fn revision(&self) -> u64 {
         self.0.revision.load(Ordering::Relaxed)
+    }
+
+    fn tick_format(&self) -> Option<TickFormat> {
+        self.0
+            .format
+            .read()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone()
     }
 
     fn begin_fit(&self) {
@@ -322,7 +402,11 @@ impl<S: PositionScale> DynPositionScale for ScaleRef<S> {
     }
 
     fn ticks(&self, count: usize) -> Ticks {
-        self.read().ticks(count)
+        let mut ticks = self.read().ticks(count);
+        if let Some(format) = ShaderFn::tick_format(self) {
+            ticks.labels = ticks.values.iter().map(|&v| format.apply(v)).collect();
+        }
+        ticks
     }
 
     fn eval(&self, x: f64) -> f64 {

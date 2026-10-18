@@ -100,6 +100,14 @@ pub trait ShaderFn: Clone + Send + Sync + 'static {
         None
     }
 
+    /// The user's tick label format for this function's input domain, if
+    /// it has one (a [`ScaleRef`](crate::ScaleRef) does). A chain's legend
+    /// ticks, which are in the data's units, use it. Internal.
+    #[doc(hidden)]
+    fn tick_format(&self) -> Option<crate::scale::TickFormat> {
+        None
+    }
+
     /// The legend a plot draws for a colour encoding through this
     /// function, if it has one: the colour scales override it, and so can
     /// a `#[wgsl_function]` colour function. A chain takes its last link's
@@ -219,6 +227,12 @@ pub trait EncodeFn: Clone + Send + Sync + 'static {
     /// for a chain that was not fitted, and for a function with no legend.
     /// (Named apart from [`ShaderFn::legend`], which scales also have.)
     fn encode_legend(&self) -> Option<crate::Legend>;
+
+    /// See [`ShaderFn::tick_format`]: the first link's.
+    #[doc(hidden)]
+    fn tick_format(&self) -> Option<crate::scale::TickFormat> {
+        None
+    }
 
     /// [`encode_legend`](Self::encode_legend) for a function whose input
     /// spans `extent`, which also gives a colour function without a
@@ -455,6 +469,10 @@ impl<S: ShaderFn> EncodeFn for S {
         ShaderFn::legend(self)
     }
 
+    fn tick_format(&self) -> Option<crate::scale::TickFormat> {
+        ShaderFn::tick_format(self)
+    }
+
     fn encode_legend_over(&self, extent: (f64, f64)) -> Option<crate::Legend> {
         ShaderFn::legend(self).or_else(|| ShaderFn::sampled_legend(self, extent))
     }
@@ -590,7 +608,12 @@ where
             extent,
             |v| self.first.eval(v),
             5,
+            self.first.tick_format().as_ref(),
         )))
+    }
+
+    fn tick_format(&self) -> Option<crate::scale::TickFormat> {
+        self.first.tick_format()
     }
 }
 
