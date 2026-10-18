@@ -348,7 +348,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   S9b: drag pan (on by default), `view_axes`, `reset_view`, and band axes left
   alone by input, in the window and the browser. Deps: GUP-452 📋, GUP-444 ✅,
   GUP-449 ✅.
-- [GUP-454](GUP-454_RFC_001_S9c_Brush_And_Drag_Zoom.md) 📋 — RFC-001 step S9c:
+- [GUP-454](GUP-454_RFC_001_S9c_Brush_And_Drag_Zoom.md) ✅ — RFC-001 step S9c:
   `Drag::Brush` selects rows by position through the pick index, drawn as an
   overlay, and `Drag::Zoom` zooms to a rectangle. Deps: GUP-453 📋, GUP-445 ✅,
   GUP-446 ✅.
