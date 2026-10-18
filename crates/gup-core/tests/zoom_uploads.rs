@@ -19,6 +19,7 @@
 
 mod common;
 
+use common::culling;
 use common::scatter;
 use gup_core::prelude::*;
 use gup_core::{ImageTarget, RenderTarget, Renderer, Scene};
@@ -269,4 +270,110 @@ fn cached_frame_timings() {
     );
     summary("Plot::resolve", resolve);
     summary("Renderer::render (cached)", render);
+}
+
+// ---- Chunk culling (RFC-001 S9f, GUP-457) -------------------------------
+
+/// `plot` resolved, prepared and drawn once: its image and draw calls.
+fn shot(cx: &Context, plot: &mut Plot) -> (image::RgbaImage, usize) {
+    let mut target = ImageTarget::new(cx, 640, 400).unwrap();
+    let mut renderer = Renderer::new();
+    let resolved = plot.resolve(cx, culling::W, culling::H).unwrap();
+    let calls = frame(cx, &mut renderer, &resolved.scene, &mut target);
+    (pollster::block_on(target.read(cx)).unwrap(), calls)
+}
+
+/// Two plots from `build`, culled and not, zoomed by `zoom`: byte-identical
+/// images; the draw calls of each.
+fn culled_and_not(
+    cx: &Context,
+    build: fn(bool) -> (Plot, culling::Scales),
+    zoom: fn(&culling::Scales),
+) -> (usize, usize) {
+    let shots = [true, false].map(|on| {
+        let (mut plot, scales) = build(on);
+        zoom(&scales);
+        shot(cx, &mut plot)
+    });
+    assert!(
+        shots[0].0 == shots[1].0,
+        "culling changed the image ({} bytes differ)",
+        shots[0]
+            .0
+            .as_raw()
+            .iter()
+            .zip(shots[1].0.as_raw())
+            .filter(|(a, b)| a != b)
+            .count()
+    );
+    // Something was drawn: more than the background and the guides.
+    let background = *shots[0].0.get_pixel(0, 0);
+    assert!(shots[0].0.pixels().filter(|p| **p != background).count() > 2_000);
+    (shots[0].1, shots[1].1)
+}
+
+#[test]
+fn culled_circles_draw_the_visible_chunks_and_the_same_image() {
+    let cx = Context::new_blocking().expect("headless context");
+    let (culled, all) = culled_and_not(&cx, culling::circles, |(x, _)| culling::zoom_circles(x));
+    let guides = all - 64;
+    assert_eq!(culled, 4 + guides, "chunks 20..=23 plus the guides");
+}
+
+#[test]
+fn a_culled_line_keeps_the_bridge_whose_ends_are_off_screen() {
+    let cx = Context::new_blocking().expect("headless context");
+    // Rows 63 and 64 are the last of chunk 0 and the first of chunk 1;
+    // only the bridge between them crosses x in 63.3..63.7.
+    let (culled, all) = culled_and_not(&cx, culling::line, |(x, _)| {
+        x.write().set_domain(63.3, 63.7).unwrap();
+    });
+    let guides = all - (64 + 63);
+    assert_eq!(culled, 1 + guides, "the bridge plus the guides");
+}
+
+#[test]
+fn culled_bars_with_a_derived_width_keep_the_same_image() {
+    let cx = Context::new_blocking().expect("headless context");
+    let (culled, all) = culled_and_not(&cx, culling::bars, |(x, _)| culling::zoom_circles(x));
+    assert!(culled < all, "{culled} of {all} draws");
+}
+
+/// 300 zoomed frames over the sorted circles write nothing new with
+/// culling, and exactly what the unculled plot writes besides.
+#[test]
+fn zooming_culled_chunks_writes_nothing_new() {
+    let cx = Context::new_blocking().expect("headless context");
+    let run = |on| {
+        let (mut plot, (x, _)) = culling::circles(on);
+        let mut target = ImageTarget::new(&cx, 640, 400).unwrap();
+        let mut renderer = Renderer::new();
+        let first = plot.resolve(&cx, culling::W, culling::H).unwrap();
+        frame(&cx, &mut renderer, &first.scene, &mut target);
+        let before = cx.upload_stats();
+        let c = f64::from(culling::CHUNK);
+        let (mut draws, mut min) = (0, usize::MAX);
+        for i in 1..=FRAMES {
+            let k = i as f64 / FRAMES as f64;
+            let (lo, hi) = (20.5 * c * k, 64.0 * c - (64.0 - 23.5) * c * k);
+            x.write().set_domain(lo, hi).unwrap();
+            let resolved = plot.resolve(&cx, culling::W, culling::H).unwrap();
+            let n = frame(&cx, &mut renderer, &resolved.scene, &mut target);
+            draws += n;
+            min = min.min(n);
+        }
+        (cx.upload_stats() - before, draws, min)
+    };
+    let (culled, culled_draws, min) = run(true);
+    let (all, all_draws, _) = run(false);
+    eprintln!("culled: {culled:?}, {culled_draws} draws; unculled: {all:?}, {all_draws} draws");
+    assert_eq!(culled.columns.bytes, 0, "{culled:?}");
+    assert_eq!(culled.columns.writes, 0, "{culled:?}");
+    assert_eq!(culled.validity.bytes, 0, "{culled:?}");
+    assert_eq!(culled.textures.bytes, all.textures.bytes);
+    assert_eq!(culled.uniforms.bytes, all.uniforms.bytes);
+    assert_eq!(culled.uniforms.writes, all.uniforms.writes);
+    assert_eq!(culled.instances.bytes, all.instances.bytes);
+    assert_eq!(culled.instances.writes, all.instances.writes);
+    assert!(culled_draws < all_draws && min < 64);
 }

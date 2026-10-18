@@ -10,7 +10,7 @@ mod common;
 use common::vr::rgba8;
 use gup_core::geom::Point as Pt;
 use gup_core::prelude::*;
-use gup_core::{ImageTarget, Input, RowId};
+use gup_core::{Button, ImageTarget, Input, RowId};
 
 const W: u32 = 480;
 const H: u32 = 320;
@@ -468,4 +468,101 @@ fn a_boxed_chart_picks_too() {
     let c = at(&x, &y, &p(5.0, 5.0, 0.0));
     assert_eq!(chart.pick_row(c), row(0, 0));
     assert_eq!(chart.pick_row(off(c, 40.0, 0.0)), None);
+}
+
+// ---- Chunk culling (RFC-001 S9f, GUP-457) -------------------------------
+
+/// The sorted circles zoomed to chunks 20.5..23.5, culled or not, resolved.
+fn zoomed(cx: &Context, culling: bool) -> Plot {
+    let (mut plot, (x, _)) = common::culling::circles(culling);
+    common::culling::zoom_circles(&x);
+    plot.drag(Drag::Brush);
+    plot.resolve(cx, common::culling::W, common::culling::H)
+        .unwrap();
+    plot
+}
+
+#[test]
+fn culling_leaves_cpu_and_gpu_picks_agreeing() {
+    let cx = Context::new_blocking().unwrap();
+    let (mut culled, mut all) = (zoomed(&cx, true), zoomed(&cx, false));
+    let rect = culled.layout().unwrap().plot;
+    let mut state = 0x2545_f491_4f6c_dd1du64;
+    let mut next = move || {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        (state >> 11) as f32 / (1u64 << 53) as f32
+    };
+    let mut hits = 0;
+    for i in 0..10_000 {
+        let q = Pt::new(rect.x + next() * rect.width, rect.y + next() * rect.height);
+        let cpu = culled.pick_row(q);
+        assert_eq!(
+            cpu,
+            all.pick_row(q),
+            "point {i} at {q:?}: culling moved the pick"
+        );
+        assert_eq!(
+            culled.pick_row_gpu(&cx, q).unwrap(),
+            cpu,
+            "point {i} at {q:?}: GPU pick disagrees with the CPU pick"
+        );
+        hits += usize::from(cpu.is_some());
+    }
+    assert!(hits > 500, "only {hits} of 10,000 points hit a circle");
+}
+
+#[test]
+fn the_pick_index_holds_only_visible_chunks() {
+    let cx = Context::new_blocking().unwrap();
+    let (mut culled, mut all) = (zoomed(&cx, true), zoomed(&cx, false));
+    let kept = culled.pick_item_count().unwrap();
+    assert!(kept <= 4 * 1024, "{kept} items for 4 visible chunks");
+    assert!(kept > 0);
+    assert_eq!(all.pick_item_count(), Some(common::culling::ROWS));
+}
+
+#[test]
+fn a_brush_selects_the_same_rows_with_and_without_culling() {
+    let cx = Context::new_blocking().unwrap();
+    let rows = [true, false].map(|on| {
+        let mut plot = zoomed(&cx, on);
+        let r = plot.layout().unwrap().plot;
+        let (a, b) = (
+            Pt::new(r.x + 0.2 * r.width, r.y + 0.1 * r.height),
+            Pt::new(r.x + 0.7 * r.width, r.y + 0.8 * r.height),
+        );
+        let button = Button::Primary;
+        let mut feed = |input| {
+            let _ = plot.handle(input);
+        };
+        feed(Input::PointerDown { at: a, button });
+        feed(Input::PointerMoved {
+            at: Pt::new(a.x + 20.0, a.y + 20.0),
+        });
+        feed(Input::PointerMoved { at: b });
+        feed(Input::PointerUp { at: b, button });
+        plot.brush().expect("a brush").rows.clone()
+    });
+    assert!(!rows[0].is_empty());
+    assert_eq!(rows[0], rows[1]);
+}
+
+#[test]
+fn a_line_picks_across_a_culled_chunk_boundary() {
+    let cx = Context::new_blocking().unwrap();
+    // Only the bridge between chunks 0 and 1 (rows 63 and 64) is on screen.
+    let rows = [true, false].map(|on| {
+        let (mut plot, (x, y)) = common::culling::line(on);
+        x.write().set_domain(63.3, 63.7).unwrap();
+        plot.resolve(&cx, common::culling::W, common::culling::H)
+            .unwrap();
+        let mid = Pt::new(x.read().eval(63.5) as f32, y.read().eval(85.65) as f32);
+        (plot.pick_row(mid), plot.pick_item_count().unwrap())
+    });
+    assert_eq!(rows[0].0, rows[1].0);
+    assert!(rows[0].0.is_some());
+    assert_eq!(rows[0].1, 1);
+    assert_eq!(rows[1].1, 4095);
 }
