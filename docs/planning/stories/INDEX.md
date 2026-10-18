@@ -336,7 +336,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   `mask wasm-attrib` attributes the scatter's WASM bytes by crate, function and
   generic group, and `mask wasm-size` budgets the cost of one more `Selection`
   row type. Deps: GUP-438 ✅, GUP-449 ✅.
-- [GUP-451](GUP-451_WASM_Size_Cuts.md) 🚧 — Cut gup-core to ≤ 320,000 B gz over
+- [GUP-451](GUP-451_WASM_Size_Cuts.md) ✅ — Cut gup-core to ≤ 320,000 B gz over
   bare wgpu (from 356,914): an LTO release profile for the harnesses, an
   ASCII-only SemiBold subset, and `Selection`'s `Layer` bodies moved out of the
   per-row-type generics. Deps: GUP-450 📋, GUP-436 ✅, GUP-445 ✅.

@@ -10,8 +10,8 @@ implementer-reason:
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 🚧 In Progress **Created**:
-2026-10-18
+**Initiative**: RFC-001 Migration **Status**: ✅ Complete 2026-10-18
+**Created**: 2026-10-18
 
 ## Context
 
@@ -449,3 +449,50 @@ per-row-type metric enforces this.
 - [ ] Goldens pass without `GUP_BLESS`; `mask wasm-browser` passes
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
+
+## Retrospective
+
+**Completed**: 2026-10-18
+
+### Key Technical Learnings
+
+#### The release profile was most of the win
+
+- **Challenge**: GUP-450 pointed at per-row-type monomorphisation, but its
+  measured cost was only 3,674 B gz.
+- **Solution**: `opt-level = "z"` with LTO and one codegen unit cut 64,322 B gz,
+  more than the other cuts together; `s` gave 46,655 B.
+- **Pattern**: spike the build profile before restructuring code.
+
+#### Unicode tables hide behind innocent calls
+
+- **Challenge**: `.rodata` had a 14 KB sorted pair table.
+- **Solution**: parsing the wasm data segment (not `strings`, which matches code
+  bytes) found it was `str::to_uppercase`'s case table, pulled in by two calls
+  on ASCII names. `to_ascii_uppercase` saved 7,664 B gz.
+- **Pattern**: carve known blobs (fonts) out of the data segment, then classify
+  the rest by text runs and by looking at heads of large binary spans.
+
+#### Per-glyph font fallback is small
+
+- **Solution**: `Font::face_for(c)` in `measure`, `walk` and the atlas, with
+  kerning skipped across a face change.
+
+### Architectural Decisions
+
+#### AC3 skipped
+
+- **Decision**: no `Selection` split; the target is met by 56 KB.
+- **Trade-off**: per-row-type cost stays about 1-4 KB gz per `T`.
+- **Future**: revisit only if `wasm.per_row_type.gz_bytes` grows with S9.
+
+### Development Workflow Insights
+
+- `twiggy` is only in the dev shell: run it as `nix develop -c ...`.
+- `mask perf-budget` reports 10 "FAIL (not measured)" rows for the crate-total
+  table in `PERF_BUDGETS.md` ("Where the bytes go"); this does not come from
+  this story's changes.
+
+### Follow-up Stories
+
+None.
