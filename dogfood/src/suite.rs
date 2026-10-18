@@ -105,6 +105,10 @@ pub enum Measure {
         count: usize,
         at: fn(usize) -> (f32, f32),
     },
+    /// A tooltip box fills `region`: a panel of one fill colour, any colour,
+    /// holding at least `lines` lines of text in a contrasting colour, and
+    /// hiding the marks under it.
+    Tooltip { region: Region, lines: usize },
     /// An SVG file contains at least `min` `<tag` elements.
     SvgElements { tag: &'static str, min: usize },
 }
@@ -238,6 +242,20 @@ impl Measure {
                 Measured {
                     passed: (min..=max).contains(&n),
                     detail: format!("{n} runs (need {min}..={max})"),
+                }
+            }
+            Measure::Tooltip { region, lines } => {
+                let p = pixels::tooltip_panel(img, region);
+                let hex = |c: [u8; 3]| format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2]);
+                Measured {
+                    passed: p.panel_fraction >= 0.95 && p.lines >= lines,
+                    detail: format!(
+                        "fill {}, text {}, {:.1}% panel, {} lines (need >= 95%, >= {lines})",
+                        hex(p.fill),
+                        hex(p.ink),
+                        p.panel_fraction * 100.0,
+                        p.lines
+                    ),
                 }
             }
             Measure::Blobs {
@@ -962,9 +980,13 @@ fn t3_window() -> Task {
             check(
                 f,
                 "hover tooltip shown at the hovered point",
-                Measure::Ink {
-                    region: Region::new(0.595, 0.34, 0.705, 0.475),
-                    min_px: 6000,
+                // The tooltip box (border included) measured in a fresh render
+                // is x 595..704, y 239..331 of 1000x700; GUP-465's region
+                // (0.595, 0.34, 0.705, 0.475) overshot the bottom by 2 px,
+                // which put the border row inside the 2 px inset.
+                Measure::Tooltip {
+                    region: Region::new(0.595, 0.3414, 0.704, 0.4729),
+                    lines: 5,
                 },
             ),
             check(

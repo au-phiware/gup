@@ -161,6 +161,101 @@ pub fn count_ink(img: &RgbaImage, region: Region, min_contrast: f32) -> usize {
         .count()
 }
 
+/// What [`tooltip_panel`] found in a region.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Panel {
+    /// The panel's fill: the most common exact colour in the interior.
+    pub fill: [u8; 3],
+    /// The text colour: the most common exact colour among contrasting pixels.
+    pub ink: [u8; 3],
+    /// Fraction of interior pixels on the fill-ink segment (fill, text or an
+    /// antialiased blend of the two).
+    pub panel_fraction: f32,
+    /// Number of separate lines of text.
+    pub lines: usize,
+}
+
+fn mode(it: impl Iterator<Item = [u8; 3]>) -> Option<[u8; 3]> {
+    let mut hist: HashMap<[u8; 3], usize> = HashMap::new();
+    for c in it {
+        *hist.entry(c).or_default() += 1;
+    }
+    // Ties break on the colour so the result is deterministic.
+    hist.into_iter()
+        .max_by_key(|(c, n)| (*n, *c))
+        .map(|(c, _)| c)
+}
+
+/// Largest per-channel distance from `p` to the segment `a..b`.
+fn segment_distance(p: [u8; 3], a: [u8; 3], b: [u8; 3]) -> f32 {
+    let d: [f32; 3] = std::array::from_fn(|i| b[i] as f32 - a[i] as f32);
+    let len2: f32 = d.iter().map(|v| v * v).sum();
+    let t = if len2 == 0.0 {
+        0.0
+    } else {
+        ((0..3)
+            .map(|i| (p[i] as f32 - a[i] as f32) * d[i])
+            .sum::<f32>()
+            / len2)
+            .clamp(0.0, 1.0)
+    };
+    (0..3)
+        .map(|i| (p[i] as f32 - (a[i] as f32 + t * d[i])).abs())
+        .fold(0.0, f32::max)
+}
+
+/// Recognise a tooltip box of any colours in `region`: a panel of one fill
+/// colour holding lines of text in a contrasting colour. The region is
+/// inset by 2 px per side first, to skip a border and sub-pixel slop.
+pub fn tooltip_panel(img: &RgbaImage, region: Region) -> Panel {
+    let (x0, y0, x1, y1) = region.bounds(img);
+    let (x0, y0, x1, y1) = (x0 + 2, y0 + 2, x1.saturating_sub(2), y1.saturating_sub(2));
+    let none = Panel {
+        fill: [0; 3],
+        ink: [0; 3],
+        panel_fraction: 0.0,
+        lines: 0,
+    };
+    if x1 <= x0 || y1 <= y0 {
+        return none;
+    }
+    let px = |x: u32, y: u32| rgb(img.get_pixel(x, y).0);
+    let all = || (y0..y1).flat_map(|y| (x0..x1).map(move |x| (x, y)));
+    let Some(fill) = mode(all().map(|(x, y)| px(x, y))) else {
+        return none;
+    };
+    let fl = luma(fill);
+    let is_text = |c: [u8; 3]| (luma(c) - fl).abs() >= 90.0;
+    let Some(ink) = mode(all().map(|(x, y)| px(x, y)).filter(|c| is_text(*c))) else {
+        return Panel { fill, ..none };
+    };
+    let total = ((x1 - x0) * (y1 - y0)) as f32;
+    let on_panel = all()
+        .filter(|&(x, y)| segment_distance(px(x, y), fill, ink) <= 8.0)
+        .count();
+    let (mut lines, mut run) = (0, 0);
+    for y in y0..y1 {
+        let inked = (x0..x1).filter(|&x| is_text(px(x, y))).count() >= 2;
+        if inked {
+            run += 1;
+        } else {
+            if run >= 3 {
+                lines += 1;
+            }
+            run = 0;
+        }
+    }
+    if run >= 3 {
+        lines += 1;
+    }
+    Panel {
+        fill,
+        ink,
+        panel_fraction: on_panel as f32 / total,
+        lines,
+    }
+}
+
 /// Number of pixels in `region` whose hue is within `tol_deg` of `hue_deg`
 /// and whose HSV saturation is at least `min_sat` (0..1). Hue survives
 /// alpha blending over white and gamma errors far better than exact RGB, so
@@ -352,5 +447,83 @@ mod tests {
     #[test]
     fn hue_wraps_around_red() {
         assert!(hue_distance(355.0, 5.0) <= 10.0);
+    }
+
+    fn tooltip_img(fill: [u8; 3], ink: [u8; 3], bars: usize) -> RgbaImage {
+        let mut img = RgbaImage::from_pixel(200, 160, Rgba([255, 255, 255, 255]));
+        let dot = |img: &mut RgbaImage, x, y, c: [u8; 3]| {
+            img.put_pixel(x, y, Rgba([c[0], c[1], c[2], 255]))
+        };
+        for y in 0..160 {
+            for x in 0..200 {
+                if (x + y) % 5 == 0 {
+                    let hues = [[200, 30, 30], [30, 160, 30], [30, 30, 200]];
+                    dot(&mut img, x, y, hues[(x % 3) as usize]);
+                }
+            }
+        }
+        for y in 20..140 {
+            for x in 30..150 {
+                let edge = x == 30 || x == 149 || y == 20 || y == 139;
+                dot(&mut img, x, y, if edge { [0x99; 3] } else { fill });
+            }
+        }
+        for i in 0..bars as u32 {
+            let top = 30 + i * 17;
+            for y in top..top + 12 {
+                for x in 40..110 {
+                    dot(&mut img, x, y, ink);
+                }
+                // Antialiasing column.
+                let mid = [0, 1, 2].map(|c| ((fill[c] as u16 + ink[c] as u16) / 2) as u8);
+                dot(&mut img, 110, y, mid);
+            }
+        }
+        img
+    }
+
+    const TIP: Region = Region::new(0.15, 0.125, 0.75, 0.875);
+
+    #[test]
+    fn tooltip_panel_recognises_light_and_dark_panels() {
+        let light = tooltip_panel(&tooltip_img([255; 3], [0x33; 3], 5), TIP);
+        assert_eq!(
+            (light.fill, light.ink, light.lines),
+            ([255; 3], [0x33; 3], 5)
+        );
+        assert!(light.panel_fraction >= 0.95, "{light:?}");
+        let dark = tooltip_panel(&tooltip_img([0x1b; 3], [255; 3], 5), TIP);
+        assert_eq!((dark.fill, dark.ink, dark.lines), ([0x1b; 3], [255; 3], 5));
+        assert!(dark.panel_fraction >= 0.95, "{dark:?}");
+    }
+
+    #[test]
+    fn tooltip_panel_counts_lines() {
+        let p = tooltip_panel(&tooltip_img([255; 3], [0x33; 3], 2), TIP);
+        assert_eq!(p.lines, 2);
+    }
+
+    #[test]
+    fn tooltip_panel_rejects_dots_without_a_panel() {
+        let img = tooltip_img([255; 3], [0x33; 3], 5);
+        // Outside the box: coloured dots on white.
+        let p = tooltip_panel(&img, Region::new(0.78, 0.02, 0.99, 0.98));
+        assert!(p.panel_fraction < 0.95 && p.lines < 5, "{p:?}");
+    }
+
+    #[test]
+    fn tooltip_panel_rejects_marks_over_the_panel() {
+        let mut img = tooltip_img([255; 3], [0x33; 3], 5);
+        // Cover about 10% of the interior with coloured dots, off the
+        // fill-ink segment.
+        for y in 24..136 {
+            for x in 34..146 {
+                if (x * 7 + y * 13) % 10 == 0 {
+                    img.put_pixel(x, y, Rgba([200, 30, 30, 255]));
+                }
+            }
+        }
+        let p = tooltip_panel(&img, TIP);
+        assert!(p.panel_fraction < 0.95, "{p:?}");
     }
 }
