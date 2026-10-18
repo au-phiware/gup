@@ -9,8 +9,8 @@ implementer-reason:
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 🚧 In Progress **Created**:
-2026-10-18
+**Initiative**: RFC-001 Migration **Status**: ✅ Complete (2026-10-18)
+**Created**: 2026-10-18
 
 ## Context
 
@@ -55,24 +55,24 @@ This story follows the pattern GUP-462 sets: module, materialisation rule,
 
 ### AC1: API
 
-- [ ] `gup_core::line`, `LineChart<T>`, `Plot::layers_mut` and the two
+- [x] `gup_core::line`, `LineChart<T>`, `Plot::layers_mut` and the two
       `ColumnValue` impls exist as in Decisions, with doctests. Closures need no
       annotations.
 
 ### AC2: Series and byte-identity
 
-- [ ] In `tests/builders.rs`, 3 series × 200 rows, interleaved by date as a CSV
+- [x] In `tests/builders.rs`, 3 series × 200 rows, interleaved by date as a CSV
       would be, render byte-identical with
       `line(rows).x(..).y(..).color(|r| r.ticker.as_str())` and with the
       equivalent hand-built `Plot`: three `plot.line(..)` layers over the
       partitioned rows, each `.color(cat.encode_key(..))` through one shared
       `ScaleRef<Categorical>`.
-- [ ] Series appear in first-seen key order, which is also the legend order.
+- [x] Series appear in first-seen key order, which is also the legend order.
       Rows keep their data order within each series.
 
 ### AC3: Golden
 
-- [ ] A golden, `gup_core/builder_line`, at 800 × 450:
+- [x] A golden, `gup_core/builder_line`, at 800 × 450:
   - 3 series of daily values over 5 years, with x through
     `.x_scale(Time::new())` and Unix seconds;
   - y as `Option<f64>`, with a 10-day gap of `None` in one series;
@@ -81,21 +81,21 @@ This story follows the pattern GUP-462 sets: module, materialisation rule,
   The implementer reads it: year ticks on x, three coloured lines, one visible
   gap, one titled legend, grid lines.
 
-- [ ] Pixel check: on the gap series, the column at the middle of the gap has
+- [x] Pixel check: on the gap series, the column at the middle of the gap has
       none of that series' colour inside the plot rect. Columns just either side
       have it.
 
 ### AC4: Escape hatches
 
-- [ ] `layers_mut()` returns the 3 layers in series order. Setting `.width(..)`
+- [x] `layers_mut()` returns the 3 layers in series order. Setting `.width(..)`
       on one through it changes only that series (pixel check of thickness).
-- [ ] `pick(at)` on a line returns the nearer endpoint row of the segment under
+- [x] `pick(at)` on a line returns the nearer endpoint row of the segment under
       `at` (the S8b rule).
-- [ ] A layer setter after the first render panics with GUP-462's message.
+- [x] A layer setter after the first render panics with GUP-462's message.
 
 ### AC5: `Option` values everywhere
 
-- [ ] `plot.circles(rows).x(|r| r.a).y(|r| r.maybe)` with `maybe: Option<f64>`
+- [x] `plot.circles(rows).x(|r| r.a).y(|r| r.maybe)` with `maybe: Option<f64>`
       compiles, and `None` rows are not drawn (pixel check). `Option<f32>` too.
 
 ## Decisions
@@ -159,10 +159,10 @@ This story follows the pattern GUP-462 sets: module, materialisation rule,
 
 ## Technical Tasks
 
-- [ ] `ColumnValue` for `Option<f64>` and `Option<f32>`; AC5 test.
-- [ ] `Plot::layers_mut`.
-- [ ] `builder/line.rs`: `line`, `LineChart`, split, `Chart` impl.
-- [ ] Tests and golden (AC2–AC4).
+- [x] `ColumnValue` for `Option<f64>` and `Option<f32>`; AC5 test.
+- [x] `Plot::layers_mut`.
+- [x] `builder/line.rs`: `line`, `LineChart`, split, `Chart` impl.
+- [x] Tests and golden (AC2–AC4).
 
 ## Dependencies
 
@@ -184,7 +184,7 @@ This story follows the pattern GUP-462 sets: module, materialisation rule,
 
 ## Success Metrics
 
-- [ ] Dogfood task 1's chart is about ten lines of user code, with no domains,
+- [x] Dogfood task 1's chart is about ten lines of user code, with no domains,
       SVG or legend workaround.
 
 ## Risk Assessment
@@ -195,13 +195,75 @@ This story follows the pattern GUP-462 sets: module, materialisation rule,
 
 ## Definition of Done
 
-- [ ] First code commit within 30 minutes of starting; then commit at each
+- [x] First code commit within 30 minutes of starting; then commit at each
       checkpoint (story-worker "Checkpoint rule")
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -p gup-core -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye: `gup_core/builder_line.png`
-- [ ] `mask old-path-loc` recorded (expected unchanged, 28,910)
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -p gup-core -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye: `gup_core/builder_line.png`
+- [x] `mask old-path-loc` recorded: 28,910, unchanged
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `crates/gup-core/src/builder/line.rs`: `line`, `LineChart<T>`, split by key
+  (rows moved, first-seen order), `Chart` impl; exported from the crate root.
+  `Plot::layers_mut` in `plot.rs`; `ColumnValue` for `Option<f64>` and
+  `Option<f32>` in `encoding.rs` (the `borrowing_accessor.stderr` trybuild
+  snapshot now lists them).
+- Tests in `tests/builders.rs` (10 new, 16 in the file): byte-identity against
+  the hand-built plot, series and data order, golden with gap and legend pixel
+  checks, `layers_mut` per-series width, S8b pick, panic after draw,
+  `stroke`/`color` exclusivity, `Option` positions for circles (f64, f32).
+- Golden: `tests/golden/gup_core/builder_line.png`, read and zoomed: year ticks,
+  three distinct Okabe-Ito lines, one titled legend, Y grid, a clean 3 px gap in
+  Bravo mid-2021, crisp joins.
+- Evidence: `mask old-path-loc` 28,910 (unchanged); `mask wasm-size` scatter
+  315,804 B gz (unchanged), over_wgpu 283,444; `mask wasm-browser` PASS;
+  `mask perf-budget` run twice at load 9.1 and 4.0: only `zoom.cpu.median_ms` /
+  `zoom_culled.cpu.median_ms` failed, by different checks each run, in paths
+  this story does not touch (CPU timing under load); all counters exact.
+
+## Retrospective
+
+**Completed**: 2026-10-18
+
+### Key Technical Learnings
+
+#### Per-layer ops must be `Fn`
+
+- **Challenge**: scatter's recorded ops are `FnOnce`; a line chart applies them
+  to every series.
+- **Solution**: ops are `Fn + Send + Sync`; user accessors are held in an `Arc`
+  and cloned into each layer's closure.
+- **Pattern**: a builder that makes N layers shares accessors by `Arc`, with no
+  `Clone` bound on the row type.
+
+#### Public `Option` impls change trybuild snapshots
+
+- **Challenge**: new `ColumnValue` impls appear in rustc's "other types
+  implement" help, failing `compile_fail`.
+- **Solution**: `TRYBUILD=overwrite`, diff checked (only the two impls).
+
+### Architectural Decisions
+
+#### One shared `ScaleRef<Categorical>` created at materialise
+
+- **Decision**: one dictionary for all layers, so the legend is one.
+- **Trade-off**: the legend title is set on every layer, relying on the legend
+  merge; the golden shows one titled legend.
+
+### Development Workflow Insights
+
+- `Selection` has no public rows accessor, so order tests use pixels and pick
+  instead of inspecting layers.
+- The 10-day gap is about 3 px at 800 px wide over 5 years: visible, and the
+  pixel check at its middle column passes.
+- The newcomer friction from GUP-462 is unchanged: `let mut chart` before
+  rendering, owned rows. Not widened.
+
+### Follow-up Stories
+
+None. Curves and area charts are T5 (out of scope as written).
