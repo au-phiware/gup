@@ -109,6 +109,12 @@ still uses the old core: the quarantined `crates/gup-culling-lod` (`GupContext`,
 
 ## Decisions
 
+- **Owner decisions (2026-10-19)**: park `crates/gup-culling-lod` (out of the
+  workspace and CI, code kept frozen in the tree; GUP-457 replaces its culling),
+  and approve the full flip scope: delete nearly all of the old `src/` tree,
+  `performance.yml` and the old `gup-macros`, ending at `mask old-path-loc` 0.
+  Every deletion step keeps CI and dogfood green.
+
 - **Facade**: `pub use gup_core::*;`. The whole public surface of `gup-core`
   (its root items, `prelude`, `wgpu`, the macros, the doc-hidden `__private` the
   macros need) becomes `gup`'s. Reason: one curated surface, maintained in
