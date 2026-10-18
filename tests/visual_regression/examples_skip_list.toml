@@ -18,22 +18,6 @@
 # Known windowed failures are tracked in expected_failures.toml.
 
 [[skip]]
-name = "01_hello_chart"
-reason = "Windowed (gup_core::show); its GUP_SCREENSHOT_PATH capture needs a display"
-
-[[skip]]
-name = "03_line_chart"
-reason = "Windowed (gup_core::show); its GUP_SCREENSHOT_PATH capture needs a display"
-
-[[skip]]
-name = "04_bar_chart"
-reason = "Windowed (gup_core::show); its GUP_SCREENSHOT_PATH capture needs a display"
-
-[[skip]]
-name = "composite_mixed_data"
-reason = "Windowed (gup_core::show); its GUP_SCREENSHOT_PATH capture needs a display"
-
-[[skip]]
 name = "02_scatter_window"
 reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
 
@@ -51,7 +35,7 @@ reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
 
 [[skip]]
 name = "boxplot_rendering_demo"
-reason = "Windowed (gup_core::show); its GUP_SCREENSHOT_PATH capture needs a display"
+reason = "GupApp window shell has no GUP_SCREENSHOT_PATH mode (GUP-375/GUP-376)"
 
 [[skip]]
 name = "brush_selection"
@@ -68,10 +52,6 @@ reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
 [[skip]]
 name = "gpu_selection_demo"
 reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
-
-[[skip]]
-name = "hello_world"
-reason = "Windowed (gup_core::show); its GUP_SCREENSHOT_PATH capture needs a display"
 
 [[skip]]
 name = "hover_reveal_demo"

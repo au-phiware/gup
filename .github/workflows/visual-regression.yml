@@ -43,7 +43,9 @@ jobs:
       - name: Install software Vulkan (lavapipe)
         run: |
           sudo apt-get update
-          sudo apt-get install -y mesa-vulkan-drivers libvulkan1
+          sudo apt-get install -y --no-install-recommends \
+            mesa-vulkan-drivers libvulkan1 libegl1 libgl1 \
+            xvfb xauth libxkbcommon-x11-0 libx11-xcb1 libxcursor1 libxi6 libxrandr2
 
       - name: Cache Cargo registry and build
         uses: actions/cache@v4
@@ -92,8 +94,8 @@ jobs:
 
       - name: Examples smoke test (skip list + headless runs)
         run: >-
-          cargo test --all-features --test examples_smoke -- --include-ignored
-          --test-threads=1
+          xvfb-run -a cargo test --all-features --test examples_smoke --
+          --include-ignored --test-threads=1
 
       - name: Upload renders and diffs
         if: always()
