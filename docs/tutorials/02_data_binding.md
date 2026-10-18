@@ -1,5 +1,8 @@
 # Tutorial 2: Data Binding
 
+**Out of date until T6:** this tutorial shows the old builders (deleted in
+GUP-466); T6's docs-as-tests rewrite replaces it.
+
 > **Goal**: Bind a custom Rust struct to a `Selection<T, M>`, map its fields to
 > visual attributes, and update the data at runtime.
 

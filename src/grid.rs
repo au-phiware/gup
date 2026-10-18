@@ -32,9 +32,9 @@
 //! The simplest way to add grids is through the chart builder:
 //!
 //! ```rust,ignore
-//! use gup::chart_builder::ScatterPlotBuilder;
+//! use gup::chart_builder::AreaChartBuilder;
 //!
-//! let chart = ScatterPlotBuilder::new()
+//! let chart = AreaChartBuilder::new()
 //!     .data(data)
 //!     .grid()  // Enable with professional defaults
 //!     .build()?;

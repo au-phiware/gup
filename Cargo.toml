@@ -179,10 +179,6 @@ name = "linear_scale_composition"
 harness = false
 
 [[bench]]
-name = "bar_chart_100k"
-harness = false
-
-[[bench]]
 name = "force_layout_benchmarks"
 harness = false
 
@@ -297,19 +293,6 @@ path = "examples/basic/03_line_chart.rs"
 name = "04_bar_chart"
 path = "examples/basic/04_bar_chart.rs"
 
-# Intermediate Examples
-[[example]]
-name = "styled_scatter"
-path = "examples/intermediate/styled_scatter.rs"
-
-[[example]]
-name = "multi_series_line"
-path = "examples/intermediate/multi_series_line.rs"
-
-[[example]]
-name = "categorical_bar"
-path = "examples/intermediate/categorical_bar.rs"
-
 # Tutorial Examples — one per tutorial for exact code-to-window match
 [[example]]
 name = "tutorial01_scatter"
@@ -328,10 +311,6 @@ name = "tutorial06_custom_marks"
 path = "examples/tutorials/tutorial06_custom_marks.rs"
 
 # Showcase Examples
-[[example]]
-name = "business_dashboard"
-path = "examples/showcase/business_dashboard.rs"
-
 [[example]]
 name = "geo_world_map"
 path = "examples/geo_world_map.rs"

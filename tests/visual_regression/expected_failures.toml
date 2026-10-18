@@ -25,34 +25,10 @@ reason = "render_to_rgba()/PNG output draws no text at all: no title, tick label
 tracking = "RFC-001 S0a (headless PNG with title and tick labels); old path deleted at S14"
 
 [[expected]]
-case = "chart_builders/bar"
-check = "color_present"
-reason = "configured colour is sRGB-encoded twice: #1f77b4 renders as #62b6db"
-tracking = "RFC-001 S3 (sRGB-space colour policy)"
-
-[[expected]]
-case = "chart_builders/line"
-check = "color_present"
-reason = "configured colour is sRGB-encoded twice: #2ca02c renders as #73cf73"
-tracking = "RFC-001 S3 (sRGB-space colour policy)"
-
-[[expected]]
 case = "chart_builders/area"
 check = "color_present"
 reason = "configured colour is sRGB-encoded twice: #9467bd renders as #c9aae0-ish blends"
 tracking = "RFC-001 S3 (sRGB-space colour policy)"
-
-[[expected]]
-case = "chart_builders/composite"
-check = "color_present"
-reason = "configured bar and line colours are sRGB-encoded twice (#1f77b4 -> #62b6db, #d62728 -> #ec6d6e-ish)"
-tracking = "RFC-001 S3 (sRGB-space colour policy) and S11 (composite on Plot)"
-
-[[expected]]
-case = "chart_builders/scatter"
-check = "color_present"
-reason = "fill_color() is ignored: points render solid black (and as ellipses, not circles, on a 4:3 canvas)"
-tracking = "GUP-393 (parked) -> RFC-001 S10 (scatter on gup-core)"
 
 [[expected]]
 case = "chart_builders/boxplot"
@@ -77,12 +53,6 @@ case = "chart_builders/area_explicit_scales"
 check = "marks_confined"
 reason = "area-chart fan explosion (same as chart_builders/area) with explicit scales"
 tracking = "GUP-393 (parked, absorbs GUP-384) -> RFC-001 S14 / T5 port"
-
-[[expected]]
-case = "chart_builders/composite"
-check = "marks_confined"
-reason = "bar layer rectangles cover most of the canvas instead of the plot rect (headless render via prepare_render + draw)"
-tracking = "RFC-001 S11 (composite / secondary y on Plot)"
 
 [[expected]]
 case = "chart_builders/density"

@@ -21,10 +21,9 @@ github_base = "https://github.com/au-phiware/gup/blob/main"
 [[examples]]
 name = "01_hello_chart"
 source = "examples/basic/01_hello_chart.rs"
-description = "Minimal scatter plot (console output only)"
+description = "Minimal scatter chart on gup-core"
 category = "Basic"
-skip = true
-skip_reason = "Console-only output, no GPU rendering"
+skip = false
 
 [[examples]]
 name = "02_scatter_window"
@@ -37,30 +36,19 @@ skip_reason = "Windowed-only (requires EventLoop)"
 [[examples]]
 name = "03_line_chart"
 source = "examples/basic/03_line_chart.rs"
-description = "Line chart API demonstration"
+description = "Line chart with two colour series"
 category = "Basic"
 skip = false
 
 [[examples]]
 name = "04_bar_chart"
 source = "examples/basic/04_bar_chart.rs"
-description = "Bar chart API demonstration"
+description = "Grouped bar chart (--stacked to stack)"
 category = "Basic"
 skip = false
 
 # ---------------------------------------------------------------------------
 # Showcase
-# ---------------------------------------------------------------------------
-
-[[examples]]
-name = "business_dashboard"
-source = "examples/showcase/business_dashboard.rs"
-description = "Multi-chart business dashboard layout"
-category = "Showcase"
-skip = false
-
-# ---------------------------------------------------------------------------
-# Charts & Marks
 # ---------------------------------------------------------------------------
 
 [[examples]]
@@ -126,20 +114,6 @@ skip = true
 skip_reason = "Windowed-only (requires EventLoop)"
 
 [[examples]]
-name = "bar_chart"
-source = "examples/bar_chart.rs"
-description = "Bar chart variations"
-category = "Charts & Marks"
-skip = false
-
-[[examples]]
-name = "line_chart_demo"
-source = "examples/line_chart_demo.rs"
-description = "Line chart rendering demo"
-category = "Charts & Marks"
-skip = false
-
-[[examples]]
 name = "area_chart_demo"
 source = "examples/area_chart_demo.rs"
 description = "Area chart rendering"
@@ -201,36 +175,11 @@ skip = true
 skip_reason = "Console-only (WGSL generation, no GPU rendering)"
 
 [[examples]]
-name = "composite_bar_trend"
-source = "examples/composite_bar_trend.rs"
-description = "Composite bar and trend chart"
-category = "Charts & Marks"
-skip = true
-skip_reason = "Windowed-only (requires EventLoop)"
-
-[[examples]]
-name = "composite_scatter_regression"
-source = "examples/composite_scatter_regression.rs"
-description = "Scatter plot with regression line"
-category = "Charts & Marks"
-skip = true
-skip_reason = "Windowed-only (requires EventLoop)"
-
-[[examples]]
 name = "composite_mixed_data"
 source = "examples/composite_mixed_data.rs"
-description = "Composite chart with per-layer data types"
+description = "One plot over two row types: circles and a line"
 category = "Charts & Marks"
-skip = true
-skip_reason = "Console-only (composite data demo, no GPU rendering)"
-
-[[examples]]
-name = "composite_layer_order"
-source = "examples/composite_layer_order.rs"
-description = "Composite chart with explicit layer z-ordering"
-category = "Charts & Marks"
-skip = true
-skip_reason = "Windowed-only (requires EventLoop)"
+skip = false
 
 [[examples]]
 name = "density_scatter_overlay"
@@ -311,14 +260,6 @@ skip_reason = "Windowed-only (requires EventLoop)"
 name = "scale_axis_integration_demo"
 source = "examples/scale_axis_integration_demo.rs"
 description = "Scale-to-axis integration"
-category = "Axis & Grid"
-skip = true
-skip_reason = "Windowed-only (requires EventLoop)"
-
-[[examples]]
-name = "grid_visual_demo"
-source = "examples/grid_visual_demo.rs"
-description = "Grid line rendering"
 category = "Axis & Grid"
 skip = true
 skip_reason = "Windowed-only (requires EventLoop)"
@@ -802,31 +743,6 @@ skip_reason = "Requires 'pdf' feature flag"
 
 # ---------------------------------------------------------------------------
 # Intermediate
-# ---------------------------------------------------------------------------
-
-[[examples]]
-name = "styled_scatter"
-source = "examples/intermediate/styled_scatter.rs"
-description = "Data-driven styling with categorical colours"
-category = "Intermediate"
-skip = false
-
-[[examples]]
-name = "multi_series_line"
-source = "examples/intermediate/multi_series_line.rs"
-description = "Multiple time series visualisation"
-category = "Intermediate"
-skip = false
-
-[[examples]]
-name = "categorical_bar"
-source = "examples/intermediate/categorical_bar.rs"
-description = "Categorical data with vertical/horizontal bars"
-category = "Intermediate"
-skip = false
-
-# ---------------------------------------------------------------------------
-# Miscellaneous (not in INDEX.md categories)
 # ---------------------------------------------------------------------------
 
 [[examples]]

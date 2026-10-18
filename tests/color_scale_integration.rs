@@ -214,27 +214,9 @@ fn chart_config_color_scale_diverging() {
 }
 
 #[test]
-fn scatter_builder_color_scale() {
-    use gup::chart_builder::builders::scatter;
-
-    let builder = scatter::<()>().color_scale(ColorScale::plasma(0.0, 50.0));
-    // ScatterPlotBuilder stores it in its internal config.
-    // (config is pub(crate), so we just verify the builder compiled.)
-    let _ = builder;
-}
-
-#[test]
 fn heatmap_builder_color_scale() {
     use gup::chart_builder::builders::heatmap;
 
     let builder = heatmap::<()>().color_scale(ColorScale::magma(0.0, 255.0));
-    let _ = builder;
-}
-
-#[test]
-fn line_builder_color_scale() {
-    use gup::chart_builder::builders::line;
-
-    let builder = line::<()>().color_scale(ColorScale::inferno(-10.0, 40.0));
     let _ = builder;
 }

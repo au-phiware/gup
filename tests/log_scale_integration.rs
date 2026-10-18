@@ -5,13 +5,8 @@
 //!
 //! Validates:
 //! - LogScale → ColorMap composition via ShaderPipeline
-//! - ScatterPlotBuilder with explicit LogScale for axis tick generation
 //! - WGSL compilation of the generated log_scale code on the GPU
 
-use gup::RenderContext;
-use gup::chart_builder::ChartBuilder;
-use gup::chart_builder::accessor::AccessorValue;
-use gup::chart_builder::builders::{AccessorFunction, ScatterPlotBuilder};
 use gup::error::GupResult;
 use gup::shader_function::{
     ColorMap, ComposableFunction, ComposableShaderFunction, LogScale, ShaderUniform, Vec4,
@@ -67,54 +62,6 @@ fn log_scale_symmetric_compose_with_color_map() {
     // Verify the LogScale uniforms contain symmetric flag.
     let chain = uniforms.unwrap();
     assert_eq!(chain.first.symmetric, 1);
-}
-
-// ---------------------------------------------------------------------------
-// AC6: ScatterPlotBuilder with LogScale Y-axis
-// ---------------------------------------------------------------------------
-
-#[derive(Debug, Clone)]
-struct DataPoint {
-    x: f32,
-    y: f32,
-}
-
-#[tokio::test]
-async fn scatter_builder_with_log_y_scale_generates_ticks() -> GupResult<()> {
-    let render_context = std::sync::Arc::new(RenderContext::new().await?);
-
-    let data = vec![
-        DataPoint { x: 1.0, y: 1.0 },
-        DataPoint { x: 2.0, y: 10.0 },
-        DataPoint { x: 3.0, y: 100.0 },
-        DataPoint { x: 4.0, y: 1000.0 },
-    ];
-
-    let chart = ScatterPlotBuilder::<DataPoint>::new()
-        .x(AccessorFunction::new(|d: &DataPoint| {
-            AccessorValue::Float(d.x)
-        }))
-        .y(AccessorFunction::new(|d: &DataPoint| {
-            AccessorValue::Float(d.y)
-        }))
-        .y_scale(LogScale::new(10.0).domain(1.0, 1000.0).range(0.0, 1.0))
-        .build_with_data(data, render_context)?;
-
-    // The chart should have been built with axes.
-    assert!(chart.bottom_axis.is_some(), "Should have a bottom axis");
-    assert!(chart.left_axis.is_some(), "Should have a left axis");
-
-    // Verify that axis geometry generation works with the log scale.
-    let geom = chart.generate_axis_geometry_instanced();
-    assert!(
-        !geom.tick_instances.is_empty(),
-        "Log-scale axis should produce tick instances"
-    );
-
-    // Verify the y_scale is stored as AxisScale::Log.
-    assert!(chart.config.y_scale.is_some(), "y_scale should be stored");
-
-    Ok(())
 }
 
 // ---------------------------------------------------------------------------

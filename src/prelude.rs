@@ -15,17 +15,11 @@ pub use crate::chart_builder::{
     AxisScale, ChartBuilder, ChartConfig,
     accessor::{AccessorValue, ConstantAccessor},
     builders::{
-        AccessorFunction, AreaChartBuilder, BarChartBuilder, ConfigurableBuilder,
-        GridCapableBuilder, HeatmapBuilder, LineChartBuilder, LineInterpolation, LineSegment,
-        ScatterPlotBuilder, area,
+        AccessorFunction, AreaChartBuilder, ConfigurableBuilder, GridCapableBuilder,
+        HeatmapBuilder, area,
         area::{AreaSegment, StackMode},
-        bar,
-        bar::{Category, Orientation},
-        composite,
-        composite::{CompositeChart, CompositeChartBuilder, IntoChartLayer, YAxisAssignment},
         heatmap,
         heatmap::{AggregateFunc, HeatmapCell},
-        line, scatter,
     },
 };
 

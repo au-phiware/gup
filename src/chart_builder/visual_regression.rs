@@ -11,7 +11,6 @@
 //! path supplies the same two values from an adapter of its own.
 
 use crate::chart_builder::ComposedChart;
-use crate::chart_builder::builders::composite::CompositeChart;
 use crate::selection::Mark;
 use crate::{MaybeSend, MaybeSync};
 use gup_visual_regression::golden::default_artifact_dir;
@@ -30,16 +29,11 @@ mod builder_cases;
 pub(crate) const BUILDER_CASES: &[&str] = &[
     "chart_builders/area",
     "chart_builders/area_explicit_scales",
-    "chart_builders/bar",
     "chart_builders/boxplot",
     "chart_builders/choropleth",
-    "chart_builders/composite",
     "chart_builders/density",
     "chart_builders/gpu_density",
     "chart_builders/heatmap",
-    "chart_builders/line",
-    "chart_builders/line_explicit_scales",
-    "chart_builders/scatter",
     "chart_builders/violin",
 ];
 
@@ -116,56 +110,6 @@ where
         .map_err(|e| format!("render_to_rgba failed: {e}"))?;
     let image = RgbaImage::new(w, h, pixels).map_err(|e| e.to_string())?;
     Ok((image, chart_layout(chart)))
-}
-
-/// Render a composite chart offscreen through its public
-/// `prepare_render()` + `draw()` API (it has no `render_to_rgba`).
-pub(crate) fn capture_composite<T>(
-    chart: &mut CompositeChart<T>,
-) -> Result<(RgbaImage, LayoutMetadata), String>
-where
-    T: Clone + MaybeSend + MaybeSync + std::fmt::Debug + 'static,
-{
-    let (w, h) = chart_size(chart.primary());
-    let context = chart
-        .primary()
-        .visualization
-        .context()
-        .cloned()
-        .ok_or("composite primary layer has no RenderContext")?;
-    let pixels = catch_unwind(AssertUnwindSafe(|| {
-        let device = context.device();
-        let queue = context.queue();
-        let target = crate::export::png::OffscreenTarget::new(device, w, h);
-        chart.prepare_render(device, queue, wgpu::TextureFormat::Bgra8UnormSrgb)?;
-        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
-            label: Some("visual_regression_composite_encoder"),
-        });
-        {
-            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("visual_regression_composite_pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: target.view(),
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color::WHITE),
-                        store: wgpu::StoreOp::Store,
-                    },
-                    depth_slice: None,
-                })],
-                depth_stencil_attachment: None,
-                timestamp_writes: None,
-                occlusion_query_set: None,
-            });
-            chart.draw(&mut pass)?;
-        }
-        queue.submit(std::iter::once(encoder.finish()));
-        target.readback_pixels(device, queue)
-    }))
-    .map_err(|p| format!("composite render panicked: {}", panic_message(p)))?
-    .map_err(|e| format!("composite render failed: {e}"))?;
-    let image = RgbaImage::new(w, h, pixels).map_err(|e| e.to_string())?;
-    Ok((image, chart_layout(chart.primary())))
 }
 
 /// Capture a choropleth chart. `ChoroplethChart` resolves CPU fill/stroke

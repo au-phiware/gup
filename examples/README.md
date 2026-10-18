@@ -15,10 +15,10 @@ These examples teach fundamental concepts step-by-step:
 
 | Example             | Description                         | Run Command                             |
 | ------------------- | ----------------------------------- | --------------------------------------- |
-| `01_hello_chart`    | Minimal scatter plot (console only) | `cargo run --example 01_hello_chart`    |
+| `01_hello_chart`    | Minimal scatter chart on `gup-core` | `cargo run --example 01_hello_chart`    |
 | `02_scatter_window` | Visual scatter plot in a window     | `cargo run --example 02_scatter_window` |
-| `03_line_chart`     | Line chart API demonstration        | `cargo run --example 03_line_chart`     |
-| `04_bar_chart`      | Bar chart API demonstration         | `cargo run --example 04_bar_chart`      |
+| `03_line_chart`     | Line chart with two colour series   | `cargo run --example 03_line_chart`     |
+| `04_bar_chart`      | Grouped or stacked bar chart        | `cargo run --example 04_bar_chart`      |
 
 **Recommended Order:**
 
@@ -26,30 +26,13 @@ These examples teach fundamental concepts step-by-step:
 2. Move to `02_scatter_window` to see GPU rendering in action
 3. Explore `03_line_chart` and `04_bar_chart` to learn different chart types
 
-### 2. Intermediate Examples (`intermediate/`)
-
-Once you're comfortable with the basics, these examples show advanced features:
-
-| Example             | Description                                    | Run Command                             |
-| ------------------- | ---------------------------------------------- | --------------------------------------- |
-| `styled_scatter`    | Data-driven styling with colors and sizes      | `cargo run --example styled_scatter`    |
-| `multi_series_line` | Multiple line series with different colors     | `cargo run --example multi_series_line` |
-| `categorical_bar`   | Bar charts with categorical data and gradients | `cargo run --example categorical_bar`   |
-
-**What You'll Learn:**
-
-- Data-driven styling and color mapping
-- Working with multiple data series
-- Category-based visualizations
-- Professional chart styling techniques
-
 | Example             | Description                               |
 | ------------------- | ----------------------------------------- |
 | `simple_window`     | Basic window with color cycling           |
 | `scatter_plot_demo` | Advanced scatter plot with custom shaders |
 | `windowed_demo`     | Multi-feature window demo                 |
 
-### 6. Feature-Specific Deep Dives
+### 2. Feature-Specific Deep Dives
 
 Deep dives into specific library capabilities:
 
@@ -58,9 +41,8 @@ Deep dives into specific library capabilities:
 | `observable_plot_visual_showcase` | Visual Observable Plot examples |
 | `label_formatting_demo`           | Advanced label formatting       |
 | `axis_showcase`                   | Axis configuration options      |
-| `grid_visual_demo`                | Grid styling and customization  |
 
-### 7. Technical Deep Dives
+### 3. Technical Deep Dives
 
 For understanding the library internals:
 
@@ -108,28 +90,18 @@ struct MyData {
 }
 ```
 
-### Accessor Functions
-
-Accessors tell Gup how to extract values from your data:
-
-```rust
-let x_accessor = AccessorFunction::new(|d: &MyData| AccessorValue::Float(d.x));
-let y_accessor = AccessorFunction::new(|d: &MyData| AccessorValue::Float(d.y));
-```
-
 ### Chart Builders
 
-Observable Plot-style fluent API:
+Each encoding is one closure over your rows:
 
 ```rust
-let chart = scatter()
-    .x(x_accessor)
-    .y(y_accessor)
-    .title("My Chart")
-    .point_size(10.0)
-    .fill_color([0.2, 0.6, 0.9, 1.0]);
+let chart = gup_core::scatter(data)
+    .x(|d| d.x)
+    .y(|d| d.y)
+    .radius(10.0)
+    .title("My Chart");
 
-let selection = chart.build_with_data(data, context)?;
+gup_core::show(chart)?;
 ```
 
 ### GPU Context
@@ -142,13 +114,13 @@ let context = Arc::new(RenderContext::new().await?);
 
 ## Chart Types
 
-| Builder     | Mark Type    | Status                           |
-| ----------- | ------------ | -------------------------------- |
-| `scatter()` | Circles      | ✅ Full support                  |
-| `line()`    | Lines        | 🚧 API ready, visual in progress |
-| `bar()`     | Rectangles   | 🚧 API ready, visual in progress |
-| `area()`    | Filled areas | 🚧 API ready, visual in progress |
-| `heatmap()` | Color grids  | 🚧 API ready, visual in progress |
+| Builder               | Mark Type    | Status                           |
+| --------------------- | ------------ | -------------------------------- |
+| `gup_core::scatter()` | Circles      | ✅ Full support                  |
+| `gup_core::line()`    | Lines        | ✅ Full support                  |
+| `gup_core::bar()`     | Rectangles   | ✅ Full support                  |
+| `area()`              | Filled areas | 🚧 API ready, visual in progress |
+| `heatmap()`           | Color grids  | 🚧 API ready, visual in progress |
 
 ## Window Controls
 

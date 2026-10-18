@@ -13,19 +13,11 @@ Run any example with: `cargo run --example <name>`
 
 | Example             | Description                                                 |
 | ------------------- | ----------------------------------------------------------- |
-| `01_hello_chart`    | Minimal scatter plot (console output only)                  |
+| `01_hello_chart`    | Minimal scatter chart on `gup-core`                         |
 | `02_scatter_window` | Visual scatter plot in a GPU window                         |
-| `03_line_chart`     | Line chart API demonstration                                |
-| `04_bar_chart`      | Bar chart API demonstration                                 |
+| `03_line_chart`     | Line chart with two colour series                           |
+| `04_bar_chart`      | Grouped (or stacked) bar chart                              |
 | `hello_world`       | A sine-wave scatter with tooltips in a window, in ten lines |
-
----
-
-## Showcase (`showcase/`)
-
-| Example              | Description                           |
-| -------------------- | ------------------------------------- |
-| `business_dashboard` | Multi-chart business dashboard layout |
 
 ---
 
@@ -41,8 +33,6 @@ Run any example with: `cargo run --example <name>`
 | `observable_plot_visual_showcase` | Visual showcase of chart builder API              |
 | `custom_mark_demo`                | Implementing a custom mark type                   |
 | `multi_pass_mark_demo`            | Multi-pass mark rendering                         |
-| `bar_chart`                       | Bar chart variations                              |
-| `line_chart_demo`                 | Line chart rendering demo                         |
 | `area_chart_demo`                 | Area chart rendering                              |
 | `heatmap_chart`                   | Heatmap chart rendering                           |
 | `violin_plot_demo`                | Violin plot rendering                             |
@@ -53,10 +43,7 @@ Run any example with: `cargo run --example <name>`
 | `choropleth_world_population`     | Choropleth world population map                   |
 | `choropleth_gpu_recolor`          | GPU-side choropleth recolouring demo              |
 | `color_scale_heatmap`             | Colour scale heatmap                              |
-| `composite_bar_trend`             | Composite bar and trend chart                     |
-| `composite_scatter_regression`    | Scatter plot with regression line                 |
-| `composite_mixed_data`            | Composite chart with per-layer data types         |
-| `composite_layer_order`           | Composite chart with explicit layer z-ordering    |
+| `composite_mixed_data`            | One plot over two row types                       |
 | `geo_world_map`                   | World map geographic rendering                    |
 | `geographic_projection`           | Geographic projection demo                        |
 | `force_directed_graph`            | Force-directed graph layout                       |
@@ -73,7 +60,6 @@ Run any example with: `cargo run --example <name>`
 | `axis_tick_integration_visual_demo` | Axis tick rendering integration          |
 | `tick_generation_visual_demo`       | Automatic tick generation algorithm demo |
 | `scale_axis_integration_demo`       | Scale-to-axis integration                |
-| `grid_visual_demo`                  | Grid line rendering                      |
 | `grid_scatter_demo`                 | Grid with scatter plot overlay           |
 | `label_formatting_demo`             | Axis label formatting and positioning    |
 
@@ -212,16 +198,6 @@ Run any example with: `cargo run --example <name>`
 | `svg_export`  | SVG export demonstration                |
 | `html_export` | HTML export demonstration               |
 | `pdf_export`  | PDF export demonstration                |
-
----
-
-## Intermediate (`intermediate/`)
-
-| Example             | Description                                    |
-| ------------------- | ---------------------------------------------- |
-| `styled_scatter`    | Data-driven styling with categorical colours   |
-| `multi_series_line` | Multiple time series visualisation             |
-| `categorical_bar`   | Categorical data with vertical/horizontal bars |
 
 ---
 

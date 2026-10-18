@@ -32,7 +32,7 @@
 //!     SalesPoint { revenue: 200.0, profit: 45.0, region: "South".to_string() },
 //! ];
 //!
-//! let chart = scatter()
+//! let chart = area()
 //!     .x(|d: &SalesPoint| AccessorValue::Float(d.revenue))
 //!     .y(|d: &SalesPoint| AccessorValue::Float(d.profit))
 //!     .title("Revenue vs profit");
@@ -4555,25 +4555,6 @@ mod tests_hover_reveal {
         );
     }
 
-    #[test]
-    fn test_scatter_builder_hover_reveal() {
-        use crate::chart_builder::builders::{ConfigurableBuilder, scatter};
-        let builder = scatter::<D>().hover_reveal(true);
-        assert!(builder.config.hover_reveal);
-    }
-
-    #[test]
-    fn test_scatter_builder_tooltip_config() {
-        use crate::chart_builder::builders::{ConfigurableBuilder, scatter};
-        let tooltip = TooltipConfig {
-            font_size: 20.0,
-            ..TooltipConfig::default()
-        };
-        let builder = scatter::<D>().tooltip_config(tooltip);
-        assert!(builder.config.hover_reveal);
-        assert!((builder.config.tooltip_config.font_size - 20.0).abs() < f32::EPSILON);
-    }
-
     // --- GPU-dependent tests ---
 
     #[tokio::test]
@@ -4762,20 +4743,6 @@ mod tests_hover_reveal {
     }
 
     // --- Builder trait conformance tests ---
-
-    #[test]
-    fn test_line_builder_hover_reveal() {
-        use crate::chart_builder::builders::{ConfigurableBuilder, line};
-        let builder = line::<D>().hover_reveal(true);
-        assert!(builder.config.hover_reveal);
-    }
-
-    #[test]
-    fn test_bar_builder_hover_reveal() {
-        use crate::chart_builder::builders::{ConfigurableBuilder, bar};
-        let builder = bar::<D>().hover_reveal(true);
-        assert!(builder.config.hover_reveal);
-    }
 
     #[test]
     fn test_area_builder_hover_reveal() {
@@ -4976,105 +4943,4 @@ mod tests_colorbar {
     }
 
     // ── Data-mark rendering tests ────────────────────────────────────────
-
-    #[tokio::test]
-    async fn test_scatter_builder_produces_render_ready_selection() {
-        use crate::chart_builder::accessor::AccessorValue;
-        use crate::chart_builder::builders::{AccessorFunction, scatter};
-
-        #[derive(Debug, Clone)]
-        struct P {
-            x: f32,
-            y: f32,
-        }
-
-        let context = Arc::new(RenderContext::new().await.unwrap());
-        let data = vec![
-            P { x: 1.0, y: 2.0 },
-            P { x: 3.0, y: 4.0 },
-            P { x: 5.0, y: 6.0 },
-        ];
-
-        let chart = scatter()
-            .x(AccessorFunction::new(|d: &P| AccessorValue::Float(d.x)))
-            .y(AccessorFunction::new(|d: &P| AccessorValue::Float(d.y)))
-            .build_with_data(data, context)
-            .unwrap();
-
-        assert!(
-            chart.visualization.is_render_ready(),
-            "Selection should be render-ready after build_with_data"
-        );
-    }
-
-    #[tokio::test]
-    async fn test_draw_data_marks_returns_nonzero_count() {
-        use crate::chart_builder::accessor::AccessorValue;
-        use crate::chart_builder::builders::{AccessorFunction, scatter};
-
-        #[derive(Debug, Clone)]
-        struct P {
-            x: f32,
-            y: f32,
-        }
-
-        let context = Arc::new(RenderContext::new().await.unwrap());
-        let data = vec![P { x: 1.0, y: 2.0 }, P { x: 3.0, y: 4.0 }];
-
-        let chart = scatter()
-            .x(AccessorFunction::new(|d: &P| AccessorValue::Float(d.x)))
-            .y(AccessorFunction::new(|d: &P| AccessorValue::Float(d.y)))
-            .build_with_data(data, context)
-            .unwrap();
-
-        assert!(chart.has_data_mark_data());
-    }
-
-    #[tokio::test]
-    async fn test_render_to_png_produces_visible_data_marks() {
-        use crate::chart_builder::accessor::AccessorValue;
-        use crate::chart_builder::builders::{AccessorFunction, scatter};
-
-        #[derive(Debug, Clone)]
-        struct P {
-            x: f32,
-            y: f32,
-        }
-
-        let context = Arc::new(RenderContext::new().await.unwrap());
-        let data = vec![
-            P { x: 10.0, y: 20.0 },
-            P { x: 30.0, y: 40.0 },
-            P { x: 50.0, y: 60.0 },
-        ];
-
-        let mut chart = scatter()
-            .x(AccessorFunction::new(|d: &P| AccessorValue::Float(d.x)))
-            .y(AccessorFunction::new(|d: &P| AccessorValue::Float(d.y)))
-            .point_size(20.0)
-            .build_with_data(data, context)
-            .unwrap();
-
-        let rgba = chart.render_to_rgba(400, 300).unwrap();
-        assert_eq!(rgba.len(), 400 * 300 * 4);
-
-        // The background is white (255,255,255). Count non-white pixels
-        // in the data region (center of the image, away from axes).
-        let mut non_white = 0u32;
-        for y in 60..240 {
-            for x in 80..320 {
-                let idx = (y * 400 + x) as usize * 4;
-                let r = rgba[idx];
-                let g = rgba[idx + 1];
-                let b = rgba[idx + 2];
-                if r != 255 || g != 255 || b != 255 {
-                    non_white += 1;
-                }
-            }
-        }
-        assert!(
-            non_white > 50,
-            "Expected visible data marks in the chart area, but found only {non_white} non-white pixels"
-        );
-    }
 }

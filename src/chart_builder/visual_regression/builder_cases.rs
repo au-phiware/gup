@@ -12,13 +12,12 @@
 //! Run: `cargo test --lib visual_regression -- --test-threads=1`
 //! Bless: `GUP_BLESS=1 cargo test --lib visual_regression -- --test-threads=1`
 
-use super::{assert_case, capture_chart, capture_choropleth, capture_composite};
+use super::{assert_case, capture_chart, capture_choropleth};
 use crate::Rectangle;
 use crate::RenderContext;
 use crate::chart_builder::accessor::AccessorValue;
 use crate::chart_builder::builders::{
-    AccessorFunction, BarChartBuilder, ConfigurableBuilder, LineChartBuilder, area, bar, boxplot,
-    composite, density_plot, heatmap, line, scatter, violin,
+    AccessorFunction, ConfigurableBuilder, area, boxplot, density_plot, heatmap, violin,
 };
 use crate::chart_builder::{AxisScale, ChartBuilder, ComposedChart};
 use crate::shader_function::{ColorScale, LinearScale};
@@ -29,10 +28,7 @@ use std::sync::Arc;
 const W: f32 = 400.0;
 const H: f32 = 300.0;
 
-const BLUE: [f32; 4] = [31.0 / 255.0, 119.0 / 255.0, 180.0 / 255.0, 1.0];
 const ORANGE: [f32; 4] = [1.0, 127.0 / 255.0, 14.0 / 255.0, 1.0];
-const GREEN: [f32; 4] = [44.0 / 255.0, 160.0 / 255.0, 44.0 / 255.0, 1.0];
-const RED: [f32; 4] = [214.0 / 255.0, 39.0 / 255.0, 40.0 / 255.0, 1.0];
 const PURPLE: [f32; 4] = [148.0 / 255.0, 103.0 / 255.0, 189.0 / 255.0, 1.0];
 const CYAN: [f32; 4] = [23.0 / 255.0, 190.0 / 255.0, 207.0 / 255.0, 1.0];
 
@@ -94,109 +90,6 @@ fn series() -> Vec<Xy> {
 fn lcg(seed: &mut u32) -> f32 {
     *seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
     (*seed >> 8) as f32 / (1u32 << 24) as f32 - 0.5
-}
-
-#[tokio::test]
-async fn golden_scatter() {
-    const POINT_SIZE: f32 = 6.0;
-    let data: Vec<Xy> = (0..12)
-        .map(|i| Xy {
-            x: i as f32 * 10.0,
-            y: ((i * 7) % 11) as f32 * 5.0 + 5.0,
-        })
-        .collect();
-    let mut chart = scatter()
-        .x(AccessorFunction::new(x_of))
-        .y(AccessorFunction::new(y_of))
-        .point_size(POINT_SIZE)
-        .fill_color(RED)
-        .title("Scatter")
-        .width(W)
-        .height(H)
-        .build_with_data(data, context().await)
-        .expect("scatter build");
-    let capture = capture_chart(&mut chart).map(|(img, layout)| {
-        (
-            img,
-            layout
-                .with_expected_color("point fill", rgba(RED))
-                .with_mark_overhang(POINT_SIZE),
-        )
-    });
-    assert_case("chart_builders/scatter", capture);
-}
-
-#[tokio::test]
-async fn golden_bar() {
-    let data: Vec<Category> = [("A", 30.0), ("B", 60.0), ("C", 45.0), ("D", 15.0)]
-        .into_iter()
-        .map(|(n, v)| Category {
-            name: n.to_string(),
-            value: v,
-        })
-        .collect();
-    let mut chart = bar()
-        .x(AccessorFunction::new(|d: &Category| {
-            AccessorValue::String(d.name.clone())
-        }))
-        .y(AccessorFunction::new(|d: &Category| {
-            AccessorValue::Float(d.value)
-        }))
-        .color(AccessorFunction::new(|_: &Category| {
-            AccessorValue::Color(BLUE)
-        }))
-        .title("Bar")
-        .width(W)
-        .height(H)
-        .build_with_data(data, context().await)
-        .expect("bar build");
-    let capture = capture_chart(&mut chart)
-        .map(|(img, layout)| (img, layout.with_expected_color("bar fill", rgba(BLUE))));
-    assert_case("chart_builders/bar", capture);
-}
-
-#[tokio::test]
-async fn golden_line() {
-    const STROKE_WIDTH: f32 = 4.0;
-    let mut chart = line()
-        .x(AccessorFunction::new(x_of))
-        .y(AccessorFunction::new(y_of))
-        .stroke_color(GREEN)
-        .stroke_width_px(STROKE_WIDTH)
-        .title("Line")
-        .width(W)
-        .height(H)
-        .build_with_data(series(), context().await)
-        .expect("line build");
-    let capture = capture_chart(&mut chart).map(|(img, layout)| {
-        (
-            img,
-            layout
-                .with_expected_color("line stroke", rgba(GREEN))
-                .with_mark_overhang(STROKE_WIDTH),
-        )
-    });
-    assert_case("chart_builders/line", capture);
-}
-
-/// Explicit-scale path (GUP-364) for the line builder.
-#[tokio::test]
-async fn golden_line_explicit_scales() {
-    const STROKE_WIDTH: f32 = 4.0;
-    let mut chart = line()
-        .x(AccessorFunction::new(x_of))
-        .y(AccessorFunction::new(y_of))
-        .x_scale(AxisScale::Linear(LinearScale::new(0.0, 4.0, -1.0, 1.0)))
-        .y_scale(AxisScale::Linear(LinearScale::new(0.0, 80.0, -1.0, 1.0)))
-        .stroke_width_px(STROKE_WIDTH)
-        .width(W)
-        .height(H)
-        .build_with_data(series(), context().await)
-        .expect("line build");
-    assert!(chart.visualization.is_render_ready());
-    let capture = capture_chart(&mut chart)
-        .map(|(img, layout)| (img, layout.with_mark_overhang(STROKE_WIDTH)));
-    assert_case("chart_builders/line_explicit_scales", capture);
 }
 
 #[tokio::test]
@@ -380,52 +273,6 @@ async fn golden_heatmap() {
         .build_with_data(data, context().await)
         .expect("heatmap build");
     assert_case("chart_builders/heatmap", capture_chart(&mut chart));
-}
-
-/// Bar + line on a secondary y-axis, rendered offscreen through
-/// `prepare_render` + `draw` with the `RenderContext` it was built with.
-#[tokio::test]
-async fn golden_composite() {
-    const LINE_WIDTH: f32 = 3.0;
-    let data: Vec<Xy> = [
-        (1.0, 120.0),
-        (2.0, 135.0),
-        (3.0, 180.0),
-        (4.0, 210.0),
-        (5.0, 195.0),
-    ]
-    .into_iter()
-    .map(|(x, y)| Xy { x, y })
-    .collect();
-    let bars = BarChartBuilder::<Xy>::new()
-        .x(AccessorFunction::new(x_of))
-        .y(AccessorFunction::new(y_of))
-        .color(AccessorFunction::new(|_: &Xy| AccessorValue::Color(BLUE)));
-    let trend = LineChartBuilder::<Xy>::new()
-        .x(AccessorFunction::new(x_of))
-        .y(AccessorFunction::new(|d: &Xy| {
-            AccessorValue::Float(d.y * 0.5)
-        }))
-        .stroke_color(RED)
-        .stroke_width_px(LINE_WIDTH);
-    let mut chart = composite::<Xy>()
-        .layer(bars)
-        .layer_with_y2(trend)
-        .title("Composite")
-        .width(W)
-        .height(H)
-        .build_with_data(data, context().await)
-        .expect("composite build");
-    let capture = capture_composite(&mut chart).map(|(img, layout)| {
-        (
-            img,
-            layout
-                .with_expected_color("bar fill", rgba(BLUE))
-                .with_expected_color("line stroke", rgba(RED))
-                .with_mark_overhang(LINE_WIDTH),
-        )
-    });
-    assert_case("chart_builders/composite", capture);
 }
 
 /// `ChoroplethChart` has no raster render path; the adapter reports that as

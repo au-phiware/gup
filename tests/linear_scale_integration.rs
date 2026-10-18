@@ -5,13 +5,8 @@
 //!
 //! Validates:
 //! - LinearScale → LinearScaleInvert round-trip composition via ShaderPipeline
-//! - ScatterPlotBuilder with explicit LinearScale for axis tick generation
 //! - WGSL compilation of the generated linear_scale / linear_scale_invert code
 
-use gup::RenderContext;
-use gup::chart_builder::ChartBuilder;
-use gup::chart_builder::accessor::AccessorValue;
-use gup::chart_builder::builders::{AccessorFunction, ScatterPlotBuilder};
 use gup::error::GupResult;
 use gup::shader_function::{
     ComposableFunction, ComposableShaderFunction, LinearScale, ShaderUniform,
@@ -54,51 +49,6 @@ fn linear_scale_compose_type_checks() {
     let composed = scale.compose(inv);
     let uniforms = composed.create_uniforms();
     assert!(uniforms.is_some(), "Composed uniforms should not be None");
-}
-
-// ---------------------------------------------------------------------------
-// ScatterPlotBuilder with explicit LinearScale
-// ---------------------------------------------------------------------------
-
-#[derive(Debug, Clone)]
-struct Point {
-    x: f32,
-    y: f32,
-}
-
-#[tokio::test]
-async fn scatter_builder_with_x_scale_generates_ticks() -> GupResult<()> {
-    let render_context = std::sync::Arc::new(RenderContext::new().await?);
-
-    let data = vec![
-        Point { x: 10.0, y: 20.0 },
-        Point { x: 50.0, y: 60.0 },
-        Point { x: 90.0, y: 80.0 },
-    ];
-
-    let chart = ScatterPlotBuilder::<Point>::new()
-        .x(AccessorFunction::new(|d: &Point| AccessorValue::Float(d.x)))
-        .y(AccessorFunction::new(|d: &Point| AccessorValue::Float(d.y)))
-        .x_scale(LinearScale::new(0.0, 100.0, 0.0, 1.0))
-        .y_scale(LinearScale::new(0.0, 100.0, 0.0, 1.0))
-        .build_with_data(data, render_context)?;
-
-    // The chart should have been built successfully with axes.
-    assert!(chart.bottom_axis.is_some(), "Should have a bottom axis");
-    assert!(chart.left_axis.is_some(), "Should have a left axis");
-
-    // Verify that axis geometry generation works (it uses the scales internally).
-    let geom = chart.generate_axis_geometry_instanced();
-    assert!(
-        !geom.tick_instances.is_empty(),
-        "Scale-driven axis should produce tick instances"
-    );
-
-    // Verify the chart config preserved the scales.
-    assert!(chart.config.x_scale.is_some(), "x_scale should be stored");
-    assert!(chart.config.y_scale.is_some(), "y_scale should be stored");
-
-    Ok(())
 }
 
 // ---------------------------------------------------------------------------

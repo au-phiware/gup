@@ -47,3 +47,6 @@ integration guide.
 ## License
 
 GPL-3.0-or-later
+
+GUP-466 deleted the old scatter, line, bar and composite builders that this
+crate's sources still name; S13 rewires it onto `gup-core`'s builders.

@@ -1,5 +1,8 @@
 # Tutorial 1: Getting Started
 
+**Out of date until T6:** this tutorial shows the old builders (deleted in
+GUP-466); T6's docs-as-tests rewrite replaces it.
+
 > **Goal**: Create a GPU-accelerated scatter chart, render it, and run the
 > program — all in under 50 lines of Rust.
 

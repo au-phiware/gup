@@ -20,27 +20,19 @@
 //! documentation.
 
 pub mod area;
-pub mod bar;
 pub mod boxplot;
 pub mod choropleth;
-pub mod composite;
 pub mod density;
 pub mod gpu_density;
 pub mod heatmap;
-pub mod line;
-pub mod scatter;
 pub mod violin;
 
 pub use area::*;
-pub use bar::*;
 pub use boxplot::*;
 pub use choropleth::*;
-pub use composite::*;
 pub use density::*;
 pub use gpu_density::*;
 pub use heatmap::*;
-pub use line::*;
-pub use scatter::*;
 pub use violin::*;
 
 use super::accessor::AccessorValue;
@@ -108,16 +100,15 @@ pub trait ConfigurableBuilder: Sized {
 /// and behavior, extending beyond the basic show/hide functionality of
 /// [`ConfigurableBuilder::show_grid`].
 ///
-/// This trait is implemented by all chart builders: [`ScatterPlotBuilder`],
-/// [`LineChartBuilder`], [`BoxPlotBuilder`], [`BarChartBuilder`],
+/// This trait is implemented by chart builders such as [`BoxPlotBuilder`],
 /// [`AreaChartBuilder`], and [`HeatmapBuilder`].
 ///
 /// # Quick Start
 ///
 /// ```rust,ignore
-/// use gup::chart_builder::ScatterPlotBuilder;
+/// use gup::chart_builder::AreaChartBuilder;
 ///
-/// let chart = ScatterPlotBuilder::new()
+/// let chart = AreaChartBuilder::new()
 ///     .data(data)
 ///     .grid()                    // Enable with professional defaults
 ///     .grid_color("#cccccc")     // Customize color
@@ -144,12 +135,12 @@ pub trait GridCapableBuilder: ConfigurableBuilder {
     ///
     /// ```rust,no_run
     /// use gup::prelude::*;
-    /// use gup::chart_builder::builders::{scatter, GridCapableBuilder};
+    /// use gup::chart_builder::builders::{area, GridCapableBuilder};
     /// use gup::GridLineConfig;
     ///
     /// # #[derive(Debug, Clone)]
     /// # struct DataPoint { x: f32, y: f32 }
-    /// let chart = scatter::<DataPoint>()
+    /// let chart = area::<DataPoint>()
     ///     .major_grid_style(
     ///         GridLineConfig::default()
     ///             .with_color([0.7, 0.7, 0.7, 1.0])
@@ -164,12 +155,12 @@ pub trait GridCapableBuilder: ConfigurableBuilder {
     ///
     /// ```rust,no_run
     /// use gup::prelude::*;
-    /// use gup::chart_builder::builders::{scatter, GridCapableBuilder};
+    /// use gup::chart_builder::builders::{area, GridCapableBuilder};
     /// use gup::GridLineConfig;
     ///
     /// # #[derive(Debug, Clone)]
     /// # struct DataPoint { x: f32, y: f32 }
-    /// let chart = scatter::<DataPoint>()
+    /// let chart = area::<DataPoint>()
     ///     .minor_grid_style(
     ///         GridLineConfig::default()
     ///             .with_color([0.9, 0.9, 0.9, 1.0])
@@ -185,11 +176,11 @@ pub trait GridCapableBuilder: ConfigurableBuilder {
     ///
     /// ```rust,no_run
     /// use gup::prelude::*;
-    /// use gup::chart_builder::builders::{scatter, GridCapableBuilder};
+    /// use gup::chart_builder::builders::{area, GridCapableBuilder};
     ///
     /// # #[derive(Debug, Clone)]
     /// # struct DataPoint { x: f32, y: f32 }
-    /// let chart = scatter::<DataPoint>()
+    /// let chart = area::<DataPoint>()
     ///     .horizontal_grid_only();
     /// ```
     fn horizontal_grid_only(self) -> Self;
@@ -200,11 +191,11 @@ pub trait GridCapableBuilder: ConfigurableBuilder {
     ///
     /// ```rust,no_run
     /// use gup::prelude::*;
-    /// use gup::chart_builder::builders::{scatter, GridCapableBuilder};
+    /// use gup::chart_builder::builders::{area, GridCapableBuilder};
     ///
     /// # #[derive(Debug, Clone)]
     /// # struct DataPoint { x: f32, y: f32 }
-    /// let chart = scatter::<DataPoint>()
+    /// let chart = area::<DataPoint>()
     ///     .vertical_grid_only();
     /// ```
     fn vertical_grid_only(self) -> Self;
@@ -215,11 +206,11 @@ pub trait GridCapableBuilder: ConfigurableBuilder {
     ///
     /// ```rust,no_run
     /// use gup::prelude::*;
-    /// use gup::chart_builder::builders::{scatter, GridCapableBuilder};
+    /// use gup::chart_builder::builders::{area, GridCapableBuilder};
     ///
     /// # #[derive(Debug, Clone)]
     /// # struct DataPoint { x: f32, y: f32 }
-    /// let chart = scatter::<DataPoint>()
+    /// let chart = area::<DataPoint>()
     ///     .with_minor_grid();
     /// ```
     fn with_minor_grid(self) -> Self;
@@ -230,11 +221,11 @@ pub trait GridCapableBuilder: ConfigurableBuilder {
     ///
     /// ```rust,no_run
     /// use gup::prelude::*;
-    /// use gup::chart_builder::builders::{scatter, GridCapableBuilder};
+    /// use gup::chart_builder::builders::{area, GridCapableBuilder};
     ///
     /// # #[derive(Debug, Clone)]
     /// # struct DataPoint { x: f32, y: f32 }
-    /// let chart = scatter::<DataPoint>()
+    /// let chart = area::<DataPoint>()
     ///     .without_minor_grid();
     /// ```
     fn without_minor_grid(self) -> Self;
@@ -245,12 +236,12 @@ pub trait GridCapableBuilder: ConfigurableBuilder {
     ///
     /// ```rust,no_run
     /// use gup::prelude::*;
-    /// use gup::chart_builder::builders::{scatter, GridCapableBuilder};
+    /// use gup::chart_builder::builders::{area, GridCapableBuilder};
     /// use gup::GridConfiguration;
     ///
     /// # #[derive(Debug, Clone)]
     /// # struct DataPoint { x: f32, y: f32 }
-    /// let chart = scatter::<DataPoint>()
+    /// let chart = area::<DataPoint>()
     ///     .grid_configuration(GridConfiguration::horizontal_only());
     /// ```
     fn grid_configuration(self, config: GridConfiguration) -> Self;
@@ -263,11 +254,11 @@ pub trait GridCapableBuilder: ConfigurableBuilder {
     ///
     /// ```rust,no_run
     /// use gup::prelude::*;
-    /// use gup::chart_builder::builders::{scatter, GridCapableBuilder};
+    /// use gup::chart_builder::builders::{area, GridCapableBuilder};
     ///
     /// # #[derive(Debug, Clone)]
     /// # struct DataPoint { x: f32, y: f32 }
-    /// let chart = scatter::<DataPoint>()
+    /// let chart = area::<DataPoint>()
     ///     .grid(); // Simple one-line grid enabling
     /// ```
     fn grid(self) -> Self {
@@ -281,11 +272,11 @@ pub trait GridCapableBuilder: ConfigurableBuilder {
     ///
     /// ```rust,no_run
     /// use gup::prelude::*;
-    /// use gup::chart_builder::builders::{scatter, GridCapableBuilder};
+    /// use gup::chart_builder::builders::{area, GridCapableBuilder};
     ///
     /// # #[derive(Debug, Clone)]
     /// # struct DataPoint { x: f32, y: f32 }
-    /// let chart = scatter::<DataPoint>()
+    /// let chart = area::<DataPoint>()
     ///     .horizontal_grid();
     /// ```
     fn horizontal_grid(self) -> Self {
@@ -299,11 +290,11 @@ pub trait GridCapableBuilder: ConfigurableBuilder {
     ///
     /// ```rust,no_run
     /// use gup::prelude::*;
-    /// use gup::chart_builder::builders::{scatter, GridCapableBuilder};
+    /// use gup::chart_builder::builders::{area, GridCapableBuilder};
     ///
     /// # #[derive(Debug, Clone)]
     /// # struct DataPoint { x: f32, y: f32 }
-    /// let chart = scatter::<DataPoint>()
+    /// let chart = area::<DataPoint>()
     ///     .vertical_grid();
     /// ```
     fn vertical_grid(self) -> Self {
@@ -317,11 +308,11 @@ pub trait GridCapableBuilder: ConfigurableBuilder {
     ///
     /// ```rust,no_run
     /// use gup::prelude::*;
-    /// use gup::chart_builder::builders::{scatter, GridCapableBuilder};
+    /// use gup::chart_builder::builders::{area, GridCapableBuilder};
     ///
     /// # #[derive(Debug, Clone)]
     /// # struct DataPoint { x: f32, y: f32 }
-    /// let chart = scatter::<DataPoint>()
+    /// let chart = area::<DataPoint>()
     ///     .grid_color("#cccccc"); // Hex color
     /// ```
     fn grid_color(self, color: impl Into<Color>) -> Self {
@@ -337,11 +328,11 @@ pub trait GridCapableBuilder: ConfigurableBuilder {
     ///
     /// ```rust,no_run
     /// use gup::prelude::*;
-    /// use gup::chart_builder::builders::{scatter, GridCapableBuilder};
+    /// use gup::chart_builder::builders::{area, GridCapableBuilder};
     ///
     /// # #[derive(Debug, Clone)]
     /// # struct DataPoint { x: f32, y: f32 }
-    /// let chart = scatter::<DataPoint>()
+    /// let chart = area::<DataPoint>()
     ///     .grid_opacity(0.5); // Semi-transparent
     /// ```
     fn grid_opacity(self, opacity: f32) -> Self {
@@ -356,11 +347,11 @@ pub trait GridCapableBuilder: ConfigurableBuilder {
     ///
     /// ```rust,no_run
     /// use gup::prelude::*;
-    /// use gup::chart_builder::builders::{scatter, GridCapableBuilder};
+    /// use gup::chart_builder::builders::{area, GridCapableBuilder};
     ///
     /// # #[derive(Debug, Clone)]
     /// # struct DataPoint { x: f32, y: f32 }
-    /// let chart = scatter::<DataPoint>()
+    /// let chart = area::<DataPoint>()
     ///     .grid_width(1.0); // Thicker lines
     /// ```
     fn grid_width(self, width: f32) -> Self {
@@ -375,11 +366,11 @@ pub trait GridCapableBuilder: ConfigurableBuilder {
     ///
     /// ```rust,no_run
     /// use gup::prelude::*;
-    /// use gup::chart_builder::builders::{scatter, GridCapableBuilder};
+    /// use gup::chart_builder::builders::{area, GridCapableBuilder};
     ///
     /// # #[derive(Debug, Clone)]
     /// # struct DataPoint { x: f32, y: f32 }
-    /// let chart = scatter::<DataPoint>()
+    /// let chart = area::<DataPoint>()
     ///     .light_grid(); // Professional light theme
     /// ```
     fn light_grid(self) -> Self {
@@ -393,11 +384,11 @@ pub trait GridCapableBuilder: ConfigurableBuilder {
     ///
     /// ```rust,no_run
     /// use gup::prelude::*;
-    /// use gup::chart_builder::builders::{scatter, GridCapableBuilder};
+    /// use gup::chart_builder::builders::{area, GridCapableBuilder};
     ///
     /// # #[derive(Debug, Clone)]
     /// # struct DataPoint { x: f32, y: f32 }
-    /// let chart = scatter::<DataPoint>()
+    /// let chart = area::<DataPoint>()
     ///     .dark_grid(); // Professional dark theme
     /// ```
     fn dark_grid(self) -> Self {
@@ -411,11 +402,11 @@ pub trait GridCapableBuilder: ConfigurableBuilder {
     ///
     /// ```rust,no_run
     /// use gup::prelude::*;
-    /// use gup::chart_builder::builders::{scatter, GridCapableBuilder};
+    /// use gup::chart_builder::builders::{area, GridCapableBuilder};
     ///
     /// # #[derive(Debug, Clone)]
     /// # struct DataPoint { x: f32, y: f32 }
-    /// let chart = scatter::<DataPoint>()
+    /// let chart = area::<DataPoint>()
     ///     .scientific_grid(); // Scientific visualization grid
     /// ```
     fn scientific_grid(self) -> Self {
@@ -429,11 +420,11 @@ pub trait GridCapableBuilder: ConfigurableBuilder {
     ///
     /// ```rust,no_run
     /// use gup::prelude::*;
-    /// use gup::chart_builder::builders::{scatter, GridCapableBuilder};
+    /// use gup::chart_builder::builders::{area, GridCapableBuilder};
     ///
     /// # #[derive(Debug, Clone)]
     /// # struct DataPoint { x: f32, y: f32 }
-    /// let chart = scatter::<DataPoint>()
+    /// let chart = area::<DataPoint>()
     ///     .business_grid(); // Clean business chart grid
     /// ```
     fn business_grid(self) -> Self {
@@ -447,11 +438,11 @@ pub trait GridCapableBuilder: ConfigurableBuilder {
     ///
     /// ```rust,no_run
     /// use gup::prelude::*;
-    /// use gup::chart_builder::builders::{scatter, GridCapableBuilder};
+    /// use gup::chart_builder::builders::{area, GridCapableBuilder};
     ///
     /// # #[derive(Debug, Clone)]
     /// # struct DataPoint { x: f32, y: f32 }
-    /// let chart = scatter::<DataPoint>()
+    /// let chart = area::<DataPoint>()
     ///     .minimal_grid(); // Very subtle grid
     /// ```
     fn minimal_grid(self) -> Self {
@@ -465,11 +456,11 @@ pub trait GridCapableBuilder: ConfigurableBuilder {
     ///
     /// ```rust,no_run
     /// use gup::prelude::*;
-    /// use gup::chart_builder::builders::{scatter, GridCapableBuilder};
+    /// use gup::chart_builder::builders::{area, GridCapableBuilder};
     ///
     /// # #[derive(Debug, Clone)]
     /// # struct DataPoint { x: f32, y: f32 }
-    /// let chart = scatter::<DataPoint>()
+    /// let chart = area::<DataPoint>()
     ///     .high_contrast_grid(); // Accessible high contrast
     /// ```
     fn high_contrast_grid(self) -> Self {
@@ -720,19 +711,6 @@ fn auto_domain<T>(data: &[T], accessor: &AccessorFunction<T>) -> (f32, f32) {
         let pad = span * 0.05;
         (lo - pad, hi + pad)
     }
-}
-
-/// Linearly map a value from one range to another.
-///
-/// Given `px` in the range `[rng_lo, rng_hi]`, returns the corresponding
-/// value in `[ndc_lo, ndc_hi]`.  When the input span is near-zero the
-/// midpoint of the output range is returned.
-pub(crate) fn range_to_ndc(px: f32, rng_lo: f32, rng_hi: f32, ndc_lo: f32, ndc_hi: f32) -> f32 {
-    let rng_span = rng_hi - rng_lo;
-    if rng_span.abs() < f32::EPSILON {
-        return (ndc_lo + ndc_hi) / 2.0;
-    }
-    ndc_lo + (px - rng_lo) / rng_span * (ndc_hi - ndc_lo)
 }
 
 /// Build a mapper that transforms [`BoxPlotAttributes`] from data space into
@@ -1138,42 +1116,6 @@ mod tests {
             string_accessor.apply(&data),
             AccessorValue::String("B".to_string())
         );
-    }
-
-    // ── GUP-362: range_to_ndc tests ─────────────────────────────────────
-
-    #[test]
-    fn test_range_to_ndc_identity() {
-        // When input range matches output range, should be identity.
-        let v = range_to_ndc(0.5, 0.0, 1.0, 0.0, 1.0);
-        assert!((v - 0.5).abs() < 1e-6);
-    }
-
-    #[test]
-    fn test_range_to_ndc_scaling() {
-        // Map pixel range [0, 800] to NDC [-1, 1].
-        let v = range_to_ndc(400.0, 0.0, 800.0, -1.0, 1.0);
-        assert!(v.abs() < 1e-6, "midpoint should map to 0, got {v}");
-
-        let left = range_to_ndc(0.0, 0.0, 800.0, -1.0, 1.0);
-        assert!((left - (-1.0)).abs() < 1e-6);
-
-        let right = range_to_ndc(800.0, 0.0, 800.0, -1.0, 1.0);
-        assert!((right - 1.0).abs() < 1e-6);
-    }
-
-    #[test]
-    fn test_range_to_ndc_inverted_range() {
-        // Inverted input range (like y-axis: range_min=600, range_max=0).
-        let v = range_to_ndc(300.0, 600.0, 0.0, -1.0, 1.0);
-        assert!(v.abs() < 1e-6, "midpoint should map to 0, got {v}");
-    }
-
-    #[test]
-    fn test_range_to_ndc_zero_span() {
-        // When span is zero, return midpoint of output range.
-        let v = range_to_ndc(5.0, 5.0, 5.0, -1.0, 1.0);
-        assert!(v.abs() < 1e-6, "zero-span should give midpoint, got {v}");
     }
 
     // ── GUP-362: apply_accessors_to_selection with scale_value ──────────

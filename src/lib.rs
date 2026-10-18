@@ -68,14 +68,6 @@
 //! let color = vec4![1.0, 0.5, 0.0, 1.0];
 //! ```
 //!
-//! ### Building a chart
-//!
-//! ```rust
-//! use gup::ScatterPlotBuilder;
-//!
-//! let builder = ScatterPlotBuilder::<(f32, f32)>::new();
-//! ```
-//!
 //! ## Type Construction
 //!
 //! Gup provides ergonomic macros for GPU-compatible vector and matrix types:
@@ -356,7 +348,6 @@ pub use layout::{
 // Export chart builder system (Observable Plot-style API)
 // Re-export selectively to avoid conflicts with label::Margins
 pub use chart_builder::builders::area::{AreaSegment, StackMode};
-pub use chart_builder::builders::bar::{BarOrientation, Category, Orientation};
 pub use chart_builder::builders::density::{
     ContourBand, ContourLevel, DensityConfig, DensityLayer, DensityPlotBuilder, DensityRenderMode,
 };
@@ -365,9 +356,9 @@ pub use chart_builder::builders::heatmap::{
 };
 pub use chart_builder::builders::violin::{HalfSide, ViolinOrientation, ViolinPlotBuilder};
 pub use chart_builder::{
-    AreaChartBuilder, AxisLabelConfig, BarChartBuilder, ChartBuilder, ChartConfig, ChoroplethChart,
+    AreaChartBuilder, AxisLabelConfig, ChartBuilder, ChartConfig, ChoroplethChart,
     ChoroplethChartBuilder, ComposedChart, HeatmapBuilder, HoverHighlight, LabelCapableBuilder,
-    LabeledChart, LineChartBuilder, ScatterPlotBuilder, TitleAlignment, TitleConfig,
+    LabeledChart, TitleAlignment, TitleConfig,
 };
 
 /// Create a new [`DensityPlotBuilder`] (convenience shorthand).
