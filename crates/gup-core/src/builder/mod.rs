@@ -89,7 +89,7 @@
 //! | `render_to_rgba(w, h)` | `chart.render(&cx, w, h)` |
 //! | `export_svg(..)` | `SvgTarget` over `Scene::guides` (marks not yet) |
 //! | `composite().layer(a).layer(b)` | one `Plot` with `circles(..)`, `line(..)` and `rects(..)` layers |
-//! | `.layer_with_y2(..)` | dropped until RFC-001 S11 |
+//! | `.layer_with_y2(..)` | `Plot::y_right` (RFC-001 S11) |
 
 pub(crate) mod bar;
 pub(crate) mod line;

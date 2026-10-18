@@ -80,8 +80,8 @@ X) or `info` (printed, never fails).
 | `pipeline.link_create.cold_ms`     | 1.04      | <= 10     | `pipeline_timings`, its first run                   |
 | `pipeline.link_create.max_ms`      | 1.06      | info      | `pipeline_timings`                                  |
 | `wasm.wgpu.gz_bytes`               | 32,360    | info      | `scripts/wasm_size.sh`, bare wgpu                   |
-| `wasm.scatter.gz_bytes`            | 319,085   | +2%       | `scripts/wasm_size.sh`, the reference scatter       |
-| `wasm.over_wgpu.gz_bytes`          | 286,725   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10         |
+| `wasm.scatter.gz_bytes`            | 325,358   | +2%       | `scripts/wasm_size.sh`, the reference scatter       |
+| `wasm.over_wgpu.gz_bytes`          | 292,998   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10         |
 | `wasm.per_row_type.gz_bytes`       | 1,730     | <= 2600   | `scripts/wasm_size.sh`, one more Selection row type |
 
 A legitimate change that moves a number (a new guide, a bigger feature) records
@@ -466,3 +466,10 @@ seeded violation (GUP-417 retrospective).
     +385 once its SVG-only code moved behind the default-on `svg` feature, which
     the harness builds without): scatter 315,804 to 319,085 B gz, and over bare
     wgpu 283,442 to 286,725.
+- **S10 to S12a merges (2026-10-19, orchestrator)**: GUP-461 (Offset,
+  `sub_band`), 474 (`tick_format`), 462/463/464 (builders), 466 (old builders
+  deleted), 480 (`append`, `Appender`, waker), 479 (`y_right`) and 477 (grey
+  unbrushed) took the WASM scatter from 319,085 to 325,358 B gz (+6,273), and
+  over bare wgpu from 286,725 to 292,998: 107 KB of headroom under the 400,000
+  cap. GUP-480 is the largest single step (about +4,100: the feed receiver, the
+  waker and appender plumbing).

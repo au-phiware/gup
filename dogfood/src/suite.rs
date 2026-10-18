@@ -105,6 +105,10 @@ pub enum Measure {
         count: usize,
         at: fn(usize) -> (f32, f32),
     },
+    /// A tooltip box fills `region`: a panel of one fill colour, any colour,
+    /// holding at least `lines` lines of text in a contrasting colour, and
+    /// hiding the marks under it.
+    Tooltip { region: Region, lines: usize },
     /// An SVG file contains at least `min` `<tag` elements.
     SvgElements { tag: &'static str, min: usize },
 }
@@ -240,6 +244,20 @@ impl Measure {
                     detail: format!("{n} runs (need {min}..={max})"),
                 }
             }
+            Measure::Tooltip { region, lines } => {
+                let p = pixels::tooltip_panel(img, region);
+                let hex = |c: [u8; 3]| format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2]);
+                Measured {
+                    passed: p.panel_fraction >= 0.95 && p.lines >= lines,
+                    detail: format!(
+                        "fill {}, text {}, {:.1}% panel, {} lines (need >= 95%, >= {lines})",
+                        hex(p.fill),
+                        hex(p.ink),
+                        p.panel_fraction * 100.0,
+                        p.lines
+                    ),
+                }
+            }
             Measure::Blobs {
                 region,
                 rgb,
@@ -287,10 +305,6 @@ const DOUBLE_GAMMA: Gap = Gap(
 );
 const NO_GRID: Gap = Gap(
     "grid is configured but not drawn in PNG/texture output; SVG has it (RFC-001 S3/S7 guides)",
-);
-const STREAM_NEVER_READY: Gap = Gap(
-    "a DataStream-fed Selection never becomes render-ready: prepare_render_bound fails with \
-     \"No attribute bindings set\" (RFC-001 S12 append replaces this route)",
 );
 const WGSL_DUPLICATE_UNIFORMS: Gap = Gap(
     "#[wgsl_function] output embeds its uniforms struct and Selection's shader assembly emits it \
@@ -809,24 +823,51 @@ fn t5_stream() -> Task {
         bin: "t5_stream",
         env: &[],
         kind: Kind::Headless,
-        intent: "task 5 (alt): Tutorial 5's DataStream -> Selection::stream route, PNG after each batch",
+        intent: "task 5 (alt): push points in batches through an appender, PNG after each batch",
         exit: Exit::Success,
         checks: vec![
-            gap(
+            check(
                 "t5_stream_0.png",
                 "first batch visible",
                 Measure::NotBlank {
                     min_fraction: 0.001,
                 },
-                STREAM_NEVER_READY,
             ),
-            gap(
+            check(
                 "t5_stream_2.png",
                 "all three batches visible",
                 Measure::NotBlank {
                     min_fraction: 0.003,
                 },
-                STREAM_NEVER_READY,
+            ),
+            // The plot rect of a fresh render's `Layout` (400x300): x 0.12..0.97,
+            // y 0.04..0.88; the x domain is 0..150, so batch n fills third n.
+            check(
+                "t5_stream_2.png",
+                "batch 1 drawn",
+                Measure::Hue {
+                    region: Region::new(0.12, 0.04, 0.39, 0.88),
+                    rgb: RED,
+                    min_px: 50,
+                },
+            ),
+            check(
+                "t5_stream_2.png",
+                "batch 2 drawn",
+                Measure::Hue {
+                    region: Region::new(0.42, 0.04, 0.67, 0.88),
+                    rgb: RED,
+                    min_px: 50,
+                },
+            ),
+            check(
+                "t5_stream_2.png",
+                "batch 3 drawn",
+                Measure::Hue {
+                    region: Region::new(0.70, 0.04, 0.97, 0.88),
+                    rgb: RED,
+                    min_px: 50,
+                },
             ),
         ],
     }
@@ -939,9 +980,13 @@ fn t3_window() -> Task {
             check(
                 f,
                 "hover tooltip shown at the hovered point",
-                Measure::Ink {
-                    region: Region::new(0.595, 0.34, 0.705, 0.475),
-                    min_px: 6000,
+                // The tooltip box (border included) measured in a fresh render
+                // is x 595..704, y 239..331 of 1000x700; GUP-465's region
+                // (0.595, 0.34, 0.705, 0.475) overshot the bottom by 2 px,
+                // which put the border row inside the 2 px inset.
+                Measure::Tooltip {
+                    region: Region::new(0.595, 0.3414, 0.704, 0.4729),
+                    lines: 5,
                 },
             ),
             check(
@@ -990,6 +1035,14 @@ fn t4() -> Task {
                 Measure::NoColour {
                     region: Region::new(0.125, 0.3, 0.215, 0.65),
                     max_px: 20,
+                },
+            ),
+            check(
+                f,
+                "left view outside the brush: rows greyed, not hidden",
+                Measure::Grey {
+                    region: Region::new(0.125, 0.3, 0.215, 0.65),
+                    min_px: 500,
                 },
             ),
             check(

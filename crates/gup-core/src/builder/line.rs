@@ -6,8 +6,10 @@
 use std::any::Any;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::task::Waker;
 
 use super::{DRAWN, plot_setters};
+use crate::append::{Appender, FeedRx};
 use crate::geom::Point;
 use crate::prelude::*;
 use crate::{ColumnValue, Context, Input, Layout, Resolved, Response, Result, RowId};
@@ -69,6 +71,10 @@ pub fn line<T: Send + Sync + 'static>(rows: impl IntoIterator<Item = T>) -> Line
         color: ColorSpec::Default,
         color_scale: Categorical::okabe_ito(),
         legend_title: None,
+        scale: None,
+        keys: HashMap::new(),
+        feed: None,
+        waker: None,
     }
 }
 
@@ -88,6 +94,14 @@ pub struct LineChart<T> {
     color: ColorSpec<T>,
     color_scale: Categorical,
     legend_title: Option<String>,
+    /// The colour scale shared by every key's layer, once materialised.
+    scale: Option<ScaleRef<Categorical>>,
+    /// Each key's index among the line layers.
+    keys: HashMap<String, usize>,
+    /// Rows pushed through [`appender`](LineChart::appender) of a keyed
+    /// chart, routed to the key's layer at resolve.
+    feed: Option<FeedRx<T>>,
+    waker: Option<Waker>,
 }
 
 impl<T> std::fmt::Debug for LineChart<T> {
@@ -213,36 +227,121 @@ impl<T: Send + Sync + 'static> LineChart<T> {
         series
     }
 
+    /// Add one line layer over `series`, with the recorded settings.
+    fn add_series(&mut self, series: Vec<T>) {
+        let sel = self.plot.line(series);
+        for op in &self.ops {
+            op(sel);
+        }
+        match &self.color {
+            ColorSpec::Default => {}
+            ColorSpec::Stroke(c) => {
+                sel.color(*c);
+            }
+            ColorSpec::Key(key) => {
+                let key = Arc::clone(key);
+                let scale = self.scale.as_ref().expect("the colour scale is made first");
+                sel.color(scale.encode_key(key_fn(move |r: &T| key(r))));
+            }
+        }
+        if let Some(title) = &self.legend_title {
+            sel.legend_title(Line::COLOR, title.clone());
+        }
+    }
+
     /// Build the layers from the recorded settings, once.
     fn materialise(&mut self) {
         let Some(rows) = self.rows.take() else {
             return;
         };
+        self.scale = Some(ScaleRef::new(self.color_scale.clone()));
         let key = match &self.color {
-            ColorSpec::Key(key) => Some(key),
+            ColorSpec::Key(key) => Some(Arc::clone(key)),
             _ => None,
         };
-        let scale = ScaleRef::new(self.color_scale.clone());
-        for series in Self::split(rows, key) {
-            let sel = self.plot.line(series);
-            for op in &self.ops {
-                op(sel);
+        for series in Self::split(rows, key.as_ref()) {
+            if let Some(key) = &key {
+                let name = key(&series[0]).to_owned();
+                let index = self.keys.len();
+                self.keys.insert(name, index);
             }
-            match &self.color {
-                ColorSpec::Default => {}
-                ColorSpec::Stroke(c) => {
-                    sel.color(*c);
-                }
-                ColorSpec::Key(key) => {
-                    let key = Arc::clone(key);
-                    sel.color(scale.encode_key(key_fn(move |r: &T| key(r))));
-                }
-            }
-            if let Some(title) = &self.legend_title {
-                sel.legend_title(Line::COLOR, title.clone());
+            self.add_series(series);
+        }
+    }
+
+    /// Move rows pushed through a keyed chart's appender to their lines.
+    fn drain_feed(&mut self) -> Result<()> {
+        let Some(feed) = &self.feed else {
+            return Ok(());
+        };
+        if !feed.pending() {
+            return Ok(());
+        }
+        let rows = feed.drain();
+        let Some(key) = (match &self.color {
+            ColorSpec::Key(key) => Some(Arc::clone(key)),
+            _ => None,
+        }) else {
+            return Ok(());
+        };
+        for series in Self::split(rows, Some(&key)) {
+            let name = key(&series[0]).to_owned();
+            if let Some(&i) = self.keys.get(&name) {
+                let layer = self
+                    .plot
+                    .layers_mut::<T, Line>()
+                    .nth(i)
+                    .expect("every key has a layer");
+                layer.append(series)?;
+            } else {
+                self.keys.insert(name, self.keys.len());
+                self.add_series(series);
             }
         }
-        self.ops.clear();
+        Ok(())
+    }
+
+    /// A handle that appends rows to the chart from any thread; rows
+    /// pushed between two frames are drawn together by the next resolve.
+    ///
+    /// With [`color`](Self::color), a row of an existing key extends that
+    /// key's line, and a row of a new key adds a line, in the next palette
+    /// colour and with a legend entry. Materialises the chart: layer
+    /// setters panic after.
+    ///
+    /// ```
+    /// use gup_core::{ChartExt, Context};
+    /// # fn main() -> gup_core::Result<()> {
+    /// let mut chart = gup_core::line(vec![(0.0, 1.0)]).x(|p| p.0).y(|p| p.1);
+    /// let feed = chart.appender();
+    /// std::thread::spawn(move || {
+    ///     for i in 1..10 {
+    ///         feed.push((f64::from(i), f64::from(i * i))).unwrap();
+    ///     }
+    /// })
+    /// .join()
+    /// .unwrap();
+    /// # let cx = Context::new_blocking()?;
+    /// let image = chart.render(&cx, 320, 200)?;
+    /// assert!(image.pixels().any(|p| p.0 != [255, 255, 255, 255]));
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn appender(&mut self) -> Appender<T> {
+        self.materialise();
+        if matches!(self.color, ColorSpec::Key(_)) {
+            let feed = self.feed.get_or_insert_with(FeedRx::new);
+            if let Some(w) = &self.waker {
+                feed.set_waker(Some(w));
+            }
+            feed.appender()
+        } else {
+            self.plot
+                .layers_mut::<T, Line>()
+                .next()
+                .expect("an unkeyed line chart has one layer")
+                .appender()
+        }
     }
 
     /// The line layers, one per key in first-seen order (one without
@@ -276,6 +375,7 @@ impl<T: Send + Sync + 'static> LineChart<T> {
 impl<T: Send + Sync + 'static> Chart for LineChart<T> {
     fn resolve(&mut self, cx: &Context, width: f32, height: f32) -> Result<&Resolved> {
         self.materialise();
+        self.drain_feed()?;
         self.plot.resolve(cx, width, height)
     }
     fn layout(&self) -> Option<&Layout> {
@@ -290,7 +390,14 @@ impl<T: Send + Sync + 'static> Chart for LineChart<T> {
         self.plot.pick_row(at)
     }
     fn needs_frame(&self) -> bool {
-        Chart::needs_frame(&self.plot)
+        Chart::needs_frame(&self.plot) || self.feed.as_ref().is_some_and(FeedRx::pending)
+    }
+    fn set_waker(&mut self, waker: Waker) {
+        if let Some(feed) = &self.feed {
+            feed.set_waker(Some(&waker));
+        }
+        self.plot.set_waker(waker.clone());
+        self.waker = Some(waker);
     }
     fn title_text(&self) -> Option<&str> {
         self.plot.title_text()

@@ -63,12 +63,11 @@ Never "fix" a gap by loosening its check. Fix Gup instead, watch the check
   (background, coverage, ink, hue, exact colour, grey, horizontal runs). It is
   deliberately small and should migrate to the shared visual-assertion module
   (GUP-388) once that lands.
-- `src/bin/*.rs` are the tasks. `t0` to `t5_live` are written against `gup_core`
-  (GUP-465); `ref_export_png`, `t5_stream` and `t6_*` still use the old `gup`
-  API until RFC-001 S12 and S14. When the new core replaces that API, rewrite
-  the remaining binaries. The manifest stays put, so the bar the task has to
-  clear does not move. RFC-001 step S10's exit criterion is "dogfood tasks 1-3
-  pass".
+- `src/bin/*.rs` are the tasks. `t0` to `t5_stream` are written against
+  `gup_core` (GUP-465, GUP-480); `ref_export_png` and `t6_*` still use the old
+  `gup` API until RFC-001 S14. When the new core replaces that API, rewrite the
+  remaining binaries. The manifest stays put, so the bar the task has to clear
+  does not move. RFC-001 step S10's exit criterion is "dogfood tasks 1-3 pass".
 - `src/bin/dogfood_check.rs` is the runner.
 
 ## The tasks
@@ -127,8 +126,9 @@ axis.
 - Dropped: the old `$Nk` x tick format.
 - `t3_scatter_window`: the same chart with `.tooltip(..)` in `gup_core::show`.
   With `DOGFOOD_AUTO=1` it resolves headless, takes a row's `pick_anchor`, and
-  sets `GUP_SCREENSHOT_*` so the window hovers there. The tooltip uses a dark
-  theme, the look the check was calibrated for. egui is not used.
+  sets `GUP_SCREENSHOT_*` so the window hovers there. The window check
+  recognises a tooltip panel of any style (`Measure::Tooltip`) on the default
+  tooltip. egui is not used.
 
 ### Task 4: `t4_linked`
 
@@ -137,21 +137,23 @@ renders any `gup_core::Chart`. egui pointer events go to the left chart's
 `Chart::handle`; it uses `Drag::Brush` and `on_brush` writes the brushed rows to
 shared state. The right chart is rebuilt from the rows whenever the selection
 changes (grey for unselected, colours for selected). This **works**. The left
-chart's own dimming of unbrushed rows is set to 0 (`unbrushed_opacity`), because
-faded colours still read as colour and the check wants grey only there.
+chart's own dimming of unbrushed rows is `Unbrushed::Grey` (a theme setting):
+rows outside the brush are drawn in `#bfbfbf`, visible but colourless, because a
+fade keeps the hue and the check wants grey only there. Two checks guard it:
+grey only (at most 20 saturated pixels) and greyed, not hidden (at least 500
+grey pixels).
 
 ### Task 5: `t5_live` and `t5_stream`
 
 Append points every 100 ms without rebuilding the chart.
 
 - `t5_live`: a line chart (random walk) and a 100k-point scatter on `gup_core`.
-  This **works**, but there is no append yet (RFC-001 S12's `appender`). Every
-  tick rebuilds both charts from their rows, a full re-upload, as before. The
-  scatter costs tens of milliseconds per tick to render.
-- `t5_stream`: Tutorial 5's `DataStream` -> `Selection::stream` route. The
-  stream accepts batches, but the selection never becomes render-ready:
-  `prepare_render_bound` fails with "No attribute bindings set", and every PNG
-  is blank _(tracked)_.
+  Each chart is built once and fed through `appender()`: every tick `extend`s
+  the new samples and the next frame uploads only those rows (GUP-480). The
+  window wakes when rows arrive.
+- `t5_stream`: a scatter chart built empty; three batches of 50 rows go through
+  its `appender()`, with a PNG after each. Three checks on `t5_stream_2.png`
+  find each batch in its third of the plot.
 
 ### Task 6: `t6_wgsl`
 

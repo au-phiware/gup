@@ -77,6 +77,11 @@ pub trait Chart: 'static {
     fn needs_frame(&self) -> bool {
         false
     }
+    /// Called by hosts with a waker that schedules a frame. Charts with
+    /// appenders wake it when rows arrive.
+    fn set_waker(&mut self, waker: std::task::Waker) {
+        let _ = waker;
+    }
     /// The chart's title, if any (a window title).
     fn title_text(&self) -> Option<&str>;
     /// The chart as [`Any`], to downcast to its concrete type.

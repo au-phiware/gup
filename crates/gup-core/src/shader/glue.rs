@@ -65,8 +65,17 @@ pub(crate) struct GlueSpec<'a> {
     /// Whether rows outside the brush dim (GUP-458): group 1 binds one bit
     /// per stored row after the LUTs, and the vertex stage multiplies every
     /// colour channel's alpha by `enc.brush_dim` for rows whose bit is
-    /// clear.
-    pub brushed: bool,
+    /// clear. `Grey` also reads `enc.brush_grey` and replaces the colour.
+    pub brushed: Option<BrushStyle>,
+}
+
+/// How the brushed glue draws rows outside the brush (GUP-477).
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub(crate) enum BrushStyle {
+    /// Multiply the colour channels' alpha by `enc.brush_dim`.
+    Fade,
+    /// Replace the colour channels by `enc.brush_grey`.
+    Grey,
 }
 
 /// A texture + sampler pair bound for one link's LUT.
@@ -260,6 +269,9 @@ pub(crate) const NULL_COLOR_FIELD: &str = "null_color";
 /// The `Encodings` field holding the opacity of unbrushed rows (1.0 while
 /// the plot has no brush).
 pub(crate) const BRUSH_DIM_FIELD: &str = "brush_dim";
+/// The `Encodings` field holding the colour of unbrushed rows under
+/// [`BrushStyle::Grey`].
+pub(crate) const BRUSH_GREY_FIELD: &str = "brush_grey";
 
 /// Whether validity plane `plane` is set for this row.
 fn valid(plane: usize) -> String {
@@ -474,10 +486,13 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
     if exprs.iter().any(|(_, e)| matches!(e, Expr::OrNull { .. })) {
         fields.push((NULL_COLOR_FIELD.to_string(), "vec4<f32>".to_string(), 16));
     }
-    if spec.brushed {
+    if spec.brushed.is_some() {
         fields.push((BRUSH_DIM_FIELD.to_string(), "f32".to_string(), 4));
     }
-    let brush_binding = spec.brushed.then_some(next_binding);
+    if spec.brushed == Some(BrushStyle::Grey) {
+        fields.push((BRUSH_GREY_FIELD.to_string(), "vec4<f32>".to_string(), 16));
+    }
+    let brush_binding = spec.brushed.map(|_| next_binding);
     // Validity bits only when the columns have a null (and only numeric
     // columns have bits).
     let validity = spec.validity && planes > 0;
@@ -487,8 +502,10 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
     if validity {
         signature.push_str(" with nulls");
     }
-    if spec.brushed {
-        signature.push_str(" brushed");
+    match spec.brushed {
+        Some(BrushStyle::Fade) => signature.push_str(" brushed"),
+        Some(BrushStyle::Grey) => signature.push_str(" brushed grey"),
+        None => {}
     }
 
     // Print the module.
@@ -653,7 +670,7 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
         let _ = writeln!(w, "    m.{name} = {expr};");
     }
     let body_end = w.len();
-    if spec.brushed {
+    if let Some(style) = spec.brushed {
         // Rows outside the brush fade: the colour channels' alpha takes
         // the same multiply as a fill opacity. Not in the pick body, which
         // never reads colour.
@@ -665,7 +682,18 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
         );
         for ch in spec.channels.iter().filter(|c| c.role == Some(Role::Color)) {
             let n = ch.name;
-            let _ = writeln!(w, "    m.{n} = vec4<f32>(m.{n}.rgb, m.{n}.a * brush_k);");
+            match style {
+                BrushStyle::Fade => {
+                    let _ = writeln!(w, "    m.{n} = vec4<f32>(m.{n}.rgb, m.{n}.a * brush_k);");
+                }
+                BrushStyle::Grey => {
+                    let _ = writeln!(
+                        w,
+                        "    m.{n} = vec4<f32>(mix(enc.brush_grey.rgb, m.{n}.rgb, brush_k), \
+                         m.{n}.a * mix(enc.brush_grey.a, 1.0, brush_k));"
+                    );
+                }
+            }
         }
     }
     let vertex =

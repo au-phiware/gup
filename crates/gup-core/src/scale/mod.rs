@@ -342,6 +342,8 @@ pub(crate) trait DynPositionScale: Send + Sync {
     /// Union the data value drawn at pixel `px` into the automatic domain
     /// being fitted (a constant or derived position, e.g. a bar baseline).
     fn fit_position(&self, px: f64);
+    /// Identifies the scale among its clones (they share state).
+    fn identity(&self) -> usize;
     /// Grow an automatic, already rounded domain, in data units, so that
     /// its ends map `overhang` pixels inside the pixel interval `a..b`.
     /// Returns whether the domain changed; an explicit domain and an
@@ -432,6 +434,10 @@ impl<S: PositionScale> DynPositionScale for ScaleRef<S> {
 
     fn invert(&self, px: f64) -> f64 {
         self.read().invert(px)
+    }
+
+    fn identity(&self) -> usize {
+        std::ptr::from_ref(&self.0.keys) as usize
     }
 
     fn fit_position(&self, px: f64) {

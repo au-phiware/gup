@@ -437,6 +437,9 @@ impl<T: Send + Sync + 'static> Chart for BarChart<T> {
     fn needs_frame(&self) -> bool {
         Chart::needs_frame(&self.plot)
     }
+    fn set_waker(&mut self, waker: std::task::Waker) {
+        self.plot.set_waker(waker);
+    }
     fn title_text(&self) -> Option<&str> {
         self.plot.title_text()
     }

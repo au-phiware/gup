@@ -9,7 +9,8 @@ implementer-reason:
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 📋 Planned **Created**: 2026-10-19
+**Initiative**: RFC-001 Migration **Status**: ✅ Complete (2026-10-19)
+**Created**: 2026-10-19
 
 ## Context
 
@@ -64,42 +65,42 @@ Eviction (`Window::LastRows`) is GUP-482; the browser host's waker is GUP-481.
 
 ### AC1: `append` is public
 
-- [ ] `Selection::append` is `pub`, its doc says what it uploads, and the
+- [x] `Selection::append` is `pub`, its doc says what it uploads, and the
       `expect(dead_code)` attribute is gone.
-- [ ] Appending bumps the selection's revision (a new `appended: u64` counter in
+- [x] Appending bumps the selection's revision (a new `appended: u64` counter in
       `revision()`), so a plot holding the selection re-resolves: a test appends
       through `plot.layer_mut::<T, M>()` and gets a non-cached resolve that
       draws the new rows.
 
 ### AC2: `Appender`
 
-- [ ] `gup_core::Appender<T>` and `gup_core::Closed` exist as in Decisions;
+- [x] `gup_core::Appender<T>` and `gup_core::Closed` exist as in Decisions;
       `Appender<T>: Clone + Send + Sync` for `T: Send` (a `static_assertions`
       style compile check in a test).
-- [ ] `Selection::appender`, `ScatterChart::appender` and `LineChart::appender`
+- [x] `Selection::appender`, `ScatterChart::appender` and `LineChart::appender`
       exist as in Decisions, each with a doctest that pushes from a spawned
       thread and renders (external crate).
-- [ ] A plot test: a thread pushes 1,000 rows in 10 `extend` calls into a
+- [x] A plot test: a thread pushes 1,000 rows in 10 `extend` calls into a
       64-row-chunk layer; after joining, `needs_frame()` is true; one resolve
       draws all rows; column bytes written equal exactly 1,000 × stride; the
       image equals a plot built from all rows at once (byte-identical, as
       `appended_rows_upload_only_their_bytes` checks); `needs_frame()` is then
       false.
-- [ ] A line chart with `.color(key)`: pushing rows of an existing key extends
+- [x] A line chart with `.color(key)`: pushing rows of an existing key extends
       that key's line; a new key adds a new line layer with the same width and
       the next palette colour and a legend entry (golden-free pixel check of the
       new line's colour and the legend's text run).
-- [ ] Dropping the chart makes `push` return `Err(Closed)`.
+- [x] Dropping the chart makes `push` return `Err(Closed)`.
 
 ### AC3: Hosts wake on new rows
 
-- [ ] `Chart::set_waker` exists (Decisions); `Plot`, `ScatterChart`, `LineChart`
+- [x] `Chart::set_waker` exists (Decisions); `Plot`, `ScatterChart`, `LineChart`
       and `BarChart` implement or forward it.
-- [ ] A test with a counting `std::task::Wake` impl: after `set_waker`, each
+- [x] A test with a counting `std::task::Wake` impl: after `set_waker`, each
       `push`/`extend` wakes it exactly once; an appender created before
       `set_waker` also wakes it.
-- [ ] `GupApp` installs a waker that redraws the window (Decisions).
-- [ ] A new example `crates/gup-core/examples/live_append.rs` (at most 40
+- [x] `GupApp` installs a waker that redraws the window (Decisions).
+- [x] A new example `crates/gup-core/examples/live_append.rs` (at most 40
       lines): a line whose rows a thread pushes every 50 ms for 3 s, shown by
       `gup_core::show`. Run it under the display for 3 s, capture the window
       (story-worker's screenshot procedure) with no pointer input, and read the
@@ -107,15 +108,15 @@ Eviction (`Window::LastRows`) is GUP-482; the browser host's waker is GUP-481.
 
 ### AC4: Dogfood
 
-- [ ] `t5_live` creates each chart once and feeds it through `appender()` every
+- [x] `t5_live` creates each chart once and feeds it through `appender()` every
       tick; the `line_chart(&pts)` / `scatter_chart(&pts)` rebuilds are gone.
       Its three checks pass unchanged.
-- [ ] `t5_stream` is rewritten on `gup_core` (Decisions) and imports nothing
+- [x] `t5_stream` is rewritten on `gup_core` (Decisions) and imports nothing
       from `gup`. The gap `STREAM_NEVER_READY` is deleted; its two checks are
       plain checks with the same thresholds, and `t5_stream_2.png` gains three
       checks, one per batch, as in Decisions.
-- [ ] `xvfb-run -a ./dogfood/run_all.sh`: no FAIL, no XPASS. Paste the t5 lines.
-- [ ] `dogfood/README.md` "Task 5" describes the appender and drops "task 5's
+- [x] `xvfb-run -a ./dogfood/run_all.sh`: no FAIL, no XPASS. Paste the t5 lines.
+- [x] `dogfood/README.md` "Task 5" describes the appender and drops "task 5's
       missing append" and the rebuild note.
 
 ## Decisions
@@ -216,14 +217,14 @@ Eviction (`Window::LastRows`) is GUP-482; the browser host's waker is GUP-481.
 
 ## Technical Tasks
 
-- [ ] `append.rs`: `Appender`, `Closed`, `Feed`; exports.
-- [ ] `Selection`: `pub append`, `appended` revision, `appender`, the three
+- [x] `append.rs`: `Appender`, `Closed`, `Feed`; exports.
+- [x] `Selection`: `pub append`, `appended` revision, `appender`, the three
       `Layer` methods.
-- [ ] `Plot`: drain before the cache check, `needs_frame`, `set_waker`.
-- [ ] `Chart::set_waker`; builders' `appender` and forwarding; `LineChart` key
+- [x] `Plot`: drain before the cache check, `needs_frame`, `set_waker`.
+- [x] `Chart::set_waker`; builders' `appender` and forwarding; `LineChart` key
       routing.
-- [ ] `GupApp` user-event waker; `live_append` example; screenshot.
-- [ ] Tests (AC1–AC3); dogfood t5 ports; README; suite run.
+- [x] `GupApp` user-event waker; `live_append` example; screenshot.
+- [x] Tests (AC1–AC3); dogfood t5 ports; README; suite run.
 
 ## Dependencies
 
@@ -252,8 +253,8 @@ Eviction (`Window::LastRows`) is GUP-482; the browser host's waker is GUP-481.
 
 ## Success Metrics
 
-- [ ] The RFC's example (e), minus `window`, works as written on `gup_core`.
-- [ ] `STREAM_NEVER_READY` is gone and both task 5 binaries use the appender.
+- [x] The RFC's example (e), minus `window`, works as written on `gup_core`.
+- [x] `STREAM_NEVER_READY` is gone and both task 5 binaries use the appender.
 
 ## Risk Assessment
 
@@ -268,22 +269,94 @@ Eviction (`Window::LastRows`) is GUP-482; the browser host's waker is GUP-481.
 
 ## Definition of Done
 
-- [ ] First code commit within 30 minutes of starting; then commit at each
+- [x] First code commit within 30 minutes of starting; then commit at each
       checkpoint (story-worker "Checkpoint rule")
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1` and
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1` and
       `cargo test -p gup-core -- --test-threads=1`
-- [ ] `xvfb-run -a ./dogfood/run_all.sh` passes (no FAIL, no XPASS)
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples` and
+- [x] `xvfb-run -a ./dogfood/run_all.sh` passes (no FAIL, no XPASS)
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples` and
       `cargo check -p gup-core --examples`
-- [ ] `mask wasm-browser` passes (this story touches the host input loop and
+- [x] `mask wasm-browser` passes (this story touches the host input loop and
       code compiled to wasm)
-- [ ] `mask wasm-size` run and the scatter and per-row-type figures reported in
+- [x] `mask wasm-size` run and the scatter and per-row-type figures reported in
       the Implementation Summary (the orchestrator re-records the budget)
-- [ ] `mask perf-budget` table pasted (story-worker step 9)
-- [ ] Rendered output verified by eye: the `live_append` screenshot,
+- [x] `mask perf-budget` table pasted (story-worker step 9)
+- [x] Rendered output verified by eye: the `live_append` screenshot,
       `t5_live.png`, `t5_stream_2.png`
-- [ ] `mask old-path-loc` recorded (expected unchanged)
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] `mask old-path-loc` recorded (expected unchanged)
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `crates/gup-core/src/append.rs`: `Appender<T>` (Clone, Send, Sync), `Closed`,
+  and the private feed (mpsc channel, pending count, waker).
+- `Selection::append` is public with a doc; `appended` counter in the revision;
+  `Selection::appender`; `Layer::{drain_feed, feed_pending, set_waker}`.
+  `Plot::resolve` drains every layer before the cache check; `Plot::needs_frame`
+  is true while rows are pending; `Chart::set_waker`.
+- `ScatterChart::appender`, `LineChart::appender` (keyed charts route rows to
+  per-key layers through a builder feed and one shared colour `ScaleRef`),
+  `BarChart` forwards the waker only.
+- `GupApp`: user-event loop (`EventLoop::<Wake>`), `ProxyWaker`, installed in
+  `open`.
+- `crates/gup-core/examples/live_append.rs`; `tests/append.rs` (12 tests: thread
+  feed with exact bytes, draw order, culling, brush bits, picks, SVG, cache
+  miss, idle resolve writes nothing, closed, waker counts, keyed line); 3
+  doctests.
+- Dogfood: `t5_live` builds each chart once and `extend`s each tick; `t5_stream`
+  is on `gup_core` with three batch checks; `STREAM_NEVER_READY` deleted; README
+  updated. Suite: 8 pass, 3 XFAIL, 0 FAIL, 0 XPASS.
+- Evidence: `mask wasm-size`: scatter 324205 B gz (recorded 319085, +1.6%, limit
+  +2%), over-wgpu 291845, per-row-type 728 (budget 2600). `mask perf-budget`:
+  first run 1 timing FAIL (`pipeline.link_create.median_ms` 1.347 vs 1.332) at
+  load average 18.6; second run all pass at load 8 (`uptime` after: load 4.18).
+  `mask old-path-loc`: TOTAL 26601. `mask wasm-browser`: PASS. Screenshots read:
+  `/tmp/live_append.png` (line grown to t = 2.9 s with no input), `t5_live.png`,
+  `t5_stream_2.png`.
+
+## Retrospective
+
+**Completed**: 2026-10-19
+
+### Key Technical Learnings
+
+#### Appends compose with the landed systems without extra code
+
+- **Challenge**: appends touch chunking, draw order, culling, brush bits, picks
+  and SVG.
+- **Solution**: one drain point (`Plot::resolve`, before the cache check)
+  funnels every append into `Selection::append`, which GUP-414 and GUP-431
+  already tested. Tests compare the appended chart to a chart built at once.
+- **Pattern**: test composition by "appended == built at once" image equality.
+
+#### Brush semantics after appends
+
+- **Challenge**: a brush holds data rows chosen at drag time.
+- **Solution**: appended rows are not in the brush and render dimmed until the
+  next drag; the test asserts that rather than inventing re-brushing.
+- **Pattern**: say what the semantics are in the test name.
+
+### Architectural Decisions
+
+#### `Receiver` behind a `Mutex`
+
+- **Decision**: `FeedRx` wraps the `Receiver` in a `Mutex` because layers must
+  be `Sync`.
+- **Reasoning**: only the owner drains, so the lock is uncontended.
+- **Trade-off**: one uncontended lock per resolve for charts with a feed.
+
+### Development Workflow Insights
+
+- A commit hook that failed printed its error only deep in the log; commit with
+  output redirected to a file and grep it.
+- Windowed screenshot: run the example under `xvfb-run` with
+  `import -window root` after a sleep.
+- The first commit attempt had a misplaced `#[cfg]` (my insert landed between an
+  attribute and its item); the hook caught it on the wasm32 clippy.
+
+### Follow-up Stories
+
+None. GUP-482 (eviction), GUP-481 and GUP-483 (wakers) already exist.

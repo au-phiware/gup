@@ -410,40 +410,40 @@ findings", GUP-396).
   scales and `Time` overrides the SI-style default for axes, legend ramps and
   measurement, with currency, percent and date goldens. Deps: GUP-435 ✅,
   GUP-452 ✅, GUP-426 ✅.
-- [GUP-477](GUP-477_Grey_Unbrushed_Rows.md) 📋 — `Theme::unbrushed` becomes
+- [GUP-477](GUP-477_Grey_Unbrushed_Rows.md) ✅ — `Theme::unbrushed` becomes
   `Unbrushed::Fade(f32) | Grey(Color)` (default `Fade(0.3)`, images unchanged),
   with a grey-brush golden, and dogfood t4 greys rather than hides unbrushed
   rows. Deps: GUP-458 ✅, GUP-465 ✅.
-- [GUP-478](GUP-478_Style_Agnostic_Tooltip_Check.md) 📋 — A dogfood
+- [GUP-478](GUP-478_Style_Agnostic_Tooltip_Check.md) ✅ — A dogfood
   `Measure::Tooltip` that recognises a tooltip panel of any colours with five
   text lines, so t3 checks the default tooltip without its dark theme. Deps:
   GUP-465 ✅.
-- [GUP-479](GUP-479_RFC_001_S11_Secondary_Y_Axis.md) 📋 — RFC-001 step S11:
+- [GUP-479](GUP-479_RFC_001_S11_Secondary_Y_Axis.md) ✅ — RFC-001 step S11:
   `Plot::y_right` and `y_right_title`, a right axis with its own fit, ticks and
   margin that zoom and pan move with the left; S11's deletions are reassigned to
   GUP-466, GUP-483/484 and GUP-486. Deps: GUP-466 ✅ (soft).
-- [GUP-480](GUP-480_RFC_001_S12a_Appender_Handle.md) 📋 — RFC-001 step S12a:
+- [GUP-480](GUP-480_RFC_001_S12a_Appender_Handle.md) ✅ — RFC-001 step S12a:
   public `Selection::append`, a `Clone + Send` `Appender` for scatter and line
   charts drained at resolve, `Chart::set_waker` with a window waker, and dogfood
   t5 on it. Deps: GUP-414 ✅, GUP-465 ✅.
 - [GUP-481](GUP-481_RFC_001_S12b_Web_Canvas_Waker.md) 📋 — RFC-001 step S12b:
   `CanvasApp` wakes on appended rows through a wasm32 thread-local registry,
-  checked by a browser step with no input. Deps: GUP-480 📋.
+  checked by a browser step with no input. Deps: GUP-480 ✅.
 - [GUP-482](GUP-482_RFC_001_S12c_Window_Eviction.md) 📋 — RFC-001 step S12c
   (design): `Window::LastRows(n)` whole-chunk eviction that keeps draw order,
   line bridges, brush bits, CPU and GPU picks and culling consistent, with
-  stored rows renumbered from 0. Deps: GUP-480 📋.
+  stored rows renumbered from 0. Deps: GUP-480 ✅.
 - [GUP-483](GUP-483_RFC_001_S13a_Gup_Egui_On_Gup_Core.md) 📋 — RFC-001 step
   S13a: `gup-egui` rewritten on `gup-core` (egui's device via `from_wgpu`, a
   sampled `TextureTarget`, input and repaint), back in the workspace, used by
-  dogfood t4 and t5. Deps: GUP-480 📋.
+  dogfood t4 and t5. Deps: GUP-480 ✅.
 - [GUP-484](GUP-484_RFC_001_S13b_Gup_Bevy_On_Gup_Core.md) 📋 — RFC-001 step
   S13b: `gup-bevy` rewritten on `gup-core`, back in the workspace, with its CI
-  placement decided by a measured compile-cost rule. Deps: GUP-480 📋, GUP-483
+  placement decided by a measured compile-cost rule. Deps: GUP-480 ✅, GUP-483
   📋 (soft).
 - [GUP-485](GUP-485_RFC_001_S14a_Dogfood_Residue_On_Gup_Core.md) 📋 — RFC-001
   step S14a: `ref_export_png` and `t6_wgsl` on `gup-core`; the suite has no
-  XFAIL and no `gup` dependency. Deps: GUP-465 ✅, GUP-480 📋.
+  XFAIL and no `gup` dependency. Deps: GUP-465 ✅, GUP-480 ✅.
 - [GUP-486](GUP-486_RFC_001_S14b_Delete_Old_Chart_Builder.md) 📋 — RFC-001 step
   S14b: delete `chart_builder` (`ComposedChart` and the remaining old builders)
   and what stops compiling; old-path LOC ≤ 18,504. Deps: GUP-466 ✅, GUP-485 📋.
