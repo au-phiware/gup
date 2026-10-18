@@ -361,7 +361,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   step S9e: hover and click through GPU picks when a layer is not CPU-readable,
   `Chart::needs_frame` for hosts, and `Plot::on_row` events by `RowId`. Deps:
   GUP-455 📋, GUP-453 📋; soft: GUP-454 📋.
-- [GUP-457](GUP-457_RFC_001_S9f_Chunk_Culling.md) 📋 — RFC-001 step S9f: skip
+- [GUP-457](GUP-457_RFC_001_S9f_Chunk_Culling.md) 🚧 — RFC-001 step S9f: skip
   draw entries whose pixel box (from f64 chunk stats, plus a margin) misses the
   plot rect, for draws, CPU picks and GPU picks alike, with byte-identical
   images, a `zoom_bench --sorted` measurement and `zoom_culled.*` budget rows.
