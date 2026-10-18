@@ -58,6 +58,10 @@ pub(crate) struct GlueSpec<'a> {
     ///
     /// [`Geometry::Polyline`]: crate::Geometry::Polyline
     pub polyline: bool,
+    /// Whether the mark defines `hit_distance` and `hit_row`
+    /// ([`Mark::GPU_PICK`](crate::Mark::GPU_PICK)), so the glue has a pick
+    /// variant ([`Glue::pick`]).
+    pub gpu_pick: bool,
 }
 
 /// A texture + sampler pair bound for one link's LUT.
@@ -128,6 +132,12 @@ pub(crate) struct Glue {
     /// relative link's base: `<field>_base: f32`, plus
     /// `<field>_base_lo: f32` for a hi/lo input).
     pub chunk: StructLayout,
+    /// The pick variant of [`source`](Self::source) (RFC-001 S9d), if the
+    /// mark draws in GPU picks: the same module with `vs_pick` and
+    /// `fs_pick` in place of `vs_main` and `fs_main`, and the `Pick`
+    /// uniform at group 3. Linked only when a pick needs it, so colour
+    /// pipelines never pay for it.
+    pub pick: Option<String>,
 }
 
 /// The `Encodings` field (and `Chunk` base, LUT and sampler prefix) of
@@ -582,11 +592,13 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
         ", col: Columns"
     };
 
+    let head_end = w.len();
     let _ = writeln!(
         w,
         "\n@vertex\nfn vs_main(@builtin(vertex_index) vertex_index: u32, \
          @builtin(instance_index) instance_index: u32{col_param}) -> {mark_alias}::Varyings {{"
     );
+    let body_start = w.len();
     if validity && spec.polyline {
         // A polyline reads this row's bits and the next row's, each at an
         // offset from the draw's first instance (a bridge between chunks
@@ -615,6 +627,7 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
     for (name, expr) in &next_exprs {
         let _ = writeln!(w, "    m.{name} = {expr};");
     }
+    let body_end = w.len();
     let vertex =
         format!("{mark_alias}::vertex(m, vertex_index, chunk.row_base + instance_index, u_view)");
     let mut drawn = Vec::new();
@@ -642,11 +655,11 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
     for name in &next_keys {
         drawn.push(format!("u32(col.{name} != {NULL_CODE}u)"));
     }
-    if !drawn.is_empty() {
+    let drawn = (!drawn.is_empty()).then(|| drawn.join(" & "));
+    if let Some(drawn) = &drawn {
         // A null position or size: every corner at one point outside the
         // clip volume, a degenerate quad that is never rasterised. The mark
         // contract names the position member `clip`.
-        let drawn = drawn.join(" & ");
         let _ = writeln!(
             w,
             "    var out = {vertex};\n    \
@@ -662,6 +675,16 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
         "\n@fragment\nfn fs_main(v: {mark_alias}::Varyings) -> @location(0) vec4<f32> {{\n    \
          return {mark_alias}::shade(v);\n}}"
     );
+    let pick = spec.gpu_pick.then(|| {
+        pick_source(
+            &s[..head_end],
+            &s[body_start..body_end],
+            &vertex,
+            drawn.as_deref(),
+            &mark_alias,
+            col_param,
+        )
+    });
 
     let mut modules = vec![&VIEW];
     modules.extend(
@@ -682,7 +705,73 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
         luts,
         encodings,
         chunk,
+        pick,
     }
+}
+
+/// Texels per logical pixel in a GPU pick's one-texel target. A
+/// rasteriser snaps vertices to 1/256 of a texel (8 subpixel bits), and
+/// varyings follow the snapped vertices, so at one texel per pixel `local`
+/// would be off by up to 0.004 px; at 256 the snap is 1/65,536 px and the
+/// pick's distances match the CPU's to about 1e-5 px (GUP-455).
+const PICK_ZOOM: f32 = 256.0;
+
+/// The pick variant of a glue module (RFC-001 S9d): `head` (imports,
+/// structs, bindings) and the vertex `body` of `vs_main`, with entry points
+/// that draw into a one-texel `Rg32Uint` target whose centre is the
+/// pointer. `vs_pick` moves the pointer to the texel's centre, scaling one
+/// logical pixel to [`PICK_ZOOM`] texels; `fs_pick` writes `(layer + 1, row + 1)` and
+/// a depth that encodes the mark's signed distance, so a `LessEqual` test
+/// in draw order keeps the CPU pick's winner.
+fn pick_source(
+    head: &str,
+    body: &str,
+    vertex: &str,
+    drawn: Option<&str>,
+    mark_alias: &str,
+    col_param: &str,
+) -> String {
+    let tol = crate::pick::PICK_TOLERANCE.0;
+    let mut s = String::from(head);
+    let w = &mut s;
+    let _ = writeln!(
+        w,
+        "\n// The pick: the pointer in clip space and the layer's index.\n\
+         struct Pick {{\n    at: vec2<f32>,\n    layer: u32,\n    pad: u32,\n}}\n\n\
+         @group(3) @binding(0) var<uniform> u_pick: Pick;\n\n\
+         struct PickOut {{\n    @location(0) id: vec2<u32>,\n    \
+         @builtin(frag_depth) depth: f32,\n}}"
+    );
+    let _ = writeln!(
+        w,
+        "\n@vertex\nfn vs_pick(@builtin(vertex_index) vertex_index: u32, \
+         @builtin(instance_index) instance_index: u32{col_param}) -> {mark_alias}::Varyings {{"
+    );
+    w.push_str(body);
+    let _ = writeln!(w, "    var out = {vertex};");
+    if let Some(drawn) = drawn {
+        let _ = writeln!(
+            w,
+            "    let drawn = {drawn};\n    \
+             out.clip = select(vec4<f32>(2.0, 2.0, 2.0, 1.0), out.clip, drawn == 1u);"
+        );
+    }
+    let _ = writeln!(
+        w,
+        "    out.clip = vec4<f32>((out.clip.xy - u_pick.at * out.clip.w) * u_view.size * \
+         {PICK_ZOOM:?}, out.clip.zw);\n    return out;\n}}"
+    );
+    let _ = writeln!(
+        w,
+        "\n@fragment\nfn fs_pick(v: {mark_alias}::Varyings) -> PickOut {{\n    \
+         let d = {mark_alias}::hit_distance(v);\n    \
+         if (!(d <= {tol:?})) {{\n        discard;\n    }}\n    \
+         var out: PickOut;\n    \
+         out.id = vec2<u32>(u_pick.layer + 1u, {mark_alias}::hit_row(v) + 1u);\n    \
+         out.depth = select(0.5 + 0.5 * d / {tol:?}, 0.0, d <= 0.0);\n    \
+         return out;\n}}"
+    );
+    s
 }
 
 fn find_module(spec: &GlueSpec<'_>, path: &str) -> Option<&'static WgslModule> {

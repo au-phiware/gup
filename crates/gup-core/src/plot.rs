@@ -15,9 +15,11 @@ use crate::channel::{Mark, Px};
 use crate::context::{Context, ContextId};
 use crate::error::{Error, Result};
 use crate::geom::{Point, Rect};
+use crate::gpu_pick::GpuPicker;
 use crate::input::{Axes, Brush, Button, Drag, Event, EventInfo, Input, Response};
 use crate::marks::{Circle, Line, Rect as MarkRect, Segment};
 use crate::pick::{PickIndex, RowId};
+use crate::render::LayerGpu;
 use crate::scale::{DynPositionScale, Linear, PositionScale, ScaleRef, Ticks};
 use crate::scene::{
     Anchor, HAlign, Item, ItemKind, RectPrim, Rule, Scene, TextRole, TextRun, TextStyle, VAlign,
@@ -26,6 +28,7 @@ use crate::scene::{
 use crate::selection::{Layer, Selection};
 use crate::theme::Theme;
 use gup_text::TextSystem;
+use std::sync::Arc;
 
 /// A text run placed by layout, with its ink box.
 #[derive(Clone, Debug, PartialEq)]
@@ -144,7 +147,7 @@ pub struct Plot {
     /// Bumped whenever `x` or `y` is replaced, so layers re-bind the
     /// closures they encode through the plot's scales (starts at 1).
     axes_generation: u64,
-    layers: Vec<Box<dyn Layer>>,
+    pub(crate) layers: Vec<Box<dyn Layer>>,
     x_title: Option<String>,
     y_title: Option<String>,
     theme: Theme,
@@ -156,7 +159,7 @@ pub struct Plot {
     /// The last successful resolve and what it was resolved for.
     cache: Option<(CacheKey, Resolved)>,
     /// How many full (uncached) resolves have succeeded.
-    generation: u64,
+    pub(crate) generation: u64,
     /// Whether each axis (x, y) was widened by the last resolve: its range
     /// is the whole plot rect, not inset at the far end.
     widened: [bool; 2],
@@ -166,6 +169,11 @@ pub struct Plot {
     zoomed: [Option<(f64, f64)>; 2],
     /// The pick index, and the (generation, revision sum) it was built at.
     pick: Option<((u64, u64), PickIndex)>,
+    /// Each layer's z and GPU state at the last resolve, by layer index:
+    /// what a GPU pick draws.
+    pub(crate) drawn: Vec<(i32, Arc<LayerGpu>)>,
+    /// GPU pick state, made on the first `request_pick`.
+    pub(crate) gpu_pick: Option<GpuPicker>,
     /// The hovered row, where its tooltip attaches, and the generation that
     /// anchor was found at.
     hover: Option<(RowId, Point, u64)>,
@@ -353,6 +361,8 @@ impl Plot {
             widened: [false; 2],
             zoomed: [None; 2],
             pick: None,
+            drawn: Vec::new(),
+            gpu_pick: None,
             hover: None,
             press: None,
             view_axes: Axes::Both,
@@ -1231,7 +1241,7 @@ impl Plot {
     }
 
     /// The pick index for the current resolve, built on first use.
-    fn pick_index(&mut self) -> Option<&PickIndex> {
+    pub(crate) fn pick_index(&mut self) -> Option<&PickIndex> {
         let plot = self.layout()?.plot;
         let key = (self.generation, self.revision_sum());
         if self
@@ -1523,6 +1533,10 @@ impl Plot {
             layer.release();
             batches.push((layer.z(), batch));
         }
+        self.drawn = batches
+            .iter()
+            .map(|(z, b)| (*z, Arc::clone(&b.gpu)))
+            .collect();
 
         // 7. The scene.
         let mut scene = Scene::new(width, height, th.background);

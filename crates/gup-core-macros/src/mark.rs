@@ -18,8 +18,9 @@ use syn::{Data, DeriveInput, Expr, Fields, Ident, LitStr};
 const USAGE: &str = "#[mark(module = \"gup::marks::circle\", geometry = Quad)] (`geometry` is \
                      `Quad` or `Polyline`; or \
                      `wgsl = \"…\"` / `file = \"…\"` for your own module, with an optional \
-                     `path = \"crate::module\"`), and optionally `antialias = Msaa` and `hit = Disc` (CPU \
-                     picking: `Disc`, `AlignedBox`, `Segment` or `Polyline`)";
+                     `path = \"crate::module\"`), and optionally `antialias = Msaa`, `hit = Disc` (CPU \
+                     picking: `Disc`, `AlignedBox`, `Segment` or `Polyline`) and `gpu_pick` \
+                     (GPU picking: the module defines `hit_distance` and `hit_row`)";
 
 /// `Selection` inherent methods that a generated setter would shadow.
 const SELECTION_METHODS: &[&str] = &[
@@ -44,6 +45,7 @@ struct Args {
     geometry: Option<Ident>,
     antialias: Option<Ident>,
     hit: Option<Ident>,
+    gpu_pick: Option<Span>,
 }
 
 fn parse_args(input: &DeriveInput) -> syn::Result<Args> {
@@ -74,6 +76,9 @@ fn parse_args(input: &DeriveInput) -> syn::Result<Args> {
             } else if meta.path.is_ident("hit") {
                 once(args.hit.is_some(), "hit")?;
                 args.hit = Some(meta.value()?.parse()?);
+            } else if meta.path.is_ident("gpu_pick") {
+                once(args.gpu_pick.is_some(), "gpu_pick")?;
+                args.gpu_pick = Some(meta.path.span());
             } else if meta.path.is_ident("wgsl") || meta.path.is_ident("file") {
                 if args.wgsl.is_some() {
                     return Err(
@@ -424,6 +429,44 @@ pub fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             ));
         }
     }
+    // `gpu_pick`: the pick pass's fragment stage calls these (RFC-001 S9d).
+    if args.gpu_pick.is_some() {
+        for (needed, ret) in [("hit_distance", "f32"), ("hit_row", "u32")] {
+            let flat = flat_name(&path, needed);
+            let found = wgsl_module
+                .functions
+                .iter()
+                .find(|(_, f)| f.name.as_deref() == Some(flat.as_str()));
+            let returns = found.and_then(|(_, f)| f.result.as_ref()).map(|r| {
+                match &wgsl_module.types[r.ty].inner {
+                    naga::TypeInner::Scalar(naga::Scalar {
+                        kind: naga::ScalarKind::Float,
+                        width: 4,
+                    }) => "f32",
+                    naga::TypeInner::Scalar(naga::Scalar {
+                        kind: naga::ScalarKind::Uint,
+                        width: 4,
+                    }) => "u32",
+                    _ => "another type",
+                }
+            });
+            let ok = found.is_some_and(|(_, f)| f.arguments.len() == 1) && returns == Some(ret);
+            if !ok {
+                return Err(syn::Error::new(
+                    name.span(),
+                    format!(
+                        "`gpu_pick` needs `fn {needed}(v: Varyings) -> {ret}` in the WGSL of \
+                         `{path}`{}",
+                        match (found, returns) {
+                            (None, _) => String::from("; it declares no such function"),
+                            (Some(_), Some(r)) if r != ret => format!("; it returns {r}"),
+                            _ => String::from("; it has another signature"),
+                        }
+                    ),
+                ));
+            }
+        }
+    }
     let (_, members) = in_struct;
     let member_names: Vec<String> = members
         .iter()
@@ -581,6 +624,11 @@ pub fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
         polyline.then(|| quote!(const GEOMETRY: #root::Geometry = #root::Geometry::Polyline;));
 
     let hit_item = hit.map(|h| quote!(const HIT: #root::HitShape = #h;));
+    let gpu_pick_item = args.gpu_pick.map(|_| {
+        quote!(
+            const GPU_PICK: bool = true;
+        )
+    });
 
     let trait_ident = format_ident!("{}Attrs", name);
     let trait_doc = format!(
@@ -682,6 +730,7 @@ pub fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 #antialias_item
                 #geometry_item
                 #hit_item
+                #gpu_pick_item
             }
 
             #(#asserts)*

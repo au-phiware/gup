@@ -36,7 +36,7 @@ use crate::channel::{Color, Px, Unit};
 /// # }
 /// ```
 #[derive(Debug, gup_core_macros::Mark)]
-#[mark(module = "gup::marks::circle", geometry = Quad, hit = Disc)]
+#[mark(module = "gup::marks::circle", geometry = Quad, hit = Disc, gpu_pick)]
 pub struct Circle {
     /// Centre x (logical pixels).
     #[channel(role = X)]
@@ -99,7 +99,7 @@ impl Circle {
 /// # }
 /// ```
 #[derive(Debug, gup_core_macros::Mark)]
-#[mark(module = "gup::marks::rect", geometry = Quad, hit = AlignedBox)]
+#[mark(module = "gup::marks::rect", geometry = Quad, hit = AlignedBox, gpu_pick)]
 pub struct Rect {
     /// Centre x, or the first edge when `width` is 0 (logical pixels).
     #[channel(role = X)]
@@ -169,7 +169,7 @@ impl Rect {
 /// # }
 /// ```
 #[derive(Debug, gup_core_macros::Mark)]
-#[mark(module = "gup::marks::segment", geometry = Quad, hit = Segment)]
+#[mark(module = "gup::marks::segment", geometry = Quad, hit = Segment, gpu_pick)]
 pub struct Segment {
     /// Start x (logical pixels).
     #[channel(role = X)]
@@ -227,7 +227,7 @@ impl Segment {
 /// # }
 /// ```
 #[derive(Debug, gup_core_macros::Mark)]
-#[mark(module = "gup::marks::line", geometry = Polyline, hit = Polyline)]
+#[mark(module = "gup::marks::line", geometry = Polyline, hit = Polyline, gpu_pick)]
 pub struct Line {
     /// x (logical pixels).
     #[channel(role = X)]

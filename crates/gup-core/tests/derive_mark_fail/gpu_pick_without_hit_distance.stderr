@@ -1,0 +1,5 @@
+error: `gpu_pick` needs `fn hit_distance(v: Varyings) -> f32` in the WGSL of `$CRATE::dot`; it declares no such function
+  --> tests/derive_mark_fail/gpu_pick_without_hit_distance.rs:40:8
+   |
+40 | struct Dot {
+   |        ^^^

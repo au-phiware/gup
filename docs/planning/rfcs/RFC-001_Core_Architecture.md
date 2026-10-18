@@ -3445,3 +3445,74 @@ us (budget 20 us; 99% of them hit something, in a dense field).
   whole pixels where they compare absolute values.
 - **Cost**: `wasm.scatter.gz_bytes` 296,974 (GUP-453) to 301,126 (+4,152 B,
   harness hooks included); `wasm.per_row_type.gz_bytes` 1,144 to 1,325.
+
+## S9d findings (2026-10-18, GUP-455)
+
+GPU picking: `Plot::request_pick`, `poll_picks` and (native) `pick_row_gpu`,
+with `PickTicket` and `GpuPick` at the crate root. It supersedes §9's 5 × 5
+`Rg32Uint` region and `pick_async(px)`.
+
+### The scheme
+
+- **One texel, exact distances, depth decides.** A pick draws every layer whose
+  mark declares `gpu_pick` into a 1 × 1 `Rg32Uint` target
+  (`(layer + 1, row + 1)`, cleared to 0) with a 1 × 1 `Depth32Float` (cleared to
+  1.0, `LessEqual`, write on), in the colour pass's order: layer `z`, layer
+  index, then the layer's spans. `vs_pick` moves the pointer to the texel's
+  centre; each mark's quad grows by `View::pick_margin` (3 px in a pick, 0 in
+  colour); `fs_pick` discards when `hit_distance(v) > 3` and writes depth 0
+  inside the mark, else `0.5 + 0.5 · d / 3`. So a later containing mark wins,
+  else the nearer, ties to the later: `PickIndex::query`'s rule.
+- **256 texels per logical pixel**, not 1. A rasteriser snaps vertices to 1/256
+  of a texel and varyings follow the snapped vertices, so at one texel per pixel
+  `local` was off by up to 5e-4 px (measured); at 256 the worst difference from
+  the CPU's distance is 3e-5 px over 4,000 points (four shapes). Far vertices
+  land outside the guard band and are clipped, which changes nothing measurable.
+- **Rows.** The texel holds the stored row (`row_base + instance_index`, a
+  line's `hit_row` choosing the nearer end, `local.x <= 0`). `poll_picks` maps
+  it through the layer's `DrawOrder::row_of` **as of the poll**; a host compares
+  `GpuPick::generation` with `resolve_generation()` to drop picks drawn before
+  the last resolve (GUP-456).
+- **Readback.** Four 256-byte `MAP_READ` buffers; `map_async` after the counted
+  `Context::submit` sets an atomic flag; `poll_picks` polls the device once on
+  native (nothing on the web), copies 8 bytes out and unmaps. A fifth request in
+  flight is `Error::config("gpu pick", …)`. Outside the plot rect a request
+  finishes at once with no GPU work.
+
+### Departures from GUP-455's Decisions
+
+- **Own glue for picks.** `Glue::pick` is the colour glue's head and vertex body
+  with `vs_pick`/`fs_pick` and `@group(3) Pick`, linked on the first pick
+  (`Context::pick_pipeline`, keyed `PipelineKind::Pick(signature)`, `Rg32Uint`,
+  1 sample) into the colour program's group 1–2 layouts. WGSL forbids calling an
+  entry point, so shared entry points would have meant moving `vs_main`'s body
+  into a helper: every colour glue fixture and every colour pipeline's parse
+  would change for a feature most charts never use. `scatter_glue.wgsl` is
+  unchanged; `scatter_linked.wgsl` changed only for the library (`pick_margin`,
+  the hit functions).
+- **No `MarkInfo` or `layer.rs`**: GUP-451 skipped its split. `GPU_PICK` is a
+  `Mark` const; the only new `Layer` method is `draw_order`, 24 B raw per row
+  type.
+- **`gup::coverage`** gains `Quad::axis`, `grow_quad` and `box_distance` (no
+  composable name ends in a digit or is a WGSL built-in).
+
+### Results
+
+- Oracle (400 × 300, 4 layers, about 2,000 rows, 10,000 points): 10,000/10,000
+  agree; no disagreement to classify.
+- `pick_row_gpu` on 100,000 circles at 800 × 500: median of 100 is 2.3 ms
+  release (4.3 ms debug), mostly the wait for the GPU.
+- Colour passes are byte-identical: blessing every gup-core golden rewrites
+  none.
+- `mask wasm-browser` picks the six rows and an empty point on SwiftShader
+  WebGPU through `request_pick`/`poll_picks` (`frag_depth` and `Rg32Uint` work
+  there).
+- WASM: +923 B gz for the library and glue alone; the scatter harness, which now
+  links the pick API for the browser proof, grows 295,904 → 305,406 B gz
+  (+3.2%).
+
+### For GUP-456
+
+The API is as GUP-455's Decisions specify. A pick reports the stored row mapped
+at poll time; drop picks whose `generation` is older than the last resolve.
+Layers of marks without `gpu_pick` are skipped.

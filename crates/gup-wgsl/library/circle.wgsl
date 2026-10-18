@@ -49,8 +49,8 @@ fn corner(vertex_index: u32) -> vec2<f32> {
 }
 
 fn vertex(m: CircleIn, vertex_index: u32, row: u32, view: View) -> Varyings {
-    // One extra pixel for the anti-aliased edge.
-    let half = m.radius + 1.0 / view.dpr;
+    // One extra pixel for the anti-aliased edge, and the pick margin.
+    let half = m.radius + 1.0 / view.dpr + view.pick_margin;
     let offset = corner(vertex_index) * half;
     var out: Varyings;
     out.clip = px_to_clip(vec2<f32>(m.x, m.y) + offset, view);
@@ -83,4 +83,16 @@ fn shade(v: Varyings) -> vec4<f32> {
     let outer = clamp(0.5 - (d - v.radius), 0.0, 1.0);
     let inner = clamp(0.5 - (d - max(v.radius - v.stroke_width, 0.0)), 0.0, 1.0);
     return compose(v.fill, v.stroke, outer, outer - inner);
+}
+
+// The signed distance from the fragment to the disc, in physical pixels
+// (logical in a pick pass, which draws at dpr 1): negative inside. A
+// negative radius is never hit (RFC-001 S9d).
+fn hit_distance(v: Varyings) -> f32 {
+    return select(length(v.local) - v.radius, 1e30, v.radius < 0.0);
+}
+
+// The row a pick of this disc reports.
+fn hit_row(v: Varyings) -> u32 {
+    return v.row;
 }

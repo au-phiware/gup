@@ -126,3 +126,21 @@ fn user_mark_renders_squares() {
         );
     }
 }
+
+/// A mark without `gpu_pick` draws as before, and the GPU pick skips its
+/// layers (RFC-001 S9d).
+#[test]
+fn a_mark_without_gpu_pick_is_skipped_by_the_gpu_pick() {
+    const { assert!(!Square::GPU_PICK && Circle::GPU_PICK) };
+    let cx = Context::new_blocking().expect("headless GPU context");
+    let mut plot = Plot::new();
+    let x = plot.x(Linear::new().domain(0.0, 10.0));
+    let y = plot.y(Linear::new().domain(0.0, 10.0));
+    plot.add(Selection::<f64, Square>::new(vec![5.0]))
+        .x_with(x.encode(|v: &f64| *v))
+        .y_with(y.encode(|v: &f64| *v))
+        .size(Px(20.0));
+    plot.resolve(&cx, W as f32, H as f32).unwrap();
+    let at = gup_core::geom::Point::new(x.read().eval(5.0) as f32, y.read().eval(5.0) as f32);
+    assert_eq!(plot.pick_row_gpu(&cx, at).unwrap(), None);
+}

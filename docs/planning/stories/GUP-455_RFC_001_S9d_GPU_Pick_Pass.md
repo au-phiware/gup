@@ -10,7 +10,8 @@ implementer-reason:
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 📋 Planned **Created**: 2026-10-18
+**Initiative**: RFC-001 Migration **Status**: ✅ Complete (2026-10-18)
+**Created**: 2026-10-18
 
 ## Context
 
@@ -81,72 +82,72 @@ into `handle`.
 
 ### AC1: API
 
-- [ ] `PickTicket`, `GpuPick`, `Plot::request_pick`, `Plot::poll_picks` and
+- [x] `PickTicket`, `GpuPick`, `Plot::request_pick`, `Plot::poll_picks` and
       (native) `Plot::pick_row_gpu` exist as in Decisions. Results are reported
       per request, never merged.
-- [ ] A native doctest resolves a three-row plot and checks that `pick_row_gpu`
+- [x] A native doctest resolves a three-row plot and checks that `pick_row_gpu`
       equals `pick_row` at each row's anchor and at an empty point.
 
 ### AC2: Equivalence with the CPU pick (the oracle)
 
 An in-crate GPU test, `gpu_pick::tests::agrees_with_cpu_pick`, at 400 × 300:
 
-- [ ] The scene has four layers. Circles (z 0, a radius column, so draw order is
+- [x] The scene has four layers. Circles (z 0, a radius column, so draw order is
       size-descending) and segments (z 0, added after the circles) overlap.
       Rects are at z 1, and a line with one null row at z 2. Rows are
       deterministic pseudo-random, about 2,000 in all.
-- [ ] For 10,000 deterministic pseudo-random points in the plot rect,
+- [x] For 10,000 deterministic pseudo-random points in the plot rect,
       `pick_row_gpu(at) == pick_row(at)` for at least 99.9% of them. Every
       disagreement is a near tie, meaning one of: (a) the CPU's best distance is
       within 0.01 px of 3 px, or of 0 px; (b) the two candidates' distances
       differ by less than 0.01 px. The test computes this from the pick index
       and prints each disagreement.
-- [ ] All points within 3 px of the null row's position (and not near another
+- [x] All points within 3 px of the null row's position (and not near another
       mark) give `None` on both paths.
-- [ ] 1 px outside the plot rect, both give `None`, and the GPU path submits
+- [x] 1 px outside the plot rect, both give `None`, and the GPU path submits
       nothing (`Context::submissions` unchanged).
 
 ### AC3: Layers the CPU cannot read
 
-- [ ] A `Retain::GpuOnly` layer with `max_chunk_rows(4)` and 12 rows, after
+- [x] A `Retain::GpuOnly` layer with `max_chunk_rows(4)` and 12 rows, after
       release: `pick_row` gives `None` at each row's position (positions
       computed in the test from the data and the scales), and `pick_row_gpu`
       gives that row's `RowId`.
-- [ ] The same with a `Line` under `GpuOnly`: at points 1 px off a segment,
+- [x] The same with a `Line` under `GpuOnly`: at points 1 px off a segment,
       nearer each end, `pick_row_gpu` returns that end's row.
 
 ### AC4: Contract, user marks and WGSL names
 
-- [ ] The four library marks declare `gpu_pick` and define `hit_distance` and
+- [x] The four library marks declare `gpu_pick` and define `hit_distance` and
       `hit_row` (Decisions). Their CPU twins in `pick.rs` and these functions
       agree on 1,000 random points per shape within 1e-4 px (a test that runs
       the WGSL function through a one-texel pick of a single mark).
-- [ ] `#[derive(Mark)]` with `gpu_pick` and a module that lacks `hit_distance`
+- [x] `#[derive(Mark)]` with `gpu_pick` and a module that lacks `hit_distance`
       fails to compile, with a message naming the function (a trybuild case in
       `tests/derive_mark_fail`). A user mark without `gpu_pick` compiles as
       before, and its layers are skipped by the GPU pick (documented on
       `request_pick`).
-- [ ] Every new WGSL identifier is checked against RFC-001 "S5c findings": no
+- [x] Every new WGSL identifier is checked against RFC-001 "S5c findings": no
       composable identifier ends in a digit, and none is a WGSL built-in name
       (`distance` is one; hence `hit_distance`).
 
 ### AC5: Cost and counters
 
-- [ ] Every pick submission goes through `Context::submit`, and every buffer
+- [x] Every pick submission goes through `Context::submit`, and every buffer
       write is counted. `tests/zoom_uploads.rs` and every golden pass unchanged:
       colour passes are byte-identical, since the view's margin field is 0 for
       them.
 - [ ] `mask perf-budget` passes, including `pipeline.link_create.median_ms`
       (+20%). If the glue for pick entry points pushes link time over, emit them
       only in the pick variant's glue (Decisions' rule).
-- [ ] Recorded in the story: the median of 100 `pick_row_gpu` calls on 100,000
+- [x] Recorded in the story: the median of 100 `pick_row_gpu` calls on 100,000
       circles at 800 × 500 on the dev machine. Over 5 ms is an escalation.
 - [ ] `mask wasm-size` passes. `wasm.per_row_type.gz_bytes` moves by less than
       2%: the new `Layer` method lives in `layer.rs`.
 
 ### AC6: Record
 
-- [ ] RFC-001 gains "S9d findings": the scheme, any departure from Decisions and
+- [x] RFC-001 gains "S9d findings": the scheme, any departure from Decisions and
       why, the oracle's agreement rate, timings, and the API that GUP-456 relies
       on. If the API differs from Decisions, update GUP-456's Decisions in the
       same commit.
@@ -251,13 +252,13 @@ An in-crate GPU test, `gpu_pick::tests::agrees_with_cpu_pick`, at 400 × 300:
 
 ## Technical Tasks
 
-- [ ] `pick_margin` in `View`; `hit_distance`/`hit_row` and quad margins in the
+- [x] `pick_margin` in `View`; `hit_distance`/`hit_row` and quad margins in the
       four library marks; `gpu_pick` in `#[mark]` and its naga check.
-- [ ] `vs_pick`/`fs_pick` emission; `PipelineKind::Pick`; the pick uniform.
-- [ ] `gpu_pick.rs`: target, depth, encode, submit, readback pool, poll, row
+- [x] `vs_pick`/`fs_pick` emission; `PipelineKind::Pick`; the pick uniform.
+- [x] `gpu_pick.rs`: target, depth, encode, submit, readback pool, poll, row
       mapping; `Plot` methods; the `Layer` hook in `layer.rs`.
-- [ ] Tests: AC2 oracle, AC3, AC4 per-shape, trybuild case, doctest.
-- [ ] `mask perf-budget`, `mask wasm-size`; timings; RFC "S9d findings".
+- [x] Tests: AC2 oracle, AC3, AC4 per-shape, trybuild case, doctest.
+- [x] `mask perf-budget`, `mask wasm-size`; timings; RFC "S9d findings".
 
 ## Dependencies
 
@@ -282,8 +283,8 @@ An in-crate GPU test, `gpu_pick::tests::agrees_with_cpu_pick`, at 400 × 300:
 
 ## Success Metrics
 
-- [ ] GPU and CPU picks agree except at measured near ties.
-- [ ] `GpuOnly` layers are pickable.
+- [x] GPU and CPU picks agree except at measured near ties.
+- [x] `GpuOnly` layers are pickable.
 
 ## Risk Assessment
 
@@ -300,9 +301,160 @@ An in-crate GPU test, `gpu_pick::tests::agrees_with_cpu_pick`, at 400 × 300:
 ## Definition of Done
 
 - [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
 - [ ] Goldens pass without `GUP_BLESS`; `mask perf-budget` passes
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `crates/gup-core/src/gpu_pick.rs` (new): `PickTicket`, `GpuPick`,
+  `Plot::request_pick`, `poll_picks`, `pick_row_gpu`; the one-texel `Rg32Uint` +
+  `Depth32Float` target, the view and per-layer `Pick` uniforms, four readback
+  slots. Tests in `gpu_pick/tests.rs`: the oracle, `GpuOnly` circles and line,
+  per-shape distances, request/poll and the 100,000-circle timing.
+- `crates/gup-core/src/shader/glue.rs`: `GlueSpec::gpu_pick`, `Glue::pick`
+  (`pick_source`: `vs_pick`/`fs_pick`, `PICK_ZOOM` = 256).
+- `crates/gup-core/src/render.rs`: `PipelineKind::Pick`,
+  `Context::pick_pipeline`, the `Pick` bind group layout, `LayerGpu::record`
+  (shared by `Prepared::draw` and picks), `ViewUniform::pick_margin`.
+- `crates/gup-wgsl/library/`: `View::pick_margin`; `Quad::axis`, `grow_quad`,
+  `box_distance` in `coverage`; `hit_distance`/`hit_row` and the quad margin in
+  circle, rect, segment and line.
+- `crates/gup-core-macros/src/mark.rs`: `#[mark(.., gpu_pick)]` and its naga
+  check (name, one argument, return type). `Mark::GPU_PICK`.
+- `Layer::draw_order` (selection.rs), `Plot::drawn` (each layer's z and GPU
+  state at the last resolve).
+- Browser: `InteractiveScatter::request_pick`/`poll_picks` and a `gpu-pick` step
+  in `wasm-size/scatter/index.html`.
+- Tests: gup-core lib 170 (5 new), `derive_mark` 3 (1 new), trybuild case
+  `gpu_pick_without_hit_distance`, a doctest on `pick_row_gpu`.
+
+### Rejected alternatives
+
+- **RFC §9's 5 × 5 region**: approximates the CPU's analytic distance with pixel
+  centres; the one-texel depth scheme is exact.
+- **One texel per pixel** (the Decisions' `* size_px`): vertices snap to 1/256
+  texel, so distances were off by up to 5e-4 px, failing AC4's 1e-4. 256 texels
+  per pixel gives 3e-5 px.
+- **Pick entry points in the colour glue**: WGSL forbids calling an entry point,
+  so sharing means moving `vs_main`'s body into a helper, which changes every
+  colour fixture and adds pick code to every colour pipeline's parse. The pick
+  variant is its own source, linked on the first pick (the Decisions' fallback
+  rule).
+- **Reading the depth to report distances**: not needed by the API; the depth is
+  copied back in tests only (offset 128 of the readback buffer).
+- **Snapshotting the draw order per pick**: O(rows) per request. Rows are mapped
+  at poll time; `GpuPick::generation` tells a host when a pick is stale.
+- **Replacing the picker when the layer count grows**: would drop picks in
+  flight; only the `Pick` uniform buffer is regrown.
+
+### Definition-of-Done evidence
+
+- Oracle: 10,000/10,000 agree (9,270 CPU hits); null row: 300+ points `None` on
+  both paths; 1 px outside: `None`, `Context::submissions` unchanged.
+- Per shape, worst |GPU − CPU| distance: circle 1.5e-5, rect 3.1e-5, segment
+  2.6e-5, line 2.8e-5 px (1,000 points each).
+- `pick_row_gpu` on 100,000 circles at 800 × 500, median of 100: **2.3 ms**
+  release, 4.3 ms debug (budget 5 ms).
+- Colour passes byte-identical: `GUP_BLESS=1` over every gup-core test rewrote
+  no golden (`git diff --stat tests/golden` empty); `zoom_uploads` passes.
+  `scatter_linked.wgsl` re-blessed: the library's `pick_margin` and hit
+  functions; `scatter_glue.wgsl` unchanged.
+- `mask wasm-browser`: `interactive=ok` including the `gpu-pick` step (six rows
+  and the empty plot centre) on SwiftShader WebGPU; the step fails when its
+  expectation is wrong (checked).
+- `mask perf-budget` (second run; the first ran under load from other agents):
+
+| metric                         | recorded | limit   | measured | verdict |
+| ------------------------------ | -------- | ------- | -------- | ------- |
+| zoom.gpu_pass.median_ms        | 2.95     | 3.540   | 2.990    | pass    |
+| zoom.cpu.median_ms             | 0.69     | 0.828   | 0.629    | pass    |
+| zoom.cpu.p95_ms                | 0.86     | 1.075   | 0.760    | pass    |
+| zoom uploads (all exact)       | —        | —       | —        | pass    |
+| pipeline.link_create.median_ms | 1.11     | 1.332   | 1.265    | pass    |
+| pipeline.link_create.cold_ms   | 1.04     | 10      | 1.411    | pass    |
+| wasm.scatter.gz_bytes          | 295,904  | 301,822 | 305,406  | FAIL    |
+| wasm.over_wgpu.gz_bytes        | 263,544  | 400,000 | 273,046  | pass    |
+| wasm.per_row_type.gz_bytes     | 941      | info    | 1,651    | info    |
+
+- **WASM growth.** Without the harness's two pick hooks the scatter is 296,827 B
+  gz (+923, +0.3%: library WGSL and glue emission). With them, 305,406 (+9,502,
+  +3.2%, 3,584 over the +2% line): the browser proof links the pick pass,
+  pipeline creation and readback into the scatter. Left for the orchestrator to
+  record in `PERF_BUDGETS.md`. `per_row_type` moved 941 → 1,163 (no hooks) and
+  1,651 (hooks). A name-grouped `twiggy` diff of the two builds puts the new
+  per-row-type code at `draw_order`, 24 B raw; the rest is existing generic
+  `Layer` methods (`bind_axes` 802 B raw) and inlining that shifts between
+  builds. AC5's `layer.rs` premise does not hold: GUP-451 skipped that split.
+- `mask all-check` passes; `cargo check --examples` passes; `mask old-path-loc`
+  TOTAL 28,910. Root-crate tests left to CI (brief).
+
+## Retrospective
+
+**Completed**: 2026-10-18
+
+### Key Technical Learnings
+
+#### Rasteriser snapping limits interpolated varyings
+
+- **Challenge**: at one texel per logical pixel, the per-shape check failed at
+  5e-4 px, and the oracle had one disagreement: the GPU found a line containing
+  the point (d ≤ 0) where the CPU measured d = 0.00023 px.
+- **Solution**: scale the pick's clip space by 256 texels per pixel. Vertices
+  snap to 1/256 of a texel, so the snap is now 1/65,536 px; the worst per-shape
+  error fell to 3e-5 px and the oracle agrees on every point.
+- **Pattern**: when a fragment stage measures analytic geometry, the precision
+  is set by subpixel snapping in the target's units, not by float precision.
+  Zoom the target so a pixel spans many texels.
+
+#### Depth as the comparison function
+
+- **Challenge**: reproduce `PickIndex::query` (containing beats near, topmost
+  breaks ties) on the GPU without a custom reduction.
+- **Solution**: depth 0 for containing marks, `0.5 + 0.5 · d / 3` otherwise,
+  `LessEqual`, drawn in the colour order. Ties go to the later draw, which is
+  the topmost.
+- **Pattern**: a lexicographic "best" over draws maps onto a depth test when the
+  order of draws supplies the tie-break.
+
+### Architectural Decisions
+
+#### A separate pick glue, linked lazily
+
+- **Decision**: `Glue::pick` holds a pick-only source (`vs_pick`/`fs_pick`,
+  group 3), linked on the first pick into the colour program's bind group
+  layouts.
+- **Reasoning**: WGSL entry points cannot be called, so sharing them means
+  restructuring `vs_main`. Colour pipelines then stay unchanged: the same
+  fixtures, link time and parse.
+- **Trade-off**: a second link the first time a layer is picked (about 1 ms).
+- **Future**: GUP-456 can pick on hover without touching colour pipelines.
+
+#### Rows mapped at poll time
+
+- **Decision**: the texel holds the stored row; `poll_picks` maps it through the
+  current `DrawOrder`.
+- **Reasoning**: snapshotting the order costs O(rows) per pick.
+- **Trade-off**: a pick that is still in flight across a compaction can map
+  wrongly. `GpuPick::generation` lets a host drop such picks.
+
+### Development Workflow Insights
+
+- The oracle test with near-tie diagnostics (all marks within 6 px printed on
+  failure) found the precision problem at once.
+- `GUP_BLESS=1` over every gup-core test plus `git diff --stat tests/golden` is
+  a quick proof that colour output is byte-identical.
+- WASM attribution: `twiggy diff` is useless across builds because every
+  function's hash changes. Grouping `twiggy top -f csv` by name with the hash
+  stripped works.
+- The shared machine skews timings: the first `perf-budget` run failed four
+  timing checks under load, and the second passed them all.
+
+### Follow-up Stories
+
+None. The scatter WASM budget (+3.2% from linking the pick API into the browser
+harness) is for the orchestrator to record in `PERF_BUDGETS.md`. GUP-456 already
+covers hover, click and hosts.

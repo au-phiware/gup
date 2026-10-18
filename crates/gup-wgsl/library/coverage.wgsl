@@ -32,6 +32,8 @@ struct Quad {
     local: vec2<f32>,
     // Half the box's extent along the same axes, in physical pixels.
     half: vec2<f32>,
+    // The box's first axis (unit length), in logical pixels.
+    axis: vec2<f32>,
 }
 
 // Corner of a quad for vertex 0..5 (two triangles), in -1..1.
@@ -57,7 +59,28 @@ fn oriented_quad(centre: vec2<f32>, axis: vec2<f32>, half: vec2<f32>, vertex_ind
     q.position = centre + axis * offset.x + normal * offset.y;
     q.local = offset * dpr;
     q.half = half * dpr;
+    q.axis = axis;
     return q;
+}
+
+// `q` grown by `by` logical pixels on every side, its `half` unchanged:
+// a pick pass grows each quad by the pick tolerance so fragments up to
+// that far outside the box measure their distance (RFC-001 S9d). Growing
+// by 0 changes nothing.
+fn grow_quad(q: Quad, by: f32, vertex_index: u32, dpr: f32) -> Quad {
+    let offset = corner(vertex_index) * by;
+    let normal = vec2<f32>(-q.axis.y, q.axis.x);
+    var g = q;
+    g.position = q.position + q.axis * offset.x + normal * offset.y;
+    g.local = q.local + offset * dpr;
+    return g;
+}
+
+// The signed distance from `local` to the box `half` (both from a `Quad`,
+// interpolated, physical pixels): negative inside, 0 on the edge.
+fn box_distance(local: vec2<f32>, half: vec2<f32>) -> f32 {
+    let q = abs(local) - half;
+    return length(max(q, vec2<f32>(0.0))) + min(max(q.x, q.y), 0.0);
 }
 
 // The quad of the axis-aligned rect from `lo` to `hi` (logical pixels, in

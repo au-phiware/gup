@@ -75,9 +75,9 @@ X) or `info` (printed, never fails).
 | `pipeline.link_create.cold_ms`    | 1.04      | <= 10     | `pipeline_timings`, its first run                   |
 | `pipeline.link_create.max_ms`     | 1.06      | info      | `pipeline_timings`                                  |
 | `wasm.wgpu.gz_bytes`              | 32,360    | info      | `scripts/wasm_size.sh`, bare wgpu                   |
-| `wasm.scatter.gz_bytes`           | 295,904   | +2%       | `scripts/wasm_size.sh`, the reference scatter       |
-| `wasm.over_wgpu.gz_bytes`         | 263,544   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10         |
-| `wasm.per_row_type.gz_bytes`      | 941       | info      | `scripts/wasm_size.sh`, one more Selection row type |
+| `wasm.scatter.gz_bytes`           | 310,638   | +2%       | `scripts/wasm_size.sh`, the reference scatter       |
+| `wasm.over_wgpu.gz_bytes`         | 278,278   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10         |
+| `wasm.per_row_type.gz_bytes`      | 1,598     | info      | `scripts/wasm_size.sh`, one more Selection row type |
 
 A legitimate change that moves a number (a new guide, a bigger feature) records
 the new value here, in the same commit, with the reason in the story.
@@ -409,3 +409,13 @@ seeded violation (GUP-417 retrospective).
     harnesses' release profile, which `web.rs` documents for users.
   - perf_budget.sh now reads only the "Budget table" section, so the crate
     breakdown above no longer shows as unmeasured budget rows.
+- **S9a to S9d merged: GUP-452, 453, 454 and 455 (2026-10-18)**, re-measured by
+  the orchestrator on the merge. WASM scatter 295,904 to 310,638 B gz (+14,734);
+  over bare wgpu 263,544 to 278,278, leaving 121,722 under the cap:
+  - GUP-452 (held rect): +227. GUP-453 (pan): +825. GUP-454 (brush, drag-zoom):
+    +4,152. Each includes its browser-harness steps.
+  - GUP-455 (GPU pick): +9,502. Under 1 KB of that is library WGSL and glue; the
+    rest is the harness now linking the pick pass for the browser test.
+  - `wasm.per_row_type.gz_bytes` 941 to 1,598. GUP-453 to 455 each saw it move
+    with no new `Layer` method: inlining shifts in generic code between the one-
+    and two-row-type builds. At this size it is noisy, and stays `info`.

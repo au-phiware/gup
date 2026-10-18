@@ -11,7 +11,7 @@
 #define_import_path gup::marks::line
 
 #import gup::view::{View, px_to_clip}
-#import gup::coverage::{line_quad, span}
+#import gup::coverage::{line_quad, grow_quad, span}
 
 // The channels in `Line::CHANNELS` order, then each position channel read
 // at the next row (the `Polyline` geometry).
@@ -40,11 +40,16 @@ fn vertex(m: LineIn, vertex_index: u32, row: u32, view: View) -> Varyings {
     // The quad spans the capsule: the segment plus a `width / 2` cap at
     // each end.
     let r = m.width * 0.5;
-    let q = line_quad(
-        vec2<f32>(m.x, m.y),
-        vec2<f32>(m.x_next, m.y_next),
-        m.width,
-        r,
+    let q = grow_quad(
+        line_quad(
+            vec2<f32>(m.x, m.y),
+            vec2<f32>(m.x_next, m.y_next),
+            m.width,
+            r,
+            vertex_index,
+            view.dpr,
+        ),
+        view.pick_margin,
         vertex_index,
         view.dpr,
     );
@@ -72,4 +77,19 @@ fn shade(v: Varyings) -> vec4<f32> {
         discard;
     }
     return vec4<f32>(v.color.rgb * alpha, alpha);
+}
+
+// The distance from the fragment to the segment, less the half width,
+// in physical pixels: negative inside the capsule. A negative width is
+// never hit (RFC-001 S9d).
+fn hit_distance(v: Varyings) -> f32 {
+    let beyond = max(abs(v.local.x) - v.half.x, 0.0);
+    return select(length(vec2<f32>(beyond, v.local.y)) - v.half.y, 1e30, v.half.y < 0.0);
+}
+
+// The end of the segment nearer the fragment: this row (the segment's
+// first) at or before the middle, else the next. A segment of no length
+// reports this row.
+fn hit_row(v: Varyings) -> u32 {
+    return select(v.row + 1u, v.row, v.local.x <= 0.0 || v.half.x <= 0.0);
 }

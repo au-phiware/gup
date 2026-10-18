@@ -7,7 +7,7 @@
 #define_import_path gup::marks::segment
 
 #import gup::view::{View, px_to_clip}
-#import gup::coverage::{line_quad, box_coverage}
+#import gup::coverage::{line_quad, grow_quad, box_coverage, box_distance}
 
 // One field per channel, in `Segment::CHANNELS` order.
 struct SegmentIn {
@@ -32,11 +32,16 @@ struct Varyings {
 }
 
 fn vertex(m: SegmentIn, vertex_index: u32, row: u32, view: View) -> Varyings {
-    let q = line_quad(
-        vec2<f32>(m.x, m.y),
-        vec2<f32>(m.x_end, m.y_end),
-        m.width,
-        m.width * 0.5,
+    let q = grow_quad(
+        line_quad(
+            vec2<f32>(m.x, m.y),
+            vec2<f32>(m.x_end, m.y_end),
+            m.width,
+            m.width * 0.5,
+            vertex_index,
+            view.dpr,
+        ),
+        view.pick_margin,
         vertex_index,
         view.dpr,
     );
@@ -55,4 +60,16 @@ fn shade(v: Varyings) -> vec4<f32> {
         discard;
     }
     return vec4<f32>(v.color.rgb * alpha, alpha);
+}
+
+// The signed distance from the fragment to the stroke's box (caps
+// included), in physical pixels: negative inside. A negative width is
+// never hit (RFC-001 S9d).
+fn hit_distance(v: Varyings) -> f32 {
+    return select(box_distance(v.local, v.half), 1e30, v.half.y < 0.0);
+}
+
+// The row a pick of this segment reports.
+fn hit_row(v: Varyings) -> u32 {
+    return v.row;
 }

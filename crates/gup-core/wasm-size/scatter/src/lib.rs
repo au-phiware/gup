@@ -976,6 +976,29 @@ impl InteractiveScatter {
         Ok(image.into_raw())
     }
 
+    /// Request a GPU pick at `[x, y]` (canvas CSS pixels; RFC-001 S9d).
+    pub fn request_pick(&self, x: f32, y: f32) -> Result<(), JsValue> {
+        let cx = self.app.context();
+        self.app.with_chart(|chart| {
+            let plot = chart.as_any_mut().downcast_mut::<Plot>().expect("a plot");
+            plot.request_pick(&cx, gup_core::geom::Point::new(x, y))
+                .map(|_| ())
+                .map_err(js)
+        })
+    }
+
+    /// The rows of the GPU picks that finished, oldest first; -1 for none.
+    pub fn poll_picks(&self) -> Vec<i32> {
+        let cx = self.app.context();
+        self.app.with_chart(|chart| {
+            let plot = chart.as_any_mut().downcast_mut::<Plot>().expect("a plot");
+            plot.poll_picks(&cx)
+                .iter()
+                .map(|p| p.row.map_or(-1, |r| r.row as i32))
+                .collect()
+        })
+    }
+
     /// The last frame error, if any.
     pub fn last_error(&self) -> Option<String> {
         self.app.last_error()

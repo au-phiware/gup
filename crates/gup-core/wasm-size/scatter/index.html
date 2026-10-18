@@ -213,6 +213,22 @@
             "click",
             async () => app.clicks() === 1 && app.last_clicked() === 1
           );
+          // RFC-001 S9d: GPU picks at each row and at the empty plot
+          // centre arrive through poll_picks a frame or more later.
+          const [ex, ey] = app.plot_centre();
+          const targets = [0, 1, 2, 3, 4, 5].map(i => [app.row_px(i), i]);
+          targets.push([[ex, ey], -1]);
+          for (const [[gx, gy], want] of targets) {
+            await step("gpu-pick", async () => {
+              app.request_pick(gx, gy);
+              for (let f = 0; f < 30; f++) {
+                await new Promise(r => requestAnimationFrame(r));
+                const done = app.poll_picks();
+                if (done.length) return done.length === 1 && done[0] === want;
+              }
+              return false;
+            });
+          }
           const [d0, d1] = app.x_domain();
           const [px, py] = app.plot_centre();
           const rect0 = app.plot_rect();
