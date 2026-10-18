@@ -9,8 +9,8 @@ implementer-reason:
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 🚧 In Progress **Created**:
-2026-10-18
+**Initiative**: RFC-001 Migration **Status**: ✅ Complete (2026-10-19)
+**Created**: 2026-10-18
 
 ## Context
 
@@ -60,30 +60,30 @@ heatmap, choropleth) still return. Those wait for the S14 flip.
 
 ### AC1: Deleted
 
-- [ ] `src/chart_builder/builders/{scatter,line,bar,composite}.rs` are deleted,
+- [x] `src/chart_builder/builders/{scatter,line,bar,composite}.rs` are deleted,
       with every re-export (`builders.rs`, `chart_builder.rs`, `lib.rs`,
       `prelude.rs`).
-- [ ] The old goldens' cases `golden_scatter`, `golden_bar`, `golden_line`,
+- [x] The old goldens' cases `golden_scatter`, `golden_bar`, `golden_line`,
       `golden_line_explicit_scales` and `golden_composite`, and their PNGs under
       `tests/golden/chart_builders/`, are deleted. The remaining cases (area,
       boxplot, violin, density, GPU density, heatmap, choropleth) pass
       unchanged.
-- [ ] `tests/composite_chart_integration.rs` and `benches/bar_chart_100k.rs`
+- [x] `tests/composite_chart_integration.rs` and `benches/bar_chart_100k.rs`
       (and its `[[bench]]`) are deleted. In `tests/axis_integration_tests.rs`,
       `color_scale_integration.rs`, `linear_scale_integration.rs` and
       `log_scale_integration.rs`, every test that builds one of the deleted
       builders is deleted. A file left with no tests is deleted. List the
       deleted tests with counts.
-- [ ] Doc examples naming a deleted builder (`src/chart_builder.rs`,
+- [x] Doc examples naming a deleted builder (`src/chart_builder.rs`,
       `src/chart_builder/builders.rs`, `src/grid.rs`) use `area()` instead when
       they demonstrate a trait `AreaChartBuilder` implements, else they are
       deleted. `cargo test --doc` passes.
-- [ ] Outside `gup-egui/` and `gup-bevy/` (parked, excluded), the Read First
+- [x] Outside `gup-egui/` and `gup-bevy/` (parked, excluded), the Read First
       grep finds nothing but the `span.line()` false positive.
 
 ### AC2: Examples
 
-- [ ] Ported to the `gup-core` builders (Decisions), each at most 40 lines, with
+- [x] Ported to the `gup-core` builders (Decisions), each at most 40 lines, with
       a headless path (`GUP_SCREENSHOT_PATH` through `gup_core::show`, or a PNG
       written):
   - `basic/01_hello_chart` (scatter);
@@ -91,32 +91,32 @@ heatmap, choropleth) still return. Those wait for the S14 flip.
   - `basic/04_bar_chart` (grouped and stacked);
   - `composite_mixed_data` (a `Plot` with circles and a line over two row
     types).
-- [ ] Deleted: `bar_chart`, `line_chart_demo`, `grid_visual_demo`,
+- [x] Deleted: `bar_chart`, `line_chart_demo`, `grid_visual_demo`,
       `intermediate/categorical_bar`, `intermediate/multi_series_line`,
       `intermediate/styled_scatter`, `showcase/business_dashboard`,
       `composite_bar_trend`, `composite_layer_order` and
       `composite_scatter_regression`.
-- [ ] `Cargo.toml` `[[example]]` entries, `examples/INDEX.md`,
+- [x] `Cargo.toml` `[[example]]` entries, `examples/INDEX.md`,
       `examples/README.md`, `scripts/gallery_config.toml` and
       `tests/visual_regression/{examples_skip_list,expected_failures}.toml` are
       in step. `scripts/check_gallery_sync.sh` passes, and so does
       `cargo test --all-features --test examples_smoke -- --ignored --test-threads=1`.
-- [ ] The implementer reads the four ported examples' screenshots. Each shows
+- [x] The implementer reads the four ported examples' screenshots. Each shows
       its title, tick labels and data inside the plot rect, plus a legend where
       there is a colour key.
 
 ### AC3: Migration table
 
-- [ ] `crates/gup-core/src/builder/mod.rs`'s module docs gain "Migrating from
+- [x] `crates/gup-core/src/builder/mod.rs`'s module docs gain "Migrating from
       the old builders": the table in Decisions.
 
 ### AC4: The metric went down
 
-- [ ] `mask old-path-loc` TOTAL is **at most 26,900** (from 28,910: at least
+- [x] `mask old-path-loc` TOTAL is **at most 26,900** (from 28,910: at least
       2,010 fewer lines). Record the figure.
-- [ ] INDEX.md's "RFC-001 Migration" header paragraph states the new figure, the
+- [x] INDEX.md's "RFC-001 Migration" header paragraph states the new figure, the
       date and this story.
-- [ ] RFC-001 gains "S10 findings (GUP-460–466)": the builder API in one
+- [x] RFC-001 gains "S10 findings (GUP-460–466)": the builder API in one
       paragraph, what was deleted with the LOC delta, and that the composite
       builder's deletion moved from S11 to S10, with the reason. Also add a
       one-line note on the S11 row of §11's table.
@@ -204,13 +204,13 @@ heatmap, choropleth) still return. Those wait for the S14 flip.
 
 ## Technical Tasks
 
-- [ ] Delete the four builder files and re-exports; fix compile errors by
+- [x] Delete the four builder files and re-exports; fix compile errors by
       deletion only.
-- [ ] Delete the goldens' cases, PNGs, tests and bench; switch or delete the
+- [x] Delete the goldens' cases, PNGs, tests and bench; switch or delete the
       doctests.
-- [ ] Port four examples; delete ten; update the gallery, INDEX, README and skip
+- [x] Port four examples; delete ten; update the gallery, INDEX, README and skip
       lists; run `examples_smoke`.
-- [ ] Migration table; LOC; INDEX header; RFC-001 "S10 findings".
+- [x] Migration table; LOC; INDEX header; RFC-001 "S10 findings".
 
 ## Dependencies
 
@@ -235,8 +235,8 @@ heatmap, choropleth) still return. Those wait for the S14 flip.
 
 ## Success Metrics
 
-- [ ] Old-path LOC at most 26,900.
-- [ ] One way to draw each of scatter, line and bar charts.
+- [x] Old-path LOC at most 26,900.
+- [x] One way to draw each of scatter, line and bar charts.
 
 ## Risk Assessment
 
@@ -246,14 +246,89 @@ heatmap, choropleth) still return. Those wait for the S14 flip.
 
 ## Definition of Done
 
-- [ ] First code commit within 30 minutes of starting; then commit at each
+- [x] First code commit within 30 minutes of starting; then commit at each
       checkpoint (story-worker "Checkpoint rule")
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1` and
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1` and
       `cargo test -p gup-core -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye: the four ported examples
-- [ ] `mask old-path-loc` at most 26,900, recorded in INDEX.md
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye: the four ported examples
+- [x] `mask old-path-loc` at most 26,900, recorded in INDEX.md
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- Deleted `src/chart_builder/builders/{scatter,line,bar,composite}.rs`, all
+  re-exports, `range_to_ndc` (dead afterwards), five goldens' cases and PNGs,
+  `tests/composite_chart_integration.rs`, `benches/bar_chart_100k.rs`, ten
+  examples.
+- Deleted tests: `chart_builder.rs` 7 (scatter hover/tooltip, line and bar
+  hover, three render-ready/draw-marks tests); `axis_integration_tests.rs` 6;
+  `color_scale_integration.rs` 2; `log_scale_integration.rs` 1;
+  `linear_scale_integration.rs` 1; `builders.rs` 4 (`range_to_ndc`); five golden
+  cases. No file was left empty except the deleted composite one.
+- Doc examples: `builders.rs` and `grid.rs` use `area()`; `chart_builder.rs`
+  module doc uses `area()`; `lib.rs` "Building a chart" example deleted.
+- Ported to `gup-core` (22, 40, 36 and 35 lines): `01_hello_chart`,
+  `03_line_chart`, `04_bar_chart`, `composite_mixed_data`. Screenshots read
+  under Xvfb and lavapipe: title, tick labels, legend (line, bar) and data
+  inside the plot rect.
+- Migration table in `gup_core::builder` module docs; RFC-001 "S10 findings";
+  tutorial notes; parked-crate README lines (`gup-egui/README.md` is new).
+- `mask old-path-loc` TOTAL 28,910 to **26,601**. Dogfood 7 PASS, 4 XFAIL, 0
+  FAIL. `mask wasm-size`: scatter 320,243 B gz (pass). `mask wasm-browser` PASS.
+  `mask all-check` clean. Workspace tests 2362 lib tests pass; doc tests 203
+  pass; `mask smoke-examples` passes.
+
+## Retrospective
+
+**Completed**: 2026-10-19
+
+### Key Technical Learnings
+
+#### Deleting by compile error
+
+- **Challenge**: five files held tests that built the deleted builders, plus
+  dead code left behind (`range_to_ndc`, three colour constants).
+- **Solution**: delete the files, then loop on
+  `cargo check --lib --tests --examples`; a small script deleted the enclosing
+  `fn` of each error line. Dead-code warnings found the leftovers.
+- **Pattern**: for "delete by compile error", script the enclosing-fn deletion
+  and let `dead_code` find what only the deleted code used.
+
+#### Smoke classifier and `gup_core::show`
+
+- **Challenge**: `examples_smoke` classifies `gup_core::show(` examples as
+  windowed with no headless path, so the four ported examples failed
+  `skip_list_matches_examples`.
+- **Solution**: followed the `hello_world` precedent and put them on the skip
+  list (capture needs a display). The screenshots were read under Xvfb.
+- **Pattern**: teaching the smoke test that `show` honours `GUP_SCREENSHOT_PATH`
+  would let them run in `mask smoke-examples`.
+
+### Architectural Decisions
+
+#### Tutorial 01's full program fence
+
+- **Decision**: changed one fence from `no_run` to `ignore` in
+  `docs/tutorials/01_getting_started.md`, beyond the story's "one-line note",
+  because the tutorials are compiled as doctests and the block names the deleted
+  `scatter()`.
+- **Trade-off**: the block is no longer compile-checked until T6 rewrites it.
+
+### Development Workflow Insights
+
+- `xvfb-run` defaults to a 640x480 screen; dogfood's `t4_linked` (1160x540
+  window) then fails "left view inside the brush". Use
+  `xvfb-run -a -s "-screen 0 1920x1080x24"`. The dogfood README only says
+  `xvfb-run -a`.
+- One `cargo test --doc` run failed `lib.rs - proc_macros` (E0365, `pub use gup`
+  re-export) and passed on the next run with no change; not caused by this
+  story.
+
+### Follow-up Stories
+
+None new. Teaching the smoke classifier about `gup_core::show` is under 30
+minutes but changes the harness; left to the orchestrator.

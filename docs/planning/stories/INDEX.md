@@ -397,7 +397,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   every dogfood task on the old scatter/line/bar builders (t0–t5_live) rewritten
   on `gup-core`; tasks 1–3 PASS with only the vector-marks gap left, no
   threshold lowered. Deps: GUP-460 📋, GUP-462 📋, GUP-463 📋, GUP-464 📋.
-- [GUP-466](GUP-466_RFC_001_S10g_Delete_Old_Builders.md) 🚧 — RFC-001 step S10g:
+- [GUP-466](GUP-466_RFC_001_S10g_Delete_Old_Builders.md) ✅ — RFC-001 step S10g:
   delete the old scatter, line, bar and composite builders with their goldens,
   tests, bench and ten examples; port four examples; a migration table; old-path
   LOC ≤ 26,900. Deps: GUP-465 📋.
