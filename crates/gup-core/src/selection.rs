@@ -644,7 +644,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         for (slot, f) in self.axes.iter().enumerate() {
             let Some(f) = f else { continue };
             let desc = &M::CHANNELS[slot];
-            let channel = format!("{}::{}", M::NAME, desc.name.to_uppercase());
+            let channel = format!("{}::{}", M::NAME, desc.name.to_ascii_uppercase());
             let (scale, axis, what) = match desc.role {
                 Some(Role::X) => (x, "x", "plot x"),
                 Some(Role::Y) => (y, "y", "plot y"),
@@ -1203,7 +1203,7 @@ fn context(e: Error, mark: &str, channel: &str) -> Error {
     match e {
         Error::Configuration { what, detail } => Error::Configuration {
             what,
-            detail: format!("{mark}::{} channel: {detail}", channel.to_uppercase()),
+            detail: format!("{mark}::{} channel: {detail}", channel.to_ascii_uppercase()),
         },
         other => other,
     }

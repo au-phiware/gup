@@ -94,29 +94,29 @@ cut 2 already removes two thirds of SemiBold's bytes.
 
 ### AC2: SemiBold subset
 
-- [ ] `crates/gup-text/fonts/inter-semibold-subset.txt` lists `0020-007E`,
+- [x] `crates/gup-text/fonts/inter-semibold-subset.txt` lists `0020-007E`,
       `2009`, `202F` and `2212`, with comments in the style of
       `inter-subset.txt` saying why. `mask subset-inter` subsets each weight
       with its own list. `Inter-SemiBold-Subset.ttf` is regenerated with it, and
       is within 1% of 18,636 B raw and 9,990 B gz.
-- [ ] gup-text's test `semibold_subset_covers_what_regular_covers` is replaced
+- [x] gup-text's test `semibold_subset_covers_what_regular_covers` is replaced
       by `semibold_subset_maps_exactly_its_list`, which mirrors the Regular
       subset's test.
-- [ ] A new test in gup-core, `major_tick_labels_fit_the_semibold_subset`,
+- [x] A new test in gup-core, `major_tick_labels_fit_the_semibold_subset`,
       generates `Time` ticks over 1 month, 1 year, 10 years and 200 years,
       starting in 1850 and in 1970, and asserts that every major label's
       characters map to non-notdef glyphs in `Font::inter_semibold()`.
-- [ ] Every golden passes **without** `GUP_BLESS`, including `time_years.png`
+- [x] Every golden passes **without** `GUP_BLESS`, including `time_years.png`
       and `time_tick_hierarchy.png`, which draw SemiBold: the glyphs are the
       same outlines.
-- [ ] The docs on `Weight::SemiBold` and `Font::inter_semibold` say that the
+- [x] The docs on `Weight::SemiBold` and `Font::inter_semibold` say that the
       bundled SemiBold covers printable ASCII and U+2009, U+202F and U+2212
       only, other characters draw as the missing-glyph box, and
       `TextSystem::with_fonts` takes a fuller face.
       `git grep -n -i semibold -- crates docs/*.md` finds no other statement
       that SemiBold covers what Regular covers.
 
-- [ ] A SemiBold run containing a character outside the subset draws that
+- [x] A SemiBold run containing a character outside the subset draws that
       character from the Regular face, never as a missing-glyph box. A test with
       a non-ASCII SemiBold label (for example "2024–Q1", with an en dash) checks
       that every glyph has ink (orchestrator, 2026-10-18).
@@ -157,10 +157,91 @@ cut 2 already removes two thirds of SemiBold's bytes.
 
 ### AC5: Users can reproduce the number
 
-- [ ] The `web` module docs (`crates/gup-core/src/web.rs` header) gain a
+- [x] The `web` module docs (`crates/gup-core/src/web.rs` header) gain a
       "Release profile" paragraph with the profile AC1 chose, saying that
       `PERF_BUDGETS.md`'s WASM sizes are measured with it, and how many bytes it
       saved.
+
+## Implementation Results (2026-10-18)
+
+Orchestrator decisions overrode the story's order: AC1, AC2 first, then
+`.rodata` attribution; AC3 conditional; PERF_BUDGETS values are recorded by the
+orchestrator, not here.
+
+### Savings, one cut at a time (`wasm.over_wgpu.gz_bytes`)
+
+| Step                                                | over_wgpu gz |  Saved |
+| --------------------------------------------------- | -----------: | -----: |
+| Start (default profile)                             |      356,914 |      - |
+| Cut 1: `z`+LTO, `codegen-units = 1`                 |      292,592 | 64,322 |
+| Cut 2: ASCII SemiBold subset (10,009 B gz)          |      271,207 | 21,385 |
+| Cut 4: `to_ascii_uppercase` (no Unicode case table) |      263,543 |  7,664 |
+
+Target 320,000 met with 56,457 B to spare. `wasm.per_row_type.gz_bytes` is 946 B
+(was 3,674). Subset regenerated: 18,636 B raw (exact), 10,009 B gz (9,990
+expected, +0.2%).
+
+### AC2 extras
+
+- `Font` gained a private `fallback`; `Font::inter_semibold()` falls back to the
+  Regular subset per character (`face_for`) in `measure`, `walk` (so layout, ink
+  bounds and the atlas) and `has_glyph`. Kerning is skipped across a face
+  change. New public `Font::has_own_glyph` (ignores the fallback); the gup-core
+  test uses it. Tests: `semibold_subset_maps_exactly_its_list`,
+  `semibold_draws_what_it_lacks_from_regular` (gup-text),
+  `major_tick_labels_fit_the_semibold_subset` (gup-core `scale`). All goldens
+  pass unblessed.
+- SVG output embeds the SemiBold subset only (no fallback in a viewer's
+  `@font-face`); documented on `SvgOptions::semibold_font`.
+
+### `.rodata` attribution (after cuts 1 and 2; 181,464 B raw, was 230,826)
+
+Parsed from the shipped wasm's data segment (scatter 181,464 B; bare wgpu 10,944
+B, so gup-core's share is 170.5 KB):
+
+| Part                                                                            |    Raw bytes |
+| ------------------------------------------------------------------------------- | -----------: |
+| Inter Regular subset                                                            |       61,260 |
+| Inter SemiBold subset (was 62,308 before cut 2)                                 |       18,636 |
+| Text: WGSL library and mark shaders                                             |       17,679 |
+| Text: messages and identifiers                                                  |       14,618 |
+| Text: wgpu / WebGPU enum and feature names                                      |        7,582 |
+| Text: source paths in panic locations                                           |        7,031 |
+| Binary: Unicode `to_uppercase`/`to_lowercase` tables                            | about 14,000 |
+| Binary: other tables (core printable/grapheme data, libm, vtables, relocations) | about 40,000 |
+
+Cuts made from it: the 14 KB case-conversion table was only pulled in by two
+`str::to_uppercase()` calls in `selection.rs` on ASCII channel names
+(`check_module_paths`, an error detail); they now use `to_ascii_uppercase()`
+(same output for ASCII names). That is 7,664 B gz. No rendered output depends on
+it. The rest is the two fonts (the Regular subset's 593 characters are GUP-407's
+choice) and strings; nothing else is a safe cut.
+
+### Checks the orchestrator asked for
+
+- ttf-parser features: fontdue already sets `default-features = false` and
+  `opentype-layout` only (needed for kerning); `glyph-names`, `apple-layout` and
+  `variable-fonts` are already off. CFF (12,243 B raw, 25 functions) has no
+  feature switch, so it needs a fork: still out of scope.
+- Export code: `SvgTarget::render` does not reach the harness (all `svg` symbols
+  total 1,192 B: only helpers); `ImageTarget` is 6,575 B raw, used by the
+  harness's scenes. Nothing to cut.
+
+### AC3 skipped
+
+Condition: target unmet after steps 1 and 2 and `mask wasm-attrib` predicting at
+least 8,000 B gz. The target is met (263,543 vs 320,000) and the measured
+per-row-type cost is 946 B gz, so the split would save little. Not done; the
+`DynColumnFn` supertrait and `layer.rs` remain a design for a time when the
+per-row-type metric grows.
+
+### AC4
+
+`wasm.over_wgpu.gz_bytes` 263,543 <= 320,000 met. The per-row-type "50% of after
+cuts 1 and 2" check is moot (AC3 skipped). `PERF_BUDGETS.md` values, History and
+the per-row-type check are for the orchestrator to record. `wasm_size.sh` prints
+the SemiBold subset line. `mask wasm-browser` prints identical pixel numbers
+before and after (`white=36234 grey=9516 coloured=18250 ... interactive=ok`).
 
 ## Decisions
 

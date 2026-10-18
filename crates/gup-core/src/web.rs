@@ -8,6 +8,15 @@
 //! pointer and wheel events into [`Input`] for [`Chart::handle`], and
 //! redraws on demand with one `requestAnimationFrame` per burst of input.
 //! There is no winit: the host is the canvas plus DOM listeners.
+//!
+//! # Release profile
+//!
+//! `PERF_BUDGETS.md`'s WASM sizes are measured with
+//! `[profile.release] opt-level = "z"`, `lto = true`, `codegen-units = 1`
+//! (GUP-451). Against cargo's default release profile it cut gup-core's cost
+//! over bare wgpu from 356,914 B to 292,592 B gz (64,322 B); `"s"` with the
+//! same LTO settings gave 310,259 B. Set the same in your app's workspace
+//! root to get the same sizes.
 
 use crate::chart::Chart;
 use crate::context::Context;
