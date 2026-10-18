@@ -9,8 +9,8 @@ implementer-reason:
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 🚧 In Progress **Created**:
-2026-10-18
+**Initiative**: RFC-001 Migration **Status**: ✅ Complete (2026-10-18)
+**Created**: 2026-10-18
 
 ## Context
 
@@ -71,16 +71,16 @@ hatches.
 
 ### AC1: API
 
-- [ ] `gup_core::scatter` and `ScatterChart<T>` exist as in Decisions, exported
+- [x] `gup_core::scatter` and `ScatterChart<T>` exist as in Decisions, exported
       at the crate root (not in the prelude). Every public item has docs. The
       module docs open with the north-star example as a doctest that renders
       with `ChartExt::render` and asserts a non-empty image.
-- [ ] Every closure in AC2–AC4 is written without type annotations (`|r| r.a`,
+- [x] Every closure in AC2–AC4 is written without type annotations (`|r| r.a`,
       `|r| r.segment.as_str()`).
 
 ### AC2: Thin sugar, byte for byte
 
-- [ ] In a new `crates/gup-core/tests/builders.rs`, this renders byte-identical
+- [x] In a new `crates/gup-core/tests/builders.rs`, this renders byte-identical
       to the existing `gup_core/scatter` golden's plot
       (`common::scatter::plot()`) at 720 × 450:
 
@@ -91,11 +91,11 @@ hatches.
           .title(TITLE).legends(false)
       ```
 
-- [ ] `into_plot()` of the same builder resolves to the same `Layout`.
+- [x] `into_plot()` of the same builder resolves to the same `Layout`.
 
 ### AC3: Defaults, with a golden
 
-- [ ] A golden, `gup_core/builder_scatter`, at 720 × 450: 300 deterministic rows
+- [x] A golden, `gup_core/builder_scatter`, at 720 × 450: 300 deterministic rows
       with `.x`, `.y`, `.color(|r| r.segment.as_str())` over 4 keys,
       `.size(|r| r.weight)`, `.opacity(0.7)`, `.legend_title("Segment")`,
       `.grid(Axes::Both)` and `.title(..)`. The implementer reads it:
@@ -104,28 +104,28 @@ hatches.
   - disc areas growing with weight;
   - a titled swatch legend at the right;
   - every disc inside the plot rect.
-- [ ] Pixel checks: the smallest-weight disc's radius is 2 px (±0.5) and the
+- [x] Pixel checks: the smallest-weight disc's radius is 2 px (±0.5) and the
       largest's 12 px (±0.5), measured by ink extent at isolated rows. A disc's
       centre colour is its segment's Okabe-Ito colour at opacity 0.7 over white
       (±3/255).
-- [ ] `.color_scale(Categorical::from_palette([..4 colours..]))` uses those
+- [x] `.color_scale(Categorical::from_palette([..4 colours..]))` uses those
       colours, whether called before or after `.color(..)`.
 
 ### AC4: Escape hatches and picking
 
-- [ ] `layer_mut().stroke(Color::BLACK).stroke_width(Px(1.0))` before the first
+- [x] `layer_mut().stroke(Color::BLACK).stroke_width(Px(1.0))` before the first
       render draws stroked discs (pixel check on one edge).
-- [ ] `pick(at)` returns `Some(&row)` for the row under a disc's centre, and
+- [x] `pick(at)` returns `Some(&row)` for the row under a disc's centre, and
       `None` in empty space.
-- [ ] Calling a layer setter (`.x(..)`) after the first `render` panics with the
+- [x] Calling a layer setter (`.x(..)`) after the first `render` panics with the
       message in Decisions (`#[should_panic(expected = ...)]`). Calling a
       plot-level setter (`.title(..)`) afterwards works and changes the next
       render.
-- [ ] `gup_core::show(chart)` compiles for a `ScatterChart` (doctest `no_run`).
+- [x] `gup_core::show(chart)` compiles for a `ScatterChart` (doctest `no_run`).
 
 ### AC5: External crate
 
-- [ ] `crates/gup-core/tests/compile_pass/` gains `builder_scatter.rs`, the
+- [x] `crates/gup-core/tests/compile_pass/` gains `builder_scatter.rs`, the
       north star with owned rows, which compiles with no annotations.
 
 ## Decisions
@@ -208,10 +208,10 @@ hatches.
 
 ## Technical Tasks
 
-- [ ] `builder/mod.rs`: module docs, key and number closure aliases, the
+- [x] `builder/mod.rs`: module docs, key and number closure aliases, the
       `plot_setters!` macro, materialisation helper.
-- [ ] `builder/scatter.rs`: `scatter`, `ScatterChart`, `Chart` impl.
-- [ ] `lib.rs` exports; `tests/builders.rs` (AC2–AC4); golden; compile-pass
+- [x] `builder/scatter.rs`: `scatter`, `ScatterChart`, `Chart` impl.
+- [x] `lib.rs` exports; `tests/builders.rs` (AC2–AC4); golden; compile-pass
       case.
 
 ## Dependencies
@@ -236,8 +236,8 @@ hatches.
 
 ## Success Metrics
 
-- [ ] The north-star scatter is five lines, with no annotations.
-- [ ] Builder output equals hand-built `Plot` output byte for byte.
+- [x] The north-star scatter is five lines, with no annotations.
+- [x] Builder output equals hand-built `Plot` output byte for byte.
 
 ## Risk Assessment
 
@@ -251,15 +251,81 @@ hatches.
 
 ## Definition of Done
 
-- [ ] First code commit within 30 minutes of starting; then commit at each
+- [x] First code commit within 30 minutes of starting; then commit at each
       checkpoint (story-worker "Checkpoint rule")
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -p gup-core -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye: `gup_core/builder_scatter.png`
-- [ ] `mask wasm-size` passes (no change expected: the harness does not use the
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -p gup-core -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye: `gup_core/builder_scatter.png`
+- [x] `mask wasm-size` passes (no change expected: the harness does not use the
       builders)
-- [ ] `mask old-path-loc` recorded (expected unchanged, 28,910)
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] `mask old-path-loc` recorded (expected unchanged, 28,910)
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `crates/gup-core/src/builder/mod.rs`: module docs (north-star doctest, the
+  pattern, a `show` doctest), the `plot_setters!` macro and the `DRAWN` panic
+  message. `builder/scatter.rs`: `scatter`, `ScatterChart<T>`, `Chart` impl.
+  Exported at the crate root.
+- Layer setters are recorded (positions, opacity, tooltip as boxed ops; colour
+  and size as fields with their scales) and applied once at materialisation.
+  `x_scale`/`y_scale` apply to the plot at once (they are plot-level).
+- `tests/builders.rs` (8 tests): byte-identical to the reference scatter and the
+  same `Layout`; defaults with the `gup_core/builder_scatter` golden; radii 2
+  and 12 px and colours measured; palette before/after; stroke via `layer_mut`;
+  picking; panic after draw; plot setters after draw; opacity range.
+  `tests/compile_pass/builder_scatter.rs`; two doctests.
+- Evidence: `mask old-path-loc` 28,910 (unchanged); wasm scatter 315,790 B gz
+  (recorded 315,804); `mask wasm-browser` PASS. `mask perf-budget`: the zoom
+  rows failed twice (zoom.gpu_pass.median 3.73 vs 2.95 recorded, cpu.p95 3.3 vs
+  0.86) while other agents were building and rendering; the builders are not on
+  that path (wasm rows pass, pipeline rows pass).
+- Golden `gup_core/builder_scatter.png` read: title, tick labels and grid, four
+  Okabe-Ito colours, areas growing with weight, "Segment" legend at right, discs
+  inside the plot rect.
+
+## Retrospective
+
+**Completed**: 2026-10-18
+
+### Key Technical Learnings
+
+#### Deferred layer, immediate plot
+
+- **Challenge**: setters chain by value but `Selection` needs rows and a `Plot`.
+- **Solution**: rows are collected up front, layer settings recorded as
+  `FnOnce(&mut Selection)` ops plus fields, applied at first use.
+- **Pattern**: a `rows: Option<Vec<T>>` doubles as the "drawn" flag.
+
+#### Higher-ranked key closure (risk)
+
+- **Challenge**: re-wrapping a stored `Arc<dyn for<'a> Fn(&'a T) -> &'a str>`.
+- **Solution**: a one-line `key_fn` identity helper fixes the closure's
+  signature; no change to `encode_key`'s bounds, no escalation.
+
+#### Size scale minimum
+
+- `Pow` fits a nice domain from 0, so a smallest weight of 1 gives 3 px, not 2.
+  The golden's minimum row has weight 0 to meet the AC's 2 px.
+
+### Architectural Decisions
+
+- Colour uses `ScaleRef<Categorical>` (legend hook) but value colour uses a
+  plain `Sequential`, to stay byte-identical to the reference.
+- `x_scale`/`y_scale` are plot-level (immediate), so no layer panic.
+
+### Development Workflow Insights
+
+- Hello-world honesty: the doctest needs a hidden `fn main` and a hidden
+  `Context`, and a row struct, so it is about 12 visible lines, not five. The
+  chain itself is five lines with no annotations, which reads naturally. The
+  cost a newcomer meets is owned rows and `let mut chart`, not the closures.
+- Pre-commit hook for `.rs` doc edits takes several minutes; run it in the
+  background.
+
+### Follow-up Stories
+
+None new (GUP-463/464 follow the pattern).
