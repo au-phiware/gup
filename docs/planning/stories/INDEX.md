@@ -332,6 +332,35 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   `gup_core::web::CanvasApp` (a canvas surface and DOM pointer listeners) with
   hover, click and wheel checked in the browser smoke test. Deps: GUP-444 📋,
   GUP-446 📋.
+- [GUP-450](GUP-450_WASM_Size_Attribution_And_Row_Type_Gate.md) 📋 —
+  `mask wasm-attrib` attributes the scatter's WASM bytes by crate, function and
+  generic group, and `mask wasm-size` budgets the cost of one more `Selection`
+  row type. Deps: GUP-438 ✅, GUP-449 ✅.
+- [GUP-451](GUP-451_WASM_Size_Cuts.md) 📋 — Cut gup-core to ≤ 320,000 B gz over
+  bare wgpu (from 356,914): an LTO release profile for the harnesses, an
+  ASCII-only SemiBold subset, and `Selection`'s `Layer` bodies moved out of the
+  per-row-type generics. Deps: GUP-450 📋, GUP-436 ✅, GUP-445 ✅.
+- [GUP-452](GUP-452_RFC_001_S9a_Stable_Plot_Rect_During_Interaction.md) 📋 —
+  RFC-001 step S9a: hold the plot rect's margins while the pointer interacts, so
+  the value under it stays put when tick labels change width, plus
+  `Plot::invert`. Deps: GUP-444 ✅, GUP-449 ✅, GUP-451 📋.
+- [GUP-453](GUP-453_RFC_001_S9b_Drag_Pan_View_Axes_Reset.md) 📋 — RFC-001 step
+  S9b: drag pan (on by default), `view_axes`, `reset_view`, and band axes left
+  alone by input, in the window and the browser. Deps: GUP-452 📋, GUP-444 ✅,
+  GUP-449 ✅.
+- [GUP-454](GUP-454_RFC_001_S9c_Brush_And_Drag_Zoom.md) 📋 — RFC-001 step S9c:
+  `Drag::Brush` selects rows by position through the pick index, drawn as an
+  overlay, and `Drag::Zoom` zooms to a rectangle. Deps: GUP-453 📋, GUP-445 ✅,
+  GUP-446 ✅.
+- [GUP-455](GUP-455_RFC_001_S9d_GPU_Pick_Pass.md) 📋 — RFC-001 step S9d
+  (design): a one-texel GPU pick pass, with depth-encoded distances, that
+  matches the CPU pick exactly and reaches `GpuOnly` layers
+  (`request_pick`/`poll_picks`). Deps: GUP-451 📋, GUP-445 ✅, GUP-431 ✅,
+  GUP-432 ✅.
+- [GUP-456](GUP-456_RFC_001_S9e_GPU_Pick_In_Hover_And_Hosts.md) 📋 — RFC-001
+  step S9e: hover and click through GPU picks when a layer is not CPU-readable,
+  `Chart::needs_frame` for hosts, and `Plot::on_row` events by `RowId`. Deps:
+  GUP-455 📋, GUP-453 📋; soft: GUP-454 📋.
 
 ## GPU Rendering Pipeline
 
