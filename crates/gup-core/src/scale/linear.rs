@@ -142,6 +142,10 @@ impl PositionScale for Linear {
         self.range = (f64::from(r0.0), f64::from(r1.0));
     }
 
+    fn clear_domain(&mut self) {
+        self.explicit = false;
+    }
+
     fn set_domain(&mut self, d0: f64, d1: f64) -> Result<()> {
         if !(d0.is_finite() && d1.is_finite()) || d0 == d1 {
             return Err(Error::config(

@@ -15,7 +15,7 @@ use crate::channel::{Mark, Px};
 use crate::context::{Context, ContextId};
 use crate::error::{Error, Result};
 use crate::geom::{Point, Rect};
-use crate::input::{Button, Event, EventInfo, Input, Response};
+use crate::input::{Axes, Button, Drag, Event, EventInfo, Input, Response};
 use crate::marks::{Circle, Line, Rect as MarkRect, Segment};
 use crate::pick::{PickIndex, RowId};
 use crate::scale::{DynPositionScale, Linear, PositionScale, ScaleRef, Ticks};
@@ -179,6 +179,25 @@ pub struct Plot {
     /// The plot rect's horizontal margins, held while the pointer drives the
     /// view so a change in tick-label width does not move the rect.
     hold: Option<Hold>,
+    /// Which axes the wheel zooms and a drag pans.
+    view_axes: Axes,
+    /// What a primary-button drag does.
+    drag: Drag,
+    /// The domains the drag started from, once the pointer left the click
+    /// slop; panning is always from these, by the total movement.
+    dragging: Option<[Option<(f64, f64)>; 2]>,
+    /// How each axis was before the first view change since the last
+    /// [`reset_view`](Self::reset_view).
+    home: Option<[Home; 2]>,
+}
+
+/// An axis as it was before the view moved.
+#[derive(Copy, Clone, Debug)]
+enum Home {
+    /// Data-driven: fit again.
+    Auto,
+    /// Explicit domain.
+    Fixed(f64, f64),
 }
 
 /// The horizontal margins held for one chart size (see `Plot::hold_layout`).
@@ -298,6 +317,10 @@ impl Plot {
             pick: None,
             hover: None,
             press: None,
+            view_axes: Axes::Both,
+            drag: Drag::Pan,
+            dragging: None,
+            home: None,
             last_at: Point::new(0.0, 0.0),
             overlay: None,
         }
@@ -439,6 +462,10 @@ impl Plot {
     /// no column bytes. Does nothing before the first resolve has fitted
     /// and ranged the scales.
     pub fn zoom(&mut self, at: Point, factor: f64) -> Result<()> {
+        self.zoom_axes(at, factor, [true, true])
+    }
+
+    fn zoom_axes(&mut self, at: Point, factor: f64, which: [bool; 2]) -> Result<()> {
         self.revision = self.revision.wrapping_add(1);
         if !(factor.is_finite() && factor > 0.0) {
             return Err(Error::config(
@@ -446,14 +473,141 @@ impl Plot {
                 format!("{factor} must be finite and positive"),
             ));
         }
-        self.x.zoom(f64::from(at.x), factor)?;
-        self.y.zoom(f64::from(at.y), factor)?;
+        self.record_home();
+        if which[0] {
+            self.x.zoom(f64::from(at.x), factor)?;
+        }
+        if which[1] {
+            self.y.zoom(f64::from(at.y), factor)?;
+        }
+        self.record_zoomed();
+        Ok(())
+    }
+
+    /// Move the view so the content moves `(dx, dy)` logical pixels, on
+    /// both axes (like [`zoom`](Self::zoom), a direct call ignores
+    /// [`view_axes`](Self::view_axes)). Each domain becomes the values now
+    /// drawn that far before the range ends, so a log scale pans in log
+    /// space. Does nothing before the first resolve has fitted and ranged
+    /// the scales; a band or point axis is an error.
+    pub fn pan(&mut self, dx: f32, dy: f32) -> Result<()> {
+        let base = [self.x.current_domain(), self.y.current_domain()];
+        self.pan_from(base, (dx, dy), [true, true])
+    }
+
+    /// Set the `which` axes to `base` panned by `d` pixels.
+    fn pan_from(
+        &mut self,
+        base: [Option<(f64, f64)>; 2],
+        d: (f32, f32),
+        which: [bool; 2],
+    ) -> Result<()> {
+        self.revision = self.revision.wrapping_add(1);
+        self.record_home();
+        let axes = [(&self.x, d.0), (&self.y, d.1)];
+        for (i, (axis, dpx)) in axes.into_iter().enumerate() {
+            if let (true, Some((d0, d1))) = (which[i], base[i]) {
+                axis.set_domain(d0, d1)?;
+                axis.pan(f64::from(dpx))?;
+            }
+        }
+        self.record_zoomed();
+        Ok(())
+    }
+
+    /// Remember a widened axis's domain after a view change (see `zoomed`).
+    fn record_zoomed(&mut self) {
         for (i, axis) in [&self.x, &self.y].into_iter().enumerate() {
             self.zoomed[i] = Some(axis)
                 .filter(|_| self.widened[i])
                 .and_then(|a| a.current_domain());
         }
-        Ok(())
+    }
+
+    /// Note how the axes are before the first view change.
+    fn record_home(&mut self) {
+        if self.home.is_none() {
+            let home = |s: &dyn DynPositionScale| match s.current_domain() {
+                Some((a, b)) if !s.is_auto() => Home::Fixed(a, b),
+                _ => Home::Auto,
+            };
+            self.home = Some([home(&*self.x), home(&*self.y)]);
+        }
+    }
+
+    /// Back to the domains before the first zoom or pan: automatic axes fit
+    /// the data again, explicit ones get their domain back. Does nothing
+    /// (and invalidates nothing) when the view has not moved.
+    pub fn reset_view(&mut self) -> &mut Self {
+        let Some(home) = self.home.take() else {
+            return self;
+        };
+        for (axis, home) in [&self.x, &self.y].into_iter().zip(home) {
+            match home {
+                Home::Auto => axis.clear_domain(),
+                // The domain was valid when it was recorded.
+                Home::Fixed(a, b) => drop(axis.set_domain(a, b)),
+            }
+        }
+        self.zoomed = [None; 2];
+        self.dragging = None;
+        self.press = None;
+        self.hold = None;
+        self.revision = self.revision.wrapping_add(1);
+        self
+    }
+
+    /// Axes the wheel zooms and a drag pans (default both). A band or
+    /// point axis is never moved by input.
+    ///
+    /// ```
+    /// use gup_core::geom::Point;
+    /// use gup_core::prelude::*;
+    /// use gup_core::{Button, Input};
+    ///
+    /// let cx = Context::new_blocking()?;
+    /// let mut plot = Plot::new();
+    /// let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
+    /// plot.add(Selection::<(f64, f64), Circle>::new(vec![(1.0, 1.0), (9.0, 3.0)]))
+    ///     .attr(Circle::X, x.encode(|r: &(f64, f64)| r.0))
+    ///     .attr(Circle::Y, y.encode(|r: &(f64, f64)| r.1))
+    ///     .attr(Circle::RADIUS, Px(4.0));
+    /// plot.view_axes(Axes::X);
+    /// let r = plot.resolve(&cx, 400.0, 300.0)?.layout.plot;
+    /// let (dx, dy) = (x.read().current_domain(), y.read().current_domain());
+    /// let p = Point::new(r.x + 50.0, r.y + 50.0);
+    /// let button = Button::Primary;
+    /// plot.handle(Input::PointerDown { at: p, button });
+    /// plot.handle(Input::PointerMoved { at: Point::new(p.x + 20.0, p.y + 10.0) });
+    /// let moved = plot.handle(Input::PointerMoved { at: Point::new(p.x + 40.0, p.y + 20.0) });
+    /// plot.handle(Input::PointerUp { at: Point::new(p.x + 40.0, p.y + 20.0), button });
+    /// assert!(moved.redraw);
+    /// assert_ne!(x.read().current_domain(), dx);
+    /// assert_eq!(y.read().current_domain(), dy);
+    /// # Ok::<(), gup_core::Error>(())
+    /// ```
+    pub fn view_axes(&mut self, axes: Axes) -> &mut Self {
+        if self.view_axes != axes {
+            self.view_axes = axes;
+            self.revision = self.revision.wrapping_add(1);
+        }
+        self
+    }
+
+    /// What a primary-button drag does (default [`Drag::Pan`]).
+    pub fn drag(&mut self, drag: Drag) -> &mut Self {
+        if self.drag != drag {
+            self.drag = drag;
+            self.revision = self.revision.wrapping_add(1);
+        }
+        self
+    }
+
+    /// The axes input may move: [`view_axes`](Self::view_axes) less band and
+    /// point axes.
+    fn movable(&self) -> [bool; 2] {
+        let [x, y] = self.view_axes.flags();
+        [x && !self.x.reads_keys(), y && !self.y.reads_keys()]
     }
 
     /// The data values drawn at `at` (logical pixels) as of the current
@@ -613,6 +767,15 @@ impl Plot {
     ///   `Click` handlers of the row under the pointer.
     /// - A wheel turn zooms about the pointer ([`zoom`](Self::zoom)),
     ///   leaving the hovered row first.
+    /// - A primary-button drag that goes beyond the click distance pans
+    ///   ([`pan`](Self::pan)): the values under the pointer at the press stay
+    ///   under it. The hovered row is left when the drag starts, and the
+    ///   release is not a click. [`drag`](Self::drag)(`Drag::Off`) turns this
+    ///   off.
+    ///
+    /// The wheel and a drag move the axes of [`view_axes`](Self::view_axes)
+    /// except band and point axes; [`reset_view`](Self::reset_view) undoes
+    /// them.
     ///
     /// `redraw` is true when the tooltip shown changes (a hovered row of a
     /// layer with a [`tooltip`](Selection::tooltip), or leaving one) or the
@@ -623,14 +786,32 @@ impl Plot {
         match input {
             Input::PointerMoved { at } => {
                 self.last_at = at;
-                let row = self.pick_row(at);
-                if row != self.hovered() {
-                    redraw = self.set_hover(row, at);
+                let which = self.movable();
+                let drags = self.drag == Drag::Pan && (which[0] || which[1]);
+                if let (Some(down), true, true) = (self.press, drags, self.cache.is_some()) {
+                    if self.dragging.is_none() && (at.x - down.x).hypot(at.y - down.y) > CLICK_SLOP
+                    {
+                        self.set_hover(None, at);
+                        self.hold_layout();
+                        self.dragging = Some([self.x.current_domain(), self.y.current_domain()]);
+                    }
+                    if let Some(base) = self.dragging {
+                        redraw = self
+                            .pan_from(base, (at.x - down.x, at.y - down.y), which)
+                            .is_ok();
+                    }
+                }
+                if self.dragging.is_none() {
+                    let row = self.pick_row(at);
+                    if row != self.hovered() {
+                        redraw = self.set_hover(row, at);
+                    }
                 }
             }
             Input::PointerLeft => {
                 redraw = self.set_hover(None, self.last_at);
                 self.press = None;
+                self.dragging = None;
                 if self.hold.take().is_some() {
                     self.revision = self.revision.wrapping_add(1);
                     redraw = true;
@@ -648,7 +829,10 @@ impl Plot {
                 button: Button::Primary,
             } => {
                 self.last_at = at;
-                if let Some(down) = self.press.take() {
+                let dragged = self.dragging.take().is_some();
+                if let Some(down) = self.press.take()
+                    && !dragged
+                {
                     let (dx, dy) = (at.x - down.x, at.y - down.y);
                     if dx.hypot(dy) <= CLICK_SLOP
                         && let Some(row) = self.pick_row(at)
@@ -661,9 +845,14 @@ impl Plot {
                 if lines.is_finite() && lines != 0.0 && self.cache.is_some() =>
             {
                 self.last_at = at;
-                self.set_hover(None, at);
-                self.hold_layout();
-                redraw = self.zoom(at, ZOOM_PER_LINE.powf(f64::from(lines))).is_ok();
+                let which = self.movable();
+                if which[0] || which[1] {
+                    self.set_hover(None, at);
+                    self.hold_layout();
+                    redraw = self
+                        .zoom_axes(at, ZOOM_PER_LINE.powf(f64::from(lines)), which)
+                        .is_ok();
+                }
             }
             _ => {}
         }

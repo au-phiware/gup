@@ -352,6 +352,9 @@ macro_rules! ordinal_scale {
                 ))
             }
 
+            /// Nothing to clear: the keys are the domain.
+            fn clear_domain(&mut self) {}
+
             fn set_range(&mut self, r0: Px, r1: Px) {
                 self.0.range = (f64::from(r0.0), f64::from(r1.0));
             }

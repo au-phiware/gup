@@ -97,6 +97,10 @@ pub trait PositionScale: ShaderFn<Out = Px> + EncodeFn<Output = Px> + CpuMirror 
     /// Set an explicit domain, e.g. to zoom or pan. Only uniforms derived
     /// from the domain change; no column bytes are re-uploaded.
     fn set_domain(&mut self, d0: f64, d1: f64) -> Result<()>;
+    /// Make the domain data-driven again ([`is_auto`](Self::is_auto) is
+    /// true); the next resolve refits it. No-op for [`Band`] and [`Point`],
+    /// which are always automatic.
+    fn clear_domain(&mut self);
     /// Set the pixel range the domain maps onto.
     fn set_range(&mut self, r0: Px, r1: Px);
     /// The domain value drawn at pixel `px`: the inverse of
@@ -247,6 +251,7 @@ pub(crate) trait DynPositionScale: Send + Sync {
     fn eval(&self, x: f64) -> f64;
     fn current_domain(&self) -> Option<(f64, f64)>;
     fn set_domain(&self, d0: f64, d1: f64) -> Result<()>;
+    fn clear_domain(&self);
     fn invert(&self, px: f64) -> f64;
     /// Grow an automatic, already rounded domain, in data units, so that
     /// its ends map `overhang` pixels inside the pixel interval `a..b`.
@@ -270,6 +275,18 @@ pub(crate) trait DynPositionScale: Send + Sync {
         let (r0, r1) = (self.eval(d0), self.eval(d1));
         let at = |r: f64| self.invert(anchor + (r - anchor) * factor);
         self.set_domain(at(r0), at(r1))
+    }
+
+    /// Move the domain so the content moves `dpx` pixels along the range:
+    /// the domain becomes the values now drawn `dpx` pixels before the range
+    /// ends. In pixels, like [`zoom`](Self::zoom), so log, pow and time
+    /// scales pan in their own space.
+    fn pan(&self, dpx: f64) -> Result<()> {
+        let Some((d0, d1)) = self.current_domain() else {
+            return Ok(());
+        };
+        let (r0, r1) = (self.eval(d0), self.eval(d1));
+        self.set_domain(self.invert(r0 - dpx), self.invert(r1 - dpx))
     }
 }
 
@@ -314,6 +331,10 @@ impl<S: PositionScale> DynPositionScale for ScaleRef<S> {
 
     fn set_domain(&self, d0: f64, d1: f64) -> Result<()> {
         self.write().set_domain(d0, d1)
+    }
+
+    fn clear_domain(&self) {
+        self.write().clear_domain();
     }
 
     fn invert(&self, px: f64) -> f64 {
@@ -415,6 +436,45 @@ pub(crate) fn format_with_step(v: f64, step: f64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// GUP-453: `clear_domain` makes every position scale automatic again
+    /// (`Band` and `Point` always are).
+    #[test]
+    fn clear_domain_makes_the_scale_automatic() {
+        fn check<S: PositionScale>(mut s: S, d: (f64, f64)) {
+            if s.set_domain(d.0, d.1).is_ok() {
+                assert!(!s.is_auto());
+            }
+            s.clear_domain();
+            assert!(s.is_auto());
+        }
+        check(Linear::new(), (1.0, 2.0));
+        check(Log::new(), (1.0, 100.0));
+        check(Pow::sqrt(), (1.0, 4.0));
+        check(Symlog::new(), (-3.0, 5.0));
+        check(Time::new(), (0.0, 1e9));
+        check(Band::new(), (0.0, 3.0));
+        check(Point::new(), (0.0, 3.0));
+    }
+
+    /// Panning moves the domain by whole pixels in the scale's own space.
+    #[test]
+    fn pan_moves_the_domain_by_pixels() {
+        let lin = ScaleRef::new(Linear::new().domain(0.0, 100.0).range(Px(0.0), Px(200.0)));
+        lin.pan(20.0).unwrap();
+        let (a, b) = lin.current_domain().unwrap();
+        assert!(
+            (a + 10.0).abs() < 1e-12 && (b - 90.0).abs() < 1e-12,
+            "{a} {b}"
+        );
+        let log = ScaleRef::new(Log::new().domain(1.0, 100.0).range(Px(0.0), Px(200.0)));
+        log.pan(-100.0).unwrap();
+        let (a, b) = log.current_domain().unwrap();
+        assert!(
+            (a - 10.0).abs() < 1e-9 && (b - 1000.0).abs() < 1e-7,
+            "{a} {b}"
+        );
+    }
 
     /// GUP-424: fits in one pass union; a new pass starts from scratch; an
     /// explicit domain ignores fits.

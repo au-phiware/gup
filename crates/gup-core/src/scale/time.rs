@@ -111,6 +111,10 @@ impl PositionScale for Time {
         self.linear.set_range(r0, r1);
     }
 
+    fn clear_domain(&mut self) {
+        self.linear.clear_domain();
+    }
+
     fn invert(&self, px: f64) -> f64 {
         self.linear.invert(px)
     }

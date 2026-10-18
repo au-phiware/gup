@@ -68,6 +68,10 @@ impl Screenshot {
 /// pointer input (move, leave, buttons, wheel) to [`Chart::handle`] and
 /// redraws when the chart asks.
 ///
+/// A [`Plot`](crate::Plot) chart so driven shows tooltips, zooms on the
+/// wheel and pans on a primary-button drag; `Plot::drag(Drag::Off)` turns
+/// the drag off.
+///
 /// With `GUP_SCREENSHOT_PATH` set, it draws one frame **in the window**,
 /// reads that frame's surface texture back, writes it as PNG to the path
 /// and returns. `GUP_SCREENSHOT_WIDTH` and `GUP_SCREENSHOT_HEIGHT`
@@ -142,7 +146,8 @@ impl GupApp {
     }
 }
 
-/// `GupApp::new(chart).run()`.
+/// `GupApp::new(chart).run()`: tooltips, wheel zoom and drag pan for a
+/// [`Plot`](crate::Plot) (`Plot::drag(Drag::Off)` turns the drag off).
 pub fn show(chart: impl Chart + 'static) -> Result<()> {
     GupApp::new(chart).run()
 }
@@ -375,6 +380,31 @@ mod tests {
             delta,
             phase: TouchPhase::Moved,
         }
+    }
+
+    /// A drag is `PointerDown`, then plain `PointerMoved`s (winit sends no
+    /// button state with a move).
+    #[test]
+    fn a_move_with_a_button_held_is_still_a_pointer_move() {
+        let at = Point::new(3.0, 4.0);
+        let down = click(ElementState::Pressed, MouseButton::Left);
+        assert_eq!(
+            input_from(&down, Some(at), 1.0),
+            Some(Input::PointerDown {
+                at,
+                button: Button::Primary
+            })
+        );
+        let moved = WindowEvent::CursorMoved {
+            device_id: dev(),
+            position: PhysicalPosition::new(30.0, 40.0),
+        };
+        assert_eq!(
+            input_from(&moved, Some(at), 1.0),
+            Some(Input::PointerMoved {
+                at: Point::new(30.0, 40.0)
+            })
+        );
     }
 
     #[test]

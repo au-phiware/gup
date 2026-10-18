@@ -460,3 +460,320 @@ fn invert_is_none_before_resolve_and_outside_the_plot() {
     assert_eq!(f.plot.invert(Point::new(r.left() - 1.0, ANCHOR.y)), None);
     assert_eq!(f.plot.invert(Point::new(ANCHOR.x, r.bottom() + 1.0)), None);
 }
+
+// ---- GUP-453: drag pan, view axes and reset ----
+
+use gup_core::{Axes, Drag, RowId};
+use std::sync::{Arc, Mutex};
+
+type Events = Arc<Mutex<Vec<&'static str>>>;
+
+const PS: (f32, f32) = (400.0, 300.0);
+
+/// A scatter with a tooltip and all three handlers, logging to `events`.
+fn pan_fixture(xs: Linear, ys: Linear) -> (Fixture, Events) {
+    let events = Events::default();
+    let mut plot = Plot::new();
+    let (x, y) = (plot.x(xs), plot.y(ys));
+    let colour = ScaleRef::new(Sequential::viridis());
+    let sel = plot.add(Selection::<Row, Circle>::new(
+        (0..50)
+            .map(|i| {
+                (
+                    f64::from(i * 10 + 1),
+                    f64::from(i * i % 9 * 10 + 1),
+                    f64::from(i % 5),
+                )
+            })
+            .collect::<Vec<Row>>(),
+    ));
+    sel.attr(Circle::X, x.encode(|r: &Row| r.0))
+        .attr(Circle::Y, y.encode(|r: &Row| r.1))
+        .attr(Circle::FILL, colour.encode(|r: &Row| r.2))
+        .attr(Circle::RADIUS, Px(6.0))
+        .tooltip(|r| format!("{}", r.0));
+    for (event, tag) in [
+        (Event::Enter, "Enter"),
+        (Event::Leave, "Leave"),
+        (Event::Click, "Click"),
+    ] {
+        let events = Arc::clone(&events);
+        sel.on(event, move |_, _| events.lock().unwrap().push(tag));
+    }
+    (Fixture { plot, x, y, colour }, events)
+}
+
+fn auto_pan() -> (Fixture, Events) {
+    pan_fixture(Linear::new(), Linear::new())
+}
+
+fn explicit_pan() -> (Fixture, Events) {
+    pan_fixture(
+        Linear::new().domain(0.0, 500.0),
+        Linear::new().domain(0.0, 100.0),
+    )
+}
+
+fn take(e: &Events) -> Vec<&'static str> {
+    std::mem::take(&mut *e.lock().unwrap())
+}
+
+fn press(f: &mut Fixture, at: Point) -> Response {
+    f.plot.handle(Input::PointerDown {
+        at,
+        button: Button::Primary,
+    })
+}
+
+fn release(f: &mut Fixture, at: Point) -> Response {
+    f.plot.handle(Input::PointerUp {
+        at,
+        button: Button::Primary,
+    })
+}
+
+fn move_to(f: &mut Fixture, at: Point) -> Response {
+    f.plot.handle(Input::PointerMoved { at })
+}
+
+fn domains(f: &Fixture) -> [(f64, f64); 2] {
+    [
+        f.x.read().current_domain().unwrap(),
+        f.y.read().current_domain().unwrap(),
+    ]
+}
+
+/// The pixel of row 3's centre, and a point to press at (on it).
+fn row_point(f: &mut Fixture) -> Point {
+    f.plot.pick_anchor(RowId { layer: 0, row: 3 }).unwrap()
+}
+
+/// Drag from a row through `+(2, 0)`, `+(30, 20)` and `+(60, -10)`,
+/// resolving after each move: the value under the pointer at the press
+/// stays under it within 0.01 px, and the plot rect never moves.
+fn drag_holds_the_value(
+    f: &mut Fixture,
+    events: &Events,
+    y_domain: impl Fn() -> (f64, f64),
+    y_eval: impl Fn(f64) -> f64,
+) {
+    let cx = cx();
+    let rect = f.plot.resolve(&cx, PS.0, PS.1).unwrap().layout.plot;
+    let p = row_point(f);
+    let _ = move_to(f, p);
+    assert_eq!(f.plot.hovered(), Some(RowId { layer: 0, row: 3 }));
+    take(events);
+    let v = f.plot.invert(p).unwrap();
+    let before = (f.x.read().current_domain(), y_domain());
+    assert_eq!(press(f, p), Response::default());
+    // Within the slop: nothing moves, the row stays hovered.
+    assert_eq!(move_to(f, Point::new(p.x + 2.0, p.y)), Response::default());
+    assert_eq!((f.x.read().current_domain(), y_domain()), before);
+    assert_eq!(f.plot.hovered(), Some(RowId { layer: 0, row: 3 }));
+    for d in [(30.0, 20.0), (60.0, -10.0)] {
+        let at = Point::new(p.x + d.0, p.y + d.1);
+        assert_eq!(move_to(f, at), Response { redraw: true });
+        assert_eq!(f.plot.hovered(), None);
+        let r = f.plot.resolve(&cx, PS.0, PS.1).unwrap().layout.plot;
+        assert_eq!(bits(r), bits(rect), "the plot rect moved");
+        let (x_px, y_px) = (f.x.read().eval(v.0), y_eval(v.1));
+        assert!((x_px - f64::from(at.x)).abs() <= 0.01, "x {x_px} {at:?}");
+        assert!((y_px - f64::from(at.y)).abs() <= 0.01, "y {y_px} {at:?}");
+    }
+    assert_eq!(take(events), ["Leave"]);
+    let end = Point::new(p.x + 60.0, p.y - 10.0);
+    assert_eq!(release(f, end), Response::default());
+    assert!(take(events).is_empty(), "the release clicked");
+    // After the release, a move hovers again.
+    let _ = move_to(f, end);
+    assert!(f.plot.hovered().is_some());
+}
+
+#[test]
+fn drag_pans_explicit_and_automatic_domains() {
+    for (mut f, events) in [explicit_pan(), auto_pan()] {
+        let y = f.y.clone();
+        let y2 = y.clone();
+        drag_holds_the_value(
+            &mut f,
+            &events,
+            move || y.read().current_domain().unwrap(),
+            move |v| y2.read().eval(v),
+        );
+    }
+}
+
+#[test]
+fn drag_pans_a_log_axis() {
+    let (mut f, events) = pan_fixture(Linear::new(), Linear::new());
+    // A log y replaces the linear one.
+    let mut plot = Plot::new();
+    let (x, y) = (plot.x(Linear::new()), plot.y(Log::new()));
+    let sel = plot.add(Selection::<Row, Circle>::new(
+        (0..50)
+            .map(|i| (f64::from(i * 10 + 1), f64::from(i % 9 + 1) * 3.0, 0.0))
+            .collect::<Vec<Row>>(),
+    ));
+    sel.attr(Circle::X, x.encode(|r: &Row| r.0))
+        .attr(Circle::Y, y.encode(|r: &Row| r.1))
+        .attr(Circle::RADIUS, Px(6.0))
+        .tooltip(|r| format!("{}", r.0));
+    for (event, tag) in [
+        (Event::Enter, "Enter"),
+        (Event::Leave, "Leave"),
+        (Event::Click, "Click"),
+    ] {
+        let events = Arc::clone(&events);
+        sel.on(event, move |_, _| events.lock().unwrap().push(tag));
+    }
+    f.plot = plot;
+    f.x = x;
+    let y2 = y.clone();
+    drag_holds_the_value(
+        &mut f,
+        &events,
+        move || y.read().current_domain().unwrap(),
+        move |v| y2.read().eval(v),
+    );
+}
+
+#[test]
+fn drag_keeps_the_widened_range_on_automatic_axes() {
+    let cx = cx();
+    let (mut f, _) = auto_pan();
+    let rect = f.plot.resolve(&cx, PS.0, PS.1).unwrap().layout.plot;
+    let p = Point::new(rect.x + 100.0, rect.y + 100.0);
+    let _ = press(&mut f, p);
+    let _ = move_to(&mut f, Point::new(p.x + 30.0, p.y + 20.0));
+    let _ = release(&mut f, Point::new(p.x + 30.0, p.y + 20.0));
+    let rect2 = f.plot.resolve(&cx, PS.0, PS.1).unwrap().layout.plot;
+    assert_eq!(bits(rect), bits(rect2));
+    let [dx, dy] = domains(&f);
+    let (x, y) = (f.x.read(), f.y.read());
+    assert!((x.eval(dx.0) - f64::from(rect.left())).abs() <= 0.01);
+    assert!((x.eval(dx.1) - f64::from(rect.right())).abs() <= 0.01);
+    assert!((y.eval(dy.0) - f64::from(rect.bottom())).abs() <= 0.01);
+    assert!((y.eval(dy.1) - f64::from(rect.top())).abs() <= 0.01);
+}
+
+#[test]
+fn view_axes_and_drag_choose_what_moves() {
+    let cx = cx();
+    let wheel_at = |f: &mut Fixture, p: Point| f.plot.handle(Input::Wheel { at: p, lines: 2.0 });
+    let drag = |f: &mut Fixture, p: Point| {
+        let _ = press(f, p);
+        let _ = move_to(f, Point::new(p.x + 30.0, p.y + 20.0));
+        let _ = move_to(f, Point::new(p.x + 60.0, p.y - 10.0));
+        let _ = release(f, Point::new(p.x + 60.0, p.y - 10.0));
+    };
+    for (axes, moves) in [
+        (Axes::X, [true, false]),
+        (Axes::Y, [false, true]),
+        (Axes::Neither, [false, false]),
+        (Axes::Both, [true, true]),
+    ] {
+        let (mut f, _) = explicit_pan();
+        f.plot.view_axes(axes);
+        let rect = f.plot.resolve(&cx, PS.0, PS.1).unwrap().layout.plot;
+        let p = Point::new(rect.x + 100.0, rect.y + 100.0);
+        let before = domains(&f);
+        drag(&mut f, p);
+        let r = wheel_at(&mut f, p);
+        assert_eq!(r.redraw, moves[0] || moves[1], "{axes:?}");
+        let after = domains(&f);
+        for i in 0..2 {
+            assert_eq!(after[i] != before[i], moves[i], "{axes:?} axis {i}");
+        }
+        if !moves[1] {
+            assert_eq!(after[1].0.to_bits(), before[1].0.to_bits());
+            assert_eq!(after[1].1.to_bits(), before[1].1.to_bits());
+        }
+    }
+    let (mut f, events) = explicit_pan();
+    f.plot.drag(Drag::Off);
+    let rect = f.plot.resolve(&cx, PS.0, PS.1).unwrap().layout.plot;
+    let p = Point::new(rect.x + 100.0, rect.y + 100.0);
+    let before = domains(&f);
+    drag(&mut f, p);
+    assert_eq!(domains(&f), before);
+    assert!(take(&events).is_empty());
+}
+
+#[test]
+fn input_leaves_a_band_axis_alone() {
+    let cx = cx();
+    let mut plot = Plot::new();
+    plot.legends(false);
+    let (x, y) = (plot.x(Band::new()), plot.y(Linear::new()));
+    plot.add(Selection::<(String, f64), Circle>::new(
+        (0..12)
+            .map(|i| (format!("k{}", i % 4), f64::from(i) * 3.0))
+            .collect::<Vec<_>>(),
+    ))
+    .attr(Circle::X, x.encode_key(|r: &(String, f64)| r.0.as_str()))
+    .attr(Circle::Y, y.encode(|r: &(String, f64)| r.1))
+    .attr(Circle::RADIUS, Px(5.0));
+    let rect = plot.resolve(&cx, PS.0, PS.1).unwrap().layout.plot;
+    let p = Point::new(rect.x + 100.0, rect.y + 100.0);
+    let (bx, by) = (x.read().current_domain(), y.read().current_domain());
+    let r = plot.handle(Input::Wheel { at: p, lines: 2.0 });
+    assert_eq!(r, Response { redraw: true });
+    let (zy, zx) = (y.read().current_domain(), x.read().current_domain());
+    assert_ne!(zy, by);
+    assert_eq!(zx, bx);
+    let _ = plot.handle(Input::PointerDown {
+        at: p,
+        button: Button::Primary,
+    });
+    let r = plot.handle(Input::PointerMoved {
+        at: Point::new(p.x + 30.0, p.y + 20.0),
+    });
+    assert_eq!(r, Response { redraw: true });
+    assert_ne!(y.read().current_domain(), zy);
+    assert_eq!(x.read().current_domain(), bx);
+    // Called directly, a band axis is an error.
+    assert!(plot.pan(5.0, 5.0).is_err());
+}
+
+#[test]
+fn reset_view_returns_to_the_first_view() {
+    let cx = cx();
+    let (mut f, _) = auto_pan();
+    let first = f.plot.resolve(&cx, PS.0, PS.1).unwrap().clone();
+    let first_rgba = f.plot.render(&cx, PS.0 as u32, PS.1 as u32).unwrap();
+    let p = Point::new(first.layout.plot.x + 120.0, first.layout.plot.y + 90.0);
+    for _ in 0..2 {
+        let _ = f.plot.handle(Input::Wheel { at: p, lines: 2.0 });
+        f.plot.resolve(&cx, PS.0, PS.1).unwrap();
+    }
+    let _ = press(&mut f, p);
+    let _ = move_to(&mut f, Point::new(p.x + 30.0, p.y + 20.0));
+    let _ = release(&mut f, Point::new(p.x + 30.0, p.y + 20.0));
+    f.plot.resolve(&cx, PS.0, PS.1).unwrap();
+    f.plot.reset_view();
+    let again = f.plot.resolve(&cx, PS.0, PS.1).unwrap();
+    assert_eq!(again.layout, first.layout);
+    assert!(f.x.read().is_auto() && f.y.read().is_auto());
+    assert_eq!(
+        f.plot.render(&cx, PS.0 as u32, PS.1 as u32).unwrap(),
+        first_rgba
+    );
+
+    // Explicit domains come back bitwise.
+    let (mut g, _) = explicit_pan();
+    g.plot.resolve(&cx, PS.0, PS.1).unwrap();
+    let before = domains(&g);
+    let _ = g.plot.handle(Input::Wheel { at: p, lines: 2.0 });
+    g.plot.pan(10.0, 10.0).unwrap();
+    assert_ne!(domains(&g), before);
+    g.plot.reset_view();
+    g.plot.resolve(&cx, PS.0, PS.1).unwrap();
+    assert_eq!(domains(&g), before);
+    assert!(!g.x.read().is_auto());
+
+    // No view change: a no-op that keeps the cache.
+    let generation = g.plot.resolve_generation();
+    g.plot.reset_view();
+    g.plot.resolve(&cx, PS.0, PS.1).unwrap();
+    assert_eq!(g.plot.resolve_generation(), generation);
+}

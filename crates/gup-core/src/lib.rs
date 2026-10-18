@@ -132,7 +132,7 @@ pub use encoding::{
     KeyMarker, KeySource, NullableKey, NullableOwnedKey, OwnedKey, Resource, ShaderFn, Then,
 };
 pub use error::{Error, Result};
-pub use input::{Button, Event, EventInfo, Input, Response};
+pub use input::{Axes, Button, Drag, Event, EventInfo, Input, Response};
 pub use marks::{Circle, CircleAttrs, Line, LineAttrs, Rect, RectAttrs, Segment, SegmentAttrs};
 pub use pick::{PICK_TOLERANCE, RowId};
 pub use plot::{Layout, PlacedText, Plot, Resolved};
@@ -287,10 +287,10 @@ pub use gup_core_macros::Mark;
 /// The names most programs need.
 pub mod prelude {
     pub use crate::{
-        Band, Categorical, Chart, ChartExt, Circle, CircleAttrs, Color, ColorScale, Context,
-        CpuMirror, Derived, Diverging, EncodeFn, Event, Line, LineAttrs, Linear, Log, Mark, Plot,
-        Point, PositionScale, Pow, Px, Rect, RectAttrs, Retain, ScaleRef, Segment, SegmentAttrs,
-        Selection, Sequential, ShaderFn, Symlog, Theme, Time, Unit, wgsl_function,
+        Axes, Band, Categorical, Chart, ChartExt, Circle, CircleAttrs, Color, ColorScale, Context,
+        CpuMirror, Derived, Diverging, Drag, EncodeFn, Event, Line, LineAttrs, Linear, Log, Mark,
+        Plot, Point, PositionScale, Pow, Px, Rect, RectAttrs, Retain, ScaleRef, Segment,
+        SegmentAttrs, Selection, Sequential, ShaderFn, Symlog, Theme, Time, Unit, wgsl_function,
     };
 }
 

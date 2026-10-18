@@ -6,7 +6,8 @@
 //! [`CanvasTarget`] is a canvas's WebGPU surface as a [`RenderTarget`].
 //! [`CanvasApp`] owns a chart, a [`Context`] and a target, translates DOM
 //! pointer and wheel events into [`Input`] for [`Chart::handle`], and
-//! redraws on demand with one `requestAnimationFrame` per burst of input.
+//! redraws on demand (tooltips, wheel zoom and drag pan come from the plot;
+//! `Plot::drag(Drag::Off)` turns the drag off) with one `requestAnimationFrame` per burst of input.
 //! There is no winit: the host is the canvas plus DOM listeners.
 //!
 //! # Release profile
@@ -405,6 +406,8 @@ impl CanvasApp {
 
     fn attach(&mut self, canvas: &HtmlCanvasElement) -> Result<()> {
         let target: &EventTarget = canvas.as_ref();
+        // Touch drags pan the chart, not the page.
+        let _ = canvas.style().set_property("touch-action", "none");
         let (state, c) = (Rc::clone(&self.state), canvas.clone());
         self.listen(target, "pointermove", true, move |e| {
             if let Some(e) = e.dyn_ref::<PointerEvent>() {
@@ -425,6 +428,8 @@ impl CanvasApp {
             if let Some(e) = e.dyn_ref::<PointerEvent>()
                 && let Some(button) = button(e)
             {
+                // A drag that leaves the canvas keeps its events.
+                let _ = c.set_pointer_capture(e.pointer_id());
                 dispatch(
                     &state,
                     Input::PointerDown {
@@ -439,6 +444,7 @@ impl CanvasApp {
             if let Some(e) = e.dyn_ref::<PointerEvent>()
                 && let Some(button) = button(e)
             {
+                let _ = c.release_pointer_capture(e.pointer_id());
                 dispatch(
                     &state,
                     Input::PointerUp {

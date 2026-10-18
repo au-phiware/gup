@@ -88,3 +88,41 @@ pub struct EventInfo {
     /// The row.
     pub row: RowId,
 }
+
+/// Which axes pointer input may zoom and pan.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Axes {
+    /// Both axes.
+    #[default]
+    Both,
+    /// Only the x axis.
+    X,
+    /// Only the y axis.
+    Y,
+    /// Neither: input leaves the view alone.
+    Neither,
+}
+
+impl Axes {
+    /// Whether the x and y axes (in that order) may move.
+    pub(crate) fn flags(self) -> [bool; 2] {
+        match self {
+            Axes::Both => [true, true],
+            Axes::X => [true, false],
+            Axes::Y => [false, true],
+            Axes::Neither => [false, false],
+        }
+    }
+}
+
+/// What a primary-button drag does.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Drag {
+    /// Move the view, so the content follows the pointer.
+    #[default]
+    Pan,
+    /// Nothing.
+    Off,
+}
