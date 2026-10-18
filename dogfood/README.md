@@ -13,7 +13,9 @@ therefore tracked continuously instead of being recorded once.
 ## Why it is a detached crate
 
 `Cargo.toml` declares its own empty `[workspace]` and depends on
-`gup = { path = ".." }`. As a result it:
+`gup = { path = ".." }` (the old API, for the tasks that have not moved) and
+`gup-core = { path = "../crates/gup-core" }` (the new core, until RFC-001 S14
+renames it to `gup`). As a result it:
 
 - is **not** a member of the parent workspace, so `cargo build` at the repo root
   does not build it, and it cannot see `pub(crate)` items;
@@ -25,6 +27,9 @@ therefore tracked continuously instead of being recorded once.
 
 ```sh
 ./dogfood/run_all.sh                       # needs a display for 3 tasks
+# Under Xvfb on a Wayland desktop, unset WAYLAND_DISPLAY (else winit opens a
+# real window), and give wgpu a presentable adapter, e.g. lavapipe:
+#   VK_ICD_FILENAMES=.../lvp_icd.x86_64.json
 xvfb-run -a ./dogfood/run_all.sh           # headless, with Xvfb
 DOGFOOD_SKIP_WINDOWED=1 ./dogfood/run_all.sh
 DOGFOOD_ONLY=t1_timeseries,t2_bars ./dogfood/run_all.sh
@@ -58,10 +63,12 @@ Never "fix" a gap by loosening its check. Fix Gup instead, watch the check
   (background, coverage, ink, hue, exact colour, grey, horizontal runs). It is
   deliberately small and should migrate to the shared visual-assertion module
   (GUP-388) once that lands.
-- `src/bin/*.rs` are the tasks, written against today's `gup` API. When the new
-  core (`crates/gup-core`, RFC-001) replaces that API, rewrite the task
-  binaries. The manifest stays put, so the bar the task has to clear does not
-  move. RFC-001 step S10's exit criterion is "dogfood tasks 1-3 pass".
+- `src/bin/*.rs` are the tasks. `t0` to `t5_live` are written against `gup_core`
+  (GUP-465); `ref_export_png`, `t5_stream` and `t6_*` still use the old `gup`
+  API until RFC-001 S12 and S14. When the new core replaces that API, rewrite
+  the remaining binaries. The manifest stays put, so the bar the task has to
+  clear does not move. RFC-001 step S10's exit criterion is "dogfood tasks 1-3
+  pass".
 - `src/bin/dogfood_check.rs` is the runner.
 
 ## The tasks
@@ -72,12 +79,11 @@ The others are recorded here, from the task sources, but have no pixel check.
 ### Control and reference
 
 - **`t0_smoke`**: the simplest scatter (20 points) with a title and axes,
-  exported to PNG. Points and axis lines render. The title and tick labels are
-  missing _(tracked: no text in PNG)_. Circles render as ellipses on the 800x500
-  canvas. The audit also tried the README-style `plot().scatter(x("x"), y("y"))`
-  route. It "succeeded" but drew every point on one spot, because field
-  accessors evaluate to `0.0`. GUP-389 deletes that API, so the suite no longer
-  runs it.
+  exported to PNG through `gup_core::scatter`. Works: title, tick labels and 20
+  separate points, each checked to within 1 px of its datum's pixel (the default
+  dots are smaller than the old builder's stretched ellipses, so a plain
+  coverage fraction no longer fits). The audit also tried the README-style
+  `plot().scatter(x("x"), y("y"))` route; GUP-389 deleted that API.
 - **`ref_export_png`**: Gup's own `examples/export_png.rs` (a raw `Selection`
   inside a `ComposedChart`, with title, subtitle and grid), copied and built as
   an external crate, so the reference path is checked from outside too. Steel
@@ -91,75 +97,57 @@ The others are recorded here, from the task sources, but have no pixel check.
 Multi-line time series (three tickers, five years of daily prices with gaps)
 from CSV, with a date axis, legend and title, exported to PNG.
 
-- Works: one line per ticker via a categorical colour accessor, and gaps via
-  `connect_nulls(false)`.
-- User workarounds in the source: domains computed by hand (axes default to
-  0..1), and timestamps in **milliseconds** because that is what
-  `DateTimeFormatter` assumes (undocumented). The plot rect is recovered by
-  parsing Gup's own SVG output.
-- Gaps: PNG has no title, tick labels or legend _(tracked)_. There is no legend
-  API _(tracked)_. Series colours are desaturated _(tracked: double gamma)_. The
-  configured horizontal grid is not drawn _(tracked)_.
-- Workaround output `t1_svg.png`: Gup's SVG export has axes and text but no data
-  marks _(see task 3)_. So the task hand-builds the line paths and legend as
-  `SvgElement`s in pixel space and rasterises the SVG in-process with resvg and
-  Gup's bundled font (`rasterise_svg` in `src/lib.rs`), so the result does not
-  depend on the machine's ImageMagick or fonts. The suite checks that this
-  output has a title, date ticks and series.
+- `gup_core::line(rows)` with Unix-second `f64` x values and `Time::new()`, an
+  `Option<f64>` y (a `None` breaks the line), `.color(|r| r.ticker.as_str())`
+  with an explicit palette, `.width(1.5)`, `.grid(Axes::Y)` and a title. No
+  hand-computed domain, plot rect, legend or SVG workaround.
+- Works: title, date ticks, legend at the right, grid, exact series colours.
+- Dropped: the old task's `%Y-%m` tick format (the time scale chooses its own
+  ticks).
 
 ### Task 2: `t2_bars`
 
-A grouped and a stacked bar chart (4 regions x 4 quarters) with legend and value
-labels, exported to PNG.
+A grouped and a stacked bar chart (4 regions x 4 quarters) with legend, exported
+to PNG through `gup_core::bar` with `.group(..)` / `.stack(..)`.
 
-- Part A uses the documented `group_by` / `stack_by` API. `group_by` changes
-  nothing: one bar per quarter, overdrawn _(tracked)_. `stack_by` does not stack
-  _(tracked)_. `.color()` with a `String` value renders grey instead of using a
-  palette _(tracked)_. No title _(tracked)_. No legend API _(tracked)_.
-- Part B is the workaround. It encodes (quarter, region) into one band key for
-  grouping and draws overlapping cumulative bars, tallest first, for stacking,
-  with explicit `AccessorValue::Color`. It re-derives the band layout from the
-  SVG axes to place value labels and a legend in SVG. The PNG has 16 grouped
-  bars and 4 stacks in the right hues, though not the exact configured colours
-  _(tracked: double gamma)_.
+- Works: grouped bars (16), stacked bars (4), palette colours, title and legend.
+  The old workaround part is gone.
+- Gap (untracked): there are no value labels, as before and unchecked.
 
 ### Task 3: `t3_scatter_png` and `t3_scatter_window`
 
 A 200k-point scatter: colour = categorical segment, size = numeric weight, log x
 axis.
 
-- `t3_scatter_png`: renders all five segments. The task works around: a
-  categorical colour rendering black (so it maps colours by hand), size being
-  "percent of plot width" (undocumented), and the circle's default black stroke
-  drowning small points. For the last, it reaches into the public
-  `visualization` field to zero `stroke_width` and re-prepare. Gaps: no title or
-  tick labels _(tracked)_, no grid _(tracked)_, and the SVG export contains no
-  data points _(tracked)_.
-- `t3_scatter_window`: the same chart in an `eframe` window with a hover
-  tooltip. `GupApp` has no input hooks, `ComposedChart`'s hover reveal only
-  reveals clipped label text, and `gup-egui` didn't compile at audit time. So
-  the task embeds the chart via `render_to_rgba` into an egui texture
-  (`ChartTexture` in `src/lib.rs`), recomputes plot-rect fractions that Gup
-  keeps `pub(crate)` (`plot_frac`), and does its own nearest-point search. The
-  egui-drawn title and tooltip work. The chart texture has no tick labels
-  _(tracked)_.
+- `t3_scatter_png`: `gup_core::scatter` with `Log::new()`, a palette, `size`,
+  `opacity(0.35)`, `grid(Axes::Both)` and a title. All five segments, title,
+  ticks and grid render. Categorical colours follow first-seen order, so the
+  manifest labels colours, not segments. The SVG is a full-scene `SvgTarget`
+  render and has all 200k `<circle>` marks (GUP-467).
+- Dropped: the old `$Nk` x tick format.
+- `t3_scatter_window`: the same chart with `.tooltip(..)` in `gup_core::show`.
+  With `DOGFOOD_AUTO=1` it resolves headless, takes a row's `pick_anchor`, and
+  sets `GUP_SCREENSHOT_*` so the window hovers there. The tooltip uses a dark
+  theme, the look the check was calibrated for. egui is not used.
 
 ### Task 4: `t4_linked`
 
-Two linked scatter views (30k points) in egui. Brushing the left view highlights
-the same customers in the right view, linked through Gup's
-`SharedSelectionState`. This **works**. The brush query and the highlight
-re-binding (a colour accessor closing over the shared state, re-evaluated by
-`prepare_render_bound`) are user code, as is the egui embedding.
+Two linked scatter views (30k points) in egui through `ChartTexture`, which
+renders any `gup_core::Chart`. egui pointer events go to the left chart's
+`Chart::handle`; it uses `Drag::Brush` and `on_brush` writes the brushed rows to
+shared state. The right chart is rebuilt from the rows whenever the selection
+changes (grey for unselected, colours for selected). This **works**. The left
+chart's own dimming of unbrushed rows is set to 0 (`unbrushed_opacity`), because
+faded colours still read as colour and the check wants grey only there.
 
 ### Task 5: `t5_live` and `t5_stream`
 
 Append points every 100 ms without rebuilding the chart.
 
-- `t5_live`: a line chart (random walk) and a 100k-point scatter. This
-  **works**, but there is no append API. Every tick copies all line segments or
-  all points and calls `set_data` + `prepare_render_bound`, re-uploading
-  everything. The scatter costs tens of milliseconds per tick.
+- `t5_live`: a line chart (random walk) and a 100k-point scatter on `gup_core`.
+  This **works**, but there is no append yet (RFC-001 S12's `appender`). Every
+  tick rebuilds both charts from their rows, a full re-upload, as before. The
+  scatter costs tens of milliseconds per tick to render.
 - `t5_stream`: Tutorial 5's `DataStream` -> `Selection::stream` route. The
   stream accepts batches, but the selection never becomes render-ready:
   `prepare_render_bound` fails with "No attribute bindings set", and every PNG
