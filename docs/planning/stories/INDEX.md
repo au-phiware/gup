@@ -357,7 +357,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   matches the CPU pick exactly and reaches `GpuOnly` layers
   (`request_pick`/`poll_picks`). Deps: GUP-451 📋, GUP-445 ✅, GUP-431 ✅,
   GUP-432 ✅.
-- [GUP-456](GUP-456_RFC_001_S9e_GPU_Pick_In_Hover_And_Hosts.md) 🚧 — RFC-001
+- [GUP-456](GUP-456_RFC_001_S9e_GPU_Pick_In_Hover_And_Hosts.md) ✅ — RFC-001
   step S9e: hover and click through GPU picks when a layer is not CPU-readable,
   `Chart::needs_frame` for hosts, and `Plot::on_row` events by `RowId`. Deps:
   GUP-455 📋, GUP-453 📋; soft: GUP-454 📋.

@@ -9,8 +9,8 @@ implementer-reason:
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 🚧 In Progress **Created**:
-2026-10-18
+**Initiative**: RFC-001 Migration **Status**: ✅ Complete (2026-10-18)
+**Created**: 2026-10-18
 
 ## Context
 
@@ -59,16 +59,16 @@ Two gaps besides the wiring:
 
 ### AC1: API
 
-- [ ] `Chart::needs_frame` and `Plot::on_row` exist as in Decisions, with
+- [x] `Chart::needs_frame` and `Plot::on_row` exist as in Decisions, with
       doctests. `needs_frame`'s default is `false`, so other `Chart`
       implementors compile unchanged.
 
 ### AC2: When the GPU path is used
 
-- [ ] A plot whose layers are all CPU-readable keeps today's synchronous path:
+- [x] A plot whose layers are all CPU-readable keeps today's synchronous path:
       `tests/events.rs` passes unchanged, `needs_frame()` is always `false`, and
       `Context::submissions` does not move on `PointerMoved`.
-- [ ] A plot with one `Retain::GpuOnly` layer past one chunk
+- [x] A plot with one `Retain::GpuOnly` layer past one chunk
       (`max_chunk_rows(4)`, 12 rows) uses the GPU path for every layer, both
       hover and click.
 
@@ -77,52 +77,52 @@ Two gaps besides the wiring:
 With that fixture in `tests/events.rs`, and helper
 `settle(plot, cx) = resolve until !needs_frame(), at most 10 times`:
 
-- [ ] `PointerMoved` at row 5's position returns `redraw: true`, and
+- [x] `PointerMoved` at row 5's position returns `redraw: true`, and
       `needs_frame()` is true. After `settle`, `hovered()` is row 5, and
       `on_row` saw `Enter` for row 5.
-- [ ] Ten `PointerMoved`s between two resolves submit **one** pick, for the last
+- [x] Ten `PointerMoved`s between two resolves submit **one** pick, for the last
       position (count `Context::submissions`), and `hovered()` follows the last
       position.
-- [ ] A result for an older position is dropped: move to row 5, resolve once
+- [x] A result for an older position is dropped: move to row 5, resolve once
       (submitted), move to empty space, settle. `hovered()` is `None`, and
       `on_row` saw `Enter(5)` then `Leave(5)`, or nothing. It never sees an
       `Enter` that arrives after the `Leave`.
-- [ ] Press and release within 4 px on row 7: after `settle`, `on_row` saw
+- [x] Press and release within 4 px on row 7: after `settle`, `on_row` saw
       `Click` for row 7. Release beyond 4 px (a pan, GUP-453): no `Click`.
-- [ ] A drag (pan) cancels a pending hover pick, and no `Enter` arrives during
+- [x] A drag (pan) cancels a pending hover pick, and no `Enter` arrives during
       the drag.
-- [ ] A `GpuOnly` row's tooltip: none (no rows). On a mixed plot, a hovered
+- [x] A `GpuOnly` row's tooltip: none (no rows). On a mixed plot, a hovered
       CPU-readable row's tooltip draws as before, anchored at its pick anchor. A
       GPU-only row's hover uses the pointer as its anchor.
 
 ### AC4: Hosts ask for frames
 
-- [ ] `GupApp` requests another redraw after rendering while `needs_frame()` is
+- [x] `GupApp` requests another redraw after rendering while `needs_frame()` is
       true. The decision is a pure function in `app.rs`,
       `fn redraw_again(chart: &dyn Chart) -> bool`, called after each render and
       unit-tested with a fake `Chart` whose `needs_frame` is true, then false.
-- [ ] `CanvasApp` schedules another `requestAnimationFrame` after a frame while
+- [x] `CanvasApp` schedules another `requestAnimationFrame` after a frame while
       `needs_frame()` is true.
 
 ### AC5: Browser
 
-- [ ] The harness exports `show_gpu_scatter(canvas)`: the interactive scatter's
+- [x] The harness exports `show_gpu_scatter(canvas)`: the interactive scatter's
       rows, `Retain::GpuOnly`, `max_chunk_rows(4)`, 12 rows, with `on_row`
       counting `Click`s and recording the last hovered and clicked rows. Hooks:
       `hovered_row()`, `clicks()`, `last_clicked()`, and
       `px_of(x: f64, y: f64) -> Vec<f32>` (data to chart pixels through the
       plot's scales, since `row_px` needs CPU rows).
-- [ ] In `index.html`, steps `gpu-hover`, `gpu-click` and `gpu-leave`. Each
+- [x] In `index.html`, steps `gpu-hover`, `gpu-click` and `gpu-leave`. Each
       dispatches the event, then waits up to 8 animation frames for the hook to
       reach the expected value: row 5 hovered; one click on row 7; −1 after
       `pointerleave`.
-- [ ] `mask wasm-browser` passes with `interactive=ok` and no console error.
+- [x] `mask wasm-browser` passes with `interactive=ok` and no console error.
 
 ### AC6: Record
 
-- [ ] RFC-001 gains "S9e findings": frames to a hover result on native and in
+- [x] RFC-001 gains "S9e findings": frames to a hover result on native and in
       SwiftShader, the coalescing rule, and the switch rule.
-- [ ] `mask wasm-size` passes. This is where GUP-455's pick pass is first linked
+- [x] `mask wasm-size` passes. This is where GUP-455's pick pass is first linked
       into the harness, so growth up to 10,000 B gz is re-recorded with the
       reason; over 10,000 B gz is an escalation. `wasm.per_row_type.gz_bytes`
       moves by less than 2%.
@@ -233,10 +233,76 @@ With that fixture in `tests/events.rs`, and helper
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] `mask wasm-browser` passes; the implementer reads `browser_scatter.png`
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] `mask wasm-browser` passes; the implementer reads `browser_scatter.png`
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+`Plot` picks hover and click on the GPU when a `gpu_pick` layer is not
+CPU-readable (`Layer::cpu_readable`, `ColumnStore::cpu_kept`), with one hover
+and one click pick in flight, the latest pointer position winning, and stale
+(older-generation) hover picks dropped and re-requested. New API:
+`Chart::needs_frame`, `Plot::on_row`. `GupApp` (`redraw_again`) and `CanvasApp`
+request frames while `needs_frame` is true. Harness: `show_gpu_scatter`, steps
+`gpu-async`, `gpu-hover`, `gpu-click`, `gpu-leave`. Findings: RFC-001 "S9e
+findings".
+
+Files: `crates/gup-core/src/{plot,chart,app,web,selection,column}.rs`,
+`crates/gup-core/tests/events.rs` (+8 tests, incl. stale-pick and CPU/GPU
+agreement), `wasm-size/scatter/{src/lib.rs,index.html}`.
+
+Evidence: `cargo test -p gup-core` passes (events 27, lib 174);
+`mask wasm-browser` PASS with `interactive=ok` (hover 6 frames, click 2, leave
+1); `mask perf-budget` passes (scatter 312,441 B gz vs 310,638, +0.6%;
+`per_row_type` 2,569 vs 1,502 on the S9d commit, info-only, not caused by
+`cpu_readable`: stubbing it left it at 2,592); `mask old-path-loc` TOTAL 28910.
+`browser_scatter.png` read: unchanged.
+
+## Retrospective
+
+**Completed**: 2026-10-18
+
+### Key Technical Learnings
+
+#### Results land in `resolve`, not in `handle`
+
+- **Challenge**: `handle` has no `Context`, so it cannot submit a pick.
+- **Solution**: `handle` records a pending point and answers `redraw: true`;
+  `resolve` applies finished picks, then submits.
+- **Pattern**: input stores intent, the frame loop does GPU work.
+
+#### Native tests need a frame's time
+
+- **Challenge**: ten back-to-back `resolve`s did not always collect a pick.
+- **Solution**: `settle` sleeps 10 ms between resolves, as a host's frame does.
+- **Pattern**: never poll a GPU readback in a tight loop in tests.
+
+#### `Plot::handle` redraw is tooltip-driven on the CPU path
+
+- Test fixtures without tooltips get `redraw: false` on a hover; assert on
+  `hovered()` and the events, not the return value.
+
+### Architectural Decisions
+
+#### Drop, don't re-apply, on wheel
+
+- **Decision**: a wheel step cancels hover picks, like the CPU path's hover
+  clearing; only non-input view changes take the stale-generation re-request.
+- **Trade-off**: hover returns on the next pointer move, as on the CPU path.
+
+### Development Workflow Insights
+
+- Hook runs the whole lint chain on every commit (about 1 minute).
+- `wasm.per_row_type` is a difference of two gzipped binaries and moves by
+  hundreds of bytes for unrelated changes; AC6's 2% reads best against the
+  scatter total.
+
+### Follow-up Stories
+
+None. `resolve` consuming all finished picks while a hover is busy would
+conflict with a program's own `poll_picks` (documented on `on_row`).
