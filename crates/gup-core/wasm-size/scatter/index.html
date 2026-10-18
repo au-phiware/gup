@@ -19,6 +19,7 @@
         render_diverging,
         render_user_function,
         show_scatter,
+        show_gpu_scatter,
       } from "./scatter.js";
       const out = document.getElementById("out");
       const [w, h] = [320, 200];
@@ -347,6 +348,54 @@
           }
           await step("last-error", async () => app.last_error() == null);
           app.free();
+          // RFC-001 S9e: a GpuOnly layer hovers and clicks through GPU
+          // picks, which land a frame or more after the event.
+          const gcanvas = document.createElement("canvas");
+          gcanvas.style.cssText = `width:${w}px;height:${h}px;display:block`;
+          document.body.appendChild(gcanvas);
+          const gpu = await show_gpu_scatter(gcanvas);
+          const grect = gcanvas.getBoundingClientRect();
+          const gfire = (type, x, y) =>
+            gcanvas.dispatchEvent(
+              new PointerEvent(type, {
+                bubbles: true,
+                clientX: grect.left + x,
+                clientY: grect.top + y,
+                pointerId: 1,
+                button: 0,
+              })
+            );
+          const rowPx = i => gpu.px_of(5 + 8 * i, [3, 7, 4, 8, 2][i % 5]);
+          // Up to 8 animation frames for the hook to reach the value.
+          const within8 = async hook => {
+            for (let f = 0; f < 8; f++) {
+              await new Promise(r => requestAnimationFrame(r));
+              if (hook()) {
+                console.log("GUP gpu hook after " + (f + 1) + " frames");
+                return true;
+              }
+            }
+            return false;
+          };
+          await frames();
+          const [h5x, h5y] = rowPx(5);
+          gfire("pointermove", h5x, h5y);
+          // Nothing lands synchronously: the rows are not CPU-readable.
+          await step("gpu-async", async () => gpu.hovered_row() === -1);
+          await step("gpu-hover", () => within8(() => gpu.hovered_row() === 5));
+          const [h7x, h7y] = rowPx(7);
+          gfire("pointerdown", h7x, h7y);
+          gfire("pointerup", h7x, h7y);
+          await step("gpu-click", () =>
+            within8(() => gpu.clicks() === 1 && gpu.last_clicked() === 7)
+          );
+          gcanvas.dispatchEvent(new PointerEvent("pointerleave"));
+          await step("gpu-leave", () =>
+            within8(() => gpu.hovered_row() === -1)
+          );
+          await step("gpu-clicks-once", async () => gpu.clicks() === 1);
+          await step("gpu-last-error", async () => gpu.last_error() == null);
+          gpu.free();
         } catch (e) {
           console.log("interactive failed: " + e);
           interactive = "error:" + e;

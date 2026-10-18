@@ -1005,6 +1005,95 @@ impl InteractiveScatter {
     }
 }
 
+/// Twelve rows whose CPU copy is released (`Retain::GpuOnly`, chunks of
+/// four): hover and click go through GPU picks (RFC-001 S9e).
+#[wasm_bindgen]
+pub struct GpuScatter {
+    app: gup_core::web::CanvasApp,
+    x: ScaleRef<Linear>,
+    y: ScaleRef<Linear>,
+    hovered: Arc<AtomicI32>,
+    clicks: Arc<AtomicU32>,
+    last_clicked: Arc<AtomicI32>,
+}
+
+/// Show the twelve `GpuOnly` rows on `canvas`.
+#[wasm_bindgen]
+pub async fn show_gpu_scatter(canvas: web_sys::HtmlCanvasElement) -> Result<GpuScatter, JsValue> {
+    std::panic::set_hook(Box::new(|info| web_error(&info.to_string())));
+    let hovered = Arc::new(AtomicI32::new(-1));
+    let clicks = Arc::new(AtomicU32::new(0));
+    let last_clicked = Arc::new(AtomicI32::new(-1));
+    let mut plot = Plot::new();
+    let x = plot.x(Linear::new().domain(0.0, 100.0));
+    let y = plot.y(Linear::new().domain(0.0, 10.0));
+    let rows: Vec<(usize, f64, f64)> = (0..12)
+        .map(|i| (i, 5.0 + 8.0 * i as f64, [3.0, 7.0, 4.0, 8.0, 2.0][i % 5]))
+        .collect();
+    let (hover, count, last) = (
+        Arc::clone(&hovered),
+        Arc::clone(&clicks),
+        Arc::clone(&last_clicked),
+    );
+    plot.on_row(move |info| match info.event {
+        Event::Enter => hover.store(info.row.row as i32, Ordering::SeqCst),
+        Event::Leave => hover.store(-1, Ordering::SeqCst),
+        Event::Click => {
+            count.fetch_add(1, Ordering::SeqCst);
+            last.store(info.row.row as i32, Ordering::SeqCst);
+        }
+        _ => {}
+    });
+    let mut selection = Selection::<(usize, f64, f64), Circle>::new(rows);
+    selection.max_chunk_rows(4).retain(Retain::GpuOnly);
+    plot.add(selection)
+        .attr(Circle::X, x.encode(|r: &(usize, f64, f64)| r.1))
+        .attr(Circle::Y, y.encode(|r: &(usize, f64, f64)| r.2))
+        .attr(Circle::FILL, Color::hex(0x2a6fdb))
+        .attr(Circle::RADIUS, Px(8.0));
+    let app = gup_core::web::show(canvas, plot).await.map_err(js)?;
+    Ok(GpuScatter {
+        app,
+        x,
+        y,
+        hovered,
+        clicks,
+        last_clicked,
+    })
+}
+
+#[wasm_bindgen]
+impl GpuScatter {
+    /// The chart pixel of data point `(x, y)` through the plot's scales:
+    /// `[x, y]`.
+    pub fn px_of(&self, x: f64, y: f64) -> Vec<f32> {
+        vec![
+            self.x.read().eval(x) as f32,
+            self.y.read().eval(y) as f32,
+        ]
+    }
+
+    /// The hovered row, or -1.
+    pub fn hovered_row(&self) -> i32 {
+        self.hovered.load(Ordering::SeqCst)
+    }
+
+    /// How many clicks reached the handler.
+    pub fn clicks(&self) -> u32 {
+        self.clicks.load(Ordering::SeqCst)
+    }
+
+    /// The row of the last click, or -1.
+    pub fn last_clicked(&self) -> i32 {
+        self.last_clicked.load(Ordering::SeqCst)
+    }
+
+    /// The last frame error, if any.
+    pub fn last_error(&self) -> Option<String> {
+        self.app.last_error()
+    }
+}
+
 /// A row type no other scene uses (GUP-450).
 #[cfg(feature = "extra-row-type")]
 struct Extra {
