@@ -338,7 +338,13 @@
               const img = await app.render_rgba();
               const i =
                 (Math.round(box[1] + 3) * w + Math.round(box[0] + 3)) * 4;
-              return img[i + 2] - img[i] >= 10;
+              if (img[i + 2] - img[i] < 10) return false;
+              // GUP-458: row 3, outside the brush, is its fill #2a6fdb at
+              // opacity 0.3 over white.
+              const [dx, dy] = app.row_px(3);
+              const j = (Math.round(dy) * w + Math.round(dx)) * 4;
+              const dim = [0x2a, 0x6f, 0xdb].map(c => 0.3 * c + 0.7 * 255);
+              return dim.every((c, k) => Math.abs(img[j + k] - c) <= 8);
             });
             // Drag-zoom: the domain becomes the box's data extent.
             app.set_drag(3);
