@@ -994,6 +994,14 @@ fn t4() -> Task {
             ),
             check(
                 f,
+                "left view outside the brush: rows greyed, not hidden",
+                Measure::Grey {
+                    region: Region::new(0.125, 0.3, 0.215, 0.65),
+                    min_px: 500,
+                },
+            ),
+            check(
+                f,
                 "left view inside the brush: colour",
                 Measure::Hue {
                     region: Region::new(0.23, 0.25, 0.36, 0.6),

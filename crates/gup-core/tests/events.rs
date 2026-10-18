@@ -671,7 +671,7 @@ fn brush_golden() {
     // Rows 1 and 2 (inside) look as without dimming; the others are
     // `#0072B2` at 0.3 over white.
     plot.theme(Theme {
-        unbrushed_opacity: 1.0,
+        unbrushed: Unbrushed::Fade(1.0),
         ..Theme::default()
     });
     let plain = render_bytes(&cx, &mut plot);
@@ -996,11 +996,11 @@ fn within(got: [u8; 3], want: [u8; 3], tol: u8) -> bool {
     got.iter().zip(want).all(|(g, w)| g.abs_diff(w) <= tol)
 }
 
-/// `plot` rendered with the theme's `unbrushed_opacity` set to `opacity`;
+/// `plot` rendered with the theme's `unbrushed` set to `Fade(opacity)`;
 /// the plot's own theme is restored.
 fn render_dimmed(cx: &Context, plot: &mut Plot, opacity: f32) -> Vec<u8> {
     plot.theme(Theme {
-        unbrushed_opacity: opacity,
+        unbrushed: Unbrushed::Fade(opacity),
         ..Theme::default()
     });
     let bytes = render_bytes(cx, plot);
@@ -1169,7 +1169,7 @@ fn opacity_is_themable_and_one_turns_dimming_off() {
     // At 1.0 nothing fades, and a brush writes no bits.
     plot.clear_brush();
     plot.theme(Theme {
-        unbrushed_opacity: 1.0,
+        unbrushed: Unbrushed::Fade(1.0),
         ..Theme::default()
     });
     plot.resolve(&cx, W, H).unwrap();
@@ -1343,5 +1343,140 @@ fn dimming_survives_culled_chunks() {
                 "row {row} unbrushed: {got:?}"
             );
         }
+    }
+}
+
+// ---- Greying rows outside the brush (GUP-477) ---------------------------
+
+const GREY: u32 = 0xbfbfbf;
+
+/// `plot` rendered with the theme's `unbrushed` set to `style`; the plot's
+/// own theme is restored.
+fn render_styled(cx: &Context, plot: &mut Plot, style: Unbrushed) -> Vec<u8> {
+    plot.theme(Theme {
+        unbrushed: style,
+        ..Theme::default()
+    });
+    let bytes = render_bytes(cx, plot);
+    plot.theme(Theme::default());
+    bytes
+}
+
+#[test]
+fn brush_grey_golden() {
+    let grey = Unbrushed::Grey(Color::hex(GREY));
+    let want = [0xbf, 0xbf, 0xbf];
+    let cx = Context::new_blocking().expect("headless GPU context");
+    let mut plot = Plot::new();
+    plot.circles(rows(5))
+        .x(|r| r.x)
+        .y(|r| r.y)
+        .radius(Px(5.0))
+        .tooltip(|r| format!("{}\nmass {:.1} kg", r.name, r.mass));
+    plot.drag(Drag::Brush);
+    plot.resolve(&cx, W, H).unwrap();
+    let (p1, p2) = (anchor(&mut plot, 1), anchor(&mut plot, 2));
+    drag(
+        &mut plot,
+        Pt::new(p1.x - 20.0, p1.y - 30.0),
+        Pt::new(p2.x + 20.0, p2.y + 30.0),
+    );
+    assert_eq!(plot.brush().unwrap().rows, [id(0, 1), id(0, 2)]);
+    let plain = render_styled(&cx, &mut plot, Unbrushed::Fade(1.0));
+    plot.theme(Theme {
+        unbrushed: grey,
+        ..Theme::default()
+    });
+    let resolved = plot.resolve(&cx, W, H).unwrap();
+    let layout = resolved.layout.clone();
+    let image = ImageTarget::new(&cx, W as u32, H as u32)
+        .unwrap()
+        .render_blocking(&cx, &resolved.scene)
+        .unwrap();
+    let vr = RgbaImage::new(W as u32, H as u32, image.into_raw()).unwrap();
+    for row in 0..5 {
+        let p = anchor(&mut plot, row);
+        let (got, before) = (rgb_at(vr.data(), p.x, p.y), rgb_at(&plain, p.x, p.y));
+        if row == 1 || row == 2 {
+            assert_eq!(got, before, "row {row}");
+        } else {
+            assert!(within(got, want, 1), "row {row}: {got:?}");
+        }
+    }
+    // A grey with alpha 0.5 halves the unbrushed alpha.
+    let half_grey = Unbrushed::Grey(Color {
+        a: 0.5,
+        ..Color::hex(GREY)
+    });
+    let bytes = render_styled(&cx, &mut plot, half_grey);
+    let p0 = anchor(&mut plot, 0);
+    assert!(
+        within(rgb_at(&bytes, p0.x, p0.y), [0xdf; 3], 2),
+        "{:?}",
+        rgb_at(&bytes, p0.x, p0.y)
+    );
+    // Clearing the brush restores the undimmed image byte for byte.
+    plot.theme(Theme {
+        unbrushed: grey,
+        ..Theme::default()
+    });
+    plot.clear_brush();
+    let cleared = render_bytes(&cx, &mut plot);
+    assert_eq!(cleared, render_styled(&cx, &mut plot, Unbrushed::Fade(1.0)));
+    harness()
+        .run("gup_core/brush_grey", Ok((vr, layout_metadata(&layout))))
+        .assert_ok();
+}
+
+#[test]
+fn grey_composes_with_layer_opacity() {
+    let cx = Context::new_blocking().expect("headless GPU context");
+    let mut plot = Plot::new();
+    plot.circles(rows(5))
+        .x(|r| r.x)
+        .y(|r| r.y)
+        .radius(Px(5.0))
+        .fill_opacity(Unit(0.5));
+    plot.drag(Drag::Brush);
+    plot.resolve(&cx, W, H).unwrap();
+    let (p1, p2) = (anchor(&mut plot, 1), anchor(&mut plot, 2));
+    drag(
+        &mut plot,
+        Pt::new(p1.x - 20.0, p1.y - 30.0),
+        Pt::new(p2.x + 20.0, p2.y + 30.0),
+    );
+    let bytes = render_styled(&cx, &mut plot, Unbrushed::Grey(Color::hex(GREY)));
+    let p0 = anchor(&mut plot, 0);
+    let got = rgb_at(&bytes, p0.x, p0.y);
+    assert!(within(got, [0xdf; 3], 2), "{got:?}");
+}
+
+#[test]
+fn grey_replaces_every_colour_channel() {
+    let cx = Context::new_blocking().expect("headless GPU context");
+    let (mut plot, [x, y]) = four_marks(&cx);
+    brush_left_half(&mut plot, at_value(&x, 50.0));
+    let dim = render_styled(&cx, &mut plot, Unbrushed::Grey(Color::hex(GREY)));
+    let full = render_dimmed(&cx, &mut plot, 1.0);
+    let (px, py) = (|v| at_value(&x, v), |v| at_value(&y, v));
+    let grey = [0xbf; 3];
+    // Unbrushed marks, stroke included, are grey.
+    for (name, (sx, sy)) in [
+        ("circle fill", (px(70.0), py(85.0))),
+        ("circle stroke", (px(70.0) + 7.0, py(85.0))),
+        ("rect", (px(65.0), py(65.0))),
+        ("segment", (px(70.0), py(45.0))),
+        ("line", (px(75.0), py(25.0))),
+    ] {
+        let got = rgb_at(&dim, sx, sy);
+        assert!(within(got, grey, 2), "{name}: {got:?}");
+    }
+    // Brushed marks are as undimmed.
+    for (sx, sy) in [
+        (px(20.0), py(85.0)),
+        (px(20.0) + 7.0, py(85.0)),
+        (px(15.0), py(65.0)),
+    ] {
+        assert_eq!(rgb_at(&dim, sx, sy), rgb_at(&full, sx, sy));
     }
 }

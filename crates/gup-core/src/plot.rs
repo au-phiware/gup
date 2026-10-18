@@ -1770,7 +1770,7 @@ impl Plot {
         }
 
         // 6. Uniforms and columns, inside a GPU error scope (GUP-410).
-        let brushable = self.drag == Drag::Brush && th.unbrushed_opacity < 1.0;
+        let brushable = self.drag == Drag::Brush && th.unbrushed.dims();
         let mut batches = Vec::with_capacity(self.layers.len());
         let mut visible = Vec::with_capacity(self.layers.len());
         for layer in &mut self.layers {

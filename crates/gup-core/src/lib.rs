@@ -154,7 +154,7 @@ pub use selection::{Retain, Selection};
 pub use shader::WgslModule;
 pub use svg::{SvgOptions, SvgTarget, VectorTarget};
 pub use target::{DEFAULT_SAMPLES, Frame, ImageTarget, RenderTarget, TargetOptions, TextureTarget};
-pub use theme::Theme;
+pub use theme::{Theme, Unbrushed};
 #[cfg(feature = "window")]
 pub use window::WindowTarget;
 
@@ -297,7 +297,8 @@ pub mod prelude {
         Axes, Band, Categorical, Chart, ChartExt, Circle, CircleAttrs, Color, ColorScale, Context,
         CpuMirror, Derived, Diverging, Drag, EncodeFn, Event, Line, LineAttrs, Linear, Log, Mark,
         Offset, Plot, Point, PositionScale, Pow, Px, Rect, RectAttrs, Retain, ScaleRef, Segment,
-        SegmentAttrs, Selection, Sequential, ShaderFn, Symlog, Theme, Time, Unit, wgsl_function,
+        SegmentAttrs, Selection, Sequential, ShaderFn, Symlog, Theme, Time, Unbrushed, Unit,
+        wgsl_function,
     };
 }
 
