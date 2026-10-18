@@ -812,12 +812,40 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             ConstValue::F32(r) => (f64::from(*r), f64::from(*r)),
             ConstValue::Vec4(_) => (f64::NEG_INFINITY, f64::INFINITY),
         };
+        // A box in centre-plus-extent mode (a constant, non-zero width or
+        // height) draws centre +- extent / 2, and ignores its far edge.
+        let extent_set = |name: &str| {
+            M::CHANNELS
+                .iter()
+                .position(|d| d.name == name)
+                .is_some_and(|i| match &self.encodings[i] {
+                    Some(Encoding::Const(v)) => matches!(v, ConstValue::F32(w) if *w != 0.0),
+                    Some(Encoding::Derived(f)) => {
+                        matches!(f(), ConstValue::F32(w) if w != 0.0)
+                    }
+                    _ => false,
+                })
+        };
+        let ignored = |name: &str| {
+            M::HIT == HitShape::AlignedBox
+                && match name {
+                    "x_end" => extent_set("width"),
+                    "y_end" => extent_set("height"),
+                    _ => false,
+                }
+        };
         let boxes: Vec<Option<PixelBox>> = (0..stored.len())
             .map(|k| {
                 let mut b = PixelBox::EMPTY;
                 let mut column = 0;
                 for (d, e) in M::CHANNELS.iter().zip(&self.encodings) {
                     let axis = match d.role {
+                        Some(Role::X | Role::Y) if ignored(d.name) => {
+                            if matches!(e, Some(Encoding::Column(_))) {
+                                column += 1;
+                            }
+                            continue;
+                        }
                         Some(Role::X) => 0,
                         Some(Role::Y) => 1,
                         _ => {

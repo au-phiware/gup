@@ -377,3 +377,13 @@ fn zooming_culled_chunks_writes_nothing_new() {
     assert_eq!(culled.instances.writes, all.instances.writes);
     assert!(culled_draws < all_draws && min < 64);
 }
+
+/// Bars with a width and no `x_end` draw centre +- width / 2, so the unset
+/// far edge must not stretch their box: chunks cull.
+#[test]
+fn culled_bars_without_an_x_end_draw_only_the_visible_chunks() {
+    let cx = Context::new_blocking().expect("headless context");
+    let (culled, all) = culled_and_not(&cx, culling::plain_bars, |(x, _)| culling::zoom_circles(x));
+    let guides = all - 64;
+    assert_eq!(culled, 4 + guides, "chunks 20..=23 plus the guides");
+}

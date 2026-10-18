@@ -88,3 +88,20 @@ pub fn bars(culling: bool) -> (Plot, Scales) {
         .max_chunk_rows(CHUNK);
     (plot, (x, y))
 }
+
+/// Bars in the `rect_bars` form: a centre, a constant width and a baseline,
+/// with no `x_end` set.
+pub fn plain_bars(culling: bool) -> (Plot, Scales) {
+    let mut plot = Plot::new();
+    plot.chunk_culling(culling);
+    plot.legends(false);
+    let x = plot.x(Linear::new());
+    let y = plot.y(Linear::new().domain(0.0, 100.0));
+    plot.rects(rows(ROWS))
+        .x_with(x.encode(|r: &Pt| r.x))
+        .y_with(y.encode(|r: &Pt| r.y))
+        .y_end_with(y.encode(|_: &Pt| 0.0))
+        .width(Px(12.0))
+        .max_chunk_rows(CHUNK);
+    (plot, (x, y))
+}
