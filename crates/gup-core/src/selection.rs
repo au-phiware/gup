@@ -620,6 +620,18 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
 
 type AxisFn<T> = Arc<dyn Fn(&T) -> f64 + Send + Sync>;
 
+/// How far a layer's marks reach past their positions, in pixels
+/// ([`Layer::overhang`]).
+#[derive(Copy, Clone, Debug, Default, PartialEq)]
+pub(crate) struct Overhang {
+    /// Every size channel (a radius, a stroke width): both axes.
+    pub size: f32,
+    /// Half a constant or derived width: the x axis only.
+    pub x: f32,
+    /// Half a constant or derived height: the y axis only.
+    pub y: f32,
+}
+
 /// A plot layer: the object-safe face of a [`Selection`] (internal; the
 /// public `Layer`/`Chart` traits are RFC-001 S7).
 pub(crate) trait Layer: wgpu::WasmNotSendSync {
@@ -645,9 +657,12 @@ pub(crate) trait Layer: wgpu::WasmNotSendSync {
     /// Evaluate accessors (chunked for `cx`'s device) and fit every
     /// data-driven domain to its column's stats across every chunk.
     fn fit_domains(&mut self, cx: &Context) -> Result<()>;
+    /// The constant and derived position values (`Px`), as (is x, pixel):
+    /// they join the automatic domains (GUP-494).
+    fn fixed_positions(&self) -> Vec<(bool, f32)>;
     /// How far marks may extend past their position (e.g. a constant
     /// radius), in pixels.
-    fn overhang(&self) -> f32;
+    fn overhang(&self) -> Overhang;
     /// The largest value any non-position `f32` channel can take (a
     /// radius, a width, a stroke width, an opacity): how far a mark can
     /// reach from its position. `INFINITY` when a channel's range is not
@@ -881,17 +896,46 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         Ok(())
     }
 
+    fn fixed_positions(&self) -> Vec<(bool, f32)> {
+        let px = |v: &crate::ConstValue| match v {
+            crate::ConstValue::F32(r) => Some(*r),
+            crate::ConstValue::Vec4(_) => None,
+        };
+        let mut out = Vec::new();
+        for (d, e) in M::CHANNELS.iter().zip(&self.encodings) {
+            let is_x = match d.role {
+                Some(Role::X) => true,
+                Some(Role::Y) => false,
+                _ => continue,
+            };
+            let v = match e {
+                Some(Encoding::Const(v)) => px(v),
+                Some(Encoding::Derived(f)) => px(&f()),
+                _ => None,
+            };
+            out.extend(v.filter(|v| v.is_finite()).map(|v| (is_x, v)));
+        }
+        out
+    }
+
     /// The largest size: a constant's, or an encoded channel's image of
     /// its column's extent (GUP-418: a `Sqrt` radius reaches its range's
     /// far end).
-    fn overhang(&self) -> f32 {
+    fn overhang(&self) -> Overhang {
         let size = |v: &crate::ConstValue| match v {
             crate::ConstValue::F32(r) => *r,
             crate::ConstValue::Vec4(_) => 0.0,
         };
         let mut column = 0;
-        let mut overhang = 0.0f32;
+        let mut overhang = Overhang::default();
         for (d, e) in M::CHANNELS.iter().zip(&self.encodings) {
+            // A width or height reaches half of itself past the position,
+            // along its own axis; a column-encoded one is not counted.
+            let half = if matches!(d.role, Some(Role::Width | Role::Height)) {
+                0.5
+            } else {
+                1.0
+            };
             let r = match e {
                 Some(Encoding::Column(c)) => {
                     column += 1;
@@ -904,12 +948,17 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
                         .and_then(|s| c.image(s.extent()))
                         .map_or(0.0, |(lo, hi)| lo.abs().max(hi.abs()) as f32)
                 }
-                _ if d.role != Some(Role::Size) => continue,
-                Some(Encoding::Const(v)) => size(v),
-                Some(Encoding::Derived(f)) => size(&f()),
-                None => size(&d.default),
+                _ if !matches!(d.role, Some(Role::Size | Role::Width | Role::Height)) => continue,
+                Some(Encoding::Const(v)) => size(v) * half,
+                Some(Encoding::Derived(f)) => size(&f()) * half,
+                None => size(&d.default) * half,
             };
-            overhang = overhang.max(r);
+            let slot = match d.role {
+                Some(Role::Width) => &mut overhang.x,
+                Some(Role::Height) => &mut overhang.y,
+                _ => &mut overhang.size,
+            };
+            *slot = slot.max(r);
         }
         overhang
     }
@@ -2144,7 +2193,7 @@ mod tests {
         assert_eq!((lo, k), (0.0, 1.0), "sqrt fitted to [0, 1]");
         // The radius chain ends in `Sqrt` onto 2..12 px: marks overhang
         // their positions by up to 12 px.
-        assert!((sel.overhang() - 12.0).abs() < 1e-4, "{}", sel.overhang());
+        assert!((sel.overhang().size - 12.0).abs() < 1e-4);
         let batch = sel.prepare(&cx, &Theme::default(), false).unwrap();
         assert_eq!(batch.instances(), 20);
     }

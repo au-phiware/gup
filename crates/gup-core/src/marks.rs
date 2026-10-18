@@ -108,10 +108,10 @@ pub struct Rect {
     #[channel(role = Y)]
     y: Px,
     /// Width (logical pixels); 0 means the span `x..x_end`.
-    #[channel(default = Px(0.0))]
+    #[channel(role = Width, default = Px(0.0))]
     width: Px,
     /// Height (logical pixels); 0 means the span `y..y_end`.
-    #[channel(default = Px(0.0))]
+    #[channel(role = Height, default = Px(0.0))]
     height: Px,
     /// Second x edge, used when `width` is 0.
     #[channel(role = X)]

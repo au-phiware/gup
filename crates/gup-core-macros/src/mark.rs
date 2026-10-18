@@ -151,7 +151,9 @@ fn parse_fields(input: &DeriveInput) -> syn::Result<Vec<Channel>> {
             attr.parse_nested_meta(|meta| {
                 if meta.path.is_ident("role") {
                     let r: Ident = meta.value()?.parse()?;
-                    if !["X", "Y", "Size", "Color"].contains(&r.to_string().as_str()) {
+                    if !["X", "Y", "Size", "Width", "Height", "Color"]
+                        .contains(&r.to_string().as_str())
+                    {
                         return Err(syn::Error::new(
                             r.span(),
                             "`role` is one of `X`, `Y`, `Size` or `Color`",

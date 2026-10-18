@@ -1569,6 +1569,13 @@ impl Plot {
         for layer in &mut self.layers {
             layer.fit_domains(cx)?;
         }
+        // Constant and derived positions (a bar's baseline) join the union.
+        for layer in &self.layers {
+            for (is_x, px) in layer.fixed_positions() {
+                let s = if is_x { x } else { y };
+                s.fit_position(f64::from(px));
+            }
+        }
         for s in [x, y] {
             if s.is_auto() {
                 s.nice();
@@ -1674,16 +1681,32 @@ impl Plot {
             })
         };
         // 5. Ranges, inset so marks on the domain edge stay inside.
-        let mark_overhang = self.layers.iter().map(|l| l.overhang()).fold(0.0, f32::max);
-        let inset = mark_overhang + th.plot_padding.0;
+        // A width reaches past x only, a height past y only; a band axis
+        // makes its own room, so they do not count there.
+        let (mut size, mut ext_x, mut ext_y) = (0.0f32, 0.0f32, 0.0f32);
+        for o in self.layers.iter().map(|l| l.overhang()) {
+            (size, ext_x, ext_y) = (size.max(o.size), ext_x.max(o.x), ext_y.max(o.y));
+        }
+        let over_x = if x.reads_keys() {
+            size
+        } else {
+            size.max(ext_x)
+        };
+        let over_y = if y.reads_keys() {
+            size
+        } else {
+            size.max(ext_y)
+        };
+        let mark_overhang = over_x.max(over_y);
+        let inset = (over_x + th.plot_padding.0, over_y + th.plot_padding.0);
         // A widened axis already holds the inset in its domain, so its
         // range is the whole plot rect. Any other axis insets only its far
         // end (right, top), so the axes meet at the corner and a baseline
         // sits on its axis.
         let set_ranges = |plot: Rect, widened: (bool, bool)| {
             let (ix, iy) = (
-                if widened.0 { 0.0 } else { inset },
-                if widened.1 { 0.0 } else { inset },
+                if widened.0 { 0.0 } else { inset.0 },
+                if widened.1 { 0.0 } else { inset.1 },
             );
             x.set_range(Px(plot.left()), Px(plot.right() - ix));
             y.set_range(Px(plot.bottom()), Px(plot.top() + iy));
@@ -1700,8 +1723,8 @@ impl Plot {
             !s.is_auto() && self.zoomed[i].is_some() && self.zoomed[i] == s.current_domain()
         };
         let widened = (
-            x.widen(lay.plot.left(), lay.plot.right(), mark_overhang) || kept(0, &**x),
-            y.widen(lay.plot.bottom(), lay.plot.top(), mark_overhang) || kept(1, &**y),
+            x.widen(lay.plot.left(), lay.plot.right(), over_x) || kept(0, &**x),
+            y.widen(lay.plot.bottom(), lay.plot.top(), over_y) || kept(1, &**y),
         );
         self.widened = [widened.0, widened.1];
         if widened.0 || widened.1 {
@@ -1818,12 +1841,12 @@ impl Plot {
         let (x_from, x_to) = if x.is_auto() || widened.0 {
             (ay_x, plot.right() - 0.5)
         } else {
-            (ay_x, plot.right() - inset)
+            (ay_x, plot.right() - inset.0)
         };
         let (y_from, y_to) = if y.is_auto() || widened.1 {
             (plot.top() + 0.5, ax_y)
         } else {
-            (plot.top() + inset, ax_y)
+            (plot.top() + inset.1, ax_y)
         };
         rules.push(axis(Point::new(x_from, ax_y), Point::new(x_to, ax_y)));
         rules.push(axis(Point::new(ay_x, y_from), Point::new(ay_x, y_to)));

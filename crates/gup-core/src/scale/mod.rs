@@ -339,6 +339,9 @@ pub(crate) trait DynPositionScale: Send + Sync {
     fn set_domain(&self, d0: f64, d1: f64) -> Result<()>;
     fn clear_domain(&self);
     fn invert(&self, px: f64) -> f64;
+    /// Union the data value drawn at pixel `px` into the automatic domain
+    /// being fitted (a constant or derived position, e.g. a bar baseline).
+    fn fit_position(&self, px: f64);
     /// Grow an automatic, already rounded domain, in data units, so that
     /// its ends map `overhang` pixels inside the pixel interval `a..b`.
     /// Returns whether the domain changed; an explicit domain and an
@@ -429,6 +432,28 @@ impl<S: PositionScale> DynPositionScale for ScaleRef<S> {
 
     fn invert(&self, px: f64) -> f64 {
         self.read().invert(px)
+    }
+
+    fn fit_position(&self, px: f64) {
+        if !self.read().is_auto() || self.reads_keys() {
+            return;
+        }
+        let (value, span) = {
+            let scale = self.read();
+            let span = scale.current_domain().map(|(a, b)| (b - a).abs());
+            (scale.invert(px), span)
+        };
+        if !value.is_finite() {
+            return;
+        }
+        // A pixel is an `f32`; snap the value back so that a baseline of
+        // zero is zero, not a rounding error that `nice` would step past.
+        let value = match span.filter(|s| s.is_finite() && *s > 0.0) {
+            Some(span) => (value / (span * 1e-5)).round() * (span * 1e-5),
+            None => value,
+        };
+        let mut this = self.clone();
+        let _ = ShaderFn::fit_domain(&mut this, (value, value));
     }
 
     fn widen(&self, a: f32, b: f32, overhang: f32) -> bool {

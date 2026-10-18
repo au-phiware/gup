@@ -249,6 +249,12 @@ pub enum Role {
     Y,
     /// Mark size.
     Size,
+    /// A mark's full extent along x in pixels (a rect's width): half of it,
+    /// when constant or derived, is overhang on x.
+    Width,
+    /// A mark's full extent along y in pixels (a rect's height): half of it,
+    /// when constant or derived, is overhang on y.
+    Height,
     /// Colour.
     Color,
 }
