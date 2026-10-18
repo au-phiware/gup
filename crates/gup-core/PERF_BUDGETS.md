@@ -77,7 +77,7 @@ X) or `info` (printed, never fails).
 | `wasm.wgpu.gz_bytes`              | 32,360    | info      | `scripts/wasm_size.sh`, bare wgpu                   |
 | `wasm.scatter.gz_bytes`           | 310,638   | +2%       | `scripts/wasm_size.sh`, the reference scatter       |
 | `wasm.over_wgpu.gz_bytes`         | 278,278   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10         |
-| `wasm.per_row_type.gz_bytes`      | 1,598     | info      | `scripts/wasm_size.sh`, one more Selection row type |
+| `wasm.per_row_type.gz_bytes`      | 1,730     | <= 2600   | `scripts/wasm_size.sh`, one more Selection row type |
 
 A legitimate change that moves a number (a new guide, a bigger feature) records
 the new value here, in the same commit, with the reason in the story.
@@ -419,3 +419,25 @@ seeded violation (GUP-417 retrospective).
   - `wasm.per_row_type.gz_bytes` 941 to 1,598. GUP-453 to 455 each saw it move
     with no new `Layer` method: inlining shifts in generic code between the one-
     and two-row-type builds. At this size it is noisy, and stays `info`.
+- **GUP-459, per-row-type cost measured cleanly and budgeted (2026-10-18)**.
+  `wasm.per_row_type.gz_bytes` went 941 (GUP-451), 1,598 (S9a to S9d), 2,569
+  (GUP-456, at `b3f87b5`: 312,441 B gz without the feature, 315,010 with it).
+  Diffing `twiggy top` of the two builds by item gave 5,144 B raw outside the
+  name section, about 3.3 KB of it the measuring function, not the library:
+  - 2,510 `future_to_promise::{{closure}}::{{closure}}` (+1), and 277 for
+    `future_to_promise::{{closure}}` (+1) with ~240 of drops and shims: the
+    harness's async `render_extra_row_type` state machine, which inlines
+    resolve, pick and render.
+  - 464 `<Resolved as Clone>::clone` (+1), -534 `InteractiveScatter::resolved`:
+    an inlining shift caused by the second caller.
+  - Library, per row type: 802 `Selection::bind_axes`, 234 `tooltip_text`, 204
+    `AxisEncoding<T>::evaluate`, 151 `dispatch`, and ~300 for `row_any`,
+    `as_any_mut`, `type_id`, vtable shims and closures.
+  - The harness export is now the synchronous `extra_row_type`, which boxes a
+    `Plot` as `dyn Chart` and runs nothing: M0 = 1,647 B gz. `bind_axes` now
+    delegates its role match, messages and `reads_keys` check to the non-generic
+    `axis_scale_for`: its instantiation falls from 802 to 538 B raw. The gz
+    figure M = 1,730 is 83 B above M0 (inlining noise at this size).
+  - The row is a budget: `<= 2600`, B = ceil(1.5 M / 100) x 100. The seeded
+    proof is in the GUP-459 retrospective. `scripts/wasm_attrib.sh --row-type`
+    attributes the figure by item.
