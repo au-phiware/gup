@@ -74,14 +74,14 @@ X) or `info` (printed, never fails).
 | `zoom_culled.draws.median`         | 14        | exact     | `zoom_bench` on 4M sorted rows, 64 chunks (GUP-457) |
 | `zoom_culled.gpu_clock.median_mhz` | 350       | info      | `scripts/perf_budget.sh` (i915 sysfs)               |
 | `zoom_culled.gpu_pass.median_ms`   | 9.90      | +20%      | `zoom_bench` on 4M sorted rows, 64 chunks           |
-| `zoom_culled.cpu.median_ms`        | 0.75      | +20%      | `zoom_bench` on 4M sorted rows, 64 chunks           |
+| `zoom_culled.cpu.median_ms`        | 0.97      | +20%      | `zoom_bench` on 4M sorted rows, 64 chunks           |
 | `zoom_culled.columns.bytes`        | 0         | exact     | `zoom_bench` on 4M sorted rows, 64 chunks           |
 | `pipeline.link_create.median_ms`   | 1.11      | +20%      | `pipeline_timings`, 20 runs, fresh cache each       |
 | `pipeline.link_create.cold_ms`     | 1.04      | <= 10     | `pipeline_timings`, its first run                   |
 | `pipeline.link_create.max_ms`      | 1.06      | info      | `pipeline_timings`                                  |
 | `wasm.wgpu.gz_bytes`               | 32,360    | info      | `scripts/wasm_size.sh`, bare wgpu                   |
-| `wasm.scatter.gz_bytes`            | 315,804   | +2%       | `scripts/wasm_size.sh`, the reference scatter       |
-| `wasm.over_wgpu.gz_bytes`          | 283,442   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10         |
+| `wasm.scatter.gz_bytes`            | 319,085   | +2%       | `scripts/wasm_size.sh`, the reference scatter       |
+| `wasm.over_wgpu.gz_bytes`          | 286,725   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10         |
 | `wasm.per_row_type.gz_bytes`       | 1,730     | <= 2600   | `scripts/wasm_size.sh`, one more Selection row type |
 
 A legitimate change that moves a number (a new guide, a bigger feature) records
@@ -454,3 +454,15 @@ seeded violation (GUP-417 retrospective).
   re-recorded (+1,803). CI measures `wasm.per_row_type.gz_bytes` at 764 where a
   local build gives 1,730: the row is noisy across machines, and its `<= 2600`
   bound holds on both.
+- **Quiet-machine A/B and S10/S9g merges (2026-10-18, orchestrator)**, measured
+  with no agents running (load 1.8 to 2.2, from the desktop):
+  - `zoom_culled.cpu.median_ms` measured 0.971 at GUP-457's own commit
+    (ee3a9c1), 0.983 at 4fc8e33, 0.945 at ad9682d, 0.942 at 21f4240 and 0.966 to
+    0.990 at HEAD. It is flat across those commits. The 0.75 GUP-457 recorded
+    does not reproduce even at ee3a9c1, so it is re-recorded at 0.97. In the
+    same runs `zoom.cpu.median_ms` read 0.79 to 0.85 at every commit against the
+    recorded 0.69: also flat, and still inside its +20%, so it is left as is.
+  - WASM after merging GUP-458 (brush dimming, +2,967) and GUP-467 (SVG marks,
+    +385 once its SVG-only code moved behind the default-on `svg` feature, which
+    the harness builds without): scatter 315,804 to 319,085 B gz, and over bare
+    wgpu 283,442 to 286,725.
