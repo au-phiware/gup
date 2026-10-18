@@ -332,7 +332,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   `gup_core::web::CanvasApp` (a canvas surface and DOM pointer listeners) with
   hover, click and wheel checked in the browser smoke test. Deps: GUP-444 📋,
   GUP-446 📋.
-- [GUP-450](GUP-450_WASM_Size_Attribution_And_Row_Type_Gate.md) 📋 —
+- [GUP-450](GUP-450_WASM_Size_Attribution_And_Row_Type_Gate.md) ✅ —
   `mask wasm-attrib` attributes the scatter's WASM bytes by crate, function and
   generic group, and `mask wasm-size` budgets the cost of one more `Selection`
   row type. Deps: GUP-438 ✅, GUP-449 ✅.
