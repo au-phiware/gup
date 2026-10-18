@@ -418,7 +418,7 @@ findings", GUP-396).
   `Measure::Tooltip` that recognises a tooltip panel of any colours with five
   text lines, so t3 checks the default tooltip without its dark theme. Deps:
   GUP-465 ✅.
-- [GUP-479](GUP-479_RFC_001_S11_Secondary_Y_Axis.md) 📋 — RFC-001 step S11:
+- [GUP-479](GUP-479_RFC_001_S11_Secondary_Y_Axis.md) ✅ — RFC-001 step S11:
   `Plot::y_right` and `y_right_title`, a right axis with its own fit, ticks and
   margin that zoom and pan move with the left; S11's deletions are reassigned to
   GUP-466, GUP-483/484 and GUP-486. Deps: GUP-466 ✅ (soft).
