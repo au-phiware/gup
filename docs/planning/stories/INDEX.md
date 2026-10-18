@@ -361,6 +361,47 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   step S9e: hover and click through GPU picks when a layer is not CPU-readable,
   `Chart::needs_frame` for hosts, and `Plot::on_row` events by `RowId`. Deps:
   GUP-455 📋, GUP-453 📋; soft: GUP-454 📋.
+- [GUP-457](GUP-457_RFC_001_S9f_Chunk_Culling.md) 📋 — RFC-001 step S9f: skip
+  draw entries whose pixel box (from f64 chunk stats, plus a margin) misses the
+  plot rect, for draws, CPU picks and GPU picks alike, with byte-identical
+  images, a `zoom_bench --sorted` measurement and `zoom_culled.*` budget rows.
+  Deps: GUP-455 ✅, GUP-456 ✅.
+- [GUP-458](GUP-458_RFC_001_S9g_Dim_Unbrushed_Rows.md) 📋 — RFC-001 step S9g:
+  rows outside a brush fade to `Theme::unbrushed_opacity` (default 0.3) through
+  per-row brushed bits read in the glue, for every mark's colour channels; the
+  `brush` golden is re-blessed. Deps: GUP-454 ✅, GUP-430 ✅, GUP-431 ✅.
+- [GUP-459](GUP-459_Per_Row_Type_WASM_Budget.md) 📋 — Attributes the
+  `wasm.per_row_type.gz_bytes` drift (941 → 2,569) to the harness's own async
+  export, measures library code only, slims `bind_axes`, adds
+  `wasm_attrib.sh --row-type` and makes the row a `<=` budget that fails CI.
+  Deps: GUP-450 ✅, GUP-456 ✅.
+- [GUP-460](GUP-460_RFC_001_S10a_Grid_Lines.md) 📋 — RFC-001 step S10a:
+  `Plot::grid(Axes)` and `Theme::grid`, light rules at the ticks behind the
+  marks, clipped to the plot rect, off by default. Deps: GUP-425 ✅.
+- [GUP-461](GUP-461_RFC_001_S10b_Offset_And_Sub_Bands.md) 📋 — RFC-001 step
+  S10b: an `Offset` link (`gup::scale::offset`) and `ScaleRef<Band>::sub_band` /
+  `sub_band_width_px`, so grouped bars sit side by side in each band. Deps:
+  GUP-418 ✅, GUP-419 ✅, GUP-429 ✅, GUP-433 ✅.
+- [GUP-462](GUP-462_RFC_001_S10c_Chart_Builders_And_Scatter.md) 📋 — RFC-001
+  step S10c: the builder pattern (by-value setters, default colour and size
+  scales, escape hatches, `Chart` impl) and `gup_core::scatter`, byte-identical
+  to the hand-built reference scatter. Deps: GUP-447 ✅, GUP-434 ✅, GUP-460 📋.
+- [GUP-463](GUP-463_RFC_001_S10d_Line_Builder.md) 📋 — RFC-001 step S10d:
+  `gup_core::line` splitting long-format rows into one line per key with one
+  legend, `Option<f64>` values as nulls, and `Plot::layers_mut`. Deps: GUP-462
+  📋, GUP-432 ✅, GUP-460 📋.
+- [GUP-464](GUP-464_RFC_001_S10e_Bar_Builder.md) 📋 — RFC-001 step S10e:
+  `gup_core::bar` with a zero baseline, `.group(..)` on sub-bands and
+  `.stack(..)` from CPU-computed stack tables. Deps: GUP-462 📋, GUP-461 📋,
+  GUP-463 📋.
+- [GUP-465](GUP-465_RFC_001_S10f_Dogfood_On_Gup_Core.md) 📋 — RFC-001 step S10f:
+  every dogfood task on the old scatter/line/bar builders (t0–t5_live) rewritten
+  on `gup-core`; tasks 1–3 PASS with only the vector-marks gap left, no
+  threshold lowered. Deps: GUP-460 📋, GUP-462 📋, GUP-463 📋, GUP-464 📋.
+- [GUP-466](GUP-466_RFC_001_S10g_Delete_Old_Builders.md) 📋 — RFC-001 step S10g:
+  delete the old scatter, line, bar and composite builders with their goldens,
+  tests, bench and ten examples; port four examples; a migration table; old-path
+  LOC ≤ 26,900. Deps: GUP-465 📋.
 
 ## GPU Rendering Pipeline
 
