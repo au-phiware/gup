@@ -15,13 +15,13 @@ use crate::channel::{Mark, Px};
 use crate::context::{Context, ContextId};
 use crate::error::{Error, Result};
 use crate::geom::{Point, Rect};
-use crate::input::{Axes, Button, Drag, Event, EventInfo, Input, Response};
+use crate::input::{Axes, Brush, Button, Drag, Event, EventInfo, Input, Response};
 use crate::marks::{Circle, Line, Rect as MarkRect, Segment};
 use crate::pick::{PickIndex, RowId};
 use crate::scale::{DynPositionScale, Linear, PositionScale, ScaleRef, Ticks};
 use crate::scene::{
-    Anchor, HAlign, Item, ItemKind, Rule, Scene, TextRole, TextRun, TextStyle, VAlign, Weight,
-    Z_AXES, Z_GRID, Z_TITLE,
+    Anchor, HAlign, Item, ItemKind, RectPrim, Rule, Scene, TextRole, TextRun, TextStyle, VAlign,
+    Weight, Z_AXES, Z_BRUSH, Z_GRID, Z_TITLE,
 };
 use crate::selection::{Layer, Selection};
 use crate::theme::Theme;
@@ -189,6 +189,44 @@ pub struct Plot {
     /// How each axis was before the first view change since the last
     /// [`reset_view`](Self::reset_view).
     home: Option<[Home; 2]>,
+    /// The brush, in data units, with its rows.
+    brush: Option<Brush>,
+    /// Called with the new brush on release, and with `None` when cleared.
+    brush_handlers: Vec<BrushHandler>,
+    /// The rectangle being dragged (logical pixels, clamped to the plot
+    /// rect), once the pointer left the click slop in `Brush` or `Zoom` mode.
+    marquee: Option<Rect>,
+}
+
+type BrushHandler = Box<dyn FnMut(Option<&Brush>) + Send + Sync>;
+
+/// The brush rectangle `rect` (logical pixels) as a scene item: a
+/// translucent fill inside a 1 px border, on whole pixels.
+fn brush_item(theme: &Theme, rect: Rect) -> Item {
+    let (l, t) = (rect.left().round(), rect.top().round());
+    let (r, b) = (rect.right().round(), rect.bottom().round());
+    let (w, h) = (r - l, b - t);
+    let prim = |x, y, w, h, color| RectPrim {
+        rect: Rect::new(x, y, w, h),
+        color,
+    };
+    let rects = if w < 2.0 || h < 2.0 {
+        vec![prim(l, t, w, h, theme.brush_stroke)]
+    } else {
+        let s = theme.brush_stroke;
+        vec![
+            prim(l + 1.0, t + 1.0, w - 2.0, h - 2.0, theme.brush_fill),
+            prim(l, t, w, 1.0, s),
+            prim(l, b - 1.0, w, 1.0, s),
+            prim(l, t + 1.0, 1.0, h - 2.0, s),
+            prim(r - 1.0, t + 1.0, 1.0, h - 2.0, s),
+        ]
+    };
+    Item {
+        z: Z_BRUSH,
+        clip: None,
+        kind: ItemKind::Rects(rects),
+    }
 }
 
 /// An axis as it was before the view moved.
@@ -321,6 +359,9 @@ impl Plot {
             drag: Drag::Pan,
             dragging: None,
             home: None,
+            brush: None,
+            brush_handlers: Vec::new(),
+            marquee: None,
             last_at: Point::new(0.0, 0.0),
             overlay: None,
         }
@@ -684,7 +725,7 @@ impl Plot {
             // After resolving: it writes the scales.
             self.cache = Some((key(self), resolved));
         }
-        self.sync_tooltip(cx);
+        self.sync_overlay(cx);
         match (&self.overlay, &self.cache) {
             (Some((g, composed)), _) if *g == self.generation => Ok(composed),
             (_, Some((_, resolved))) => Ok(resolved),
@@ -692,23 +733,23 @@ impl Plot {
         }
     }
 
-    /// Bring the hover and the composed tooltip scene up to date with the
-    /// base resolve: re-anchor after a full resolve, and compose the overlay
-    /// when it is missing. Costs nothing when neither changed.
-    fn sync_tooltip(&mut self, cx: &Context) {
-        let Some((row, _, at_gen)) = self.hover else {
-            self.overlay = None;
-            return;
-        };
-        if at_gen != self.generation {
+    /// Bring the hover and the composed overlay scene (brush and tooltip)
+    /// up to date with the base resolve: re-anchor after a full resolve, and
+    /// compose the overlay when it is missing. Costs nothing when neither
+    /// changed.
+    fn sync_overlay(&mut self, cx: &Context) {
+        if let Some((row, _, at_gen)) = self.hover
+            && at_gen != self.generation
+        {
             self.overlay = None;
             match self.pick_anchor(row) {
                 Some(a) => self.hover = Some((row, a, self.generation)),
-                None => {
-                    self.hover = None;
-                    return;
-                }
+                None => self.hover = None,
             }
+        }
+        if self.hover.is_none() && self.brush.is_none() && self.marquee.is_none() {
+            self.overlay = None;
+            return;
         }
         if self
             .overlay
@@ -718,27 +759,30 @@ impl Plot {
             return;
         }
         self.overlay = None;
+        let brush_px = self.marquee.or_else(|| self.brush_rect());
+        let tooltip = self.hover.and_then(|(row, anchor, _)| {
+            let text = self.layers.get(row.layer)?.tooltip_text(row.row)?;
+            Some((text, anchor))
+        });
         let Some((_, base)) = &self.cache else {
             return;
         };
-        let Some((_, anchor, _)) = self.hover else {
+        if brush_px.is_none() && tooltip.is_none() {
             return;
-        };
-        let Some(text) = self
-            .layers
-            .get(row.layer)
-            .and_then(|l| l.tooltip_text(row.row))
-        else {
-            return;
-        };
-        let (width, height) = (base.layout.width, base.layout.height);
-        let (rect, items) =
-            crate::tooltip::overlay(&cx.text(), &self.theme, &text, anchor, width, height);
-        let mut composed = base.clone();
-        for item in items {
-            composed.scene.push(item);
         }
-        composed.layout.tooltip = Some(rect);
+        let mut composed = base.clone();
+        if let Some(rect) = brush_px {
+            composed.scene.push(brush_item(&self.theme, rect));
+        }
+        if let Some((text, anchor)) = tooltip {
+            let (width, height) = (base.layout.width, base.layout.height);
+            let (rect, items) =
+                crate::tooltip::overlay(&cx.text(), &self.theme, &text, anchor, width, height);
+            for item in items {
+                composed.scene.push(item);
+            }
+            composed.layout.tooltip = Some(rect);
+        }
         self.overlay = Some((self.generation, composed));
     }
 
@@ -801,7 +845,21 @@ impl Plot {
                             .is_ok();
                     }
                 }
-                if self.dragging.is_none() {
+                if let (Some(down), true, true) = (
+                    self.press,
+                    matches!(self.drag, Drag::Brush | Drag::Zoom),
+                    self.cache.is_some(),
+                ) && (self.marquee.is_some()
+                    || (at.x - down.x).hypot(at.y - down.y) > CLICK_SLOP)
+                {
+                    if self.marquee.is_none() {
+                        self.set_hover(None, at);
+                    }
+                    self.marquee = self.clamped_rect(down, at);
+                    self.overlay = None;
+                    redraw = true;
+                }
+                if self.dragging.is_none() && self.marquee.is_none() {
                     let row = self.pick_row(at);
                     if row != self.hovered() {
                         redraw = self.set_hover(row, at);
@@ -812,6 +870,10 @@ impl Plot {
                 redraw = self.set_hover(None, self.last_at);
                 self.press = None;
                 self.dragging = None;
+                if self.marquee.take().is_some() {
+                    self.overlay = None;
+                    redraw = true;
+                }
                 if self.hold.take().is_some() {
                     self.revision = self.revision.wrapping_add(1);
                     redraw = true;
@@ -830,14 +892,26 @@ impl Plot {
             } => {
                 self.last_at = at;
                 let dragged = self.dragging.take().is_some();
-                if let Some(down) = self.press.take()
+                let down = self.press.take();
+                if let Some(down) = down
+                    && self.marquee.take().is_some()
+                {
+                    self.overlay = None;
+                    redraw = true;
+                    match self.drag {
+                        Drag::Brush => redraw |= self.finish_brush(down, at),
+                        Drag::Zoom => redraw |= self.finish_zoom(down, at),
+                        Drag::Pan | Drag::Off => {}
+                    }
+                } else if let Some(down) = down
                     && !dragged
                 {
                     let (dx, dy) = (at.x - down.x, at.y - down.y);
-                    if dx.hypot(dy) <= CLICK_SLOP
-                        && let Some(row) = self.pick_row(at)
-                    {
-                        self.dispatch(Event::Click, at, row);
+                    if dx.hypot(dy) <= CLICK_SLOP {
+                        redraw |= self.drop_brush();
+                        if let Some(row) = self.pick_row(at) {
+                            self.dispatch(Event::Click, at, row);
+                        }
                     }
                 }
             }
@@ -857,6 +931,178 @@ impl Plot {
             _ => {}
         }
         Response { redraw }
+    }
+
+    /// The rectangle from `a` to `b` clamped to the plot rect.
+    fn clamped_rect(&self, a: Point, b: Point) -> Option<Rect> {
+        let plot = self.layout()?.plot;
+        let cx = |v: f32| v.clamp(plot.left(), plot.right());
+        let cy = |v: f32| v.clamp(plot.top(), plot.bottom());
+        Some(Rect::from_edges(
+            cx(a.x.min(b.x)),
+            cy(a.y.min(b.y)),
+            cx(a.x.max(b.x)),
+            cy(a.y.max(b.y)),
+        ))
+    }
+
+    /// Release in `Brush` mode: set the brush from the rectangle, or clear
+    /// it when the rectangle is empty. Whether the overlay changed.
+    fn finish_brush(&mut self, down: Point, up: Point) -> bool {
+        let Some(r) = self.clamped_rect(down, up) else {
+            return false;
+        };
+        if r.width <= 0.0 || r.height <= 0.0 {
+            self.drop_brush();
+            return true;
+        }
+        let Some(rows) = self.pick_index().map(|i| i.rows_in(r)) else {
+            return false;
+        };
+        let (x0, x1) = (
+            self.x.invert(f64::from(r.left())),
+            self.x.invert(f64::from(r.right())),
+        );
+        let (y0, y1) = (
+            self.y.invert(f64::from(r.top())),
+            self.y.invert(f64::from(r.bottom())),
+        );
+        self.brush = Some(Brush {
+            x: (x0.min(x1), x0.max(x1)),
+            y: (y0.min(y1), y0.max(y1)),
+            rows,
+        });
+        self.overlay = None;
+        self.call_brush_handlers();
+        true
+    }
+
+    /// Release in `Zoom` mode: the view axes take the rectangle's extent
+    /// when it is wider and taller than the click slop.
+    fn finish_zoom(&mut self, down: Point, up: Point) -> bool {
+        let Some(r) = self.clamped_rect(down, up) else {
+            return false;
+        };
+        let which = self.movable();
+        if !(which[0] || which[1]) || r.width <= CLICK_SLOP || r.height <= CLICK_SLOP {
+            return false;
+        }
+        self.hold_layout();
+        self.record_home();
+        let ends = [
+            (r.left(), r.right()),
+            // The y range runs bottom to top.
+            (r.bottom(), r.top()),
+        ];
+        for (i, axis) in [&self.x, &self.y].into_iter().enumerate() {
+            if which[i] {
+                let (p0, p1) = ends[i];
+                // A rectangle inside the plot is a valid domain.
+                drop(axis.set_domain(axis.invert(f64::from(p0)), axis.invert(f64::from(p1))));
+            }
+        }
+        self.record_zoomed();
+        self.revision = self.revision.wrapping_add(1);
+        true
+    }
+
+    fn call_brush_handlers(&mut self) {
+        for handler in &mut self.brush_handlers {
+            handler(self.brush.as_ref());
+        }
+    }
+
+    /// Clear the brush, calling the handlers if there was one. Whether it
+    /// did.
+    fn drop_brush(&mut self) -> bool {
+        if self.brush.take().is_none() {
+            return false;
+        }
+        self.overlay = None;
+        self.call_brush_handlers();
+        true
+    }
+
+    /// The current brush, if any (see [`Drag::Brush`]).
+    ///
+    /// ```
+    /// use gup_core::geom::Point;
+    /// use gup_core::prelude::*;
+    /// use gup_core::{Button, Input, RowId};
+    ///
+    /// struct Row { id: u32, x: f64, y: f64 }
+    /// # fn main() -> gup_core::Result<()> {
+    /// let rows = vec![
+    ///     Row { id: 10, x: 1.0, y: 1.0 },
+    ///     Row { id: 11, x: 2.0, y: 2.0 },
+    ///     Row { id: 12, x: 3.0, y: 3.0 },
+    /// ];
+    /// let cx = Context::new_blocking()?;
+    /// let mut plot = Plot::new();
+    /// plot.circles(rows).x(|r| r.x).y(|r| r.y);
+    /// plot.drag(Drag::Brush);
+    /// let layout = plot.resolve(&cx, 320.0, 200.0)?.layout.clone();
+    /// let r = layout.plot;
+    /// // Press at the bottom-left, drag to the middle of the plot: the
+    /// // two lower-left points are inside.
+    /// let from = Point::new(r.left() + 1.0, r.bottom() - 1.0);
+    /// let to = Point::new(r.left() + r.width * 0.62, r.top() + r.height * 0.38);
+    /// let button = Button::Primary;
+    /// plot.handle(Input::PointerDown { at: from, button });
+    /// plot.handle(Input::PointerMoved { at: to });
+    /// plot.handle(Input::PointerUp { at: to, button });
+    /// let brush = plot.brush().expect("a brush");
+    /// let ids: Vec<u32> = brush
+    ///     .rows
+    ///     .iter()
+    ///     .map(|&id| plot.row::<Row>(id).unwrap().id)
+    ///     .collect();
+    /// assert_eq!(ids, [10, 11]);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn brush(&self) -> Option<&Brush> {
+        self.brush.as_ref()
+    }
+
+    /// Call `f` with the new brush on release, and with `None` when the
+    /// brush is cleared (a click, or [`clear_brush`](Self::clear_brush)).
+    /// Handlers run in registration order.
+    pub fn on_brush(&mut self, f: impl FnMut(Option<&Brush>) + Send + Sync + 'static) -> &mut Self {
+        self.brush_handlers.push(Box::new(f));
+        self
+    }
+
+    /// Remove the brush, calling the handlers with `None` only if there
+    /// was one.
+    pub fn clear_brush(&mut self) -> &mut Self {
+        self.drop_brush();
+        self
+    }
+
+    /// The brush's rectangle under the current scales (logical pixels),
+    /// clipped to the plot rect; `None` without a brush, before the first
+    /// resolve, or when it is out of view.
+    pub fn brush_rect(&self) -> Option<Rect> {
+        let b = self.brush.as_ref()?;
+        let plot = self.layout()?.plot;
+        let px = |s: &dyn DynPositionScale, (a, b): (f64, f64)| {
+            let (a, b) = (s.eval(a) as f32, s.eval(b) as f32);
+            (a.min(b), a.max(b))
+        };
+        let (x0, x1) = px(&*self.x, b.x);
+        let (y0, y1) = px(&*self.y, b.y);
+        let (l, t) = (x0.max(plot.left()), y0.max(plot.top()));
+        let (r, bt) = (x1.min(plot.right()), y1.min(plot.bottom()));
+        (l <= r && t <= bt).then(|| Rect::from_edges(l, t, r, bt))
+    }
+
+    /// Row `id`'s data, if its layer holds rows of type `T` and kept them.
+    pub fn row<T: 'static>(&self, id: RowId) -> Option<&T> {
+        self.layers
+            .get(id.layer)?
+            .row_any(id.row)?
+            .downcast_ref::<T>()
     }
 
     /// Hold the cached layout's horizontal margins until the pointer leaves

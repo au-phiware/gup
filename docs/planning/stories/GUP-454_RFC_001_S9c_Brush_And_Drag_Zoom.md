@@ -9,7 +9,8 @@ implementer-reason:
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 📋 Planned **Created**: 2026-10-18
+**Initiative**: RFC-001 Migration **Status**: 🚧 In Progress **Created**:
+2026-10-18
 
 ## Context
 

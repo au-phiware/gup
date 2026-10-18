@@ -125,4 +125,25 @@ pub enum Drag {
     Pan,
     /// Nothing.
     Off,
+    /// Select the rows whose marks lie inside the dragged rectangle (see
+    /// [`Plot::brush`](crate::Plot::brush)).
+    Brush,
+    /// Zoom the view to the dragged rectangle.
+    Zoom,
+}
+
+/// A rectangle selection, in data units.
+///
+/// A row is brushed when its mark's position lies inside the rectangle,
+/// edges included: a disc's or a box's centre, a segment's midpoint, a
+/// line's vertex. A large mark that merely overlaps the rectangle is not
+/// brushed.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Brush {
+    /// The x extent, (min, max) in data units (codes on a band axis).
+    pub x: (f64, f64),
+    /// The y extent, (min, max).
+    pub y: (f64, f64),
+    /// Rows whose position is inside, sorted by (layer, row).
+    pub rows: Vec<crate::RowId>,
 }

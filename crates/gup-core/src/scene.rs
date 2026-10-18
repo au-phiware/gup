@@ -18,6 +18,8 @@ pub const Z_GRID: i32 = -100;
 pub const Z_AXES: i32 = 100;
 /// Default z-order of the title and legends.
 pub const Z_TITLE: i32 = 200;
+/// Z-order of the brush rectangle, above titles and legends.
+pub const Z_BRUSH: i32 = 250;
 /// Z-order of the hover tooltip, above everything else.
 pub const Z_TOOLTIP: i32 = 300;
 

@@ -57,6 +57,10 @@ pub struct Theme {
     pub tooltip_text: Color,
     /// Tooltip text size.
     pub tooltip_size: Px,
+    /// Brush rectangle fill (translucent).
+    pub brush_fill: Color,
+    /// Brush rectangle border (1 px).
+    pub brush_stroke: Color,
 }
 
 impl Default for Theme {
@@ -80,6 +84,11 @@ impl Default for Theme {
             tooltip_border: Color::hex(0x999999),
             tooltip_text: Color::hex(0x333333),
             tooltip_size: Px(12.0),
+            brush_fill: Color {
+                a: 0.15,
+                ..Color::hex(0x4477aa)
+            },
+            brush_stroke: Color::hex(0x4477aa),
         }
     }
 }
@@ -109,5 +118,13 @@ mod tests {
         assert_eq!(t.tooltip_border, Color::hex(0x999999));
         assert_eq!(t.tooltip_text, Color::hex(0x333333));
         assert_eq!(t.tooltip_size, Px(12.0));
+        assert_eq!(t.brush_stroke, Color::hex(0x4477aa));
+        assert_eq!(
+            t.brush_fill,
+            Color {
+                a: 0.15,
+                ..Color::hex(0x4477aa)
+            }
+        );
     }
 }

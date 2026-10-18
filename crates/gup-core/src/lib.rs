@@ -132,7 +132,7 @@ pub use encoding::{
     KeyMarker, KeySource, NullableKey, NullableOwnedKey, OwnedKey, Resource, ShaderFn, Then,
 };
 pub use error::{Error, Result};
-pub use input::{Axes, Button, Drag, Event, EventInfo, Input, Response};
+pub use input::{Axes, Brush, Button, Drag, Event, EventInfo, Input, Response};
 pub use marks::{Circle, CircleAttrs, Line, LineAttrs, Rect, RectAttrs, Segment, SegmentAttrs};
 pub use pick::{PICK_TOLERANCE, RowId};
 pub use plot::{Layout, PlacedText, Plot, Resolved};

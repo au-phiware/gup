@@ -400,3 +400,293 @@ fn tooltip_golden() {
         .run("gup_core/tooltip", Ok((vr, layout_metadata(&layout))))
         .assert_ok();
 }
+
+// ---- Brush and drag-zoom (GUP-454) ------------------------------------
+
+fn feed(plot: &mut Plot, input: Input) {
+    let _ = plot.handle(input);
+}
+
+/// Press at `from`, move past the click slop, move to `to`, release.
+fn drag(plot: &mut Plot, from: Pt, to: Pt) {
+    let button = Button::Primary;
+    feed(plot, Input::PointerDown { at: from, button });
+    let mid = Pt::new((from.x + to.x) / 2.0, (from.y + to.y) / 2.0);
+    feed(plot, Input::PointerMoved { at: mid });
+    feed(plot, Input::PointerMoved { at: to });
+    feed(plot, Input::PointerUp { at: to, button });
+}
+
+/// The pixel of `value` along an axis, from its tick pixels.
+fn px(ticks: &[(f64, f32)], value: f64) -> f32 {
+    let (a, b) = (ticks[0], *ticks.last().unwrap());
+    (f64::from(a.1) + (value - a.0) * f64::from(b.1 - a.1) / (b.0 - a.0)) as f32
+}
+
+/// Four layers at different `z`; positions (data units) are listed in
+/// `MIXED_*`.
+const CIRCLES: [(f64, f64); 3] = [(2.0, 2.0), (4.0, 6.0), (8.0, 8.0)];
+const RECTS: [(f64, f64, f64, f64); 2] = [(1.0, 1.0, 5.0, 3.0), (6.0, 6.0, 9.0, 9.0)];
+const SEGMENTS: [(f64, f64, f64, f64); 2] = [(1.0, 8.0, 3.0, 6.0), (7.0, 1.0, 9.0, 3.0)];
+const LINE: [(f64, f64); 5] = [(1.0, 5.0), (3.0, 4.0), (5.0, 5.0), (7.0, 3.0), (9.0, 5.0)];
+
+fn mixed() -> (Context, Plot, Log) {
+    let clicks = Log::default();
+    let l = clicks.clone();
+    let cx = Context::new_blocking().expect("headless GPU context");
+    let mut plot = Plot::new();
+    plot.circles(CIRCLES)
+        .x(|r| r.0)
+        .y(|r| r.1)
+        .radius(Px(4.0))
+        .on(Event::Click, move |info, _| {
+            l.lock().unwrap().push(format!("Click {}", info.row.row));
+        })
+        .z(3);
+    plot.rects(RECTS)
+        .x(|r| r.0)
+        .y(|r| r.1)
+        .x_end(|r| r.2)
+        .y_end(|r| r.3)
+        .z(1);
+    plot.segments(SEGMENTS)
+        .x(|r| r.0)
+        .y(|r| r.1)
+        .x_end(|r| r.2)
+        .y_end(|r| r.3)
+        .width(Px(2.0))
+        .z(2);
+    plot.line(LINE).x(|r| r.0).y(|r| r.1).z(4);
+    plot.drag(Drag::Brush);
+    plot.resolve(&cx, W, H).unwrap();
+    (cx, plot, clicks)
+}
+
+/// The pixel rectangle of the data box `x0..x1`, `y0..y1`.
+fn data_box(plot: &Plot, x: (f64, f64), y: (f64, f64)) -> (Pt, Pt) {
+    let l = plot.layout().unwrap();
+    (
+        Pt::new(px(&l.x_ticks, x.0), px(&l.y_ticks, y.1)),
+        Pt::new(px(&l.x_ticks, x.1), px(&l.y_ticks, y.0)),
+    )
+}
+
+fn id(layer: usize, row: usize) -> RowId {
+    RowId { layer, row }
+}
+
+#[test]
+fn a_brush_selects_rows_by_mark_position_for_all_four_marks() {
+    let (_cx, mut plot, _) = mixed();
+    let (a, b) = data_box(&plot, (1.9, 5.1), (1.9, 7.1));
+    drag(&mut plot, a, b);
+    let brush = plot.brush().expect("a brush");
+    // Circles (2,2), (4,6); rect centre (3,2); segment midpoint (2,7); line
+    // vertices (3,4) and (5,5).
+    assert_eq!(
+        brush.rows,
+        [id(0, 0), id(0, 1), id(1, 0), id(2, 0), id(3, 1), id(3, 2)]
+    );
+    assert!((brush.x.0 - 1.9).abs() < 0.05 && (brush.x.1 - 5.1).abs() < 0.05);
+    assert!((brush.y.0 - 1.9).abs() < 0.05 && (brush.y.1 - 7.1).abs() < 0.05);
+}
+
+#[test]
+fn a_big_mark_overlapping_but_not_centred_inside_is_not_brushed() {
+    let (_cx, mut plot, _) = mixed();
+    // Covers most of rect 0 (1..5 × 1..3) but not its centre (3, 2).
+    let (a, b) = data_box(&plot, (3.5, 5.1), (0.0, 2.6));
+    drag(&mut plot, a, b);
+    assert!(plot.brush().unwrap().rows.iter().all(|r| r.layer != 1));
+}
+
+#[test]
+fn handlers_run_once_on_release_and_a_click_clears() {
+    let (_cx, mut plot, clicks) = mixed();
+    let calls: Arc<Mutex<Vec<Option<usize>>>> = Arc::default();
+    let c = calls.clone();
+    plot.on_brush(move |b| c.lock().unwrap().push(b.map(|b| b.rows.len())));
+    let button = Button::Primary;
+    let (a, b) = data_box(&plot, (1.9, 5.1), (1.9, 7.1));
+    feed(&mut plot, Input::PointerDown { at: a, button });
+    assert!(
+        plot.handle(Input::PointerMoved {
+            at: off(a, 20.0, -20.0)
+        })
+        .redraw
+    );
+    feed(&mut plot, Input::PointerMoved { at: b });
+    assert!(calls.lock().unwrap().is_empty(), "moves call no handler");
+    assert!(plot.brush().is_none());
+    feed(&mut plot, Input::PointerUp { at: b, button });
+    assert_eq!(*calls.lock().unwrap(), [Some(6)]);
+
+    // A click on a row clears the brush and is still delivered.
+    let row_at = plot.pick_anchor(id(0, 2)).unwrap();
+    feed(&mut plot, Input::PointerDown { at: row_at, button });
+    feed(
+        &mut plot,
+        Input::PointerUp {
+            at: off(row_at, 1.0, 1.0),
+            button,
+        },
+    );
+    assert!(plot.brush().is_none());
+    assert_eq!(*calls.lock().unwrap(), [Some(6), None]);
+    assert_eq!(take(&clicks), ["Click 2"]);
+
+    // clear_brush with no brush calls nothing.
+    plot.clear_brush();
+    assert_eq!(calls.lock().unwrap().len(), 2);
+}
+
+#[test]
+fn a_brush_from_outside_is_clamped_and_an_empty_one_clears() {
+    let (_cx, mut plot, _) = mixed();
+    let r = plot.layout().unwrap().plot;
+    let (a, b) = data_box(&plot, (7.0, 9.0), (7.0, 9.0));
+    // From beyond the bottom-right corner into the upper left.
+    drag(&mut plot, Pt::new(r.right() + 40.0, r.bottom() + 40.0), a);
+    let rect = plot.brush_rect().unwrap();
+    assert!((rect.right() - r.right()).abs() < 0.01);
+    assert!((rect.bottom() - r.bottom()).abs() < 0.01);
+    // Everything right of and below `a` that is drawn: circle 2 and rect 1.
+    let rows = &plot.brush().unwrap().rows;
+    assert!(rows.contains(&id(0, 2)) && rows.contains(&id(1, 1)));
+    // Dragging along the plot's edge from outside is zero-width: it clears.
+    let calls: Arc<Mutex<Vec<bool>>> = Arc::default();
+    let c = calls.clone();
+    plot.on_brush(move |b| c.lock().unwrap().push(b.is_some()));
+    drag(
+        &mut plot,
+        Pt::new(r.right() + 30.0, r.top() + 30.0),
+        Pt::new(r.right() + 60.0, r.top() + 90.0),
+    );
+    assert!(plot.brush().is_none());
+    assert_eq!(*calls.lock().unwrap(), [false]);
+    let _ = b;
+}
+
+#[test]
+fn a_brush_survives_a_wheel_step_and_a_resize_and_follows_the_data() {
+    let (cx, mut plot, _) = mixed();
+    let (a, b) = data_box(&plot, (1.9, 5.1), (1.9, 7.1));
+    drag(&mut plot, a, b);
+    let before = plot.brush().cloned().unwrap();
+    let generation = plot.resolve_generation();
+    // The overlay is composed on the cached resolve.
+    plot.resolve(&cx, W, H).unwrap();
+    assert_eq!(plot.resolve_generation(), generation);
+    let at = Pt::new(W / 2.0, H / 2.0);
+    for (w, h, lines) in [(W, H, -1.0), (W + 40.0, H + 20.0, 0.0)] {
+        if lines != 0.0 {
+            feed(&mut plot, Input::Wheel { at, lines });
+        }
+        plot.resolve(&cx, w, h).unwrap();
+        assert_eq!(plot.brush(), Some(&before));
+        let l = plot.layout().unwrap().clone();
+        let rect = plot.brush_rect().unwrap();
+        let want = [
+            px(&l.x_ticks, before.x.0),
+            px(&l.y_ticks, before.y.1),
+            px(&l.x_ticks, before.x.1),
+            px(&l.y_ticks, before.y.0),
+        ];
+        let got = [rect.left(), rect.top(), rect.right(), rect.bottom()];
+        for (g, w) in got.iter().zip(want) {
+            assert!((g - w).abs() < 0.01, "{got:?} vs {want:?}");
+        }
+    }
+}
+
+#[test]
+fn drag_zoom_sets_the_domains_to_the_rectangle_and_reset_view_undoes_it() {
+    let cx = Context::new_blocking().expect("headless GPU context");
+    let mut plot = Plot::new();
+    let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
+    plot.add(Selection::<(f64, f64), Circle>::new(CIRCLES.to_vec()))
+        .attr(Circle::X, x.encode(|r: &(f64, f64)| r.0))
+        .attr(Circle::Y, y.encode(|r: &(f64, f64)| r.1))
+        .attr(Circle::RADIUS, Px(4.0));
+    plot.drag(Drag::Zoom);
+    let r = plot.resolve(&cx, W, H).unwrap().layout.plot;
+    let first = (x.read().current_domain(), y.read().current_domain());
+    let (a, b) = (
+        Pt::new(r.left() + 60.0, r.top() + 40.0),
+        Pt::new(r.left() + 200.0, r.top() + 150.0),
+    );
+    let (va, vb) = (plot.invert(a).unwrap(), plot.invert(b).unwrap());
+    drag(&mut plot, a, b);
+    assert!(plot.brush().is_none());
+    plot.resolve(&cx, W, H).unwrap();
+    let close = |got: f64, want: f64| (got - want).abs() <= 1e-9 * want.abs().max(1.0);
+    let (dx, dy) = (
+        x.read().current_domain().unwrap(),
+        y.read().current_domain().unwrap(),
+    );
+    assert!(
+        close(dx.0, va.0) && close(dx.1, vb.0),
+        "{dx:?} {va:?} {vb:?}"
+    );
+    assert!(
+        close(dy.0, vb.1) && close(dy.1, va.1),
+        "{dy:?} {va:?} {vb:?}"
+    );
+
+    // Too narrow on one axis changes nothing.
+    drag(&mut plot, a, off(a, 3.0, 80.0));
+    assert_eq!(x.read().current_domain().unwrap(), dx);
+    plot.reset_view();
+    plot.resolve(&cx, W, H).unwrap();
+    assert_eq!(
+        (x.read().current_domain(), y.read().current_domain()),
+        first
+    );
+}
+
+#[test]
+fn brush_golden() {
+    let cx = Context::new_blocking().expect("headless GPU context");
+    let mut plot = Plot::new();
+    plot.circles(rows(5))
+        .x(|r| r.x)
+        .y(|r| r.y)
+        .radius(Px(5.0))
+        .tooltip(|r| format!("{}\nmass {:.1} kg", r.name, r.mass));
+    plot.drag(Drag::Brush);
+    plot.resolve(&cx, W, H).unwrap();
+    // Brush the dots of rows 1 and 2 (x 10 and 20; y 7 and 4).
+    let (p1, p2) = (anchor(&mut plot, 1), anchor(&mut plot, 2));
+    let from = Pt::new(p1.x - 20.0, p1.y - 30.0);
+    let to = Pt::new(p2.x + 20.0, p2.y + 30.0);
+    drag(&mut plot, from, to);
+    assert_eq!(plot.brush().unwrap().rows, [id(0, 1), id(0, 2)]);
+    let resolved = plot.resolve(&cx, W, H).unwrap();
+    let layout = resolved.layout.clone();
+    let image = ImageTarget::new(&cx, W as u32, H as u32)
+        .unwrap()
+        .render_blocking(&cx, &resolved.scene)
+        .unwrap();
+    let vr = RgbaImage::new(W as u32, H as u32, image.into_raw()).unwrap();
+    // A background pixel inside the brush, away from the dots, is tinted
+    // blue; the border is the stroke colour.
+    let rect = plot.brush_rect().unwrap();
+    let at = |x: f32, y: f32| {
+        let i = (y as usize * W as usize + x as usize) * 4;
+        let d = vr.data();
+        [d[i], d[i + 1], d[i + 2]]
+    };
+    let (l, t) = (rect.left().round(), rect.top().round());
+    let inside = at(l + 4.0, t + 4.0);
+    assert!(
+        inside[0] >= 200 && i32::from(inside[2]) - i32::from(inside[0]) >= 10,
+        "{inside:?}"
+    );
+    let border = at(l + 30.0, t);
+    for (g, w) in border.iter().zip([0x44u8, 0x77, 0xaa]) {
+        assert!(g.abs_diff(w) <= 6, "border {border:?}");
+    }
+    harness()
+        .run("gup_core/brush", Ok((vr, layout_metadata(&layout))))
+        .assert_ok();
+}

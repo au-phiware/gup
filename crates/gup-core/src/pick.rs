@@ -398,6 +398,61 @@ impl PickIndex {
         Some(Hit { row, anchor })
     }
 
+    /// The rows whose mark position lies inside `r` (edges included),
+    /// sorted by (layer, row), without duplicates. The position is a disc's
+    /// or a box's centre, a segment's midpoint, or a line's vertex.
+    pub(crate) fn rows_in(&self, r: Rect) -> Vec<RowId> {
+        let p = self.plot;
+        let (Some(c0), Some(c1)) = (
+            self.cell_range(r.x - p.x, r.x + r.width - p.x, self.cols),
+            self.cell_range(r.y - p.y, r.y + r.height - p.y, self.rows),
+        ) else {
+            return Vec::new();
+        };
+        let inside = |q: [f32; 2]| {
+            q[0] >= r.x && q[0] <= r.x + r.width && q[1] >= r.y && q[1] <= r.y + r.height
+        };
+        let mut out = Vec::new();
+        for cy in c1.0..=c1.1 {
+            for cx in c0.0..=c0.1 {
+                for &i in &self.cells[cy * self.cols + cx] {
+                    let item = &self.items[i as usize];
+                    match item.shape {
+                        Shape::Disc { c, .. } => {
+                            if inside(c) {
+                                out.push(item.row);
+                            }
+                        }
+                        Shape::Box { lo, hi } => {
+                            if inside([(lo[0] + hi[0]) / 2.0, (lo[1] + hi[1]) / 2.0]) {
+                                out.push(item.row);
+                            }
+                        }
+                        Shape::Segment { a, b, .. } => {
+                            if inside([(a[0] + b[0]) / 2.0, (a[1] + b[1]) / 2.0]) {
+                                out.push(item.row);
+                            }
+                        }
+                        Shape::Capsule { a, b, .. } => {
+                            if inside(a) {
+                                out.push(item.row);
+                            }
+                            if inside(b) {
+                                out.push(RowId {
+                                    row: item.row.row + 1,
+                                    ..item.row
+                                });
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        out.sort_unstable();
+        out.dedup();
+        out
+    }
+
     /// Where a tooltip for `row` attaches, if it is drawn.
     pub(crate) fn anchor(&self, row: RowId) -> Option<Point> {
         self.items.iter().find_map(|item| {
