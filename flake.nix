@@ -110,6 +110,10 @@
             # Node.js for Puppeteer benchmark capture scripts
             nodejs
 
+            # `mask wasm-attrib` (GUP-450): which crates and functions the
+            # scatter's WASM bytes belong to.
+            twiggy
+
             # Prettier for markdown formatting
             nodePackages.prettier
 

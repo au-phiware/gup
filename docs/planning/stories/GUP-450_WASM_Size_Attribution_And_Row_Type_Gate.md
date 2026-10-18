@@ -9,7 +9,8 @@ implementer-reason:
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 📋 Planned **Created**: 2026-10-18
+**Initiative**: RFC-001 Migration **Status**: ✅ Complete (2026-10-18)
+**Created**: 2026-10-18
 
 ## Context
 
@@ -72,11 +73,11 @@ full copy of the `Layer` methods, and nothing reports it.
 
 ### AC1: Spike — which attribution tool
 
-- [ ] Run `nix shell nixpkgs#twiggy -c twiggy top -n 5 <wasm>` on the scatter as
+- [x] Run `nix shell nixpkgs#twiggy -c twiggy top -n 5 <wasm>` on the scatter as
       `wasm-bindgen --target web` writes it **with** its name section (no
       `--remove-name-section`). Record the twiggy version and the result in the
       story.
-- [ ] Decision rule: if twiggy parses the file and prints function names (not
+- [x] Decision rule: if twiggy parses the file and prints function names (not
       only `code[N]`), the tool is twiggy, and `twiggy` joins the dev shell's
       packages in `flake.nix`. If it fails to parse (rustc enables
       reference-types and multi-value on wasm32 by default, and twiggy 0.7's
@@ -86,53 +87,53 @@ full copy of the `Layer` methods, and nothing reports it.
 
 ### AC2: `mask wasm-attrib`
 
-- [ ] `mask wasm-attrib` (`scripts/wasm_attrib.sh`, plus `wasm_attrib.py` if AC1
+- [x] `mask wasm-attrib` (`scripts/wasm_attrib.sh`, plus `wasm_attrib.py` if AC1
       chose it) builds the scatter harness exactly as `wasm_size.sh` does, binds
       it keeping names, and prints the three sections below, each headed by its
       name on a line of its own.
-- [ ] Section `== top`: the 30 largest functions and data segments, raw bytes
+- [x] Section `== top`: the 30 largest functions and data segments, raw bytes
       and percentage of the file.
-- [ ] Section `== monos`: generic functions grouped by path with the
+- [x] Section `== monos`: generic functions grouped by path with the
       instantiation hash removed, the 20 largest groups by total bytes, each
       with its instantiation count and total.
-- [ ] Section `== crates`: raw bytes summed by crate (the first path segment of
+- [x] Section `== crates`: raw bytes summed by crate (the first path segment of
       the demangled name, with a leading `<` stripped), with data segments as
       `data` and everything unmatched as `other`, largest first.
-- [ ] It exits 0 on `main`. Its `== monos` section lists
+- [x] It exits 0 on `main`. Its `== monos` section lists
       `<gup_core::selection::Selection<T,M> as gup_core::selection::Layer>::prepare`
       with 7 instantiations. Its `== crates` section puts `gup_core` first.
-- [ ] `maskfile.md` documents the task: what it builds, what each section means,
+- [x] `maskfile.md` documents the task: what it builds, what each section means,
       that sizes are raw (find targets with it, judge cuts by the gz totals of
       `mask wasm-size`), and that it is local only, not a CI job.
 
 ### AC3: The per-row-type build
 
-- [ ] The scatter harness gains a Cargo feature `extra-row-type`. With it, the
+- [x] The scatter harness gains a Cargo feature `extra-row-type`. With it, the
       harness exports one more function, `render_extra_row_type` (Decisions),
       which adds a `Selection` over a row type no other scene uses. Without the
       feature, the harness and its wasm are byte-identical to before (compare
       `sha256sum` of the bound `.wasm` before and after this story's harness
       edit, built without the feature).
-- [ ] `scripts/wasm_size.sh` builds the scatter twice: with `extra-row-type`
+- [x] `scripts/wasm_size.sh` builds the scatter twice: with `extra-row-type`
       first and without it second, so the artifact left in
       `wasm32-unknown-unknown/release` is the default build that
       `wasm_browser.sh` uses. It prints a row `gup-core-scatter+T` and the
       metric `metric wasm.per_row_type.gz_bytes <with − without>`.
-- [ ] `PERF_BUDGETS.md`'s budget table gains the row
+- [x] `PERF_BUDGETS.md`'s budget table gains the row
       `wasm.per_row_type.gz_bytes | <measured> | info | scripts/wasm_size.sh, one more Selection row type`.
       `info` for now; GUP-451 sets its check after the cuts.
-- [ ] `mask wasm-size` passes, and the `wasm.scatter` and `wasm.over_wgpu` rows
+- [x] `mask wasm-size` passes, and the `wasm.scatter` and `wasm.over_wgpu` rows
       are unchanged (the default build did not change).
 
 ### AC4: The attribution recorded
 
-- [ ] `PERF_BUDGETS.md` "WASM size" gains a subsection "Where the bytes go
+- [x] `PERF_BUDGETS.md` "WASM size" gains a subsection "Where the bytes go
       (GUP-450)", with the date, the commit, and three tables from
       `mask wasm-attrib`: the 10 largest crates, the 10 largest generic groups,
       and the 10 largest single items. It adds one sentence on how far they
       agree with this story's Context figures, which came from the scribe's
       parse before wasm-bindgen.
-- [ ] The same subsection records `wasm.per_row_type.gz_bytes` and the share of
+- [x] The same subsection records `wasm.per_row_type.gz_bytes` and the share of
       the scatter's gz bytes it represents.
 
 ## Decisions
@@ -199,13 +200,13 @@ full copy of the `Layer` methods, and nothing reports it.
 
 ## Technical Tasks
 
-- [ ] AC1 spike; record the result.
-- [ ] `scripts/wasm_attrib.sh` (and `.py` if chosen) and `maskfile.md`
+- [x] AC1 spike; record the result.
+- [x] `scripts/wasm_attrib.sh` (and `.py` if chosen) and `maskfile.md`
       `## wasm-attrib`; `twiggy` in `flake.nix` if chosen.
-- [ ] Harness feature `extra-row-type` and `render_extra_row_type`.
-- [ ] `wasm_size.sh`: second build, `gup-core-scatter+T` row and metric; update
+- [x] Harness feature `extra-row-type` and `render_extra_row_type`.
+- [x] `wasm_size.sh`: second build, `gup-core-scatter+T` row and metric; update
       its header comment.
-- [ ] `PERF_BUDGETS.md`: budget row and the "Where the bytes go" subsection.
+- [x] `PERF_BUDGETS.md`: budget row and the "Where the bytes go" subsection.
 
 ## Dependencies
 
@@ -234,9 +235,9 @@ full copy of the `Layer` methods, and nothing reports it.
 
 ## Success Metrics
 
-- [ ] One command attributes every raw byte of the scatter to a crate, function
+- [x] One command attributes every raw byte of the scatter to a crate, function
       or data segment.
-- [ ] The marginal cost of a row type is a number in `PERF_BUDGETS.md`, printed
+- [x] The marginal cost of a row type is a number in `PERF_BUDGETS.md`, printed
       by every `mask wasm-size` run.
 
 ## Risk Assessment
@@ -250,10 +251,71 @@ full copy of the `Layer` methods, and nothing reports it.
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] `mask wasm-size`, `mask wasm-attrib` and `mask wasm-browser` pass
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] `mask wasm-size`, `mask wasm-attrib` and `mask wasm-browser` pass
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- **AC1 spike**: `nix shell nixpkgs#twiggy` fetched twiggy 0.8.0. It parses the
+  bound scatter with names and prints function names (for example
+  `gup_core::shader::glue::emit::h...`, 14,867 B), so the tool is twiggy and it
+  joins the dev shell in `flake.nix`. No Python fallback was needed.
+- `scripts/wasm_attrib.sh` (`mask wasm-attrib`) runs `twiggy top -f csv` and
+  aggregates `== top`, `== monos` (groups of two or more instantiations) and
+  `== crates` with an inline `python3 -I` stdlib step. The 263,564 B name
+  section is reported apart (not shipped).
+- Harness feature `extra-row-type` and `render_extra_row_type`; the default
+  bound wasm is byte-identical (sha256 bd70eb2d... before and after).
+- `scripts/wasm_size.sh` builds `gup-core-scatter+T` first, then the default.
+  `wasm.per_row_type.gz_bytes` = 3,674 (402,301 - 398,627), 0.92% of the
+  scatter, recorded as `info`; `wasm.scatter` and `wasm.over_wgpu` unchanged.
+- `PERF_BUDGETS.md` "Where the bytes go (GUP-450)" records the tables.
+- Checks: `mask all-fix`, `wasm-size`, `wasm-browser` (GUP PASS), `old-path-loc`
+  (TOTAL 28910) pass.
+
+## Retrospective
+
+**Completed**: 2026-10-18
+
+### Key Technical Learnings
+
+#### twiggy 0.8 parses current rustc output
+
+- **Challenge**: the story feared twiggy 0.7's parser predates reference-types
+  and multi-value.
+- **Solution**: nixpkgs ships 0.8.0, which reads the file; its `-f csv` output
+  is easy to aggregate.
+- **Pattern**: `twiggy top -n 1000000 -f csv` gives every item; do crate and
+  mono grouping in a few lines of stdlib Python.
+
+#### Bound file size depends on the out-name
+
+- Binding with `--out-name scatter` instead of `s` gave a file 1,962 B larger
+  than the same build bound as `s`: the name is embedded. Percentages in
+  `wasm-attrib` use the file it actually bound.
+
+### Architectural Decisions
+
+#### Feature, not a second crate
+
+- **Decision**: as the story specifies. The extra build costs seconds with
+  shared dependencies (the second link was quick locally).
+- **Trade-off**: `wasm_size.sh` leaves the default artifact last, so
+  `wasm_browser.sh` is unaffected.
+
+### Development Workflow Insights
+
+- A row type's marginal cost for a bare interactive `Circle` layer is 3.7 KB gz,
+  below GUP-445's 5.8 KB estimate and the Context's per-method figures, since gz
+  shares much with the existing seven instantiations.
+- The twiggy `top` list repeats each `Layer` instantiation as a separate item;
+  only `== monos` shows the generic cost.
+
+### Follow-up Stories
+
+None.

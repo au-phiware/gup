@@ -65,6 +65,25 @@ disk is tight. See `scripts/wasm_size.sh` and `crates/gup-core/PERF_BUDGETS.md`.
 ./scripts/wasm_size.sh
 ```
 
+## wasm-attrib
+
+Where the reference scatter's WASM bytes go (GUP-450). Builds the scatter
+harness exactly as `wasm-size` does, runs `wasm-bindgen --target web` keeping
+the name section (the file a user ships, minus its names; cargo's own output
+still holds wasm-bindgen's describe functions), and prints three sections with
+`twiggy` (pinned in the dev shell): `== top`, the 30 largest functions and data
+segments; `== monos`, generic functions grouped by path with the instantiation
+hash removed, the 20 largest groups, each with its instantiation count and
+total; and `== crates`, raw bytes summed by crate (the first path segment of the
+demangled name), with data segments as `data` and everything else as `other`.
+The name section itself is listed apart, since it is not shipped. Sizes are
+**raw** bytes: find targets with this, and judge a cut by the gz totals of
+`mask wasm-size`. Local only, not a CI job. See `scripts/wasm_attrib.sh`.
+
+```bash
+./scripts/wasm_attrib.sh
+```
+
 ## perf-budget
 
 gup-core's performance budgets (GUP-417): run `zoom_bench` (100K points,

@@ -53,30 +53,31 @@ script says when that happened and its timing checks were weak. Under `Fifo`
 pass, flagged for re-recording when it is more than N% faster), `<= X` (at most
 X) or `info` (printed, never fails).
 
-| Metric                            | Recorded  | Check     | Measured by                                       |
-| --------------------------------- | --------- | --------- | ------------------------------------------------- |
-| `zoom.size`                       | 1920x1080 | exact     | `zoom_bench` (fullscreen; other sizes: re-record) |
-| `zoom.samples`                    | 1         | exact     | `zoom_bench` (`DEFAULT_SAMPLES`)                  |
-| `zoom.gpu_clock.median_mhz`       | 350       | info      | `scripts/perf_budget.sh` (i915 sysfs)             |
-| `zoom.gpu_pass.median_ms`         | 2.95      | +20%      | `zoom_bench`, timestamp queries                   |
-| `zoom.gpu_pass.p95_ms`            | 5.60      | +25%      | `zoom_bench`, timestamp queries                   |
-| `zoom.cpu.median_ms`              | 0.69      | +20%      | `zoom_bench`, resolve + prepare + submit          |
-| `zoom.cpu.p95_ms`                 | 0.86      | +25%      | `zoom_bench`, resolve + prepare + submit          |
-| `zoom.interval.median_ms`         | 4.91      | info      | `zoom_bench` (GPU-bound: follows the GPU pass)    |
-| `zoom.columns.bytes`              | 0         | exact     | `zoom_bench`, over the 600 measured frames        |
-| `zoom.columns.writes`             | 0         | exact     | `zoom_bench`                                      |
-| `zoom.validity.bytes`             | 0         | exact     | `zoom_bench`                                      |
-| `zoom.uniforms.bytes_per_frame`   | 136       | exact     | `zoom_bench`                                      |
-| `zoom.uniforms.writes_per_frame`  | 3         | exact     | `zoom_bench`                                      |
-| `zoom.instances.bytes`            | 5,631,168 | exact     | `zoom_bench`, over the 600 measured frames        |
-| `zoom.instances.writes_per_frame` | 3         | exact     | `zoom_bench`                                      |
-| `zoom.textures.bytes`             | 0         | exact     | `zoom_bench`                                      |
-| `pipeline.link_create.median_ms`  | 1.11      | +20%      | `pipeline_timings`, 20 runs, fresh cache each     |
-| `pipeline.link_create.cold_ms`    | 1.04      | <= 10     | `pipeline_timings`, its first run                 |
-| `pipeline.link_create.max_ms`     | 1.06      | info      | `pipeline_timings`                                |
-| `wasm.wgpu.gz_bytes`              | 41,712    | info      | `scripts/wasm_size.sh`, bare wgpu                 |
-| `wasm.scatter.gz_bytes`           | 398,627   | +2%       | `scripts/wasm_size.sh`, the reference scatter     |
-| `wasm.over_wgpu.gz_bytes`         | 356,914   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10       |
+| Metric                            | Recorded  | Check     | Measured by                                         |
+| --------------------------------- | --------- | --------- | --------------------------------------------------- |
+| `zoom.size`                       | 1920x1080 | exact     | `zoom_bench` (fullscreen; other sizes: re-record)   |
+| `zoom.samples`                    | 1         | exact     | `zoom_bench` (`DEFAULT_SAMPLES`)                    |
+| `zoom.gpu_clock.median_mhz`       | 350       | info      | `scripts/perf_budget.sh` (i915 sysfs)               |
+| `zoom.gpu_pass.median_ms`         | 2.95      | +20%      | `zoom_bench`, timestamp queries                     |
+| `zoom.gpu_pass.p95_ms`            | 5.60      | +25%      | `zoom_bench`, timestamp queries                     |
+| `zoom.cpu.median_ms`              | 0.69      | +20%      | `zoom_bench`, resolve + prepare + submit            |
+| `zoom.cpu.p95_ms`                 | 0.86      | +25%      | `zoom_bench`, resolve + prepare + submit            |
+| `zoom.interval.median_ms`         | 4.91      | info      | `zoom_bench` (GPU-bound: follows the GPU pass)      |
+| `zoom.columns.bytes`              | 0         | exact     | `zoom_bench`, over the 600 measured frames          |
+| `zoom.columns.writes`             | 0         | exact     | `zoom_bench`                                        |
+| `zoom.validity.bytes`             | 0         | exact     | `zoom_bench`                                        |
+| `zoom.uniforms.bytes_per_frame`   | 136       | exact     | `zoom_bench`                                        |
+| `zoom.uniforms.writes_per_frame`  | 3         | exact     | `zoom_bench`                                        |
+| `zoom.instances.bytes`            | 5,631,168 | exact     | `zoom_bench`, over the 600 measured frames          |
+| `zoom.instances.writes_per_frame` | 3         | exact     | `zoom_bench`                                        |
+| `zoom.textures.bytes`             | 0         | exact     | `zoom_bench`                                        |
+| `pipeline.link_create.median_ms`  | 1.11      | +20%      | `pipeline_timings`, 20 runs, fresh cache each       |
+| `pipeline.link_create.cold_ms`    | 1.04      | <= 10     | `pipeline_timings`, its first run                   |
+| `pipeline.link_create.max_ms`     | 1.06      | info      | `pipeline_timings`                                  |
+| `wasm.wgpu.gz_bytes`              | 41,712    | info      | `scripts/wasm_size.sh`, bare wgpu                   |
+| `wasm.scatter.gz_bytes`           | 398,627   | +2%       | `scripts/wasm_size.sh`, the reference scatter       |
+| `wasm.over_wgpu.gz_bytes`         | 356,914   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10         |
+| `wasm.per_row_type.gz_bytes`      | 3,674     | info      | `scripts/wasm_size.sh`, one more Selection row type |
 
 A legitimate change that moves a number (a new guide, a bigger feature) records
 the new value here, in the same commit, with the reason in the story.
@@ -195,6 +196,78 @@ instance ranges) adds 3,566 B (+1.2%).
 Merging GUP-426 (legends, +10,242 B on its own) with GUP-431 gives 316,565 B
 (over bare wgpu 274,852), measured with `mask wasm-size` on the merge
 (2026-10-17). That is the recorded figure.
+
+### Where the bytes go (GUP-450)
+
+Measured 2026-10-18 at commit bf9e8b8 plus this story's harness feature (the
+default build is byte-identical), with `mask wasm-attrib`: the scatter as
+`wasm-bindgen --target web` writes it, names kept, read by twiggy 0.8.0. The
+file is 1,415,901 B raw; its 263,564 B name section is not shipped and is left
+out of the tables. Raw bytes, not gz: use them to find targets, and judge a cut
+by `mask wasm-size`.
+
+Ten largest crates (`data` is every data segment, mostly `.rodata`, which holds
+the two Inter subsets):
+
+| Crate                  | Raw B   | Share of file |
+| ---------------------- | ------- | ------------- |
+| `gup_core`             | 383,096 | 27.06%        |
+| `data`                 | 230,954 | 16.31%        |
+| `core`                 | 139,401 | 9.85%         |
+| `alloc`                | 65,994  | 4.66%         |
+| `ttf_parser`           | 60,704  | 4.29%         |
+| `other`                | 57,125  | 4.03%         |
+| `wasm_bindgen_futures` | 49,778  | 3.52%         |
+| `wgpu`                 | 31,887  | 2.25%         |
+| `fontdue`              | 21,305  | 1.50%         |
+| `hashbrown`            | 20,786  | 1.47%         |
+
+Ten largest generic groups (instantiation hash removed; groups of two or more):
+
+| Group                                                                                           | Instantiations | Raw B  |
+| ----------------------------------------------------------------------------------------------- | -------------- | ------ |
+| `<gup_core::selection::Selection<T,M> as gup_core::selection::Layer>::prepare`                  | 7              | 53,431 |
+| `wasm_bindgen_futures::future_to_promise::{{closure}}::{{closure}}`                             | 8              | 44,076 |
+| `<gup_core::selection::Selection<T,M> as gup_core::selection::Layer>::hit_items`                | 7              | 25,557 |
+| `<gup_core::selection::Selection<T,M> as gup_core::selection::Layer>::fit_domains`              | 7              | 24,675 |
+| `gup_core::selection::Selection<T,M>::attr`                                                     | 35             | 20,880 |
+| `gup_core::scope::<impl gup_core::context::Context>::scoped`                                    | 7              | 15,112 |
+| `hashbrown::raw::RawTable<T,A>::reserve_rehash`                                                 | 8              | 14,092 |
+| `<alloc::vec::Vec<T> as alloc::vec::spec_from_iter_nested::SpecFromIterNested<T,I>>::from_iter` | 23             | 12,118 |
+| `<alloc::vec::Vec<T> as alloc::vec::spec_from_iter::SpecFromIter<T,I>>::from_iter`              | 22             | 9,262  |
+| `<gup_core::selection::Selection<T,M> as gup_core::selection::Layer>::bind_axes`                | 7              | 8,995  |
+
+Ten largest single items:
+
+| Item                                                                           | Raw B   | Share of file |
+| ------------------------------------------------------------------------------ | ------- | ------------- |
+| `data segment ".rodata"`                                                       | 230,826 | 16.30%        |
+| `gup_core::shader::glue::emit`                                                 | 14,867  | 1.05%         |
+| `gup_core::plot::Plot::resolve`                                                | 13,342  | 0.94%         |
+| `ttf_parser::tables::cff::cff1::_parse_char_string`                            | 12,654  | 0.89%         |
+| `wasm_bindgen_futures::future_to_promise::{{closure}}::{{closure}}`            | 9,693   | 0.68%         |
+| `<gup_core::selection::Selection<T,M> as gup_core::selection::Layer>::prepare` | 7,633   | 0.54%         |
+| `<gup_core::selection::Selection<T,M> as gup_core::selection::Layer>::prepare` | 7,633   | 0.54%         |
+| `<gup_core::selection::Selection<T,M> as gup_core::selection::Layer>::prepare` | 7,633   | 0.54%         |
+| `<gup_core::selection::Selection<T,M> as gup_core::selection::Layer>::prepare` | 7,633   | 0.54%         |
+| `<gup_core::selection::Selection<T,M> as gup_core::selection::Layer>::prepare` | 7,633   | 0.54%         |
+
+These agree with the Context figures of GUP-450 within about 5% on the
+per-instantiation sizes (`Layer::prepare` 7,633 B here against 8,177 B,
+`hit_items` 3,651 B against 3,842 B, `fit_domains` 3,525 B against 3,712 B,
+`bind_axes` 1,285 B against 1,404 B, all with 7 instantiations); the sum of
+those four, 112,658 B, is below the scribe's 159,137 B for all `Layer` methods
+because it leaves out the others (`attr`, `scoped`, the `hit_items` closures).
+`ttf_parser` is 60.7 KB against about 64 KB, and the `wasm_bindgen_futures`
+closures 44.1 KB (the scribe's 59 KB included inlined scene functions that
+twiggy attributes to their callees). The scribe's figures were taken before
+wasm-bindgen, so they differ by the describe functions it removes.
+
+One more `Selection` row type (`wasm.per_row_type.gz_bytes`, the scatter built
+with and without the harness's `extra-row-type` feature) costs **3,674 B gz**,
+0.92% of the scatter's 398,627 B gz. That is a floor for an interactive layer of
+`Circle`s with a tooltip and a click handler: a row type that also carries other
+encodings or marks instantiates more of `attr`.
 
 ## CI-side proxies
 

@@ -19,4 +19,9 @@ web-sys = { version = "0.3", features = ["HtmlCanvasElement"] }
 wasm-bindgen = "0.2"
 wasm-bindgen-futures = "0.4"
 
+[features]
+# One more `Selection` row type, linked so `mask wasm-size` can measure what an
+# additional `T` costs (GUP-450). Off in the default build.
+extra-row-type = []
+
 [workspace]
