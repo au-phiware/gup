@@ -14,9 +14,9 @@ help: the trait `CpuMirror` is not implemented for `Gamma`
              Band
              Categorical
              Diverging
+             Offset
              ScaleRef<S>
              Sequential
              Symlog
              Then<A, B>
-             Time
            and $N others

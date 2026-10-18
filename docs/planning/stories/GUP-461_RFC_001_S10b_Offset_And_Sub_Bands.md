@@ -9,8 +9,8 @@ implementer-reason:
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 🚧 In Progress **Created**:
-2026-10-18
+**Initiative**: RFC-001 Migration **Status**: ✅ Complete 2026-10-19
+**Created**: 2026-10-18
 
 ## Context
 
@@ -54,25 +54,25 @@ fitted keys are shared as they are for any band encoding (GUP-433).
 
 ### AC1: `Offset`
 
-- [ ] `Offset` exists as in Decisions, in `crates/gup-core/src/scale/offset.rs`,
+- [x] `Offset` exists as in Decisions, in `crates/gup-core/src/scale/offset.rs`,
       exported at the crate root and in the prelude, with a doctest.
-- [ ] Conformance: `Linear.then(Offset::by(Derived::new(|| Px(12.5))))` and
+- [x] Conformance: `Linear.then(Offset::by(Derived::new(|| Px(12.5))))` and
       `Band.then(Offset::by(..))` match their CPU mirrors within 1e-4 px over
       the conformance inputs (new tests beside the chain test).
-- [ ] An `Offset` whose `Derived` changes between two resolves moves the marks
+- [x] An `Offset` whose `Derived` changes between two resolves moves the marks
       with 0 column bytes written and only uniform writes (count them).
 
 ### AC2: Sub-bands
 
-- [ ] `ScaleRef<Band>::sub_band` and `sub_band_width_px` exist as in Decisions,
+- [x] `ScaleRef<Band>::sub_band` and `sub_band_width_px` exist as in Decisions,
       with doctests. Unit tests check the centres and widths against the
       formulas for `count` 1, 2 and 4, on a normal and a reversed range.
-- [ ] `sub_band(0, 1)` places bars exactly where `encode_key` on the band does
+- [x] `sub_band(0, 1)` places bars exactly where `encode_key` on the band does
       (byte-identical render).
 
 ### AC3: Grouped bars, by hand
 
-- [ ] A golden, `gup_core/grouped_bars`: 3 quarters × 2 groups, two `Rect`
+- [x] A golden, `gup_core/grouped_bars`: 3 quarters × 2 groups, two `Rect`
       layers built with `Plot` (no builder). Each layer's x is
       `x.sub_band(i, 2).encode_key(..)`, its width is
       `x.sub_band_width_px(2, 0.1)`, and its fill comes from one shared
@@ -80,10 +80,10 @@ fitted keys are shared as they are for any band encoding (GUP-433).
   - two bars side by side in each band, with a visible gap between them;
   - the x tick labels under each band's centre;
   - one legend with both groups.
-- [ ] Pixel check: along a row through all bars, `dogfood/src/pixels.rs`'s
+- [x] Pixel check: along a row through all bars, `dogfood/src/pixels.rs`'s
       `count_runs` rule (non-background runs ≥ 3 px) counts exactly 6 runs.
       Reimplement it in the test; don't depend on the dogfood crate.
-- [ ] `pick_row` at each bar's centre returns that bar's row, and `pick_row_gpu`
+- [x] `pick_row` at each bar's centre returns that bar's row, and `pick_row_gpu`
       agrees.
 
 ## Decisions
@@ -147,10 +147,10 @@ fitted keys are shared as they are for any band encoding (GUP-433).
 
 ## Technical Tasks
 
-- [ ] `scale_offset.wgsl` registered in `gup-wgsl`'s library; `offset.rs`.
-- [ ] `sub_band`, `sub_band_width_px` and unit tests.
-- [ ] Conformance tests (AC1); golden and pick tests (AC3).
-- [ ] `mask wasm-size`: no change expected (the harness doesn't use it).
+- [x] `scale_offset.wgsl` registered in `gup-wgsl`'s library; `offset.rs`.
+- [x] `sub_band`, `sub_band_width_px` and unit tests.
+- [x] Conformance tests (AC1); golden and pick tests (AC3).
+- [x] `mask wasm-size`: no change expected (the harness doesn't use it).
 
 ## Dependencies
 
@@ -173,7 +173,7 @@ fitted keys are shared as they are for any band encoding (GUP-433).
 
 ## Success Metrics
 
-- [ ] Grouped bars render correctly from public API, without a builder.
+- [x] Grouped bars render correctly from public API, without a builder.
 
 ## Risk Assessment
 
@@ -182,13 +182,59 @@ fitted keys are shared as they are for any band encoding (GUP-433).
 
 ## Definition of Done
 
-- [ ] First code commit within 30 minutes of starting; then commit at each
+- [x] First code commit within 30 minutes of starting; then commit at each
       checkpoint (story-worker "Checkpoint rule")
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -p gup-core -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye: `gup_core/grouped_bars.png`
-- [ ] `mask old-path-loc` recorded (expected unchanged, 28,910)
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -p gup-core -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye: `gup_core/grouped_bars.png`
+- [x] `mask old-path-loc` recorded (expected unchanged, 28,910)
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `Offset` (`scale/offset.rs`, `scale_offset.wgsl`), exported and in the
+  prelude; `ScaleRef<Band>::sub_band` / `sub_band_width_px` in `band.rs`;
+  `Derived::get` (crate-private).
+- Tests: conformance `an_offset_link_matches_its_mirror` (3.6e-5 px max),
+  sub-band unit tests, `tests/grouped_bars.rs` (5 tests: golden plus SVG, six
+  runs, CPU/GPU picks, `sub_band(0, 1)` byte-identical, resize and
+  changed-offset write counts: 0 column bytes, 204 uniform bytes).
+- Golden `tests/golden/gup_core/grouped_bars.png`: three quarters, a gap between
+  each pair, ticks at band centres, one two-entry legend.
+- Three trybuild `.stderr` files re-blessed: `Offset` joins rustc's truncated
+  list of `CpuMirror` implementors and the library module list.
+- Gates: `mask old-path-loc` 28,910 (unchanged); wasm scatter 319,087 (budget
+  319,085 +2%); `mask wasm-browser` PASS; `mask perf-budget` all pass (load
+  average about 4).
+
+## Retrospective
+
+**Completed**: 2026-10-19
+
+### Key Technical Learnings
+
+#### Params padding
+
+- **Challenge**: the story's one-field WGSL `Params` fails the 16-byte span
+  rule.
+- **Solution**: three pad words, as `scale_band.wgsl` does.
+- **Pattern**: every uniform `Params` spans 16 bytes, even for one field.
+
+#### Snapshot drift
+
+- **Challenge**: a new public `CpuMirror` type changes trybuild's candidate
+  lists.
+- **Solution**: `TRYBUILD=overwrite`, then check the diff only adds `Offset`.
+
+### Architectural Decisions
+
+- None beyond the story. No escalation trigger fired: `then` follows a
+  `ScaleRef<Band>`, ticks and dictionary are shared, and a resize re-reads the
+  offset.
+
+### Follow-up Stories
+
+None.

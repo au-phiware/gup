@@ -1,5 +1,5 @@
 error: the WGSL of `Twice` (module `$CRATE::twice`) does not compose:
-       $DIR/tests/wgsl_function_fail/unknown_import.rs:11: `gup::scale::liner` is not a module this one can import (did you mean `gup::scale::linear`?); the library has: gup::view, gup::marks::circle, gup::color::categorical, gup::color::diverging, gup::color::sequential, gup::coverage, gup::marks::line, gup::marks::rect, gup::scale::band, gup::scale::linear, gup::scale::log, gup::scale::pow, gup::scale::symlog, gup::scale::time, gup::marks::segment
+       $DIR/tests/wgsl_function_fail/unknown_import.rs:11: `gup::scale::liner` is not a module this one can import (did you mean `gup::scale::linear`?); the library has: gup::view, gup::marks::circle, gup::color::categorical, gup::color::diverging, gup::color::sequential, gup::coverage, gup::marks::line, gup::marks::rect, gup::scale::band, gup::scale::linear, gup::scale::log, gup::scale::offset, gup::scale::pow, gup::scale::symlog, gup::scale::time, gup::marks::segment
   --> tests/wgsl_function_fail/unknown_import.rs:10:24
    |
 10 | #[wgsl_function(wgsl = r#"
