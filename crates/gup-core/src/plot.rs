@@ -571,6 +571,28 @@ impl Plot {
             .find_map(|l| l.as_any_mut().downcast_mut())
     }
 
+    /// Every layer of type `Selection<T, M>`, in the order added.
+    ///
+    /// ```
+    /// use gup_core::prelude::*;
+    /// let mut plot = Plot::new();
+    /// plot.x(Linear::new());
+    /// plot.line([(0.0, 1.0), (1.0, 2.0)]);
+    /// plot.line([(0.0, 2.0), (1.0, 1.0)]);
+    /// for layer in plot.layers_mut::<(f64, f64), Line>() {
+    ///     layer.width(Px(3.0));
+    /// }
+    /// assert_eq!(plot.layers_mut::<(f64, f64), Line>().count(), 2);
+    /// ```
+    pub fn layers_mut<T: Send + Sync + 'static, M: Mark>(
+        &mut self,
+    ) -> impl Iterator<Item = &mut Selection<T, M>> {
+        self.revision = self.revision.wrapping_add(1);
+        self.layers
+            .iter_mut()
+            .filter_map(|l| l.as_any_mut().downcast_mut())
+    }
+
     /// The layer at `index`, as a test reaches it (counts as a change).
     #[cfg(test)]
     fn layer_at_mut<T: Send + Sync + 'static, M: Mark>(

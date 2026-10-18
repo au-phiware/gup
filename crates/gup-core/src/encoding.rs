@@ -615,6 +615,23 @@ impl ColumnValue for f32 {
     }
 }
 
+/// `None` is a null: it holds NaN, and a row with a null position or size
+/// is not drawn.
+impl ColumnValue for Option<f64> {
+    type Gpu = f32;
+    fn to_f64(self) -> f64 {
+        self.unwrap_or(f64::NAN)
+    }
+}
+
+/// `None` is a null, as for `Option<f64>`.
+impl ColumnValue for Option<f32> {
+    type Gpu = f32;
+    fn to_f64(self) -> f64 {
+        self.map_or(f64::NAN, f64::from)
+    }
+}
+
 /// An accessor composed with an encoding function, made by
 /// [`EncodeFn::encode`].
 #[derive(Clone)]

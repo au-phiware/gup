@@ -53,8 +53,10 @@
 //! gup_core::show(chart).unwrap();
 //! ```
 
+pub(crate) mod line;
 pub(crate) mod scatter;
 
+pub use line::{LineChart, line};
 pub use scatter::{ScatterChart, scatter};
 
 /// The message of the panic when a layer setter is called on a chart that
