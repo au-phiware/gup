@@ -398,6 +398,31 @@ impl PickIndex {
         Some(Hit { row, anchor })
     }
 
+    /// Every item within `reach` of `at` (tests): its signed distance, the
+    /// row a pick of it reports, and for a capsule how much nearer one end
+    /// is than the other.
+    #[cfg(test)]
+    pub(crate) fn hits_at(&self, at: Point, reach: f32) -> Vec<(f32, RowId, Option<f32>)> {
+        let q = [at.x, at.y];
+        self.items
+            .iter()
+            .filter_map(|item| {
+                let d = item.shape.distance(q);
+                (d <= reach).then(|| {
+                    let (row, _) = item.shape.anchor(q, item.row);
+                    let gap = match item.shape {
+                        Shape::Capsule { a, b, .. } => Some(
+                            (hypot(q[0] - a[0], q[1] - a[1]) - hypot(q[0] - b[0], q[1] - b[1]))
+                                .abs(),
+                        ),
+                        _ => None,
+                    };
+                    (d, row, gap)
+                })
+            })
+            .collect()
+    }
+
     /// Where a tooltip for `row` attaches, if it is drawn.
     pub(crate) fn anchor(&self, row: RowId) -> Option<Point> {
         self.items.iter().find_map(|item| {

@@ -515,3 +515,6 @@ impl GpuPicker {
         ((self.pick_buffer.size() - entry) / DYNAMIC_ALIGN + 1) as usize
     }
 }
+
+#[cfg(test)]
+mod tests;

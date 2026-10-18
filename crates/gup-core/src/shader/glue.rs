@@ -709,11 +709,18 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
     }
 }
 
+/// Texels per logical pixel in a GPU pick's one-texel target. A
+/// rasteriser snaps vertices to 1/256 of a texel (8 subpixel bits), and
+/// varyings follow the snapped vertices, so at one texel per pixel `local`
+/// would be off by up to 0.004 px; at 256 the snap is 1/65,536 px and the
+/// pick's distances match the CPU's to about 1e-5 px (GUP-455).
+const PICK_ZOOM: f32 = 256.0;
+
 /// The pick variant of a glue module (RFC-001 S9d): `head` (imports,
 /// structs, bindings) and the vertex `body` of `vs_main`, with entry points
 /// that draw into a one-texel `Rg32Uint` target whose centre is the
 /// pointer. `vs_pick` moves the pointer to the texel's centre, scaling one
-/// logical pixel to one texel; `fs_pick` writes `(layer + 1, row + 1)` and
+/// logical pixel to [`PICK_ZOOM`] texels; `fs_pick` writes `(layer + 1, row + 1)` and
 /// a depth that encodes the mark's signed distance, so a `LessEqual` test
 /// in draw order keeps the CPU pick's winner.
 fn pick_source(
@@ -751,8 +758,8 @@ fn pick_source(
     }
     let _ = writeln!(
         w,
-        "    out.clip = vec4<f32>((out.clip.xy - u_pick.at * out.clip.w) * u_view.size, \
-         out.clip.zw);\n    return out;\n}}"
+        "    out.clip = vec4<f32>((out.clip.xy - u_pick.at * out.clip.w) * u_view.size * \
+         {PICK_ZOOM:?}, out.clip.zw);\n    return out;\n}}"
     );
     let _ = writeln!(
         w,

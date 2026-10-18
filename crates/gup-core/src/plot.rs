@@ -715,7 +715,7 @@ impl Plot {
     }
 
     /// The pick index for the current resolve, built on first use.
-    fn pick_index(&mut self) -> Option<&PickIndex> {
+    pub(crate) fn pick_index(&mut self) -> Option<&PickIndex> {
         let plot = self.layout()?.plot;
         let key = (self.generation, self.revision_sum());
         if self
