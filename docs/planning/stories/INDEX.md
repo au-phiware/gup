@@ -382,7 +382,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   S10b: an `Offset` link (`gup::scale::offset`) and `ScaleRef<Band>::sub_band` /
   `sub_band_width_px`, so grouped bars sit side by side in each band. Deps:
   GUP-418 ✅, GUP-419 ✅, GUP-429 ✅, GUP-433 ✅.
-- [GUP-462](GUP-462_RFC_001_S10c_Chart_Builders_And_Scatter.md) 📋 — RFC-001
+- [GUP-462](GUP-462_RFC_001_S10c_Chart_Builders_And_Scatter.md) 🚧 — RFC-001
   step S10c: the builder pattern (by-value setters, default colour and size
   scales, escape hatches, `Chart` impl) and `gup_core::scatter`, byte-identical
   to the hand-built reference scatter. Deps: GUP-447 ✅, GUP-434 ✅, GUP-460 📋.
