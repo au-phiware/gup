@@ -907,6 +907,11 @@ impl<V: Visual> Derived<V> {
     pub fn new(f: impl Fn() -> V + Send + Sync + 'static) -> Self {
         Self(Arc::new(f))
     }
+
+    /// Read the value now.
+    pub(crate) fn get(&self) -> V {
+        (self.0)()
+    }
 }
 
 impl<V> Clone for Derived<V> {

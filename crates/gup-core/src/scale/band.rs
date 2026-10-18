@@ -6,10 +6,11 @@
 //! WGSL function, `offset + step · code`, and take their domain, the
 //! channel's keys in first-seen order, from [`ShaderFn::fit_keys`].
 
+use super::Offset;
 use super::{PositionScale, ScaleRef, Ticks};
 use crate::channel::Px;
 use crate::column::{ColumnFormat, NULL_CODE};
-use crate::encoding::{CpuMirror, Derived, ShaderFn};
+use crate::encoding::{CpuMirror, Derived, EncodeFn, ShaderFn, Then};
 use crate::error::{Error, Result};
 use crate::shader::{SCALE_BAND, WgslModule};
 use std::sync::Arc;
@@ -220,6 +221,69 @@ impl ScaleRef<Band> {
         let band = self.clone();
         Derived::new(move || Px(band.read().band_width().abs() as f32))
     }
+
+    /// The centre of slot `index` of `count` equal slots across each band:
+    /// grouped bars. Encode keys through it as through the band
+    /// (`x.sub_band(1, 2).encode_key(..)`); the keys, the axis ticks and
+    /// the dictionary are the band's own. The offset from the band's
+    /// centre, `((index + 0.5) / count − 0.5) · band_width`, is read each
+    /// time the plot resolves, so it follows the plot rect and the keys.
+    /// Pair it with [`sub_band_width_px`](Self::sub_band_width_px).
+    ///
+    /// ```
+    /// use gup_core::prelude::*;
+    ///
+    /// let x = ScaleRef::new(Band::new().padding(0.25).range(Px(0.0), Px(325.0)));
+    /// x.write().fit_keys(&["Mon".into(), "Tue".into(), "Wed".into()])?;
+    /// // Bands 75 px wide centred at 62.5, 162.5, …; two slots of 37.5 px.
+    /// let right = x.sub_band(1, 2);
+    /// assert_eq!(right.eval(0.0), 62.5 + 18.75);
+    /// assert_eq!(x.sub_band(0, 2).eval(0.0), 62.5 - 18.75);
+    /// # Ok::<(), gup_core::Error>(())
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// If `count` is 0 or `index >= count`.
+    pub fn sub_band(&self, index: u32, count: u32) -> Then<ScaleRef<Band>, Offset> {
+        check_slot("sub_band", index, count);
+        let band = self.clone();
+        let offset = Derived::new(move || {
+            let w = band.read().band_width();
+            Px((((f64::from(index) + 0.5) / f64::from(count) - 0.5) * w) as f32)
+        });
+        self.clone().then(Offset::by(offset))
+    }
+
+    /// A bar's width in a slot of `count` across each band: the slot's
+    /// width less `padding` (in `0..1`) of it, `|band_width| / count ·
+    /// (1 − padding)`, read each time the plot resolves. Bind it to
+    /// `Rect::WIDTH`.
+    ///
+    /// ```
+    /// use gup_core::prelude::*;
+    ///
+    /// let x = ScaleRef::new(Band::new().padding(0.25).range(Px(0.0), Px(325.0)));
+    /// x.write().fit_keys(&["Mon".into(), "Tue".into(), "Wed".into()])?;
+    /// let _width: Derived<Px> = x.sub_band_width_px(2, 0.1);
+    /// # Ok::<(), gup_core::Error>(())
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// If `count` is 0 or `padding` is not in `0..1`.
+    pub fn sub_band_width_px(&self, count: u32, padding: f64) -> Derived<Px> {
+        check_slot("sub_band_width_px", 0, count);
+        assert!(
+            (0.0..1.0).contains(&padding),
+            "sub_band_width_px: padding must be in 0..1, not {padding}"
+        );
+        let band = self.clone();
+        Derived::new(move || {
+            let w = band.read().band_width().abs();
+            Px((w / f64::from(count) * (1.0 - padding)) as f32)
+        })
+    }
 }
 
 /// A point position scale: each key of a dictionary-encoded channel gets
@@ -377,6 +441,14 @@ macro_rules! ordinal_scale {
 ordinal_scale!(Band);
 ordinal_scale!(Point);
 
+fn check_slot(what: &str, index: u32, count: u32) {
+    assert!(count > 0, "{what}: count must be at least 1");
+    assert!(
+        index < count,
+        "{what}: index {index} is out of range for {count} slots"
+    );
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -447,5 +519,47 @@ mod tests {
             "{err}"
         );
         assert_eq!(Band::new().current_domain(), None);
+    }
+
+    /// GUP-461 AC2: slot centres and widths follow the formulas, on a
+    /// normal and a reversed range.
+    #[test]
+    fn sub_bands_split_each_band_into_equal_slots() {
+        for (r0, r1) in [(40.0, 340.0), (340.0, 40.0)] {
+            let x = ScaleRef::new(Band::new().range(Px(r0), Px(r1)));
+            x.write().fit_keys(&keys(3)).unwrap();
+            let w = x.read().band_width();
+            for count in [1u32, 2, 4] {
+                let width = x.sub_band_width_px(count, 0.25).get().0;
+                let expected = (w.abs() / f64::from(count) * 0.75) as f32;
+                assert!((width - expected).abs() < 1e-4, "{count}: {width}");
+                for index in 0..count {
+                    let slot = x.sub_band(index, count);
+                    for code in 0..3 {
+                        let centre = x.read().eval(f64::from(code));
+                        let want = centre + ((f64::from(index) + 0.5) / f64::from(count) - 0.5) * w;
+                        let got = slot.eval(f64::from(code));
+                        assert!(
+                            (got - want).abs() < 1e-4,
+                            "{index}/{count}: {got} vs {want}"
+                        );
+                    }
+                }
+            }
+            // One slot is the band itself.
+            assert!((x.sub_band(0, 1).eval(1.0) - x.read().eval(1.0)).abs() < 1e-4);
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "out of range")]
+    fn sub_band_index_must_be_in_range() {
+        let _ = ScaleRef::new(Band::new()).sub_band(2, 2);
+    }
+
+    #[test]
+    #[should_panic(expected = "at least 1")]
+    fn sub_band_count_must_be_positive() {
+        let _ = ScaleRef::new(Band::new()).sub_band_width_px(0, 0.1);
     }
 }

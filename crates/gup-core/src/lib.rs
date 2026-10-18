@@ -146,8 +146,8 @@ pub use plot::{Layout, PlacedText, Plot, Resolved};
 pub use render::{PipelineStats, Prepared, Renderer, TargetDesc};
 pub use scale::{
     Band, CATEGORICAL_COLORS, Categorical, ColorScale, Diverging, Legend, Linear, Log, MAX_PALETTE,
-    NULL_COLOR, OKABE_ITO, Point, PositionScale, Pow, Ramp, RampTick, ScaleRef, Sequential, Swatch,
-    Symlog, Ticks, Time,
+    NULL_COLOR, OKABE_ITO, Offset, Point, PositionScale, Pow, Ramp, RampTick, ScaleRef, Sequential,
+    Swatch, Symlog, Ticks, Time,
 };
 pub use scene::Scene;
 pub use selection::{Retain, Selection};
@@ -296,7 +296,7 @@ pub mod prelude {
     pub use crate::{
         Axes, Band, Categorical, Chart, ChartExt, Circle, CircleAttrs, Color, ColorScale, Context,
         CpuMirror, Derived, Diverging, Drag, EncodeFn, Event, Line, LineAttrs, Linear, Log, Mark,
-        Plot, Point, PositionScale, Pow, Px, Rect, RectAttrs, Retain, ScaleRef, Segment,
+        Offset, Plot, Point, PositionScale, Pow, Px, Rect, RectAttrs, Retain, ScaleRef, Segment,
         SegmentAttrs, Selection, Sequential, ShaderFn, Symlog, Theme, Time, Unit, wgsl_function,
     };
 }

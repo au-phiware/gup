@@ -2153,7 +2153,7 @@ mod tests {
     fn rust_params_match_wgsl_params() {
         use crate::shader::{
             COLOR_CATEGORICAL, COLOR_DIVERGING, COLOR_SEQUENTIAL, SCALE_LINEAR, SCALE_LOG,
-            SCALE_POW, SCALE_SYMLOG, SCALE_TIME,
+            SCALE_OFFSET, SCALE_POW, SCALE_SYMLOG, SCALE_TIME,
         };
         use encase::ShaderType;
         for (module, size) in [
@@ -2164,6 +2164,7 @@ mod tests {
             (&SCALE_LINEAR, crate::scale::LinearParams::min_size().get()),
             (&SCALE_LOG, crate::scale::LogParams::min_size().get()),
             (&SCALE_TIME, crate::scale::LinearParams::min_size().get()),
+            (&SCALE_OFFSET, crate::scale::OffsetParams::min_size().get()),
             (&SCALE_POW, crate::scale::PowParams::min_size().get()),
             (&SCALE_SYMLOG, crate::scale::SymlogParams::min_size().get()),
             (

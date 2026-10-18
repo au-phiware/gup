@@ -970,3 +970,40 @@ mod chunk_boundary {
         }
     }
 }
+
+/// GUP-461 AC1: `Linear` then `Offset` and `Band` then `Offset` match their
+/// CPU mirrors (within 1e-4 px; the ranges are a few hundred pixels, so an
+/// `f32` result is that exact).
+#[test]
+fn an_offset_link_matches_its_mirror() {
+    use super::Offset;
+    use crate::encoding::Derived;
+    let cx = Context::new_blocking().unwrap();
+    let mut worst = 0.0f64;
+
+    let linear = Linear::new()
+        .domain(0.0, 10.0)
+        .range(Px(0.0), Px(256.0))
+        .then(Offset::by(Derived::new(|| Px(12.5))));
+    let inputs: Vec<f64> = (0..SAMPLES)
+        .map(|i| 10.0 * i as f64 / (SAMPLES - 1) as f64)
+        .collect();
+    let gpu = dispatch(&cx, &linear, &inputs, None);
+    for (g, &x) in gpu.iter().zip(&inputs) {
+        worst = worst.max((f64::from(*g) - linear.eval(x)).abs());
+    }
+
+    for (r0, r1) in [(40.0, 360.0), (260.0, 20.0)] {
+        let mut band = Band::new().range(Px(r0), Px(r1));
+        band.fit_keys(&(0..7).map(|i| format!("k{i}").into()).collect::<Vec<_>>())
+            .unwrap();
+        let chain = band.then(Offset::by(Derived::new(|| Px(-9.25))));
+        let codes: Vec<f64> = (0..7).map(f64::from).collect();
+        let gpu = dispatch(&cx, &chain, &codes, None);
+        for (g, &c) in gpu.iter().zip(&codes) {
+            worst = worst.max((f64::from(*g) - chain.eval(c)).abs());
+        }
+    }
+    eprintln!("offset chains: max |gpu - cpu| = {worst:.2e} px");
+    assert!(worst <= 1e-4, "max |gpu - cpu| = {worst} px");
+}
