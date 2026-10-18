@@ -9,7 +9,9 @@
 //! the same `gup_text::Font` measurements the GPU path lays out with, so
 //! margins and anchors match the PNG.
 //!
-//! **Data marks are vector shapes** (GUP-467): one `<g>` per layer, with
+//! **Data marks are vector shapes** (GUP-467, feature `svg`, on by default;
+//! without it a scene with a data layer is an error and only guides are
+//! written): one `<g>` per layer, with
 //! the layer's clip, holding a `<circle>`, `<rect>`, `<line>` or
 //! `<polyline>` per mark, in the order the GPU draws them. Positions,
 //! sizes and colours come from the CPU mirrors picking uses
@@ -45,7 +47,10 @@
 
 use crate::channel::Color;
 use crate::error::{Error, Result};
-use crate::scene::{GradientDirection, HAlign, ItemKind, MarkBatch, Scene, Weight};
+#[cfg(feature = "svg")]
+use crate::scene::MarkBatch;
+use crate::scene::{GradientDirection, HAlign, ItemKind, Scene, Weight};
+#[cfg(feature = "svg")]
 use crate::vector::{LayerVector, VectorMark};
 use std::fmt::Write as _;
 
@@ -270,12 +275,16 @@ impl SvgTarget {
             )?;
         }
         let mut gradient = 0;
+        #[cfg(feature = "svg")]
         let mut layer = 0;
         for item in &scene.items {
             if let Some(clip) = item.clip {
                 writeln!(s, r#"<g clip-path="url(#clip{})">"#, clip.0)?;
             }
             match &item.kind {
+                #[cfg(not(feature = "svg"))]
+                ItemKind::Marks(_) => unreachable!("rejected before writing"),
+                #[cfg(feature = "svg")]
                 ItemKind::Marks(batch) => {
                     if item.clip.is_none() {
                         s.push_str("<g>\n");
@@ -378,6 +387,24 @@ impl VectorTarget for SvgTarget {
     /// Write `scene`: its guides and its data marks (see the
     /// [module docs](self) for the layers that are skipped).
     fn render(&mut self, scene: &Scene) -> Result<()> {
+        #[cfg(not(feature = "svg"))]
+        {
+            let marks = scene
+                .items
+                .iter()
+                .filter(|i| matches!(i.kind, ItemKind::Marks(_)))
+                .count();
+            if marks > 0 {
+                return Err(Error::config(
+                    "svg scene",
+                    format!(
+                        "it has {marks} data layer(s) and gup-core was built without its \
+                         `svg` feature, so SvgTarget writes guides only; render \
+                         `scene.guides()` or enable the feature"
+                    ),
+                ));
+            }
+        }
         self.svg = self
             .write(scene)
             .map_err(|e| Error::config("svg target", e.to_string()))?;
@@ -385,6 +412,7 @@ impl VectorTarget for SvgTarget {
     }
 }
 
+#[cfg(feature = "svg")]
 /// One layer's `<g>` contents, or the comment saying why there are none.
 fn write_layer(
     s: &mut String,
@@ -510,6 +538,7 @@ fn write_layer(
     Ok(())
 }
 
+#[cfg(feature = "svg")]
 /// A mark coordinate or size with at most two decimals and no trailing
 /// zeros.
 fn num2(v: f32) -> String {

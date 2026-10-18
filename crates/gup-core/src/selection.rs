@@ -23,6 +23,7 @@ use crate::scale::{DynPositionScale, Legend};
 use crate::scene::MarkBatch;
 use crate::shader::glue::{self, ChannelSource, ChunkBase, Glue, GlueChannel, GlueSpec};
 use crate::theme::Theme;
+#[cfg(feature = "svg")]
 use crate::vector::{CpuLayer, LayerVector, MarkKind, VChan};
 use std::any::Any;
 use std::marker::PhantomData;
@@ -685,8 +686,22 @@ fn axis_scale_for<'s>(
 }
 
 impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
+    /// The batch's vector slot: the snapshot with the `svg` feature.
+    #[cfg(feature = "svg")]
+    fn vector_slot(&self, theme: &Theme, entries: &[DrawEntry]) -> Arc<LayerVector> {
+        Arc::new(self.vector(theme, entries))
+    }
+
+    /// The batch's vector slot: nothing without the `svg` feature.
+    #[cfg(not(feature = "svg"))]
+    #[expect(clippy::unused_self, reason = "the `svg` build's slot reads the layer")]
+    fn vector_slot(&self, _theme: &Theme, _entries: &[DrawEntry]) -> crate::scene::VectorSlot {
+        crate::scene::VectorSlot
+    }
+
     /// What a vector target needs to write the layer's marks (GUP-467), as
     /// it is now: see [`LayerVector`].
+    #[cfg(feature = "svg")]
     fn vector(&self, theme: &Theme, entries: &[DrawEntry]) -> LayerVector {
         use crate::marks::{Circle, Line, Rect, Segment};
         use std::any::TypeId;
@@ -1077,7 +1092,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         let validity = |c| chunk_validity(reads_validity, c, cx);
         let stored = store.chunks();
         let entries = draw_entries(M::GEOMETRY, stored);
-        let vector = Arc::new(self.vector(theme, &entries));
+        let vector = self.vector_slot(theme, &entries);
         let uploaded = || {
             entries.iter().map(|d| {
                 let c = &stored[d.this];

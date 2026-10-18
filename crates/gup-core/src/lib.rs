@@ -115,6 +115,7 @@ mod svg;
 pub mod target;
 mod theme;
 mod tooltip;
+#[cfg(feature = "svg")]
 mod vector;
 #[cfg(all(feature = "web", target_arch = "wasm32"))]
 pub mod web;

@@ -268,3 +268,20 @@ pieces needed to emit vector marks exist.
 
 None new. A raster fallback above a mark-count threshold stays out of scope; the
 10k size (570 KB, 106 KB gz) is the input for that decision.
+
+### WASM size follow-up (2026-10-18)
+
+`mask wasm-attrib` against 8b6af25: gup_core +32 KB raw, all of it SVG-only code
+the scatter harness linked because it calls `SvgTarget::render`:
+`svg::write_layer` (with the inlined mark evaluation) 10.6 KB, the per-layer
+`vector()` snapshot inside `Selection::prepare` (about +7.9 KB over its three
+instantiations), `.rodata` +3 KB (format strings), and the `Arc`, mirror and
+`cpu_color` plumbing. That was +7 832 B gz. The marks code is now behind the
+default-on `svg` feature of gup-core (`vector`, `CpuColumns`,
+`EncodeFn::cpu_color`, `DynColumnEncoding::mirror`, `SvgTarget`'s mark writer);
+the harness builds without it. `ShaderFn::cpu_color` and the macro probe stay
+ungated (the macro cannot see gup-core's features, and they are dead-stripped).
+Without the feature `SvgTarget` still writes guides and a scene with a data
+layer is an error. Sizes: scatter 316 187 B gz (+385 B over the recorded 315
+804), over_wgpu 283 827 B (+385 B). `mask all-check` now also runs
+`cargo clippy -p gup-core --lib --no-default-features`.

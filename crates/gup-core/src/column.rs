@@ -841,6 +841,7 @@ fn decode_chunk(
 }
 
 /// One chunk of a [`CpuColumns`].
+#[cfg(feature = "svg")]
 #[derive(Clone, Debug)]
 struct CpuChunk {
     row_base: u64,
@@ -852,6 +853,7 @@ struct CpuChunk {
 /// A read-only copy of a [`ColumnStore`]'s CPU columns that shares the
 /// chunks' bytes: how a [`MarkBatch`](crate::scene::MarkBatch) lets a
 /// vector target decode positions long after the layer released its data.
+#[cfg(feature = "svg")]
 #[derive(Clone, Debug)]
 pub(crate) struct CpuColumns {
     formats: Vec<ColumnFormat>,
@@ -859,6 +861,7 @@ pub(crate) struct CpuColumns {
     chunks: Vec<CpuChunk>,
 }
 
+#[cfg(feature = "svg")]
 impl CpuColumns {
     /// First stored row of chunk `k`.
     pub(crate) fn row_base(&self, k: usize) -> u64 {
@@ -1191,6 +1194,7 @@ impl ColumnStore {
     /// holds its copy (see [`cpu_kept`](Self::cpu_kept)). Sharing the
     /// chunks' bytes costs nothing; an append to the last chunk copies it
     /// first (copy on write), so the view never changes (GUP-467).
+    #[cfg(feature = "svg")]
     pub(crate) fn cpu_snapshot(&self) -> Option<CpuColumns> {
         let chunks = self
             .chunks

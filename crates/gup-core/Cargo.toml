@@ -57,7 +57,11 @@ name = "zoom_bench"
 required-features = ["window"]
 
 [features]
-default = ["window"]
+default = ["window", "svg"]
+# Data marks in `SvgTarget` (GUP-467): the CPU mirrors and snapshots a layer
+# keeps for vector output. Without it, `SvgTarget` writes guides only and a
+# scene with a data layer is an error; the WASM size harness builds without it.
+svg = []
 # A winit window target and a minimal `show()`.
 window = ["dep:winit"]
 # A `<canvas>` target and host (`web::CanvasApp`); wasm32 only, no winit.

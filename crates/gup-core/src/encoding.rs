@@ -209,6 +209,7 @@ pub trait EncodeFn: Clone + Send + Sync + 'static {
     /// The colour the chain produces for column value `x`, if its last
     /// link is a colour function with a CPU mirror (see
     /// [`ShaderFn::cpu_color`]).
+    #[cfg(feature = "svg")]
     #[doc(hidden)]
     fn cpu_color(&self, x: f64) -> Option<crate::Color>;
 
@@ -445,6 +446,7 @@ impl<S: ShaderFn> EncodeFn for S {
         ShaderFn::image(self, extent)
     }
 
+    #[cfg(feature = "svg")]
     fn cpu_color(&self, x: f64) -> Option<crate::Color> {
         ShaderFn::cpu_color(self, x)
     }
@@ -561,6 +563,7 @@ where
         self.next.image(self.first.image(extent)?)
     }
 
+    #[cfg(feature = "svg")]
     fn cpu_color(&self, x: f64) -> Option<crate::Color> {
         self.next.cpu_color(self.first.eval(x))
     }
@@ -1011,6 +1014,7 @@ pub trait DynColumnEncoding<T>: Send + Sync {
     /// A frozen copy of the encoding function, without the accessor: what
     /// a vector target evaluates columns with after the layer has moved on
     /// (GUP-467).
+    #[cfg(feature = "svg")]
     #[doc(hidden)]
     fn mirror(&self) -> Arc<dyn ColumnMirror>;
     /// The legend of the encoding as fitted (see [`EncodeFn::legend`]).
@@ -1021,6 +1025,7 @@ pub trait DynColumnEncoding<T>: Send + Sync {
 
 /// The CPU twin of a column encoding's function (see
 /// [`DynColumnEncoding::mirror`]).
+#[cfg(feature = "svg")]
 #[doc(hidden)]
 pub trait ColumnMirror: Send + Sync {
     /// The numeric output (pixels, a size, an opacity) for column value
@@ -1031,8 +1036,10 @@ pub trait ColumnMirror: Send + Sync {
     fn color(&self, v: f64) -> Option<crate::Color>;
 }
 
+#[cfg(feature = "svg")]
 struct FuncMirror<E>(E);
 
+#[cfg(feature = "svg")]
 impl<E: EncodeFn> ColumnMirror for FuncMirror<E> {
     fn number(&self, v: f64) -> Option<f64> {
         self.0.image((v, v)).map(|(a, _)| a)
@@ -1076,6 +1083,7 @@ where
         self.func.image(extent)
     }
 
+    #[cfg(feature = "svg")]
     fn mirror(&self) -> Arc<dyn ColumnMirror> {
         Arc::new(FuncMirror(self.func.clone()))
     }
@@ -1127,6 +1135,7 @@ where
         self.func.image(extent)
     }
 
+    #[cfg(feature = "svg")]
     fn mirror(&self) -> Arc<dyn ColumnMirror> {
         Arc::new(FuncMirror(self.func.clone()))
     }
@@ -1146,6 +1155,7 @@ pub(crate) trait DynEncodeFn: Send + Sync {
     fn dyn_links(&self) -> Vec<&dyn DynShaderFn>;
     fn dyn_fit(&mut self, extent: (f64, f64)) -> Result<()>;
     fn dyn_image(&self, extent: (f64, f64)) -> Option<(f64, f64)>;
+    #[cfg(feature = "svg")]
     fn dyn_mirror(&self) -> Arc<dyn ColumnMirror>;
     fn dyn_legend(&self) -> Option<crate::Legend>;
     fn dyn_legend_over(&self, extent: (f64, f64)) -> Option<crate::Legend>;
@@ -1162,6 +1172,7 @@ impl<E: EncodeFn> DynEncodeFn for E {
     fn dyn_image(&self, extent: (f64, f64)) -> Option<(f64, f64)> {
         EncodeFn::image(self, extent)
     }
+    #[cfg(feature = "svg")]
     fn dyn_mirror(&self) -> Arc<dyn ColumnMirror> {
         Arc::new(FuncMirror(self.clone()))
     }
@@ -1218,6 +1229,7 @@ impl<T> DynColumnEncoding<T> for AxisEncoding<T> {
         self.func.dyn_image(extent)
     }
 
+    #[cfg(feature = "svg")]
     fn mirror(&self) -> Arc<dyn ColumnMirror> {
         self.func.dyn_mirror()
     }

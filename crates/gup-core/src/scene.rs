@@ -10,7 +10,6 @@ use crate::geom::{Point, Rect};
 use crate::render::{LayerGpu, Span};
 use crate::scale::Ramp;
 use crate::scale::sequential::sample_lut;
-use crate::vector::LayerVector;
 use std::sync::Arc;
 
 /// Default z-order of backgrounds and grids, below data layers.
@@ -153,12 +152,25 @@ pub struct MarkBatch {
     /// order (RFC-001 S9f): what a draw, a CPU pick and a GPU pick use.
     pub(crate) visible: Arc<[Span]>,
     /// What vector targets need to write the marks (GUP-467).
-    pub(crate) vector: Arc<LayerVector>,
+    #[cfg_attr(
+        not(feature = "svg"),
+        expect(dead_code, reason = "only vector targets read it")
+    )]
+    pub(crate) vector: VectorSlot,
 }
+
+/// What a batch carries for vector targets: the layer's CPU snapshot with
+/// the `svg` feature, nothing without it.
+#[cfg(feature = "svg")]
+pub(crate) type VectorSlot = Arc<crate::vector::LayerVector>;
+/// See the `svg` feature.
+#[cfg(not(feature = "svg"))]
+#[derive(Clone, Debug)]
+pub(crate) struct VectorSlot;
 
 impl MarkBatch {
     /// A batch that draws every span of `gpu`.
-    pub(crate) fn new(gpu: Arc<LayerGpu>, antialias: Antialias, vector: Arc<LayerVector>) -> Self {
+    pub(crate) fn new(gpu: Arc<LayerGpu>, antialias: Antialias, vector: VectorSlot) -> Self {
         let visible = gpu.spans.as_slice().into();
         Self {
             gpu,
