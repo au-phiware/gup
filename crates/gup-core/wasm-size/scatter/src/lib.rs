@@ -845,6 +845,18 @@ impl InteractiveScatter {
             .unwrap_or_default()
     }
 
+    /// The data values drawn at canvas point `(x, y)` (`Plot::invert`):
+    /// `[x, y]` values, empty outside the plot rectangle.
+    pub fn value_at(&self, x: f32, y: f32) -> Vec<f64> {
+        self.app
+            .with_chart(|chart| {
+                let plot = chart.as_any_mut().downcast_mut::<Plot>()?;
+                plot.invert(gup_core::geom::Point::new(x, y))
+            })
+            .map(|(vx, vy)| vec![vx, vy])
+            .unwrap_or_default()
+    }
+
     /// The centre of the plot rectangle: `[x, y]`.
     pub fn plot_centre(&self) -> Result<Vec<f32>, JsValue> {
         let r = self.resolved()?.layout.plot;

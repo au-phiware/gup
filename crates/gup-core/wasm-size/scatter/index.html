@@ -201,13 +201,10 @@
           });
           canvas.dispatchEvent(new PointerEvent("pointerleave"));
           await frames();
-          await step(
-            "leave",
-            async () => {
-              const t = [app.hovered_row(), app.tooltip_text()];
-              return t[0] === -1 && t[1] == null;
-            }
-          );
+          await step("leave", async () => {
+            const t = [app.hovered_row(), app.tooltip_text()];
+            return t[0] === -1 && t[1] == null;
+          });
           const [cx1, cy1] = app.row_px(1);
           fire("pointerdown", cx1, cy1);
           fire("pointerup", cx1, cy1);
@@ -244,6 +241,45 @@
           canvas.dispatchEvent(new PointerEvent("pointerleave"));
           await frames();
           await step("release", async () => app.plot_rect()[0] < rect0[0]);
+          // Drag pan (GUP-453): press at the plot centre, three moves, then
+          // release. The value under the pointer at the press is under it at
+          // the end, row 3's dot moved with the pointer, and it was no click.
+          {
+            await frames();
+            const [qx, qy] = app.plot_centre();
+            const [r3x, r3y] = app.row_px(3);
+            const start = app.value_at(qx, qy);
+            const rect1 = app.plot_rect();
+            const clicks0 = app.clicks();
+            fire("pointerdown", qx, qy);
+            for (let i = 1; i <= 3; i++)
+              fire("pointermove", qx + 10 * i, qy + (20 / 3) * i);
+            fire("pointerup", qx + 30, qy + 20);
+            await frames();
+            await step("pan", async () => {
+              const end = app.value_at(qx + 30, qy + 20);
+              const lo = app.x_domain();
+              if (start.length !== 2 || end.length !== 2) return false;
+              const rect2 = app.plot_rect();
+              const wx = lo[1] - lo[0];
+              // Relative to the domain's width (x); y by the plot's pixel
+              // mapping, which is linear: 1e-9 of the value's size.
+              const ok = (a, b, w) => Math.abs(a - b) <= 1e-9 * w;
+              if (!ok(end[0], start[0], wx)) return false;
+              if (!ok(end[1], start[1], Math.max(Math.abs(start[1]), 1)))
+                return false;
+              if (!rect2.every((v, i) => v === rect1[i])) return false;
+              if (app.clicks() !== clicks0) return false;
+              const [n3x, n3y] = app.row_px(3);
+              if (Math.abs(n3x - (r3x + 30)) > 0.5) return false;
+              if (Math.abs(n3y - (r3y + 20)) > 0.5) return false;
+              // The dot is drawn there, in its fill #2a6fdb.
+              const img = await app.render_rgba();
+              const i = (Math.round(n3y) * w + Math.round(n3x)) * 4;
+              const want = [0x2a, 0x6f, 0xdb];
+              return want.every((c, k) => Math.abs(img[i + k] - c) <= 8);
+            });
+          }
           await step("last-error", async () => app.last_error() == null);
           app.free();
         } catch (e) {
