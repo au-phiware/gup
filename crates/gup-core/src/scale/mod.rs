@@ -226,6 +226,10 @@ impl<S: ShaderFn> ShaderFn for ScaleRef<S> {
     fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)> {
         self.read().image(extent)
     }
+
+    fn cpu_color(&self, x: f64) -> Option<crate::Color> {
+        self.read().cpu_color(x)
+    }
 }
 
 impl<S> CpuMirror for ScaleRef<S>

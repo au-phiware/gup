@@ -253,6 +253,10 @@ pub struct CategoricalParams {
 }
 
 impl ShaderFn for Categorical {
+    fn cpu_color(&self, x: f64) -> Option<Color> {
+        Some(CpuMirror::eval(self, x))
+    }
+
     type In = u32;
     type Out = Color;
     type Params = CategoricalParams;

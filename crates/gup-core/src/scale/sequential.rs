@@ -89,6 +89,10 @@ pub struct SequentialParams {
 }
 
 impl ShaderFn for Sequential {
+    fn cpu_color(&self, x: f64) -> Option<Color> {
+        Some(CpuMirror::eval(self, x))
+    }
+
     type In = f32;
     type Out = Color;
     type Params = SequentialParams;

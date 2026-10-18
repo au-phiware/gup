@@ -23,6 +23,8 @@ use crate::scale::{DynPositionScale, Legend};
 use crate::scene::MarkBatch;
 use crate::shader::glue::{self, ChannelSource, ChunkBase, Glue, GlueChannel, GlueSpec};
 use crate::theme::Theme;
+#[cfg(feature = "svg")]
+use crate::vector::{CpuLayer, LayerVector, MarkKind, VChan};
 use std::any::Any;
 use std::marker::PhantomData;
 use std::sync::Arc;
@@ -740,6 +742,81 @@ fn axis_scale_for<'s>(
     Ok(scale)
 }
 
+impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
+    /// The batch's vector slot: the snapshot with the `svg` feature.
+    #[cfg(feature = "svg")]
+    fn vector_slot(&self, theme: &Theme, entries: &[DrawEntry]) -> Arc<LayerVector> {
+        Arc::new(self.vector(theme, entries))
+    }
+
+    /// The batch's vector slot: nothing without the `svg` feature.
+    #[cfg(not(feature = "svg"))]
+    #[expect(clippy::unused_self, reason = "the `svg` build's slot reads the layer")]
+    fn vector_slot(&self, _theme: &Theme, _entries: &[DrawEntry]) -> crate::scene::VectorSlot {
+        crate::scene::VectorSlot
+    }
+
+    /// What a vector target needs to write the layer's marks (GUP-467), as
+    /// it is now: see [`LayerVector`].
+    #[cfg(feature = "svg")]
+    fn vector(&self, theme: &Theme, entries: &[DrawEntry]) -> LayerVector {
+        use crate::marks::{Circle, Line, Rect, Segment};
+        use std::any::TypeId;
+        let id = TypeId::of::<M>();
+        let kind = if id == TypeId::of::<Circle>() {
+            MarkKind::Circle
+        } else if id == TypeId::of::<Rect>() {
+            MarkKind::Rect
+        } else if id == TypeId::of::<Segment>() {
+            MarkKind::Segment
+        } else if id == TypeId::of::<Line>() {
+            MarkKind::Line
+        } else {
+            return LayerVector::Skipped(format!(
+                "`{}` is a user-defined mark with no CPU description",
+                M::NAME
+            ));
+        };
+        let rows = self.len() as u64;
+        if !self.retain.keeps_columns(rows) {
+            return LayerVector::Skipped(format!(
+                "its CPU columns are not retained (Retain::{:?}, {rows} rows)",
+                self.retain
+            ));
+        }
+        let Some(cols) = self.columns.as_ref().and_then(ColumnStore::cpu_snapshot) else {
+            return LayerVector::Skipped("its CPU columns were released".to_owned());
+        };
+        let mut column = 0;
+        let chans = M::CHANNELS
+            .iter()
+            .zip(&self.encodings)
+            .map(|(desc, e)| {
+                let chan = match e {
+                    None => VChan::Const(desc.default),
+                    Some(Encoding::Const(v)) => VChan::Const(*v),
+                    Some(Encoding::Derived(f)) => VChan::Const(f()),
+                    Some(Encoding::Column(c)) => {
+                        column += 1;
+                        VChan::Column {
+                            column: column - 1,
+                            mirror: c.mirror(),
+                        }
+                    }
+                };
+                (desc.name, desc.role, chan)
+            })
+            .collect();
+        LayerVector::Cpu(Arc::new(CpuLayer {
+            kind,
+            cols,
+            entries: entries.to_vec(),
+            chans,
+            null_color: theme.null_color,
+        }))
+    }
+}
+
 impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
     fn bind_axes(
         &mut self,
@@ -1085,6 +1162,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             .brush_binding
             .map(|_| crate::render::brush_words(store.rows()));
         let entries = draw_entries(M::GEOMETRY, stored);
+        let vector = self.vector_slot(theme, &entries);
         let uploaded = || {
             entries.iter().map(|d| {
                 let c = &stored[d.this];
@@ -1119,7 +1197,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             // uniform values into the existing buffers.
             if gpu.draws_chunks(uploaded(), &spans) {
                 gpu.write_uniforms(cx, &encodings, &chunks);
-                return Ok(MarkBatch::new(Arc::clone(gpu), M::ANTIALIAS));
+                return Ok(MarkBatch::new(Arc::clone(gpu), M::ANTIALIAS, vector));
             }
             // Appended rows: new chunk draws and `Chunk` entries over the
             // same encodings, which take their new values in place.
@@ -1141,7 +1219,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
                 self.write_bits(cx, &grown);
             }
             self.gpu = Some((Arc::clone(&grown), luts));
-            return Ok(MarkBatch::new(grown, M::ANTIALIAS));
+            return Ok(MarkBatch::new(grown, M::ANTIALIAS, vector));
         }
         #[cfg_attr(
             target_arch = "wasm32",
@@ -1171,7 +1249,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         );
         self.write_bits(cx, &gpu);
         self.gpu = Some((Arc::clone(&gpu), luts));
-        Ok(MarkBatch::new(gpu, M::ANTIALIAS))
+        Ok(MarkBatch::new(gpu, M::ANTIALIAS, vector))
     }
 
     fn write_brush(&mut self, cx: &Context, rows: Option<&[usize]>) -> Result<()> {

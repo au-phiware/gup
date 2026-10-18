@@ -11,6 +11,7 @@
 
 mod common;
 
+use common::svg_marks;
 use common::vr::{harness, layout_metadata, rgba8};
 use gup_core::geom::Rect;
 use gup_core::prelude::*;
@@ -43,7 +44,11 @@ fn check(cx: &Context, case: &str, scene: &Scene, meta: LayoutMetadata) -> image
         .render_blocking(cx, scene)
         .unwrap();
     let vr = RgbaImage::new(image.width(), image.height(), image.as_raw().clone()).unwrap();
-    harness().run(case, Ok((vr, meta))).assert_ok();
+    harness()
+        .run(case, Ok((vr.clone(), meta.clone())))
+        .assert_ok();
+    // GUP-467: the SVG draws the same marks.
+    svg_marks::assert_matches(case, scene, &vr, &meta);
     image
 }
 

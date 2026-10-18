@@ -7,6 +7,7 @@
 
 mod common;
 
+use common::svg_marks;
 use common::vr::{harness, layout_metadata, rgba8};
 use gup_core::prelude::*;
 use gup_core::{ImageTarget, OKABE_ITO};
@@ -286,6 +287,8 @@ fn error_bars_and_a_fan() {
     let meta = layout_metadata(&resolved.layout)
         .with_expected_color("error bar", rgba8(Segment::DEFAULT_COLOR));
     harness()
-        .run("gup_core/segment_mark", Ok((vr, meta)))
+        .run("gup_core/segment_mark", Ok((vr.clone(), meta.clone())))
         .assert_ok();
+    // GUP-467: the SVG draws the same marks.
+    svg_marks::assert_matches("gup_core/segment_mark", &resolved.scene, &vr, &meta);
 }

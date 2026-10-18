@@ -13,6 +13,7 @@
 mod common;
 
 use common::scatter::{Country, countries_n};
+use common::svg_marks;
 use common::vr::{harness, layout_metadata, rgba8};
 use gup_core::prelude::*;
 use gup_core::{Layout, ScaleRef};
@@ -21,13 +22,30 @@ use gup_visual_regression::RgbaImage;
 const WIDTH: u32 = 720;
 const HEIGHT: u32 = 450;
 
-fn check(case: &str, image: image::RgbaImage, layout: &Layout, colors: &[(&str, Color)]) {
+fn check(
+    case: &str,
+    cx: &Context,
+    plot: &mut Plot,
+    image: image::RgbaImage,
+    layout: &Layout,
+    colors: &[(&str, Color)],
+) {
+    // The cached resolve of the render: the scene the image shows.
+    let scene = plot
+        .resolve(cx, image.width() as f32, image.height() as f32)
+        .unwrap()
+        .scene
+        .clone();
     let mut meta = layout_metadata(layout);
     for (label, c) in colors {
         meta = meta.with_expected_color(*label, rgba8(*c));
     }
     let vr = RgbaImage::new(image.width(), image.height(), image.into_raw()).unwrap();
-    harness().run(case, Ok((vr, meta))).assert_ok();
+    harness()
+        .run(case, Ok((vr.clone(), meta.clone())))
+        .assert_ok();
+    // GUP-467: the SVG draws the same marks.
+    svg_marks::assert_matches(case, &scene, &vr, &meta);
 }
 
 /// The coverage-weighted centre of the ink of a disc drawn in opaque
@@ -84,7 +102,7 @@ fn sqrt_radius_scatter() {
             "disc at ({px}, {py}) r {r} leaves {p:?}"
         );
     }
-    check("gup_core/sqrt_radius", image, &layout, &[]);
+    check("gup_core/sqrt_radius", &cx, &mut plot, image, &layout, &[]);
 }
 
 /// AC2: radii grow as the square root. Five discs on one row with
@@ -192,7 +210,14 @@ fn symlog_signed_scatter() {
             "point {r:?} not drawn at ({px}, {py}): {got:?}"
         );
     }
-    check("gup_core/symlog_signed", image, &layout, &[("points", ink)]);
+    check(
+        "gup_core/symlog_signed",
+        &cx,
+        &mut plot,
+        image,
+        &layout,
+        &[("points", ink)],
+    );
 }
 
 /// Seconds since the epoch at midnight UTC on 1 January of `year`.
@@ -257,7 +282,14 @@ fn time_axis_ticks_on_years() {
         .map(|t| &*t.run.text)
         .collect();
     assert_eq!(heavy, ["2019", "2020", "2021", "2022", "2023", "2024"]);
-    check("gup_core/time_years", image, &layout, &[("points", ink)]);
+    check(
+        "gup_core/time_years",
+        &cx,
+        &mut plot,
+        image,
+        &layout,
+        &[("points", ink)],
+    );
 }
 
 /// GUP-436: monthly ticks over two and a half years: the January labels
@@ -295,6 +327,8 @@ fn time_tick_hierarchy() {
     assert_eq!(heavy, ["2020", "2021", "2022"]);
     check(
         "gup_core/time_tick_hierarchy",
+        &cx,
+        &mut plot,
         image,
         &layout,
         &[("points", ink)],

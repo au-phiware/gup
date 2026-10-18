@@ -98,6 +98,16 @@ fn user_mark_renders_squares() {
         .size(Px(20.0))
         .fill(palette.encode_key(|r: &(f64, &'static str)| r.1));
     let resolved = plot.resolve(&cx, W as f32, H as f32).unwrap();
+    // GUP-467: a user mark has no CPU description, so the SVG skips the
+    // layer with a comment instead of failing.
+    let mut svg = gup_core::SvgTarget::new();
+    gup_core::VectorTarget::render(&mut svg, &resolved.scene).unwrap();
+    assert!(
+        svg.svg()
+            .contains("<!-- layer 0 skipped: `Square` is a user-defined mark"),
+        "{}",
+        svg.svg()
+    );
     let img = ImageTarget::new(&cx, W, H)
         .unwrap()
         .render_blocking(&cx, &resolved.scene)

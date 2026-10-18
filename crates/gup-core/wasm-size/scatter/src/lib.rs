@@ -123,6 +123,9 @@ pub async fn render_scatter(
         .await
         .map_err(js)?;
     let mut svg = SvgTarget::new();
+    // Guides only, on purpose: the size budget measures the SVG guides path
+    // as recorded (GUP-467 writes marks too; `render(&scene)` would add
+    // that code to the budget).
     svg.render(&scene.guides()).map_err(js)?;
     web_log(svg.svg().len());
     Ok(image.into_raw())

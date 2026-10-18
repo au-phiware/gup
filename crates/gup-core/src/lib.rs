@@ -116,6 +116,8 @@ mod svg;
 pub mod target;
 mod theme;
 mod tooltip;
+#[cfg(feature = "svg")]
+mod vector;
 #[cfg(all(feature = "web", target_arch = "wasm32"))]
 pub mod web;
 #[cfg(feature = "window")]
@@ -342,6 +344,33 @@ pub mod __private {
 
     impl<T> MirrorFallback for &MirrorProbe<'_, T> {
         fn sampled(&self, _extent: (f64, f64)) -> Option<crate::Legend> {
+            None
+        }
+    }
+
+    /// See [`MirrorProbe`]: `(&MirrorProbe(f)).color(x)` is the CPU
+    /// mirror's colour when the type has one.
+    pub trait MirrorColored {
+        /// The colour for input `x`.
+        fn color(&self, x: f64) -> Option<crate::Color>;
+    }
+
+    impl<T: crate::CpuMirror + crate::EncodeFn<Output = crate::Color>> MirrorColored
+        for MirrorProbe<'_, T>
+    {
+        fn color(&self, x: f64) -> Option<crate::Color> {
+            Some(self.0.eval(x))
+        }
+    }
+
+    /// See [`MirrorProbe`].
+    pub trait MirrorColorFallback {
+        /// No colour mirror.
+        fn color(&self, x: f64) -> Option<crate::Color>;
+    }
+
+    impl<T> MirrorColorFallback for &MirrorProbe<'_, T> {
+        fn color(&self, _x: f64) -> Option<crate::Color> {
             None
         }
     }

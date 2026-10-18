@@ -613,6 +613,16 @@ fn expand(attr: TokenStream2, item: TokenStream2) -> syn::Result<TokenStream2> {
             }
         }
     });
+    // Likewise its CPU colour, for vector output.
+    let cpu_color = (conv.output == Output::Color).then(|| {
+        quote! {
+            fn cpu_color(&self, x: f64) -> ::core::option::Option<#root::Color> {
+                #[allow(unused_imports)]
+                use #private::{MirrorColorFallback as _, MirrorColored as _, MirrorProbe};
+                (&MirrorProbe(self)).color(x)
+            }
+        }
+    });
     let out_item = if user_out.is_some() {
         quote!()
     } else {
@@ -667,6 +677,7 @@ fn expand(attr: TokenStream2, item: TokenStream2) -> syn::Result<TokenStream2> {
                 #image
 
                 #sampled
+                #cpu_color
 
                 #(#user_items)*
             }

@@ -6,6 +6,7 @@
 
 mod common;
 
+use common::svg_marks;
 use common::vr::{harness, layout_metadata};
 use gup_core::Layout;
 use gup_core::geom::Rect;
@@ -60,9 +61,13 @@ fn canvas(layout: &Layout) -> Rect {
 fn golden(cx: &Context, case: &str, plot: &mut Plot, w: u32, h: u32) -> (Layout, image::RgbaImage) {
     let (image, layout) = plot.render_resolved(cx, w, h).unwrap();
     let vr = RgbaImage::new(image.width(), image.height(), image.as_raw().clone()).unwrap();
+    let meta = layout_metadata(&layout);
     harness()
-        .run(case, Ok((vr, layout_metadata(&layout))))
+        .run(case, Ok((vr.clone(), meta.clone())))
         .assert_ok();
+    // GUP-467: the SVG draws the same marks (and the legend's swatches).
+    let scene = plot.resolve(cx, w as f32, h as f32).unwrap().scene.clone();
+    svg_marks::assert_matches(case, &scene, &vr, &meta);
     (layout, image)
 }
 

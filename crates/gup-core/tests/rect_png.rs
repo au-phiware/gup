@@ -7,6 +7,7 @@
 
 mod common;
 
+use common::svg_marks;
 use common::vr::{harness, layout_metadata, rgba8};
 use gup_core::ImageTarget;
 use gup_core::prelude::*;
@@ -191,8 +192,10 @@ fn monthly_bars_are_as_wide_as_their_band() {
     let meta = layout_metadata(&resolved.layout)
         .with_expected_color("bar fill", rgba8(Rect::DEFAULT_FILL));
     harness()
-        .run("gup_core/rect_bars", Ok((vr, meta)))
+        .run("gup_core/rect_bars", Ok((vr.clone(), meta.clone())))
         .assert_ok();
+    // GUP-467: the SVG draws the same marks.
+    svg_marks::assert_matches("gup_core/rect_bars", &resolved.scene, &vr, &meta);
 
     // GUP-435: the tallest bar stops short of the plot rect's edge.
     let top = y.read().eval(60.0) as f32;
