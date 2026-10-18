@@ -80,8 +80,8 @@ X) or `info` (printed, never fails).
 | `pipeline.link_create.cold_ms`     | 1.04      | <= 10     | `pipeline_timings`, its first run                   |
 | `pipeline.link_create.max_ms`      | 1.06      | info      | `pipeline_timings`                                  |
 | `wasm.wgpu.gz_bytes`               | 32,360    | info      | `scripts/wasm_size.sh`, bare wgpu                   |
-| `wasm.scatter.gz_bytes`            | 310,638   | +2%       | `scripts/wasm_size.sh`, the reference scatter       |
-| `wasm.over_wgpu.gz_bytes`          | 278,278   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10         |
+| `wasm.scatter.gz_bytes`            | 315,804   | +2%       | `scripts/wasm_size.sh`, the reference scatter       |
+| `wasm.over_wgpu.gz_bytes`          | 283,442   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10         |
 | `wasm.per_row_type.gz_bytes`       | 1,730     | <= 2600   | `scripts/wasm_size.sh`, one more Selection row type |
 
 A legitimate change that moves a number (a new guide, a bigger feature) records
@@ -446,3 +446,11 @@ seeded violation (GUP-417 retrospective).
   - The row is a budget: `<= 2600`, B = ceil(1.5 M / 100) x 100. The seeded
     proof is in the GUP-459 retrospective. `scripts/wasm_attrib.sh --row-type`
     attributes the figure by item.
+- **GUP-457, 459 and 460 merged (2026-10-18)**, recorded by the orchestrator
+  from CI's `mask wasm-size` on 7983fe8, the reference per GUP-438. WASM scatter
+  310,638 to 315,804 B gz (+5,166); over bare wgpu 278,278 to 283,442. Most of
+  it is GUP-457's chunk culling (+3,181 measured on its own base, accepted for
+  an 83% GPU-pass cut on 4M rows). GUP-456's GPU-picked hover had not been
+  re-recorded (+1,803). CI measures `wasm.per_row_type.gz_bytes` at 764 where a
+  local build gives 1,730: the row is noisy across machines, and its `<= 2600`
+  bound holds on both.
