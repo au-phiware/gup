@@ -344,7 +344,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   RFC-001 step S9a: hold the plot rect's margins while the pointer interacts, so
   the value under it stays put when tick labels change width, plus
   `Plot::invert`. Deps: GUP-444 ✅, GUP-449 ✅, GUP-451 📋.
-- [GUP-453](GUP-453_RFC_001_S9b_Drag_Pan_View_Axes_Reset.md) 🚧 — RFC-001 step
+- [GUP-453](GUP-453_RFC_001_S9b_Drag_Pan_View_Axes_Reset.md) ✅ — RFC-001 step
   S9b: drag pan (on by default), `view_axes`, `reset_view`, and band axes left
   alone by input, in the window and the browser. Deps: GUP-452 📋, GUP-444 ✅,
   GUP-449 ✅.

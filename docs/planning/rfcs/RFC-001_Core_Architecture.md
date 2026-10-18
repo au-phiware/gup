@@ -3390,3 +3390,31 @@ us (budget 20 us; 99% of them hit something, in a dense field).
   instance one 20-line wheel on that plot (widest label 8 px to 26 px), which
   moves the rect from x 29 to 47, the same as a fresh layout.
 - **Cost**: `wasm.scatter.gz_bytes` 295,904 to 296,131 (+227 B, within the +2%).
+
+## S9b findings (2026-10-18, GUP-453)
+
+- **Pan formula**: with domain `(d0, d1)` and `r = eval(d)`, the new domain is
+  `(invert(r0 − dpx), invert(r1 − dpx))` (`DynPositionScale::pan`). Like zoom it
+  works in pixels, so log, pow and time axes pan in their own space. A drag pans
+  from the domains stored when it started, by the total movement since the
+  press, not from the last move, so rounding does not accumulate. Measured on
+  linear (explicit and widened) and log axes, 400 × 300: the value under the
+  pointer at the press stays within 0.01 px, and the plot rect is bitwise
+  constant (GUP-452's hold, taken when the drag starts).
+- **Band rule**: input never moves an axis whose scale reads keys (`Band`,
+  `Point`). `handle` zooms or pans the other axis and still redraws; direct
+  `Plot::zoom` and `Plot::pan` keep returning the band error. Before this a
+  wheel on a bar chart did nothing, because `zoom` stopped at the x error.
+- **Default**: `Drag::Pan` is on. The wheel already zoomed by default, and a
+  view that zooms but cannot pan strands the user. A click is still a press and
+  release within 4 px; a drag starts only beyond that, clears the hover
+  (`Leave`) and is not a click. `Drag::Off` and `Axes::Neither` restore the old
+  behaviour.
+- **Reset**: the first view change since the last reset records each axis
+  (automatic, or explicit with its domain); `reset_view` restores it
+  (`PositionScale::clear_domain`, or `set_domain`) and the next resolve gives a
+  `Layout` equal to the first resolve's, with identical RGBA.
+- **Host**: `CanvasApp` captures the pointer on `pointerdown` and sets
+  `touch-action: none`; the browser pan step passes with synthetic events.
+- **Cost**: `wasm.scatter.gz_bytes` 296,149 to 296,974 (+825 B). The harness's
+  per-row-type delta moved 1,003 to 1,144 B though no `Layer` method was added.

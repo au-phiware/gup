@@ -9,8 +9,8 @@ implementer-reason:
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 🚧 In Progress **Created**:
-2026-10-18
+**Initiative**: RFC-001 Migration **Status**: ✅ Complete (2026-10-18)
+**Created**: 2026-10-18
 
 ## Context
 
@@ -64,12 +64,12 @@ And for the chart's author:
 
 ### AC1: API
 
-- [ ] `Axes`, `Drag`, `Plot::view_axes`, `Plot::drag`, `Plot::pan` and
+- [x] `Axes`, `Drag`, `Plot::view_axes`, `Plot::drag`, `Plot::pan` and
       `Plot::reset_view` exist as in Decisions. `Axes` and `Drag` are in the
       prelude. A doctest builds a plot with `.view_axes(Axes::X)`, resolves it,
       sends a press, two moves and a release through `handle`, and checks that
       only the x domain moved.
-- [ ] `PositionScale::clear_domain` is implemented for `Linear`, `Log`, `Pow`,
+- [x] `PositionScale::clear_domain` is implemented for `Linear`, `Log`, `Pow`,
       `Symlog`, `Time`, `Band` and `Point`. A unit test per scale: after
       `set_domain` (where allowed) and `clear_domain`, `is_auto()` is true.
 
@@ -79,75 +79,75 @@ In `tests/resolve_cache.rs`, with a plot of explicit domains and one with
 automatic (widened) domains, 400 × 300, a layer with a tooltip and `Enter`,
 `Leave` and `Click` handlers:
 
-- [ ] Press at `P` over a row; move to `P + (2, 0)`: no domain changes,
+- [x] Press at `P` over a row; move to `P + (2, 0)`: no domain changes,
       `Response::default()`, the row is still hovered.
-- [ ] Move to `P + (30, 20)`, then `P + (60, −10)`: each returns `redraw: true`.
+- [x] Move to `P + (30, 20)`, then `P + (60, −10)`: each returns `redraw: true`.
       After each resolve, `(plot.invert(current) − v) × px_per_unit ≤ 0.01` px
       on both axes, where `v = plot.invert(P)` before the press. `layout.plot`
       is bitwise unchanged (GUP-452's hold).
-- [ ] The hovered row gets `Leave` when the drag starts, `hovered()` is `None`
+- [x] The hovered row gets `Leave` when the drag starts, `hovered()` is `None`
       during the drag, and no `Click` is dispatched by the release. After the
       release, a `PointerMoved` hovers again.
-- [ ] The same sequence on a `Log` y axis meets the 0.01 px bound.
-- [ ] On the automatic plot, after the drag, each axis keeps the widened range:
+- [x] The same sequence on a `Log` y axis meets the 0.01 px bound.
+- [x] On the automatic plot, after the drag, each axis keeps the widened range:
       the x scale maps its domain ends to `plot.left()` and `plot.right()`
       within 0.01 px (GUP-444's policy, recorded in `zoomed`).
-- [ ] `view_axes(Axes::X)`: the y domain is bitwise unchanged by the drag and by
+- [x] `view_axes(Axes::X)`: the y domain is bitwise unchanged by the drag and by
       a wheel step. `Axes::Neither`: no domain changes at all. `Drag::Off`: the
       drag changes no domain.
-- [ ] A plot with a `Band` x axis and a `Linear` y axis: a wheel step and a drag
+- [x] A plot with a `Band` x axis and a `Linear` y axis: a wheel step and a drag
       change the y domain and leave the band axis alone, returning
       `redraw: true`.
 
 ### AC3: Reset
 
-- [ ] After two wheel steps and a drag on the automatic plot, `reset_view()`
+- [x] After two wheel steps and a drag on the automatic plot, `reset_view()`
       then a resolve gives a `Layout` equal (`==`) to the first resolve's. Its
       `ChartExt::render` RGBA is byte-identical. Both axes are `is_auto()`.
-- [ ] On the explicit plot, `reset_view()` restores the explicit domains
+- [x] On the explicit plot, `reset_view()` restores the explicit domains
       bitwise.
-- [ ] `reset_view()` with no prior view change is a no-op: it does not bump the
+- [x] `reset_view()` with no prior view change is a no-op: it does not bump the
       revision, so the next resolve is cached (`resolve_generation` unchanged).
 
 ### AC4: Changed default — drag pans
 
-- [ ] `git grep -n "PointerDown" -- crates examples dogfood` lists every sender.
+- [x] `git grep -n "PointerDown" -- crates examples dogfood` lists every sender.
       Each is listed in the retrospective as "no move beyond 4 px, so
       unaffected" or "updated". `tests/events.rs`'s click tests (press and
       release with no move between) pass unchanged.
-- [ ] The docs of `Plot::handle`, `GupApp`, `show` and `web::CanvasApp` list
+- [x] The docs of `Plot::handle`, `GupApp`, `show` and `web::CanvasApp` list
       drag pan among the behaviours, with `Plot::drag(Drag::Off)` to turn it
       off.
 
 ### AC5: Hosts
 
-- [ ] `CanvasApp` calls `set_pointer_capture` on `pointerdown` and
+- [x] `CanvasApp` calls `set_pointer_capture` on `pointerdown` and
       `release_pointer_capture` on `pointerup` (errors ignored), and sets the
       canvas's `touch-action` to `none` when attached.
       `cargo clippy --target     wasm32-unknown-unknown -p gup-core --features web`
       is clean.
-- [ ] `GupApp` needs no change; a unit test in `app.rs` checks that
+- [x] `GupApp` needs no change; a unit test in `app.rs` checks that
       `CursorMoved` with a button held still maps to `Input::PointerMoved`.
 
 ### AC6: Browser
 
-- [ ] The harness exports
+- [x] The harness exports
       `InteractiveScatter::value_at(x: f32, y: f32) -> Vec<f64>`
       (`Plot::invert`, empty when `None`). In `index.html`, a step `pan` after
       GUP-452's `release` step: `pointerdown` at the plot centre, three
       `pointermove`s to `+30, +20` in equal steps, `pointerup`, then two frames.
-- [ ] `value_at(end)` equals `value_at(start)` taken before the press (relative
+- [x] `value_at(end)` equals `value_at(start)` taken before the press (relative
       error ≤ 1e-9 of each domain's width); `clicks()` is unchanged.
-- [ ] **Pixels**: `row_px(3)` moved by `(30, 20)` ± 0.5 px, and in
+- [x] **Pixels**: `row_px(3)` moved by `(30, 20)` ± 0.5 px, and in
       `render_rgba()` the pixel at the new `row_px(3)` is within ±8 per channel
       of the dot's fill `#2a6fdb`.
-- [ ] `mask wasm-browser` passes with `interactive=ok`.
+- [x] `mask wasm-browser` passes with `interactive=ok`.
 
 ### AC7: Record
 
-- [ ] RFC-001 gains "S9b findings": the pan formula, the band-axis rule, and the
+- [x] RFC-001 gains "S9b findings": the pan formula, the band-axis rule, and the
       default.
-- [ ] `mask wasm-size` passes. Growth over 6,000 B gz on `wasm.scatter` is an
+- [x] `mask wasm-size` passes. Growth over 6,000 B gz on `wasm.scatter` is an
       escalation, not a re-record. `wasm.per_row_type.gz_bytes` moves by less
       than 1% (pan adds no `Layer` method).
 
@@ -243,13 +243,13 @@ automatic (widened) domains, 400 × 300, a layer with a tooltip and `Enter`,
 
 ## Technical Tasks
 
-- [ ] `Axes`, `Drag`, prelude; `Plot::{view_axes, drag, pan, reset_view}`.
-- [ ] `PositionScale::clear_domain` for seven scales; `DynPositionScale::pan`.
-- [ ] Drag state machine and band-axis skip in `handle`.
-- [ ] Tests (AC2, AC3) and the AC4 grep.
-- [ ] `web.rs` capture and `touch-action`; `app.rs` test; docs.
-- [ ] Harness hook `value_at`, the `pan` step.
-- [ ] RFC-001 "S9b findings"; `mask wasm-size`.
+- [x] `Axes`, `Drag`, prelude; `Plot::{view_axes, drag, pan, reset_view}`.
+- [x] `PositionScale::clear_domain` for seven scales; `DynPositionScale::pan`.
+- [x] Drag state machine and band-axis skip in `handle`.
+- [x] Tests (AC2, AC3) and the AC4 grep.
+- [x] `web.rs` capture and `touch-action`; `app.rs` test; docs.
+- [x] Harness hook `value_at`, the `pan` step.
+- [x] RFC-001 "S9b findings"; `mask wasm-size`.
 
 ## Dependencies
 
@@ -276,9 +276,9 @@ automatic (widened) domains, 400 × 300, a layer with a tooltip and `Enter`,
 
 ## Success Metrics
 
-- [ ] The value under the pointer at the press is under the pointer for the
+- [x] The value under the pointer at the press is under the pointer for the
       whole drag (≤ 0.01 px native, 1e-9 relative in the browser).
-- [ ] `reset_view` returns exactly to the first view.
+- [x] `reset_view` returns exactly to the first view.
 
 ## Risk Assessment
 
@@ -290,10 +290,74 @@ automatic (widened) domains, 400 × 300, a layer with a tooltip and `Enter`,
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] `mask wasm-browser` passes; the implementer reads `browser_scatter.png`
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] `mask wasm-browser` passes; the implementer reads `browser_scatter.png`
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `Axes`, `Drag` (`input.rs`, root and prelude);
+  `Plot::{view_axes, drag, pan, reset_view}`; `PositionScale::clear_domain`
+  (seven scales); `DynPositionScale::pan`. The drag state machine, band-axis
+  skip and `home` are in `Plot::handle`. `web.rs` captures the pointer and sets
+  `touch-action`; docs of `handle`, `GupApp`, `show` and `CanvasApp` list drag
+  pan.
+- Tests: seven in `tests/resolve_cache.rs` (explicit and automatic panning, log
+  axis, widened range, view axes and `Drag::Off`, band axis, reset), one scale
+  unit test per scale and a `pan` test, an `app.rs` mapping test, a doctest.
+  `gup-core` suite passes (`--test-threads=1`). Browser `pan` step passes
+  (`interactive=ok`).
+- RFC-001 "S9b findings" added. `wasm.scatter.gz_bytes` 296,149 to 296,974 (+825
+  B, limit +6,000). `wasm.per_row_type.gz_bytes` 1,003 to 1,144 (a gzip
+  differential; no `Layer` method added). `mask perf-budget` all pass.
+
+## Retrospective
+
+**Completed**: 2026-10-18
+
+### Key Technical Learnings
+
+#### Pan from the press
+
+- **Challenge**: Panning by each move's delta accumulates rounding and, with the
+  hold, drifts on widened axes.
+- **Solution**: Store the domains when the drag starts and set each to the
+  stored domain panned by the total delta. The 0.01 px bound held on linear and
+  log axes with no escalation.
+- **Pattern**: Interactions that are a function of (start state, total input)
+  are idempotent per move.
+
+#### Auto axes need no special reset
+
+- **Challenge**: `reset_view` must reproduce the first layout exactly.
+- **Solution**: Every full resolve refits and niceifies automatic scales, so
+  `clear_domain` only clears the `explicit` flag; the Layout and RGBA matched.
+
+### Architectural Decisions
+
+#### Band skip lives in `handle`, not in `zoom`
+
+- **Decision**: `zoom_axes`/`pan_from` take an axis mask; `handle` passes
+  `view_axes` minus keyed axes; public `zoom` and `pan` pass both and keep the
+  band error.
+- **Trade-off**: A band axis cannot be panned by input at all (no category
+  scrolling) until a story needs it.
+
+### Development Workflow Insights
+
+- AC4 grep (`PointerDown` senders): `tests/events.rs` (click tests, 3 senders,
+  press and release with no move between: unaffected; the 5 px test moves only
+  at release), `tests/resolve_cache.rs` (`inputs_that_do_nothing`: no move after
+  the press, unaffected; new GUP-453 tests: updated by design), `src/app.rs`
+  (mapping and a new test), `src/web.rs` (the host: now captures the pointer),
+  `src/plot.rs` (`handle` and its doctest). No examples or dogfood crates send
+  it.
+- Worktree baseline for the wasm-size comparison needed its own target dir.
+
+### Follow-up Stories
+
+None. (GUP-454 brush and drag-zoom already extends `Drag`.)
