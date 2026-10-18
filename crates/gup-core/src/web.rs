@@ -28,7 +28,10 @@ use crate::render::{Renderer, TargetDesc};
 use crate::surface::surface_config;
 use crate::target::{DEFAULT_SAMPLES, Frame, RenderTarget, check_samples, msaa_view};
 use std::cell::RefCell;
-use std::rc::Rc;
+use std::collections::HashMap;
+use std::rc::{Rc, Weak};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use wasm_bindgen::JsCast;
 use wasm_bindgen::JsValue;
 use wasm_bindgen::closure::Closure;
@@ -267,6 +270,35 @@ impl State {
     }
 }
 
+thread_local! {
+    /// Canvases by wake id. `Wake` needs `Send + Sync`; an id is both, and
+    /// wasm32 has one thread.
+    static CANVASES: RefCell<HashMap<u64, Weak<RefCell<State>>>> = Default::default();
+}
+
+static NEXT_CANVAS_ID: AtomicU64 = AtomicU64::new(1);
+
+/// Wakes the canvas registered under its id; a missing one is a no-op.
+struct CanvasWake(u64);
+
+impl std::task::Wake for CanvasWake {
+    fn wake(self: Arc<Self>) {
+        self.wake_by_ref();
+    }
+    fn wake_by_ref(self: &Arc<Self>) {
+        // Clone the `Weak` and release the registry before scheduling.
+        let weak = CANVASES.with(|c| c.borrow().get(&self.0).cloned());
+        let Some(rc) = weak.and_then(|w| w.upgrade()) else {
+            return;
+        };
+        // A wake from inside a frame or `with_chart` finds the state
+        // borrowed; both schedule a frame themselves.
+        if rc.try_borrow_mut().is_ok() {
+            schedule(&rc);
+        }
+    }
+}
+
 struct Listener {
     target: EventTarget,
     kind: &'static str,
@@ -282,6 +314,7 @@ struct Listener {
 pub struct CanvasApp {
     state: Rc<RefCell<State>>,
     listeners: Vec<Listener>,
+    wake_id: u64,
 }
 
 fn schedule(state: &Rc<RefCell<State>>) {
@@ -371,10 +404,15 @@ impl CanvasApp {
         };
         st.draw()?;
         cx.settle_gpu_errors().await?;
+        let wake_id = NEXT_CANVAS_ID.fetch_add(1, Ordering::Relaxed);
+        st.chart
+            .set_waker(std::task::Waker::from(Arc::new(CanvasWake(wake_id))));
         let state = Rc::new(RefCell::new(st));
+        CANVASES.with(|c| c.borrow_mut().insert(wake_id, Rc::downgrade(&state)));
         let mut app = Self {
             state,
             listeners: Vec::new(),
+            wake_id,
         };
         app.attach(&canvas)?;
         Ok(app)
@@ -516,6 +554,7 @@ impl CanvasApp {
 impl Drop for CanvasApp {
     fn drop(&mut self) {
         self.state.borrow_mut().closed = true;
+        CANVASES.with(|c| c.borrow_mut().remove(&self.wake_id));
         for l in self.listeners.drain(..) {
             // Removing a listener that is already gone is harmless.
             let _ = l

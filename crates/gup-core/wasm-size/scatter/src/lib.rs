@@ -772,6 +772,8 @@ pub struct InteractiveScatter {
     clicks: Arc<AtomicU32>,
     last_clicked: Arc<AtomicI32>,
     size: (f32, f32),
+    appender: gup_core::Appender<(usize, f64, f64)>,
+    rows: std::cell::Cell<usize>,
 }
 
 const NAMES: [&str; 6] = ["Tui", "Weka", "Kiwi", "Kea", "Kaka", "Pukeko"];
@@ -801,7 +803,7 @@ pub async fn show_scatter(
         .attr(Circle::Y, y.encode(|r: &(usize, f64, f64)| r.2))
         .attr(Circle::FILL, Color::hex(0x2a6fdb))
         .attr(Circle::RADIUS, Px(8.0))
-        .tooltip(|r| format!("{}\nx {}", NAMES[r.0], r.1))
+        .tooltip(|r| format!("{}\nx {}", NAMES.get(r.0).copied().unwrap_or("New"), r.1))
         .on(Event::Enter, move |info, _| {
             enter.store(info.row.row as i32, Ordering::SeqCst);
         })
@@ -810,6 +812,10 @@ pub async fn show_scatter(
             count.fetch_add(1, Ordering::SeqCst);
             last.store(info.row.row as i32, Ordering::SeqCst);
         });
+    let appender = plot
+        .layer_mut::<(usize, f64, f64), Circle>()
+        .ok_or_else(|| JsValue::from_str("the scatter layer is missing"))?
+        .appender();
     let app = gup_core::web::show(canvas, plot).await.map_err(js)?;
     Ok(InteractiveScatter {
         app,
@@ -818,6 +824,8 @@ pub async fn show_scatter(
         clicks,
         last_clicked,
         size,
+        appender,
+        rows: std::cell::Cell::new(NAMES.len()),
     })
 }
 
@@ -873,6 +881,16 @@ impl InteractiveScatter {
                 plot.drag(drag);
             }
         });
+    }
+
+    /// Append one row through the layer's `Appender`; the canvas draws it
+    /// without any input event.
+    pub fn append_row(&self, x: f64, y: f64) {
+        let n = self.rows.get();
+        self.rows.set(n + 1);
+        if self.appender.push((n, x, y)).is_err() {
+            web_error("append_row: the chart is closed");
+        }
     }
 
     /// Back to the first view (`Plot::reset_view`).
