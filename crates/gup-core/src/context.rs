@@ -60,6 +60,9 @@ pub enum Upload {
     /// word, so an append writes up to 4 bytes per column more than its
     /// rows' bits.
     Validity,
+    /// Brushed-row bits, one bit per stored row, written whole when the
+    /// brush changes (GUP-458).
+    Brush,
     /// Uniform buffers: encodings, per-chunk bases, the view.
     Uniform,
     /// Per-frame guide instances: rules and glyph quads.
@@ -69,9 +72,10 @@ pub enum Upload {
 }
 
 impl Upload {
-    const ALL: [Upload; 5] = [
+    const ALL: [Upload; 6] = [
         Upload::Column,
         Upload::Validity,
+        Upload::Brush,
         Upload::Uniform,
         Upload::Instances,
         Upload::Texture,
@@ -105,6 +109,8 @@ pub struct UploadStats {
     pub columns: WriteCount,
     /// Validity bytes (null bits).
     pub validity: WriteCount,
+    /// Brushed-row bits.
+    pub brush: WriteCount,
     /// Uniform bytes.
     pub uniforms: WriteCount,
     /// Guide instance bytes.
@@ -119,6 +125,7 @@ impl std::ops::Sub for UploadStats {
         Self {
             columns: self.columns - rhs.columns,
             validity: self.validity - rhs.validity,
+            brush: self.brush - rhs.brush,
             uniforms: self.uniforms - rhs.uniforms,
             instances: self.instances - rhs.instances,
             textures: self.textures - rhs.textures,
@@ -129,8 +136,8 @@ impl std::ops::Sub for UploadStats {
 /// Lock-free per-kind counters.
 #[derive(Default)]
 struct UploadCounters {
-    bytes: [AtomicU64; 5],
-    writes: [AtomicU64; 5],
+    bytes: [AtomicU64; 6],
+    writes: [AtomicU64; 6],
 }
 
 impl UploadCounters {
@@ -144,10 +151,11 @@ impl UploadCounters {
             bytes: self.bytes[kind as usize].load(Ordering::Relaxed),
             writes: self.writes[kind as usize].load(Ordering::Relaxed),
         };
-        let [columns, validity, uniforms, instances, textures] = Upload::ALL.map(get);
+        let [columns, validity, brush, uniforms, instances, textures] = Upload::ALL.map(get);
         UploadStats {
             columns,
             validity,
+            brush,
             uniforms,
             instances,
             textures,

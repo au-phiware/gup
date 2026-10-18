@@ -63,6 +63,9 @@ pub struct Theme {
     pub brush_fill: Color,
     /// Brush rectangle border (1 px).
     pub brush_stroke: Color,
+    /// Opacity multiplier for rows outside the brush while one exists;
+    /// 1.0 turns dimming off.
+    pub unbrushed_opacity: f32,
 }
 
 impl Default for Theme {
@@ -92,6 +95,7 @@ impl Default for Theme {
                 ..Color::hex(0x4477aa)
             },
             brush_stroke: Color::hex(0x4477aa),
+            unbrushed_opacity: 0.3,
         }
     }
 }
@@ -122,6 +126,7 @@ mod tests {
         assert_eq!(t.tooltip_text, Color::hex(0x333333));
         assert_eq!(t.tooltip_size, Px(12.0));
         assert_eq!(t.brush_stroke, Color::hex(0x4477aa));
+        assert_eq!(t.unbrushed_opacity, 0.3);
         assert_eq!(
             t.brush_fill,
             Color {

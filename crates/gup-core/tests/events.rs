@@ -668,6 +668,29 @@ fn brush_golden() {
         .render_blocking(&cx, &resolved.scene)
         .unwrap();
     let vr = RgbaImage::new(W as u32, H as u32, image.into_raw()).unwrap();
+    // Rows 1 and 2 (inside) look as without dimming; the others are
+    // `#0072B2` at 0.3 over white.
+    plot.theme(Theme {
+        unbrushed_opacity: 1.0,
+        ..Theme::default()
+    });
+    let plain = render_bytes(&cx, &mut plot);
+    plot.theme(Theme::default());
+    let centre = |d: &[u8], p: Pt| {
+        let i = (p.y.round() as usize * W as usize + p.x.round() as usize) * 4;
+        [d[i], d[i + 1], d[i + 2]]
+    };
+    for row in 0..5 {
+        let p = anchor(&mut plot, row);
+        let (got, before) = (centre(vr.data(), p), centre(&plain, p));
+        if row == 1 || row == 2 {
+            assert_eq!(got, before, "row {row}");
+        } else {
+            for (g, w) in got.iter().zip([179u8, 213, 232]) {
+                assert!(g.abs_diff(w) <= 3, "row {row}: {got:?}");
+            }
+        }
+    }
     // A background pixel inside the brush, away from the dots, is tinted
     // blue; the border is the stroke colour.
     let rect = plot.brush_rect().unwrap();
@@ -689,6 +712,34 @@ fn brush_golden() {
     harness()
         .run("gup_core/brush", Ok((vr, layout_metadata(&layout))))
         .assert_ok();
+}
+
+/// The RGBA bytes of `plot` rendered at `W x H`.
+fn render_bytes(cx: &Context, plot: &mut Plot) -> Vec<u8> {
+    let resolved = plot.resolve(cx, W, H).unwrap();
+    ImageTarget::new(cx, W as u32, H as u32)
+        .unwrap()
+        .render_blocking(cx, &resolved.scene)
+        .unwrap()
+        .into_raw()
+}
+
+#[test]
+fn clearing_the_brush_renders_as_never_brushed() {
+    let cx = Context::new_blocking().expect("headless GPU context");
+    let mut plot = Plot::new();
+    plot.circles(rows(5)).x(|r| r.x).y(|r| r.y).radius(Px(5.0));
+    plot.drag(Drag::Brush);
+    let plain = render_bytes(&cx, &mut plot);
+    let (p1, p2) = (anchor(&mut plot, 1), anchor(&mut plot, 2));
+    drag(
+        &mut plot,
+        Pt::new(p1.x - 20.0, p1.y - 30.0),
+        Pt::new(p2.x + 20.0, p2.y + 30.0),
+    );
+    assert_ne!(render_bytes(&cx, &mut plot), plain, "dimmed while brushed");
+    plot.clear_brush();
+    assert_eq!(render_bytes(&cx, &mut plot), plain);
 }
 
 // ---- GPU-picked hover and click (GUP-456) ------------------------------

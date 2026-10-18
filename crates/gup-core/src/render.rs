@@ -114,6 +114,86 @@ pub(crate) struct Draws {
 pub(crate) struct EncodingsGpu {
     buffer: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
+    /// What the bind group refers to besides `buffer`, kept to rebuild it
+    /// around a larger brush buffer.
+    lut_views: Vec<wgpu::TextureView>,
+    sampler: wgpu::Sampler,
+    /// The brushed-row bits (GUP-458), if the program dims unbrushed rows:
+    /// the buffer and its length in 32-row words.
+    brush: Option<(wgpu::Buffer, usize)>,
+}
+
+/// The 32-row words of brushed-row bits for `rows` stored rows (at least
+/// one, so the binding is valid with no rows).
+pub(crate) fn brush_words(rows: u64) -> usize {
+    rows.div_ceil(32).max(1) as usize
+}
+
+impl EncodingsGpu {
+    fn bind_group(
+        device: &wgpu::Device,
+        program: &GlueProgram,
+        buffer: &wgpu::Buffer,
+        lut_views: &[wgpu::TextureView],
+        sampler: &wgpu::Sampler,
+        brush: Option<&wgpu::Buffer>,
+    ) -> wgpu::BindGroup {
+        let mut entries = vec![wgpu::BindGroupEntry {
+            binding: 0,
+            resource: buffer.as_entire_binding(),
+        }];
+        for (lut, view) in program.glue.luts.iter().zip(lut_views) {
+            entries.push(wgpu::BindGroupEntry {
+                binding: lut.binding,
+                resource: wgpu::BindingResource::TextureView(view),
+            });
+            entries.push(wgpu::BindGroupEntry {
+                binding: lut.binding + 1,
+                resource: wgpu::BindingResource::Sampler(sampler),
+            });
+        }
+        if let (Some(binding), Some(bits)) = (program.glue.brush_binding, brush) {
+            entries.push(wgpu::BindGroupEntry {
+                binding,
+                resource: bits.as_entire_binding(),
+            });
+        }
+        device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("gup encodings"),
+            layout: &program.enc_bgl,
+            entries: &entries,
+        })
+    }
+
+    /// A zeroed (nothing brushed) bits buffer of `words` words.
+    fn zeroed_bits(device: &wgpu::Device, words: usize) -> wgpu::Buffer {
+        device.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("gup brush bits"),
+            size: 4 * words as u64,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        })
+    }
+
+    /// These encodings over a new zeroed bits buffer of `words` words.
+    fn with_brush_words(&self, cx: &Context, program: &GlueProgram, words: usize) -> Self {
+        let bits = Self::zeroed_bits(cx.device(), words);
+        let bind_group = Self::bind_group(
+            cx.device(),
+            program,
+            &self.buffer,
+            &self.lut_views,
+            &self.sampler,
+            Some(&bits),
+        );
+        Self {
+            buffer: self.buffer.clone(),
+            bind_group,
+            lut_views: self.lut_views.clone(),
+            sampler: self.sampler.clone(),
+            brush: Some((bits, words)),
+        }
+    }
 }
 
 /// A data layer's GPU state, ready to draw: one instanced draw per column
@@ -308,6 +388,9 @@ impl Context {
                 let mut enc_entries = vec![uniform_entry(0, false)];
                 for lut in &glue.luts {
                     enc_entries.extend(lut_entries(lut.binding));
+                }
+                if let Some(binding) = glue.brush_binding {
+                    enc_entries.push(validity_entry(binding));
                 }
                 let enc_bgl = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                     label: Some("gup encodings"),
@@ -663,6 +746,8 @@ pub(crate) struct LayerUniforms<'a> {
     pub chunks: Vec<u8>,
     /// One LUT per `program.glue.luts` entry.
     pub luts: Vec<&'a [[u8; 4]]>,
+    /// Words of brushed-row bits, if the program dims unbrushed rows.
+    pub brush_words: Option<usize>,
 }
 
 /// Bytes of one `Chunk` uniform entry of `span` bytes per chunk, each at
@@ -705,25 +790,17 @@ impl LayerUniforms<'_> {
         let sampler = lut_sampler(device);
         let lut_views: Vec<wgpu::TextureView> =
             self.luts.iter().map(|lut| lut_view(cx, lut)).collect();
-        let mut entries = vec![wgpu::BindGroupEntry {
-            binding: 0,
-            resource: enc.as_entire_binding(),
-        }];
-        for (lut, view) in self.program.glue.luts.iter().zip(&lut_views) {
-            entries.push(wgpu::BindGroupEntry {
-                binding: lut.binding,
-                resource: wgpu::BindingResource::TextureView(view),
-            });
-            entries.push(wgpu::BindGroupEntry {
-                binding: lut.binding + 1,
-                resource: wgpu::BindingResource::Sampler(&sampler),
-            });
-        }
-        let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("gup encodings"),
-            layout: &self.program.enc_bgl,
-            entries: &entries,
-        });
+        let bits = self
+            .brush_words
+            .map(|words| (EncodingsGpu::zeroed_bits(device, words), words));
+        let bind_group = EncodingsGpu::bind_group(
+            device,
+            &self.program,
+            &enc,
+            &lut_views,
+            &sampler,
+            bits.as_ref().map(|(b, _)| b),
+        );
         #[cfg_attr(
             target_arch = "wasm32",
             expect(
@@ -735,6 +812,9 @@ impl LayerUniforms<'_> {
         let encodings = Arc::new(EncodingsGpu {
             buffer: enc,
             bind_group,
+            lut_views,
+            sampler,
+            brush: bits,
         });
         LayerGpu::new(
             cx,
@@ -917,15 +997,36 @@ impl LayerGpu {
         cx: &Context,
         chunk_bytes: &[u8],
         draws: Draws,
+        brush_words: Option<usize>,
     ) -> Result<Self> {
         let signature = &self.program.glue.signature;
         cx.scoped(
             || format!("layer `{signature}` (chunk uniforms)"),
             || {
+                // More rows than the brush bits cover: a new, zeroed buffer
+                // (and bind group) for the caller to fill.
+                let encodings = match (brush_words, &self.encodings.brush) {
+                    (Some(words), Some((_, held))) if words != *held => {
+                        #[cfg_attr(
+                            target_arch = "wasm32",
+                            expect(
+                                clippy::arc_with_non_send_sync,
+                                reason = "`Arc` so native layers stay `Send + Sync`; wgpu's \
+                                          wasm handles are neither, so this `Arc` never \
+                                          crosses a thread there"
+                            )
+                        )]
+                        #[allow(clippy::let_and_return)]
+                        let regrown =
+                            Arc::new(self.encodings.with_brush_words(cx, &self.program, words));
+                        regrown
+                    }
+                    _ => Arc::clone(&self.encodings),
+                };
                 Ok(Self::new(
                     cx,
                     Arc::clone(&self.program),
-                    Arc::clone(&self.encodings),
+                    encodings,
                     chunk_bytes,
                     draws,
                     self.vertices_per_instance,
@@ -941,6 +1042,35 @@ impl LayerGpu {
     pub(crate) fn write_uniforms(&self, cx: &Context, encodings: &[u8], chunks: &[u8]) {
         self.write_encodings(cx, encodings);
         cx.write_buffer(Upload::Uniform, &self.chunk_buffer, 0, chunks);
+    }
+
+    /// The length in words of the brushed-row bits, if the program has them.
+    pub(crate) fn brush_words(&self) -> Option<usize> {
+        self.encodings.brush.as_ref().map(|(_, words)| *words)
+    }
+
+    /// Write the brushed-row bits whole (`bits` is [`brush_words`]
+    /// (Self::brush_words) words).
+    pub(crate) fn write_brush_bits(&self, cx: &Context, bits: &[u32]) {
+        if let Some((buffer, _)) = &self.encodings.brush {
+            cx.write_buffer(Upload::Brush, buffer, 0, bytemuck::cast_slice(bits));
+        }
+    }
+
+    /// Write the opacity of unbrushed rows into the `Encodings` uniform.
+    pub(crate) fn write_brush_dim(&self, cx: &Context, dim: f32) {
+        if let Some(offset) = self
+            .program
+            .encodings
+            .offset(crate::shader::glue::BRUSH_DIM_FIELD)
+        {
+            cx.write_buffer(
+                Upload::Uniform,
+                &self.encodings.buffer,
+                u64::from(offset),
+                bytemuck::bytes_of(&dim),
+            );
+        }
     }
 
     /// Write new `Encodings` uniform values into the existing buffer.
