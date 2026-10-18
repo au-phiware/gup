@@ -91,6 +91,10 @@ both must see the formatted strings.
 
 ## Decisions
 
+- (Orchestrator, 2026-10-18) `Time`'s `tick_format` receives f64 **Unix
+  seconds**, the unit of its domain since GUP-418's hi/lo column. Tooltips are
+  not affected: they are user closures (`Selection::tooltip`).
+
 - The formatter is `Arc<dyn Fn(f64) -> String + Send + Sync>` stored in
   `Shared<S>` next to the scale (so clones of a `ScaleRef` share it), wrapped in
   a small type with a manual `Debug` so the derives keep working.
