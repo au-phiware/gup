@@ -49,7 +49,7 @@ fn left_chart(data: &[Pt], shared: Arc<Shared>) -> ScatterChart<Pt> {
         .size(|p| p.weight)
         .opacity(0.6)
         .theme(Theme {
-            unbrushed_opacity: 0.0,
+            unbrushed: Unbrushed::Grey(Color::hex(GREY)),
             ..Theme::default()
         });
     let plot = chart.plot_mut();

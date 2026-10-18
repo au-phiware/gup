@@ -7,6 +7,44 @@
 use crate::channel::{Color, Px};
 use crate::scale::NULL_COLOR;
 
+/// How rows outside a brush are drawn while one exists.
+///
+/// ```
+/// use gup_core::prelude::*;
+///
+/// let theme = Theme {
+///     unbrushed: Unbrushed::Grey(Color::hex(0xbfbfbf)),
+///     ..Theme::default()
+/// };
+/// let mut plot = Plot::new();
+/// plot.drag(Drag::Brush).theme(theme);
+/// ```
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum Unbrushed {
+    /// Multiply every colour channel's alpha by this opacity
+    /// (0.0..=1.0). `Fade(1.0)` turns dimming off.
+    Fade(f32),
+    /// Draw every colour channel in this colour; its alpha multiplies
+    /// the mark's alpha.
+    Grey(Color),
+}
+
+impl Default for Unbrushed {
+    fn default() -> Self {
+        Unbrushed::Fade(0.3)
+    }
+}
+
+impl Unbrushed {
+    /// Whether a brushed plot draws unbrushed rows differently at all.
+    pub(crate) fn dims(&self) -> bool {
+        match self {
+            Unbrushed::Fade(o) => *o < 1.0,
+            Unbrushed::Grey(_) => true,
+        }
+    }
+}
+
 /// Styling for a [`Plot`](crate::Plot). The default is the look every
 /// plot had before themes existed.
 ///
@@ -63,9 +101,8 @@ pub struct Theme {
     pub brush_fill: Color,
     /// Brush rectangle border (1 px).
     pub brush_stroke: Color,
-    /// Opacity multiplier for rows outside the brush while one exists;
-    /// 1.0 turns dimming off.
-    pub unbrushed_opacity: f32,
+    /// How rows outside the brush are drawn while one exists.
+    pub unbrushed: Unbrushed,
 }
 
 impl Default for Theme {
@@ -95,7 +132,7 @@ impl Default for Theme {
                 ..Color::hex(0x4477aa)
             },
             brush_stroke: Color::hex(0x4477aa),
-            unbrushed_opacity: 0.3,
+            unbrushed: Unbrushed::default(),
         }
     }
 }
@@ -126,7 +163,10 @@ mod tests {
         assert_eq!(t.tooltip_text, Color::hex(0x333333));
         assert_eq!(t.tooltip_size, Px(12.0));
         assert_eq!(t.brush_stroke, Color::hex(0x4477aa));
-        assert_eq!(t.unbrushed_opacity, 0.3);
+        assert_eq!(t.unbrushed, Unbrushed::Fade(0.3));
+        assert!(Unbrushed::Grey(Color::BLACK).dims());
+        assert!(Unbrushed::Fade(0.0).dims());
+        assert!(!Unbrushed::Fade(1.0).dims());
         assert_eq!(
             t.brush_fill,
             Color {

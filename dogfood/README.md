@@ -136,8 +136,11 @@ renders any `gup_core::Chart`. egui pointer events go to the left chart's
 `Chart::handle`; it uses `Drag::Brush` and `on_brush` writes the brushed rows to
 shared state. The right chart is rebuilt from the rows whenever the selection
 changes (grey for unselected, colours for selected). This **works**. The left
-chart's own dimming of unbrushed rows is set to 0 (`unbrushed_opacity`), because
-faded colours still read as colour and the check wants grey only there.
+chart's own dimming of unbrushed rows is `Unbrushed::Grey` (a theme setting):
+rows outside the brush are drawn in `#bfbfbf`, visible but colourless, because a
+fade keeps the hue and the check wants grey only there. Two checks guard it:
+grey only (at most 20 saturated pixels) and greyed, not hidden (at least 500
+grey pixels).
 
 ### Task 5: `t5_live` and `t5_stream`
 
