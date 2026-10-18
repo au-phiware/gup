@@ -104,6 +104,52 @@ pub fn count_near(img: &RgbaImage, region: Region, target: [u8; 3], tol: u8) -> 
         .count()
 }
 
+/// Centroids (in pixels, pixel centres at +0.5) of the 4-connected blobs of
+/// pixels within `tol` of `target` inside `region`.
+pub fn blob_centroids(
+    img: &RgbaImage,
+    region: Region,
+    target: [u8; 3],
+    tol: u8,
+) -> Vec<(f32, f32)> {
+    let (x0, y0, x1, y1) = region.bounds(img);
+    let (w, h) = ((x1 - x0) as usize, (y1 - y0) as usize);
+    let hit = |x: usize, y: usize| {
+        max_channel_diff(rgb(img.get_pixel(x0 + x as u32, y0 + y as u32).0), target) <= tol
+    };
+    let mut seen = vec![false; w * h];
+    let mut out = Vec::new();
+    for sy in 0..h {
+        for sx in 0..w {
+            if seen[sy * w + sx] || !hit(sx, sy) {
+                continue;
+            }
+            let (mut n, mut cx, mut cy) = (0f64, 0f64, 0f64);
+            let mut stack = vec![(sx, sy)];
+            seen[sy * w + sx] = true;
+            while let Some((x, y)) = stack.pop() {
+                n += 1.0;
+                cx += x as f64 + 0.5 + x0 as f64;
+                cy += y as f64 + 0.5 + y0 as f64;
+                let nb = [
+                    (x.wrapping_sub(1), y),
+                    (x + 1, y),
+                    (x, y.wrapping_sub(1)),
+                    (x, y + 1),
+                ];
+                for (nx, ny) in nb {
+                    if nx < w && ny < h && !seen[ny * w + nx] && hit(nx, ny) {
+                        seen[ny * w + nx] = true;
+                        stack.push((nx, ny));
+                    }
+                }
+            }
+            out.push(((cx / n) as f32, (cy / n) as f32));
+        }
+    }
+    out
+}
+
 /// Number of "ink" pixels in `region`: pixels darker than the background by
 /// at least `min_contrast` in luma. Text and axis lines are ink; empty
 /// margins are not.

@@ -47,7 +47,11 @@ fn left_chart(data: &[Pt], shared: Arc<Shared>) -> ScatterChart<Pt> {
         .color(|p| p.segment.as_str())
         .color_scale(Categorical::from_palette(palette()))
         .size(|p| p.weight)
-        .opacity(0.6);
+        .opacity(0.6)
+        .theme(Theme {
+            unbrushed_opacity: 0.0,
+            ..Theme::default()
+        });
     let plot = chart.plot_mut();
     plot.drag(Drag::Brush);
     plot.on_brush(move |b| {

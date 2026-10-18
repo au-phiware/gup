@@ -25,6 +25,12 @@ fn chart(data: Vec<Pt>) -> ScatterChart<Pt> {
         .size(|p| p.weight)
         .opacity(0.35)
         .grid(Axes::Both)
+        // The tooltip the check was calibrated for is a dark popup.
+        .theme(Theme {
+            tooltip_background: Color::hex(0x1b1b1b),
+            tooltip_text: Color::WHITE,
+            ..Theme::default()
+        })
         .title("Spend vs income (200k customers), log x")
         .tooltip(|p| {
             format!(

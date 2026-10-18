@@ -95,6 +95,16 @@ pub enum Measure {
         min: usize,
         max: usize,
     },
+    /// Exactly `count` blobs of colour `rgb` (within `tol` per channel) lie
+    /// in `region`, and blob `i`, in reading order of the expected points,
+    /// has its centroid within 1 px of `at(i)` (image pixels).
+    Blobs {
+        region: Region,
+        rgb: [f32; 3],
+        tol: u8,
+        count: usize,
+        at: fn(usize) -> (f32, f32),
+    },
     /// An SVG file contains at least `min` `<tag` elements.
     SvgElements { tag: &'static str, min: usize },
 }
@@ -230,6 +240,34 @@ impl Measure {
                     detail: format!("{n} runs (need {min}..={max})"),
                 }
             }
+            Measure::Blobs {
+                region,
+                rgb,
+                tol,
+                count,
+                at,
+            } => {
+                let target = rgb.map(|c| (c * 255.0).round() as u8);
+                let found = pixels::blob_centroids(img, region, target, tol);
+                // Each expected point must have exactly one blob within 1 px.
+                let matched = (0..count)
+                    .filter(|&i| {
+                        let (ex, ey) = at(i);
+                        found
+                            .iter()
+                            .filter(|(x, y)| (x - ex).abs() <= 1.0 && (y - ey).abs() <= 1.0)
+                            .count()
+                            == 1
+                    })
+                    .count();
+                Measured {
+                    passed: found.len() == count && matched == count,
+                    detail: format!(
+                        "{} blobs, {matched} at their expected pixel (need {count} of {count})",
+                        found.len()
+                    ),
+                }
+            }
             Measure::SvgElements { .. } => Measured {
                 passed: false,
                 detail: "SvgElements must be evaluated on a file".into(),
@@ -330,6 +368,11 @@ pub fn tasks() -> Vec<Task> {
     ]
 }
 
+fn t0_point(i: usize) -> (f32, f32) {
+    let i = i as f32;
+    (47.5 + 36.85 * i, 463.5 - 1.045 * i * i)
+}
+
 fn t0_smoke() -> Task {
     let f = "t0_smoke_builder.png";
     Task {
@@ -347,13 +390,18 @@ fn t0_smoke() -> Task {
                     min_fraction: 0.003,
                 },
             ),
+            // The Layout's tick pixels for the 800x500 render: x = 47.5 + 36.85 i,
+            // y = 463.5 - 1.045 i^2 (data (i, i^2)). The default dot is the
+            // palette's #0072B2; 20 separate dots, each where its datum is.
             check(
                 f,
-                "points drawn inside the plot",
-                Measure::Coverage {
+                "20 distinct points, each at its datum's pixel",
+                Measure::Blobs {
                     region: Region::new(0.055, 0.084, 0.985, 0.934),
-                    min: 0.01,
-                    max: 0.5,
+                    rgb: [0.0, 0.447, 0.698],
+                    tol: 24,
+                    count: 20,
+                    at: t0_point,
                 },
             ),
             check(
@@ -859,8 +907,9 @@ fn t6_workaround() -> Task {
 
 fn t3_window() -> Task {
     let f = "t3_window.png";
-    // The chart texture sits under a 25 px egui title bar.
-    let plot = Region::new(0.13, 0.09, 0.96, 0.83);
+    // The screenshot is the window's 1000x700 frame; the plot rect is the
+    // Layout's (x 0.041..0.895, y 0.060..0.953).
+    let plot = Region::new(0.041, 0.06, 0.895, 0.953);
     Task {
         name: "t3_scatter_window",
         bin: "t3_scatter_window",
@@ -871,7 +920,7 @@ fn t3_window() -> Task {
         checks: vec![
             check(
                 f,
-                "retail (blue) points",
+                "blue points (first segment seen)",
                 Measure::Hue {
                     region: plot,
                     rgb: BLUE,
@@ -880,7 +929,7 @@ fn t3_window() -> Task {
             ),
             check(
                 f,
-                "other (purple) points",
+                "purple points",
                 Measure::Hue {
                     region: plot,
                     rgb: PURPLE,
@@ -889,20 +938,19 @@ fn t3_window() -> Task {
             ),
             check(
                 f,
-                "hover tooltip shown (hand-built hit test)",
+                "hover tooltip shown at the hovered point",
                 Measure::Ink {
-                    region: Region::new(0.53, 0.54, 0.66, 0.67),
+                    region: Region::new(0.595, 0.34, 0.705, 0.475),
                     min_px: 6000,
                 },
             ),
-            gap(
+            check(
                 f,
                 "x tick labels present",
                 Measure::Ink {
-                    region: Region::new(0.15, 0.85, 0.97, 0.93),
+                    region: Region::new(0.04, 0.96, 0.9, 0.99),
                     min_px: 30,
                 },
-                NO_TEXT,
             ),
         ],
     }
@@ -971,7 +1019,7 @@ fn t5_live() -> Task {
                 f,
                 "initial line points drawn",
                 Measure::Hue {
-                    region: Region::new(0.14, 0.05, 0.18, 0.48),
+                    region: Region::new(0.05, 0.05, 0.083, 0.48),
                     rgb: RED,
                     min_px: 20,
                 },
@@ -980,7 +1028,7 @@ fn t5_live() -> Task {
                 f,
                 "appended line points drawn",
                 Measure::Hue {
-                    region: Region::new(0.2, 0.05, 0.6, 0.48),
+                    region: Region::new(0.087, 0.05, 0.145, 0.48),
                     rgb: RED,
                     min_px: 20,
                 },
@@ -1085,6 +1133,28 @@ mod tests {
                 x1: 1.0,
                 min: 1,
                 max: 1
+            }
+            .evaluate(&img)
+            .passed
+        );
+        assert!(
+            Measure::Blobs {
+                region: Region::ALL,
+                rgb: BLUE,
+                tol: 2,
+                count: 1,
+                at: |_| (50.0, 50.0),
+            }
+            .evaluate(&img)
+            .passed
+        );
+        assert!(
+            !Measure::Blobs {
+                region: Region::ALL,
+                rgb: BLUE,
+                tol: 2,
+                count: 1,
+                at: |_| (60.0, 50.0),
             }
             .evaluate(&img)
             .passed
