@@ -332,7 +332,11 @@ mod tests {
         for item in &mut scene.items {
             if let ItemKind::Marks(batch) = &mut item.kind {
                 let bad = Arc::new(seed(cx, &batch.gpu.program));
-                *batch = MarkBatch::new(Arc::new(batch.gpu.with_program(bad)), batch.antialias);
+                *batch = MarkBatch::new(
+                    Arc::new(batch.gpu.with_program(bad)),
+                    batch.antialias,
+                    Arc::clone(&batch.vector),
+                );
             }
         }
         scene

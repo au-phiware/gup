@@ -9,11 +9,27 @@
 //! the same `gup_text::Font` measurements the GPU path lays out with, so
 //! margins and anchors match the PNG.
 //!
-//! **Data marks are not written yet.** Evaluating mark positions and
-//! colours on the CPU (`MarkBatch::vector()`, with a rasterised fallback
-//! above a mark-count threshold) needs the column store and scale mirrors
-//! of RFC-001 S4/S5. Until then a scene with an `ItemKind::Marks` item is
-//! an error, never a silent drop; pass [`Scene::guides`] to write the rest.
+//! **Data marks are vector shapes** (GUP-467): one `<g>` per layer, with
+//! the layer's clip, holding a `<circle>`, `<rect>`, `<line>` or
+//! `<polyline>` per mark, in the order the GPU draws them. Positions,
+//! sizes and colours come from the CPU mirrors picking uses
+//! (`crate::vector`), so the file and the picks agree; rows hidden by a
+//! null are not written, and neither are chunks culled for lying outside
+//! the plot (they could not reach a pixel; the file is the view, not the
+//! data). Coordinates have at most two decimals.
+//!
+//! A layer that cannot be evaluated on the CPU is **skipped with an XML
+//! comment**, `<!-- layer N skipped: <reason> -->`, never an error: a
+//! user-defined `#[derive(Mark)]` mark has no CPU description; a layer
+//! whose [`Retain`](crate::Retain) policy drops the CPU columns
+//! (`GpuOnly`, `Rows`, or `Auto` above `Retain::AUTO_MAX_ROWS` rows) has
+//! nothing to read; a colour function without a CPU mirror cannot be
+//! coloured. Layers count in `Scene` order, from 0. A scene's
+//! [`Scene::guides`] is still the way to write only the guides.
+//!
+//! Marks are evaluated as they were when the scene was resolved, except
+//! that a shared [`ScaleRef`](crate::ScaleRef) is read live: write the
+//! scene out before changing its scales.
 //!
 //! **Fonts are referenced, and optionally embedded.** Text is set in
 //! `font-family="Inter, sans-serif"`. By default the font is not
@@ -29,7 +45,8 @@
 
 use crate::channel::Color;
 use crate::error::{Error, Result};
-use crate::scene::{GradientDirection, HAlign, ItemKind, Scene, Weight};
+use crate::scene::{GradientDirection, HAlign, ItemKind, MarkBatch, Scene, Weight};
+use crate::vector::{LayerVector, VectorMark};
 use std::fmt::Write as _;
 
 /// Something that writes a [`Scene`] as vector graphics (SVG, PDF).
@@ -253,12 +270,22 @@ impl SvgTarget {
             )?;
         }
         let mut gradient = 0;
+        let mut layer = 0;
         for item in &scene.items {
             if let Some(clip) = item.clip {
                 writeln!(s, r#"<g clip-path="url(#clip{})">"#, clip.0)?;
             }
             match &item.kind {
-                ItemKind::Marks(_) => unreachable!("rejected before writing"),
+                ItemKind::Marks(batch) => {
+                    if item.clip.is_none() {
+                        s.push_str("<g>\n");
+                    }
+                    write_layer(&mut s, layer, batch)?;
+                    if item.clip.is_none() {
+                        s.push_str("</g>\n");
+                    }
+                    layer += 1;
+                }
                 ItemKind::Rules(rules) => {
                     for r in rules {
                         // Square caps: the GPU extends each rule by half its
@@ -348,28 +375,150 @@ impl SvgTarget {
 }
 
 impl VectorTarget for SvgTarget {
-    /// Write `scene`'s guides. Errors (and writes nothing) if the scene
-    /// has a data layer: mark export is RFC-001 S4/S5.
+    /// Write `scene`: its guides and its data marks (see the
+    /// [module docs](self) for the layers that are skipped).
     fn render(&mut self, scene: &Scene) -> Result<()> {
-        let marks = scene
-            .items
-            .iter()
-            .filter(|i| matches!(i.kind, ItemKind::Marks(_)))
-            .count();
-        if marks > 0 {
-            return Err(Error::config(
-                "svg scene",
-                format!(
-                    "it has {marks} data layer(s); SvgTarget writes guides (rules, rects, \
-                     gradients, text) only until mark export lands (RFC-001 S4/S5). Render \
-                     `scene.guides()` to write everything else"
-                ),
-            ));
-        }
         self.svg = self
             .write(scene)
             .map_err(|e| Error::config("svg target", e.to_string()))?;
         Ok(())
+    }
+}
+
+/// One layer's `<g>` contents, or the comment saying why there are none.
+fn write_layer(
+    s: &mut String,
+    layer: usize,
+    batch: &MarkBatch,
+) -> std::result::Result<(), std::fmt::Error> {
+    let marks = match &*batch.vector {
+        LayerVector::Cpu(cpu) => cpu.marks(&batch.visible),
+        LayerVector::Skipped(why) => Err(why.clone()),
+    };
+    let marks = match marks {
+        Ok(marks) => marks,
+        Err(why) => {
+            // `--` may not appear in a comment.
+            return writeln!(
+                s,
+                "<!-- layer {layer} skipped: {} -->",
+                why.replace("--", "- -")
+            );
+        }
+    };
+    for mark in &marks {
+        match mark {
+            VectorMark::Circle {
+                c,
+                r,
+                fill,
+                stroke,
+                stroke_width,
+            } => {
+                writeln!(
+                    s,
+                    r#"<circle cx="{}" cy="{}" r="{}" fill="{}"{}/>"#,
+                    num2(c[0]),
+                    num2(c[1]),
+                    num2(*r),
+                    hex(*fill),
+                    opacity("fill-opacity", *fill)
+                )?;
+                // The stroke lies inside the edge, over the fill.
+                let w = stroke_width.min(*r);
+                if w > 0.0 && stroke.a > 0.0 {
+                    writeln!(
+                        s,
+                        r#"<circle cx="{}" cy="{}" r="{}" fill="none" stroke="{}" stroke-width="{}"{}/>"#,
+                        num2(c[0]),
+                        num2(c[1]),
+                        num2(r - w / 2.0),
+                        hex(*stroke),
+                        num2(w),
+                        opacity("stroke-opacity", *stroke)
+                    )?;
+                }
+            }
+            VectorMark::Rect {
+                lo,
+                hi,
+                fill,
+                stroke,
+                stroke_width,
+            } => {
+                let (w, h) = (hi[0] - lo[0], hi[1] - lo[1]);
+                writeln!(
+                    s,
+                    r#"<rect x="{}" y="{}" width="{}" height="{}" fill="{}"{}/>"#,
+                    num2(lo[0]),
+                    num2(lo[1]),
+                    num2(w),
+                    num2(h),
+                    hex(*fill),
+                    opacity("fill-opacity", *fill)
+                )?;
+                let sw = stroke_width.min(w / 2.0).min(h / 2.0);
+                if sw > 0.0 && stroke.a > 0.0 {
+                    writeln!(
+                        s,
+                        r#"<rect x="{}" y="{}" width="{}" height="{}" fill="none" stroke="{}" stroke-width="{}"{}/>"#,
+                        num2(lo[0] + sw / 2.0),
+                        num2(lo[1] + sw / 2.0),
+                        num2(w - sw),
+                        num2(h - sw),
+                        hex(*stroke),
+                        num2(sw),
+                        opacity("stroke-opacity", *stroke)
+                    )?;
+                }
+            }
+            VectorMark::Segment { a, b, width, color } => {
+                writeln!(
+                    s,
+                    r#"<line x1="{}" y1="{}" x2="{}" y2="{}" stroke="{}" stroke-width="{}" stroke-linecap="square"{}/>"#,
+                    num2(a[0]),
+                    num2(a[1]),
+                    num2(b[0]),
+                    num2(b[1]),
+                    hex(*color),
+                    num2(*width),
+                    opacity("stroke-opacity", *color)
+                )?;
+            }
+            VectorMark::Polyline {
+                points,
+                width,
+                color,
+            } => {
+                s.push_str(r#"<polyline points=""#);
+                for (i, p) in points.iter().enumerate() {
+                    if i > 0 {
+                        s.push(' ');
+                    }
+                    write!(s, "{},{}", num2(p.x), num2(p.y))?;
+                }
+                writeln!(
+                    s,
+                    r#"" fill="none" stroke="{}" stroke-width="{}" stroke-linejoin="round" stroke-linecap="round"{}/>"#,
+                    hex(*color),
+                    num2(*width),
+                    opacity("stroke-opacity", *color)
+                )?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// A mark coordinate or size with at most two decimals and no trailing
+/// zeros.
+fn num2(v: f32) -> String {
+    let s = format!("{v:.2}");
+    let s = s.trim_end_matches('0').trim_end_matches('.');
+    if s == "-0" {
+        "0".to_owned()
+    } else {
+        s.to_owned()
     }
 }
 

@@ -165,6 +165,17 @@ pub trait ShaderFn: Clone + Send + Sync + 'static {
         let _ = extent;
         None
     }
+
+    /// The colour this function produces for input `x`, if it is a colour
+    /// function with a CPU mirror (`None`, the default, otherwise): how a
+    /// vector target colours marks (GUP-467). The library's colour scales
+    /// and `#[wgsl_function]` colour functions whose type implements
+    /// [`CpuMirror`] provide it.
+    #[doc(hidden)]
+    fn cpu_color(&self, x: f64) -> Option<crate::Color> {
+        let _ = x;
+        None
+    }
 }
 
 /// What a channel is encoded through: one [`ShaderFn`], or a chain of
@@ -194,6 +205,12 @@ pub trait EncodeFn: Clone + Send + Sync + 'static {
     /// The extent of the chain's numeric output over column values in
     /// `extent`: each link's [`ShaderFn::image`] in turn.
     fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)>;
+
+    /// The colour the chain produces for column value `x`, if its last
+    /// link is a colour function with a CPU mirror (see
+    /// [`ShaderFn::cpu_color`]).
+    #[doc(hidden)]
+    fn cpu_color(&self, x: f64) -> Option<crate::Color>;
 
     /// The legend a plot draws for a colour encoding through this
     /// function: the last link's, with a ramp's ticks in the data's units
@@ -428,6 +445,10 @@ impl<S: ShaderFn> EncodeFn for S {
         ShaderFn::image(self, extent)
     }
 
+    fn cpu_color(&self, x: f64) -> Option<crate::Color> {
+        ShaderFn::cpu_color(self, x)
+    }
+
     fn encode_legend(&self) -> Option<crate::Legend> {
         ShaderFn::legend(self)
     }
@@ -538,6 +559,10 @@ where
 
     fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)> {
         self.next.image(self.first.image(extent)?)
+    }
+
+    fn cpu_color(&self, x: f64) -> Option<crate::Color> {
+        self.next.cpu_color(self.first.eval(x))
     }
 
     /// The last link's ramp with its ticks in the data's units: about five
@@ -983,10 +1008,38 @@ pub trait DynColumnEncoding<T>: Send + Sync {
     fn cpu_eval(&self, v: f64) -> Option<f64> {
         self.image((v, v)).map(|(a, _)| a)
     }
+    /// A frozen copy of the encoding function, without the accessor: what
+    /// a vector target evaluates columns with after the layer has moved on
+    /// (GUP-467).
+    #[doc(hidden)]
+    fn mirror(&self) -> Arc<dyn ColumnMirror>;
     /// The legend of the encoding as fitted (see [`EncodeFn::legend`]).
     fn legend(&self) -> Option<crate::Legend>;
     /// See [`EncodeFn::apply_theme`].
     fn apply_theme(&mut self, theme: &Theme);
+}
+
+/// The CPU twin of a column encoding's function (see
+/// [`DynColumnEncoding::mirror`]).
+#[doc(hidden)]
+pub trait ColumnMirror: Send + Sync {
+    /// The numeric output (pixels, a size, an opacity) for column value
+    /// `v`, if the function has a CPU mirror.
+    fn number(&self, v: f64) -> Option<f64>;
+    /// The colour for column value `v`, if the function is a colour
+    /// function with a CPU mirror.
+    fn color(&self, v: f64) -> Option<crate::Color>;
+}
+
+struct FuncMirror<E>(E);
+
+impl<E: EncodeFn> ColumnMirror for FuncMirror<E> {
+    fn number(&self, v: f64) -> Option<f64> {
+        self.0.image((v, v)).map(|(a, _)| a)
+    }
+    fn color(&self, v: f64) -> Option<crate::Color> {
+        self.0.cpu_color(v)
+    }
 }
 
 struct ColumnEncoding<A, S, D> {
@@ -1021,6 +1074,10 @@ where
 
     fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)> {
         self.func.image(extent)
+    }
+
+    fn mirror(&self) -> Arc<dyn ColumnMirror> {
+        Arc::new(FuncMirror(self.func.clone()))
     }
 
     fn legend(&self) -> Option<crate::Legend> {
@@ -1070,6 +1127,10 @@ where
         self.func.image(extent)
     }
 
+    fn mirror(&self) -> Arc<dyn ColumnMirror> {
+        Arc::new(FuncMirror(self.func.clone()))
+    }
+
     fn legend(&self) -> Option<crate::Legend> {
         self.func.encode_legend()
     }
@@ -1085,6 +1146,7 @@ pub(crate) trait DynEncodeFn: Send + Sync {
     fn dyn_links(&self) -> Vec<&dyn DynShaderFn>;
     fn dyn_fit(&mut self, extent: (f64, f64)) -> Result<()>;
     fn dyn_image(&self, extent: (f64, f64)) -> Option<(f64, f64)>;
+    fn dyn_mirror(&self) -> Arc<dyn ColumnMirror>;
     fn dyn_legend(&self) -> Option<crate::Legend>;
     fn dyn_legend_over(&self, extent: (f64, f64)) -> Option<crate::Legend>;
     fn dyn_apply_theme(&mut self, theme: &Theme);
@@ -1099,6 +1161,9 @@ impl<E: EncodeFn> DynEncodeFn for E {
     }
     fn dyn_image(&self, extent: (f64, f64)) -> Option<(f64, f64)> {
         EncodeFn::image(self, extent)
+    }
+    fn dyn_mirror(&self) -> Arc<dyn ColumnMirror> {
+        Arc::new(FuncMirror(self.clone()))
     }
     fn dyn_legend(&self) -> Option<crate::Legend> {
         EncodeFn::encode_legend(self)
@@ -1151,6 +1216,10 @@ impl<T> DynColumnEncoding<T> for AxisEncoding<T> {
 
     fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)> {
         self.func.dyn_image(extent)
+    }
+
+    fn mirror(&self) -> Arc<dyn ColumnMirror> {
+        self.func.dyn_mirror()
     }
 
     fn legend(&self) -> Option<crate::Legend> {

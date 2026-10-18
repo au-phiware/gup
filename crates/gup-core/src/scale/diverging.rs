@@ -159,6 +159,10 @@ pub struct DivergingParams {
 }
 
 impl ShaderFn for Diverging {
+    fn cpu_color(&self, x: f64) -> Option<Color> {
+        Some(CpuMirror::eval(self, x))
+    }
+
     type In = f32;
     type Out = Color;
     type Params = DivergingParams;

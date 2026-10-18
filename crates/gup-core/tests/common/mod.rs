@@ -7,4 +7,5 @@ pub mod continents;
 pub mod culling;
 pub mod legend;
 pub mod scatter;
+pub mod svg_marks;
 pub mod vr;

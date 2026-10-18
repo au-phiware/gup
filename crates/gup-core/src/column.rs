@@ -461,7 +461,7 @@ fn validity_words(rows: u32, planes: usize) -> usize {
 /// A chunk's CPU copy: what uploads read and appends write. Released
 /// (dropped) by [`ColumnStore::release`] once the chunk is full and
 /// uploaded.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct ChunkCpu {
     /// The columns, laid out for the chunk's capacity.
     bytes: Vec<u8>,
@@ -505,7 +505,7 @@ pub struct Chunk {
     capacity: u32,
     columns: Vec<ChunkColumn>,
     /// The CPU copy, until released.
-    cpu: Option<ChunkCpu>,
+    cpu: Option<Arc<ChunkCpu>>,
     gpu: Option<ChunkGpu>,
 }
 
@@ -526,10 +526,10 @@ impl Chunk {
                     stats: Acc::EMPTY,
                 })
                 .collect(),
-            cpu: Some(ChunkCpu {
+            cpu: Some(Arc::new(ChunkCpu {
                 bytes: vec![0; size as usize],
                 validity: vec![0; validity_words(capacity, planes)],
-            }),
+            })),
             gpu: None,
         }
     }
@@ -603,7 +603,7 @@ impl Chunk {
     fn grow(&mut self, formats: &[ColumnFormat], planes: usize, capacity: u32) {
         let (offsets, size) = layout(formats, capacity);
         let len = self.len;
-        let cpu = self.cpu.as_mut().expect("only full chunks are released");
+        let cpu = Arc::make_mut(self.cpu.as_mut().expect("only full chunks are released"));
         let mut bytes = vec![0; size as usize];
         for (col, offset) in self.columns.iter_mut().zip(offsets) {
             let n = (u64::from(len) * col.format.stride()) as usize;
@@ -619,7 +619,7 @@ impl Chunk {
     /// Store rows `range` of `columns` as the chunk's rows `len..`.
     fn write(&mut self, columns: &[ColumnData], range: std::ops::Range<usize>, planes: usize) {
         let at = self.len;
-        let cpu = self.cpu.as_mut().expect("only full chunks are released");
+        let cpu = Arc::make_mut(self.cpu.as_mut().expect("only full chunks are released"));
         let mut plane = 0;
         for (col, data) in self.columns.iter_mut().zip(columns) {
             match data {
@@ -804,6 +804,110 @@ fn validity_buffer(cx: &Context, words: usize) -> wgpu::Buffer {
             | wgpu::BufferUsages::COPY_SRC,
         mapped_at_creation: false,
     })
+}
+
+/// Decode one chunk's `column` into `out`: the origin plus the stored
+/// offset (plus its low part), or a dictionary code; nulls are NaN.
+fn decode_chunk(
+    out: &mut Vec<f64>,
+    format: ColumnFormat,
+    plane: usize,
+    planes: usize,
+    len: u32,
+    col: &ChunkColumn,
+    cpu: &ChunkCpu,
+) {
+    let origin = col.origin();
+    let stride = format.stride() as usize;
+    let f32_at = |at: usize| f32::from_le_bytes(cpu.bytes[at..at + 4].try_into().unwrap());
+    for r in 0..len as usize {
+        let at = col.offset as usize + r * stride;
+        out.push(match format {
+            ColumnFormat::U32 => {
+                let code = u32::from_le_bytes(cpu.bytes[at..at + 4].try_into().unwrap());
+                if code == NULL_CODE {
+                    f64::NAN
+                } else {
+                    f64::from(code)
+                }
+            }
+            _ if cpu.validity[r / 32 * planes + plane] >> (r % 32) & 1 == 0 => f64::NAN,
+            ColumnFormat::F32 | ColumnFormat::F32Relative => origin + f64::from(f32_at(at)),
+            ColumnFormat::F32x2Relative => {
+                origin + f64::from(f32_at(at)) + f64::from(f32_at(at + 4))
+            }
+        });
+    }
+}
+
+/// One chunk of a [`CpuColumns`].
+#[derive(Clone, Debug)]
+struct CpuChunk {
+    row_base: u64,
+    len: u32,
+    columns: Vec<ChunkColumn>,
+    cpu: Arc<ChunkCpu>,
+}
+
+/// A read-only copy of a [`ColumnStore`]'s CPU columns that shares the
+/// chunks' bytes: how a [`MarkBatch`](crate::scene::MarkBatch) lets a
+/// vector target decode positions long after the layer released its data.
+#[derive(Clone, Debug)]
+pub(crate) struct CpuColumns {
+    formats: Vec<ColumnFormat>,
+    planes: usize,
+    chunks: Vec<CpuChunk>,
+}
+
+impl CpuColumns {
+    /// First stored row of chunk `k`.
+    pub(crate) fn row_base(&self, k: usize) -> u64 {
+        self.chunks[k].row_base
+    }
+
+    /// Number of chunks.
+    pub(crate) fn chunks(&self) -> usize {
+        self.chunks.len()
+    }
+
+    /// Rows in chunk `k`.
+    pub(crate) fn rows_of(&self, k: usize) -> usize {
+        self.chunks[k].len as usize
+    }
+
+    /// Whether `column` holds dictionary codes.
+    pub(crate) fn is_codes(&self, column: usize) -> bool {
+        self.formats[column] == ColumnFormat::U32
+    }
+
+    /// Column `column`'s values for every stored row, as
+    /// [`ColumnStore::cpu_values_where`]: the rows of chunks `keep`
+    /// rejects are NaN.
+    pub(crate) fn values_where(&self, column: usize, keep: impl Fn(usize) -> bool) -> Vec<f64> {
+        let format = self.formats[column];
+        let plane = self.formats[..column]
+            .iter()
+            .filter(|f| f.has_validity())
+            .count();
+        let total: usize = self.chunks.iter().map(|c| c.len as usize).sum();
+        let mut out = Vec::with_capacity(total);
+        for (k, chunk) in self.chunks.iter().enumerate() {
+            if keep(k) {
+                decode_chunk(
+                    &mut out,
+                    format,
+                    plane,
+                    self.planes,
+                    chunk.len,
+                    &chunk.columns[column],
+                    &chunk.cpu,
+                );
+            } else {
+                out.resize(out.len() + chunk.len as usize, f64::NAN);
+            }
+        }
+        out
+    }
 }
 
 /// A column store split into chunks.
@@ -1052,10 +1156,7 @@ impl ColumnStore {
         keep: impl Fn(usize) -> bool,
     ) -> Option<Vec<f64>> {
         let format = *self.formats.get(column)?;
-        let plane = self.formats[..column]
-            .iter()
-            .filter(|f| f.has_validity())
-            .count();
+        let plane = self.plane_of(column);
         let planes = self.validity_planes();
         let mut out = Vec::with_capacity(self.rows as usize);
         for (k, chunk) in self.chunks.iter().enumerate() {
@@ -1064,30 +1165,50 @@ impl ColumnStore {
                 continue;
             }
             let cpu = chunk.cpu.as_ref()?;
-            let col = &chunk.columns[column];
-            let origin = col.origin();
-            let stride = format.stride() as usize;
-            let f32_at = |at: usize| f32::from_le_bytes(cpu.bytes[at..at + 4].try_into().unwrap());
-            for r in 0..chunk.len as usize {
-                let at = col.offset as usize + r * stride;
-                out.push(match format {
-                    ColumnFormat::U32 => {
-                        let code = u32::from_le_bytes(cpu.bytes[at..at + 4].try_into().unwrap());
-                        if code == NULL_CODE {
-                            f64::NAN
-                        } else {
-                            f64::from(code)
-                        }
-                    }
-                    _ if cpu.validity[r / 32 * planes + plane] >> (r % 32) & 1 == 0 => f64::NAN,
-                    ColumnFormat::F32 | ColumnFormat::F32Relative => origin + f64::from(f32_at(at)),
-                    ColumnFormat::F32x2Relative => {
-                        origin + f64::from(f32_at(at)) + f64::from(f32_at(at + 4))
-                    }
-                });
-            }
+            decode_chunk(
+                &mut out,
+                format,
+                plane,
+                planes,
+                chunk.len,
+                &chunk.columns[column],
+                cpu,
+            );
         }
         Some(out)
+    }
+
+    /// The validity plane of numeric column `column` (columns before it
+    /// that have validity).
+    fn plane_of(&self, column: usize) -> usize {
+        self.formats[..column]
+            .iter()
+            .filter(|f| f.has_validity())
+            .count()
+    }
+
+    /// A shared, read-only view of the CPU columns, if every chunk still
+    /// holds its copy (see [`cpu_kept`](Self::cpu_kept)). Sharing the
+    /// chunks' bytes costs nothing; an append to the last chunk copies it
+    /// first (copy on write), so the view never changes (GUP-467).
+    pub(crate) fn cpu_snapshot(&self) -> Option<CpuColumns> {
+        let chunks = self
+            .chunks
+            .iter()
+            .map(|c| {
+                Some(CpuChunk {
+                    row_base: c.row_base,
+                    len: c.len,
+                    columns: c.columns.clone(),
+                    cpu: Arc::clone(c.cpu.as_ref()?),
+                })
+            })
+            .collect::<Option<Vec<_>>>()?;
+        Some(CpuColumns {
+            planes: self.validity_planes(),
+            formats: self.formats.clone(),
+            chunks,
+        })
     }
 
     /// Drop the CPU copy of every full chunk whose rows (and null bits)
@@ -1120,7 +1241,8 @@ impl ColumnStore {
             .find(|c| (c.row_base..c.row_base + u64::from(c.len)).contains(&row))
             .expect("row in the store");
         let r = (row - chunk.row_base) as usize;
-        chunk.cpu.as_mut().expect("CPU copy").validity[r / 32 * planes + plane] &= !(1 << (r % 32));
+        Arc::make_mut(chunk.cpu.as_mut().expect("CPU copy")).validity[r / 32 * planes + plane] &=
+            !(1 << (r % 32));
         if let Some(v) = chunk.gpu.as_mut().and_then(|g| g.validity.as_mut()) {
             v.rows = 0;
         }

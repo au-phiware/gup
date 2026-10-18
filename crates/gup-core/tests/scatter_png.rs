@@ -9,22 +9,29 @@
 mod common;
 
 use common::scatter::{self, HEIGHT, WIDTH};
+use common::svg_marks;
 use common::vr::{harness, layout_metadata, metadata, rgba8};
 use gup_core::prelude::*;
 use gup_core::{Layout, scene::TextRole};
 use gup_visual_regression::RgbaImage;
 
-fn render() -> (image::RgbaImage, Layout, Sequential) {
+fn render() -> (image::RgbaImage, Layout, Sequential, gup_core::Scene) {
     let cx = Context::new_blocking().expect("headless GPU context");
-    let (image, layout) = scatter::plot()
+    let mut plot = scatter::plot();
+    let (image, layout) = plot
         .render_resolved(&cx, WIDTH, HEIGHT)
         .expect("render scatter");
-    (image, layout, scatter::fill())
+    let scene = plot
+        .resolve(&cx, WIDTH as f32, HEIGHT as f32)
+        .expect("cached resolve")
+        .scene
+        .clone();
+    (image, layout, scatter::fill(), scene)
 }
 
 #[test]
 fn scatter_png_passes_the_visual_regression_harness() {
-    let (image, layout, fill) = render();
+    let (image, layout, fill, scene) = render();
 
     // Non-trivial output (AC7), independently of the harness.
     assert_eq!(image.dimensions(), (WIDTH, HEIGHT));
@@ -55,9 +62,13 @@ fn scatter_png_passes_the_visual_regression_harness() {
     }
 
     let vr = RgbaImage::new(WIDTH, HEIGHT, image.into_raw()).unwrap();
+    let meta = metadata(&layout, &fill);
     harness()
-        .run("gup_core/scatter", Ok((vr, metadata(&layout, &fill))))
+        .run("gup_core/scatter", Ok((vr.clone(), meta.clone())))
         .assert_ok();
+    // GUP-467: the SVG draws the same marks.
+    let svg = svg_marks::assert_matches("gup_core/scatter", &scene, &vr, &meta);
+    assert_eq!(svg.matches("<circle ").count(), 120);
 }
 
 /// RFC-001 S4a (AC3): the golden scatter's 120 rows forced into 3 and 4

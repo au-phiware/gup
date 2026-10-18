@@ -10,6 +10,7 @@ use crate::geom::{Point, Rect};
 use crate::render::{LayerGpu, Span};
 use crate::scale::Ramp;
 use crate::scale::sequential::sample_lut;
+use crate::vector::LayerVector;
 use std::sync::Arc;
 
 /// Default z-order of backgrounds and grids, below data layers.
@@ -151,16 +152,19 @@ pub struct MarkBatch {
     /// The layer's spans that can put a pixel inside the plot rect, in draw
     /// order (RFC-001 S9f): what a draw, a CPU pick and a GPU pick use.
     pub(crate) visible: Arc<[Span]>,
+    /// What vector targets need to write the marks (GUP-467).
+    pub(crate) vector: Arc<LayerVector>,
 }
 
 impl MarkBatch {
     /// A batch that draws every span of `gpu`.
-    pub(crate) fn new(gpu: Arc<LayerGpu>, antialias: Antialias) -> Self {
+    pub(crate) fn new(gpu: Arc<LayerGpu>, antialias: Antialias, vector: Arc<LayerVector>) -> Self {
         let visible = gpu.spans.as_slice().into();
         Self {
             gpu,
             antialias,
             visible,
+            vector,
         }
     }
 
