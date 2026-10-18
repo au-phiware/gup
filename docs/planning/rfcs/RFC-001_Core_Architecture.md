@@ -3372,3 +3372,21 @@ us (budget 20 us; 99% of them hit something, in a dense field).
   tied to it) and `plot_centre()` in the harness. `surface_config` lives in
   `src/surface.rs`, not `window.rs`, because it is shared by two features and
   `window.rs` is compiled only with `window`.
+
+## S9a findings (2026-10-18, GUP-452)
+
+- **Rule**: `Plot::handle` holds the plot rect's left edge and right margin
+  (taken before the first domain-changing input, `Plot::hold_layout`) while the
+  pointer drives the view. A margin is kept unless the label needs more than the
+  held value plus `pad`; then it grows to what a fresh layout needs, and the
+  hold keeps the grown value. Released by `PointerLeft` (with a redraw) or a
+  size change. Direct `Plot::zoom` calls never hold.
+- **Test data**: x `(0, 100)`, y `(0, 8)` explicit, 400 × 300, anchor (150,
+  120). Six wheel-in lines then six out: the widest y label goes 8 px, 18 px, 8
+  px (never more than +10 px, under `pad` = 12). Without the hold the rect
+  moves; with it, it is bitwise constant and the value under the pointer holds
+  to 0.01 px.
+- **Grow case**: not seen in the 12-step sequence. It needs a larger jump, for
+  instance one 20-line wheel on that plot (widest label 8 px to 26 px), which
+  moves the rect from x 29 to 47, the same as a fresh layout.
+- **Cost**: `wasm.scatter.gz_bytes` 295,904 to 296,131 (+227 B, within the +2%).

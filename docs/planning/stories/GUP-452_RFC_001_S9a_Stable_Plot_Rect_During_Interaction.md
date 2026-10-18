@@ -9,8 +9,8 @@ implementer-reason:
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 🚧 In Progress **Created**:
-2026-10-18
+**Initiative**: RFC-001 Migration **Status**: ✅ Complete (2026-10-18)
+**Created**: 2026-10-18
 
 ## Context
 
@@ -56,11 +56,11 @@ held.
 
 ### AC1: `Plot::invert`
 
-- [ ] `Plot::invert` exists as in Decisions. A doctest resolves a plot, takes
+- [x] `Plot::invert` exists as in Decisions. A doctest resolves a plot, takes
       the plot rect's centre, and checks that `invert` gives the domain
       midpoints (relative error ≤ 1e-9) for a linear x and y. It returns `None`
       before the first resolve and 1 px outside the plot rect.
-- [ ] `Chart` is unchanged (not added to the trait).
+- [x] `Chart` is unchanged (not added to the trait).
 
 ### AC2: The value under the pointer holds across label-width changes
 
@@ -69,61 +69,61 @@ In `tests/resolve_cache.rs`, a plot with explicit domains, x `(0, 100)` and y
 conditions below hold), resolved at 400 × 300. With explicit domains, "a fresh
 plot at the same domains" below has the same range policy.
 
-- [ ] A sequence of 6 `Input::Wheel { lines: 1.0 }` steps at a fixed anchor
+- [x] A sequence of 6 `Input::Wheel { lines: 1.0 }` steps at a fixed anchor
       inside the plot rect, then 6 with `lines: -1.0`, with a resolve after
       each. After every step, `(plot.invert(anchor) − v) × px_per_unit` is at
       most 0.01 px on each axis, where `v` is `plot.invert(anchor)` before the
       step.
-- [ ] The test asserts that its data exercises the bug: at least one step widens
+- [x] The test asserts that its data exercises the bug: at least one step widens
       and at least one narrows the widest y tick label (measured from
       `layout.texts`, the y tick labels' ink widths), and no step widens it by
       more than `theme.pad`.
-- [ ] `layout.plot` is identical (bitwise `f32`) after every step of the
+- [x] `layout.plot` is identical (bitwise `f32`) after every step of the
       sequence.
-- [ ] Control: the same steps on a plot whose hold is released after every step
+- [x] Control: the same steps on a plot whose hold is released after every step
       (send `Input::PointerLeft` before each resolve) move `layout.plot.x` at
       least once. That proves the hold is doing the work.
 
 ### AC3: Grow and release
 
-- [ ] **Grow**: a wheel step whose widest y label widens by more than
+- [x] **Grow**: a wheel step whose widest y label widens by more than
       `theme.pad` over the held gutter moves `layout.plot.x` right by exactly
       the growth needed. Every y tick label's ink box then has `x ≥ 0`.
-- [ ] **Release on leave**: after AC2's wheel-in steps, `Input::PointerLeft`
+- [x] **Release on leave**: after AC2's wheel-in steps, `Input::PointerLeft`
       returns `Response { redraw: true }`, and the next resolve gives the same
       `layout.plot` as a fresh plot resolved at the same domains (bitwise).
-- [ ] **Release on resize**: resolving at a different size gives the same
+- [x] **Release on resize**: resolving at a different size gives the same
       `layout.plot` as a fresh plot at that size and those domains.
-- [ ] Calling `Plot::zoom` directly (not through `handle`) does not hold:
+- [x] Calling `Plot::zoom` directly (not through `handle`) does not hold:
       `layout.plot` equals a fresh plot's at the zoomed domains.
 
 ### AC4: Every existing caller still passes
 
-- [ ] `git grep -n "Input::Wheel\|Input::PointerLeft" -- crates examples dogfood`.
+- [x] `git grep -n "Input::Wheel\|Input::PointerLeft" -- crates examples dogfood`.
       Each hit is listed in the retrospective as "unaffected" or "updated", with
       the reason. In particular `tests/resolve_cache.rs::inputs_that_do_nothing`
       still gets `Response::default()` for `PointerLeft` (no hold was taken).
-- [ ] `cargo test -p gup-core -- --test-threads=1` and all goldens pass without
+- [x] `cargo test -p gup-core -- --test-threads=1` and all goldens pass without
       `GUP_BLESS` (no golden involves input).
 
 ### AC5: Browser
 
-- [ ] The harness exports a hook `InteractiveScatter::plot_rect() -> Vec<f32>`
+- [x] The harness exports a hook `InteractiveScatter::plot_rect() -> Vec<f32>`
       (`[x, y, width, height]` of the current layout's plot rect).
-- [ ] In `index.html`, a step `held-rect` after the existing `wheel` step:
+- [x] In `index.html`, a step `held-rect` after the existing `wheel` step:
       `plot_rect()` is unchanged from just before the wheel. That scene's y
       labels go from `0 … 10` to a set without `10`, so without the hold the
       rect would move left.
-- [ ] Then `pointerleave` and two frames: step `release`, `plot_rect()[0]` is
+- [x] Then `pointerleave` and two frames: step `release`, `plot_rect()[0]` is
       smaller than before the wheel.
-- [ ] `mask wasm-browser` passes (this story changes layout behaviour), with
+- [x] `mask wasm-browser` passes (this story changes layout behaviour), with
       `interactive=ok`.
 
 ### AC6: Record
 
-- [ ] RFC-001 gains "S9a findings" (date, story), with the rule, the test data,
+- [x] RFC-001 gains "S9a findings" (date, story), with the rule, the test data,
       and how often the grow case was seen.
-- [ ] `mask wasm-size` passes. If `wasm.scatter.gz_bytes` grows beyond its +2%,
+- [x] `mask wasm-size` passes. If `wasm.scatter.gz_bytes` grows beyond its +2%,
       re-record it with the reason in `PERF_BUDGETS.md`'s History.
 
 ## Decisions
@@ -187,13 +187,13 @@ plot at the same domains" below has the same range policy.
 
 ## Technical Tasks
 
-- [ ] `Plot::invert` and its doctest.
-- [ ] `Hold`, `hold_layout`, the `layout` closure change, and release in
+- [x] `Plot::invert` and its doctest.
+- [x] `Hold`, `hold_layout`, the `layout` closure change, and release in
       `handle` and `resolve`.
-- [ ] AC2/AC3 tests in `tests/resolve_cache.rs`.
-- [ ] AC4 grep and retrospective list.
-- [ ] Harness hook `plot_rect`, the `held-rect` and `release` steps.
-- [ ] RFC-001 "S9a findings"; `mask wasm-size`.
+- [x] AC2/AC3 tests in `tests/resolve_cache.rs`.
+- [x] AC4 grep and retrospective list.
+- [x] Harness hook `plot_rect`, the `held-rect` and `release` steps.
+- [x] RFC-001 "S9a findings"; `mask wasm-size`.
 
 ## Dependencies
 
@@ -220,9 +220,9 @@ plot at the same domains" below has the same range policy.
 
 ## Success Metrics
 
-- [ ] Zero pixel motion of the plot rect across a wheel sequence whose labels
+- [x] Zero pixel motion of the plot rect across a wheel sequence whose labels
       change width.
-- [ ] Layout returns to the un-held result as soon as the pointer leaves.
+- [x] Layout returns to the un-held result as soon as the pointer leaves.
 
 ## Risk Assessment
 
@@ -234,10 +234,73 @@ plot at the same domains" below has the same range policy.
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] `mask wasm-browser` passes; goldens pass without `GUP_BLESS`
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] `mask wasm-browser` passes; goldens pass without `GUP_BLESS`
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `Plot::invert`, private `Hold`/`Plot::hold_layout` (taken in `handle` on
+  `Wheel`), used in `resolve_full`'s `layout` closure; released on `PointerLeft`
+  (revision bump, `redraw: true`) and on a size change in `resolve`.
+- `tests/resolve_cache.rs`: 5 new tests (value held and rect bitwise constant
+  with a control, grow, release on leave and resize, direct `zoom`, `invert`
+  edges) plus a doctest.
+- Browser: `InteractiveScatter::plot_rect`, steps `held-rect` and `release`;
+  `mask wasm-browser` passes with `interactive=ok`.
+- `mask wasm-size`: scatter 296,131 B gz (recorded 295,904, +0.08%), over wgpu
+  263,771. `mask perf-budget`: every check passed. `mask old-path-loc`: TOTAL
+  28,910. No golden changed.
+
+## Retrospective
+
+**Completed**: 2026-10-18
+
+### Key Technical Learnings
+
+#### Holding rect edges exactly
+
+- **Challenge**: bitwise-identical rects across steps.
+- **Solution**: the hold stores the right edge (not `width - right`), valid for
+  one size, so no float round trip. `hold_layout` reads the cached layout, so it
+  must run before `zoom`.
+- **Pattern**: store the absolute value when the key already pins the size.
+
+### Architectural Decisions
+
+#### Right edge instead of right margin in `Hold`
+
+- **Decision**: `Hold.right` is the plot's right edge; the margin test is
+  `(width - right) - pad <= width - held.right`.
+- **Reasoning**: equivalent to the Decisions' margin for one size, and exact.
+- **Trade-off**: none; the struct is private.
+
+#### Grow case coverage
+
+- The 12-step sequence never grows (max +10 px < pad 12). The grow test uses one
+  20-line wheel (8 px to 26 px).
+
+### AC4: callers of `Input::Wheel` / `Input::PointerLeft`
+
+- `app.rs` (160, 179, 326, 394, 428, 438), `web.rs` (421, 463): unaffected, they
+  only translate host events into `Input`.
+- `chart.rs:43` doctest: unaffected (wheel on a plot; no rect assertion).
+- `plot.rs` `handle`: updated.
+- `tests/events.rs` (105, 107, 221, 250, 303), `tests/pick.rs:373`: unaffected;
+  they pass unchanged.
+- `tests/resolve_cache.rs::inputs_that_do_nothing`: still `Response::default()`
+  for `PointerLeft` (no hold taken).
+- The existing `wheel_steps` helpers' comment still says the rows keep label
+  widths; that is now only needed for the old assumption, harmless.
+
+### Development Workflow Insights
+
+- A probe test printing label widths and rects found data in one run.
+
+### Follow-up Stories
+
+None.

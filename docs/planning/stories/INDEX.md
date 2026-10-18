@@ -340,7 +340,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   bare wgpu (from 356,914): an LTO release profile for the harnesses, an
   ASCII-only SemiBold subset, and `Selection`'s `Layer` bodies moved out of the
   per-row-type generics. Deps: GUP-450 📋, GUP-436 ✅, GUP-445 ✅.
-- [GUP-452](GUP-452_RFC_001_S9a_Stable_Plot_Rect_During_Interaction.md) 🚧 —
+- [GUP-452](GUP-452_RFC_001_S9a_Stable_Plot_Rect_During_Interaction.md) ✅ —
   RFC-001 step S9a: hold the plot rect's margins while the pointer interacts, so
   the value under it stays put when tick labels change width, plus
   `Plot::invert`. Deps: GUP-444 ✅, GUP-449 ✅, GUP-451 📋.
