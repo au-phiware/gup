@@ -375,7 +375,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   export, measures library code only, slims `bind_axes`, adds
   `wasm_attrib.sh --row-type` and makes the row a `<=` budget that fails CI.
   Deps: GUP-450 ✅, GUP-456 ✅.
-- [GUP-460](GUP-460_RFC_001_S10a_Grid_Lines.md) 📋 — RFC-001 step S10a:
+- [GUP-460](GUP-460_RFC_001_S10a_Grid_Lines.md) ✅ — RFC-001 step S10a:
   `Plot::grid(Axes)` and `Theme::grid`, light rules at the ticks behind the
   marks, clipped to the plot rect, off by default. Deps: GUP-425 ✅.
 - [GUP-461](GUP-461_RFC_001_S10b_Offset_And_Sub_Bands.md) 📋 — RFC-001 step

@@ -9,7 +9,8 @@ implementer-reason:
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 📋 Planned **Created**: 2026-10-18
+**Initiative**: RFC-001 Migration **Status**: ✅ Complete (2026-10-18)
+**Created**: 2026-10-18
 
 ## Context
 
@@ -39,42 +40,42 @@ RFC-001 S10's exit criterion is that dogfood tasks 1–3 pass. The S10 builders
 
 ### AC1: API
 
-- [ ] `Plot::grid(&mut self, axes: Axes) -> &mut Self` and `Theme::grid: Color`
+- [x] `Plot::grid(&mut self, axes: Axes) -> &mut Self` and `Theme::grid: Color`
       exist as in Decisions, with a doctest that builds a plot with
       `.grid(Axes::Y)`.
-- [ ] The default is no grid. Every existing golden is unchanged (run the whole
+- [x] The default is no grid. Every existing golden is unchanged (run the whole
       gup-core suite without `GUP_BLESS`).
 
 ### AC2: Drawn right
 
-- [ ] A golden, `gup_core/grid`, of the reference scatter
+- [x] A golden, `gup_core/grid`, of the reference scatter
       (`tests/common/scatter.rs`) with `.grid(Axes::Both)` at 720 × 450. The
       implementer reads it:
   - one light line at every x and y tick;
   - inside the plot rect only;
   - behind the dots;
   - the axis lines still dark where a grid line meets them.
-- [ ] Pixel checks in the same test:
+- [x] Pixel checks in the same test:
   - halfway between two x ticks, on a y tick's row, the pixel is
     `Theme::default().grid` (±2/255);
   - a dot centred on a grid line shows the dot's colour at its centre;
   - 3 px outside the plot rect, on a tick's row, there is no grid colour.
-- [ ] `Axes::X` draws only vertical lines, `Axes::Y` only horizontal ones, and
+- [x] `Axes::X` draws only vertical lines, `Axes::Y` only horizontal ones, and
       `Axes::Neither` none. Counted from the scene's `Rules` item at `Z_GRID`.
 
 ### AC3: Zoom and outputs
 
-- [ ] While zooming, the grid follows the ticks. One zoom step on a grid plot
+- [x] While zooming, the grid follows the ticks. One zoom step on a grid plot
       writes 0 column bytes, and its guide-instance bytes grow by exactly the
       grid's rules (count them).
-- [ ] `SvgTarget` on a grid plot writes one `<line>` per grid line, clipped like
+- [x] `SvgTarget` on a grid plot writes one `<line>` per grid line, clipped like
       the marks. Extend `tests/svg.rs`.
-- [ ] `mask perf-budget`'s `zoom.instances.bytes` is unchanged (`zoom_bench` has
+- [x] `mask perf-budget`'s `zoom.instances.bytes` is unchanged (`zoom_bench` has
       no grid).
 
 ### AC4: Docs
 
-- [ ] `plot.rs`'s module docs no longer say grids are later work.
+- [x] `plot.rs`'s module docs no longer say grids are later work.
 
 ## Decisions
 
@@ -112,9 +113,9 @@ RFC-001 S10's exit criterion is that dogfood tasks 1–3 pass. The S10 builders
 
 ## Technical Tasks
 
-- [ ] `Theme::grid`; `Plot::grid` and its field.
-- [ ] Emit the grid rules in `resolve`; push the clipped item at `Z_GRID`.
-- [ ] Golden and pixel tests (AC2); zoom and SVG tests (AC3); docs.
+- [x] `Theme::grid`; `Plot::grid` and its field.
+- [x] Emit the grid rules in `resolve`; push the clipped item at `Z_GRID`.
+- [x] Golden and pixel tests (AC2); zoom and SVG tests (AC3); docs.
 
 ## Dependencies
 
@@ -135,7 +136,7 @@ RFC-001 S10's exit criterion is that dogfood tasks 1–3 pass. The S10 builders
 
 ## Success Metrics
 
-- [ ] `NO_GRID` can become a plain check in dogfood tasks 1 and 3.
+- [x] `NO_GRID` can become a plain check in dogfood tasks 1 and 3.
 
 ## Risk Assessment
 
@@ -144,14 +145,14 @@ RFC-001 S10's exit criterion is that dogfood tasks 1–3 pass. The S10 builders
 
 ## Definition of Done
 
-- [ ] First code commit within 30 minutes of starting; then commit at each
+- [x] First code commit within 30 minutes of starting; then commit at each
       checkpoint (story-worker "Checkpoint rule")
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -p gup-core -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye: `gup_core/grid.png`
-- [ ] `mask wasm-size` passes
-- [ ] `mask old-path-loc` recorded (expected unchanged, 28,910)
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -p gup-core -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye: `gup_core/grid.png`
+- [x] `mask wasm-size` passes
+- [x] `mask old-path-loc` recorded (expected unchanged, 28,910)
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document

@@ -8,8 +8,9 @@
 //! union across layers and channels. Left and bottom axes with tick
 //! labels, an optional title, axis titles, a [`Theme`](crate::Theme) and
 //! colour legends at the right (found through
-//! [`ShaderFn::legend`](crate::ShaderFn::legend)); grids and the
-//! object-safe `Chart` trait are later RFC-001 S7 steps.
+//! [`ShaderFn::legend`](crate::ShaderFn::legend)) and optional grid
+//! lines at the ticks ([`Plot::grid`]); the object-safe `Chart` trait is a
+//! later RFC-001 step.
 
 use crate::channel::{Mark, Px};
 use crate::context::{Context, ContextId};
@@ -195,6 +196,8 @@ pub struct Plot {
     hold: Option<Hold>,
     /// Which axes the wheel zooms and a drag pans.
     view_axes: Axes,
+    /// Which axes draw grid lines at their ticks.
+    grid: Axes,
     /// What a primary-button drag does.
     drag: Drag,
     /// The domains the drag started from, once the pointer left the click
@@ -413,6 +416,7 @@ impl Plot {
             hover: None,
             press: None,
             view_axes: Axes::Both,
+            grid: Axes::Neither,
             drag: Drag::Pan,
             dragging: None,
             home: None,
@@ -441,6 +445,20 @@ impl Plot {
     pub fn title(&mut self, title: impl Into<String>) -> &mut Self {
         self.revision = self.revision.wrapping_add(1);
         self.title = Some(title.into());
+        self
+    }
+
+    /// Draw grid lines at the ticks of the given axes (default
+    /// `Axes::Neither`): vertical lines at x ticks, horizontal at y ticks.
+    ///
+    /// ```
+    /// use gup_core::prelude::*;
+    /// let mut plot = Plot::new();
+    /// plot.grid(Axes::Y);
+    /// ```
+    pub fn grid(&mut self, axes: Axes) -> &mut Self {
+        self.revision = self.revision.wrapping_add(1);
+        self.grid = axes;
         self
     }
 
@@ -1865,6 +1883,39 @@ impl Plot {
         guides.extend(legend.iter().flat_map(|l| l.guides.iter().copied()));
 
         let clip = scene.add_clip(plot);
+        let [grid_x, grid_y] = self.grid.flags();
+        let mut grid_rules = Vec::new();
+        let grid_rule = |p0: Point, p1: Point| Rule {
+            p0,
+            p1,
+            width: Px(1.0),
+            color: th.grid,
+        };
+        if grid_x {
+            for (_, px) in &x_placed {
+                let cx_ = px.floor() + 0.5;
+                grid_rules.push(grid_rule(
+                    Point::new(cx_, plot.top()),
+                    Point::new(cx_, plot.bottom()),
+                ));
+            }
+        }
+        if grid_y {
+            for (_, py) in &y_placed {
+                let cy = py.floor() + 0.5;
+                grid_rules.push(grid_rule(
+                    Point::new(plot.left(), cy),
+                    Point::new(plot.right(), cy),
+                ));
+            }
+        }
+        if !grid_rules.is_empty() {
+            scene.push(Item {
+                z: Z_GRID,
+                clip: Some(clip),
+                kind: ItemKind::Rules(grid_rules),
+            });
+        }
         // Insertion order; `Scene::push` breaks z ties by it.
         for (z, batch) in batches {
             scene.push(Item {
