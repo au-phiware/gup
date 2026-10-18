@@ -127,8 +127,9 @@ axis.
 - Dropped: the old `$Nk` x tick format.
 - `t3_scatter_window`: the same chart with `.tooltip(..)` in `gup_core::show`.
   With `DOGFOOD_AUTO=1` it resolves headless, takes a row's `pick_anchor`, and
-  sets `GUP_SCREENSHOT_*` so the window hovers there. The tooltip uses a dark
-  theme, the look the check was calibrated for. egui is not used.
+  sets `GUP_SCREENSHOT_*` so the window hovers there. The window check
+  recognises a tooltip panel of any style (`Measure::Tooltip`) on the default
+  tooltip. egui is not used.
 
 ### Task 4: `t4_linked`
 
