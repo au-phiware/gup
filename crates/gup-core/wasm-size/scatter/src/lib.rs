@@ -1102,15 +1102,14 @@ struct Extra {
     label: &'static str,
 }
 
-/// An interactive layer over [`Extra`] rows, resolved, picked at the plot
-/// centre and rendered: it links every `Layer` method for one more row type
+/// An interactive layer over [`Extra`] rows. Boxing the plot as a `dyn Chart`
+/// links every `Layer` method for one more row type through the vtable
 /// (`bind_axes`, `fit_domains`, `prepare`, `hit_items`, `tooltip_text` and
-/// `dispatch`). The page never calls it.
+/// `dispatch`), and nothing else runs, so the size difference measures library
+/// code only (GUP-459). The page never calls it.
 #[cfg(feature = "extra-row-type")]
 #[wasm_bindgen]
-pub async fn render_extra_row_type(width: u32, height: u32) -> Result<Vec<u8>, JsValue> {
-    std::panic::set_hook(Box::new(|info| web_error(&info.to_string())));
-    let cx = Context::new().await.map_err(js)?;
+pub fn extra_row_type() -> usize {
     let rows: Vec<Extra> = (0..12)
         .map(|i| Extra {
             a: f64::from(i),
@@ -1124,20 +1123,8 @@ pub async fn render_extra_row_type(width: u32, height: u32) -> Result<Vec<u8>, J
         .y(|r| r.b)
         .tooltip(|r| r.label.to_owned())
         .on(Event::Click, |_, _| {});
-    let resolved = plot
-        .resolve(&cx, width as f32, height as f32)
-        .map_err(js)?
-        .clone();
-    let r = resolved.layout.plot;
-    let picked = plot.pick_row(gup_core::geom::Point::new(
-        r.x + r.width / 2.0,
-        r.y + r.height / 2.0,
-    ));
-    web_log(picked.map_or(0, |p| p.row + 1));
-    let image = ImageTarget::new(&cx, width, height)
-        .map_err(js)?
-        .render(&cx, &resolved.scene)
-        .await
-        .map_err(js)?;
-    Ok(image.into_raw())
+    let chart: Box<dyn Chart> = Box::new(plot);
+    std::hint::black_box(chart)
+        .title_text()
+        .map_or(0, str::len)
 }
