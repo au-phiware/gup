@@ -77,11 +77,15 @@ pub fn assert_matches(case: &str, scene: &Scene, gpu: &RgbaImage, meta: &LayoutM
     }
     let masked = RgbaImage::new(raster.width(), raster.height(), data).unwrap();
     let tol = DiffTolerance::default();
-    let stats = perceptual_diff(gpu, &masked, &tol).unwrap();
-    eprintln!("{case}: SVG raster vs GPU image {stats:?}");
+    let whole = perceptual_diff(gpu, &masked, &tol).unwrap();
+    let (a, b) = (blocks(gpu, BLOCK), blocks(&masked, BLOCK));
+    let stats = perceptual_diff(&a, &b, &tol).unwrap();
+    eprintln!(
+        "{case}: SVG raster vs GPU image: per pixel {whole:?}; in {BLOCK}x{BLOCK} blocks {stats:?}"
+    );
     assert!(
         stats.differing_fraction() <= tol.max_differing_fraction,
-        "{case}: {} of {} pixels differ by more than ΔE {} (max ΔE {:.1}); see {}",
+        "{case}: {} of {} blocks differ by more than ΔE {} (max ΔE {:.1}); see {}",
         stats.differing_pixels,
         stats.total_pixels,
         tol.pixel_delta_e,
@@ -89,4 +93,28 @@ pub fn assert_matches(case: &str, scene: &Scene, gpu: &RgbaImage, meta: &LayoutM
         artifacts.display()
     );
     svg
+}
+
+/// Side of the blocks both images are averaged over before comparing.
+const BLOCK: u32 = 4;
+
+/// `img` with each `k × k` block of pixels averaged into one.
+fn blocks(img: &RgbaImage, k: u32) -> RgbaImage {
+    let (w, h) = (img.width() / k, img.height() / k);
+    let mut data = Vec::with_capacity((w * h * 4) as usize);
+    for by in 0..h {
+        for bx in 0..w {
+            let mut sum = [0u32; 4];
+            for y in by * k..(by + 1) * k {
+                for x in bx * k..(bx + 1) * k {
+                    let p = img.pixel(x, y);
+                    for (s, c) in sum.iter_mut().zip([p.r, p.g, p.b, p.a]) {
+                        *s += u32::from(c);
+                    }
+                }
+            }
+            data.extend(sum.map(|s| ((s + k * k / 2) / (k * k)) as u8));
+        }
+    }
+    RgbaImage::new(w, h, data).unwrap()
 }

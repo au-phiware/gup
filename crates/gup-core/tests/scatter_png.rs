@@ -195,6 +195,11 @@ fn categorical_scatter_with_nulls() {
     }
     let (mut plot, _, _) = continents::plot(nulls.clone());
     let (image, layout) = plot.render_resolved(&cx, WIDTH, HEIGHT).unwrap();
+    let scene = plot
+        .resolve(&cx, WIDTH as f32, HEIGHT as f32)
+        .unwrap()
+        .scene
+        .clone();
     assert_eq!(layout.plot, all_layout.plot);
 
     // AC1: no ink where the null rows would be; the control image has it.
@@ -268,6 +273,9 @@ fn categorical_scatter_with_nulls() {
     meta = meta.with_expected_color("null", rgba8(NULL_COLOR));
     let vr = RgbaImage::new(WIDTH, HEIGHT, image.into_raw()).unwrap();
     harness()
-        .run("gup_core/categorical_nulls", Ok((vr, meta)))
+        .run("gup_core/categorical_nulls", Ok((vr.clone(), meta.clone())))
         .assert_ok();
+    // GUP-467: nulls are skipped (a null colour is drawn, a null position
+    // is not); the SVG draws the same marks.
+    svg_marks::assert_matches("gup_core/categorical_nulls", &scene, &vr, &meta);
 }

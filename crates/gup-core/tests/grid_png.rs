@@ -8,6 +8,7 @@
 mod common;
 
 use common::scatter::{self, HEIGHT, WIDTH};
+use common::svg_marks;
 use common::vr::{harness, layout_metadata};
 use gup_core::prelude::*;
 use gup_core::scene::{ItemKind, Z_GRID};
@@ -43,9 +44,8 @@ fn grid_lines_sit_at_the_ticks_behind_the_marks() {
     let cx = Context::new_blocking().unwrap();
     let theme = Theme::default();
     let (plain, _) = scatter::plot().render_resolved(&cx, WIDTH, HEIGHT).unwrap();
-    let (image, layout) = grid_plot(Axes::Both)
-        .render_resolved(&cx, WIDTH, HEIGHT)
-        .unwrap();
+    let mut grid = grid_plot(Axes::Both);
+    let (image, layout) = grid.render_resolved(&cx, WIDTH, HEIGHT).unwrap();
     let p = layout.plot;
     assert!(layout.x_ticks.len() >= 4 && layout.y_ticks.len() >= 4);
 
@@ -104,7 +104,16 @@ fn grid_lines_sit_at_the_ticks_behind_the_marks() {
 
     let meta = layout_metadata(&layout);
     let vr = RgbaImage::new(WIDTH, HEIGHT, image.into_raw()).unwrap();
-    harness().run("gup_core/grid", Ok((vr, meta))).assert_ok();
+    harness()
+        .run("gup_core/grid", Ok((vr.clone(), meta.clone())))
+        .assert_ok();
+    // GUP-467: the SVG draws the same marks (and grid lines).
+    let scene = grid
+        .resolve(&cx, WIDTH as f32, HEIGHT as f32)
+        .unwrap()
+        .scene
+        .clone();
+    svg_marks::assert_matches("gup_core/grid", &scene, &vr, &meta);
 }
 
 #[test]

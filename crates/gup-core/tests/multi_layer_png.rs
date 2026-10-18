@@ -6,6 +6,7 @@
 
 mod common;
 
+use common::svg_marks;
 use common::vr::{harness, layout_metadata, rgba8};
 use gup_core::ScaleRef;
 use gup_core::prelude::*;
@@ -126,11 +127,21 @@ fn composite_two_layers() {
     circle_layer(&mut plot, (&x, &y), forecast, 2.0, grey);
     circle_layer(&mut plot, (&x, &y), observed, 5.0, blue).z(1);
     let (image, layout) = plot.render_resolved(&cx, WIDTH, HEIGHT).unwrap();
+    let scene = plot
+        .resolve(&cx, WIDTH as f32, HEIGHT as f32)
+        .unwrap()
+        .scene
+        .clone();
     let meta = layout_metadata(&layout)
         .with_expected_color("forecast", rgba8(grey))
         .with_expected_color("observed", rgba8(blue));
     let vr = RgbaImage::new(image.width(), image.height(), image.into_raw()).unwrap();
     harness()
-        .run("gup_core/composite_two_layers", Ok((vr, meta)))
+        .run(
+            "gup_core/composite_two_layers",
+            Ok((vr.clone(), meta.clone())),
+        )
         .assert_ok();
+    // GUP-467: the SVG draws the same marks.
+    svg_marks::assert_matches("gup_core/composite_two_layers", &scene, &vr, &meta);
 }

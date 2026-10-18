@@ -169,3 +169,39 @@ pieces needed to emit vector marks exist.
 - [ ] Rendered output verified by eye (golden image or PNG read), if visual
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
+
+## Blocked (2026-10-18)
+
+**Question**: AC2 says compare each golden scene's SVG raster to the PNG within
+the harness tolerance (ΔE 3.0, 0.25% of pixels). Per pixel that fails for 9 of
+17 scenes, purely from antialiasing, not geometry (Escalation Trigger 3). May
+the comparison average both images over 4×4 pixel blocks first, keeping the same
+ΔE 3.0 / 0.25% numbers?
+
+**Evidence** (all 17 golden scenes, text regions masked, per-pixel pixels over
+ΔE 3 of 324 000; the same scenes in 4×4 blocks):
+
+- Per pixel: scatter 1715 (0.53%), grid 1708, rect_bars 1719, segment_mark 1703,
+  line_series 1094 (0.38%), diverging_anomaly 3049 (0.94%), time_years 3368
+  (1.04%), time_tick_hierarchy 1777 (0.82%), categorical_nulls 1174 fail;
+  composite, legend (2), band_months, categorical_species, sqrt, symlog and
+  axis_titles pass. Max per-pixel ΔE 6.6 to 19.3, mean ΔE under 0.08.
+- Geometry matches: a row through a scatter circle's centre differs by 5/255 at
+  the edge pixels only; colours are identical. The cause is resvg (tiny-skia)
+  quantising vertical coverage to quarter steps: the Apr bar's top edge at y =
+  101.65 has exact coverage 0.35, the GPU draws 0.353, resvg 0.247.
+- In 4×4 blocks every scene passes the default tolerance: at most 20 of 20 160
+  blocks (0.10%, segment_mark) exceed ΔE 3; max block ΔE 4.6.
+  `tests/common/svg_marks.rs` implements it (`BLOCK`); a mark moved by more than
+  about 0.3 px, a wrong colour or a missing mark still fails.
+
+**Options**: (A) block-averaged comparison, same tolerance (recommended; the
+code is in this commit); (B) per-pixel with `max_differing_fraction` of about
+1.5%, which a 1 px shift of every mark could also pass; (C) compare per-mark ink
+totals only.
+
+**Done so far**: vector emission for all four marks (`src/vector.rs`,
+`src/svg.rs`), CPU colour mirrors (`ShaderFn::cpu_color`, macro and scales),
+`Arc`-shared chunk bytes (`CpuColumns`), golden comparison wired into every
+`*_png.rs` test. **Not done**: unit tests, 10k size report, docs sweep for
+`Scene::guides` callers, dogfood grep, `msaa.rs` scene, checks and retro.

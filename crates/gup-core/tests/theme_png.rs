@@ -7,6 +7,7 @@
 mod common;
 
 use common::scatter::{Country, countries_n};
+use common::svg_marks;
 use common::vr::{harness, layout_metadata};
 use gup_core::prelude::*;
 use gup_core::scene::TextRole;
@@ -192,8 +193,11 @@ fn axis_titles_are_placed_without_overlap() {
     let meta = layout_metadata(&layout);
     let vr = RgbaImage::new(720, 450, image.into_raw()).unwrap();
     harness()
-        .run("gup_core/axis_titles", Ok((vr, meta)))
+        .run("gup_core/axis_titles", Ok((vr.clone(), meta.clone())))
         .assert_ok();
+    // GUP-467: the SVG draws the same marks.
+    let scene = plot.resolve(&cx, 720.0, 450.0).unwrap().scene.clone();
+    svg_marks::assert_matches("gup_core/axis_titles", &scene, &vr, &meta);
 }
 
 #[test]

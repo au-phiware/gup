@@ -7,6 +7,7 @@
 
 mod common;
 
+use common::svg_marks;
 use common::vr::{harness, layout_metadata, rgba8};
 use gup_core::ImageTarget;
 use gup_core::prelude::*;
@@ -372,6 +373,14 @@ fn line_series_golden() {
     let meta =
         layout_metadata(&resolved.layout).with_expected_color("line", rgba8(Line::DEFAULT_COLOR));
     harness()
-        .run("gup_core/line_series", Ok((vr, meta)))
+        .run("gup_core/line_series", Ok((vr.clone(), meta.clone())))
         .assert_ok();
+    // GUP-467: the SVG draws the line as polylines (the gap splits it, and
+    // so do the 64-row chunks' bridges: they join, so one run per side).
+    let svg = svg_marks::assert_matches("gup_core/line_series", &resolved.scene, &vr, &meta);
+    assert_eq!(
+        svg.matches("<polyline ").count(),
+        2,
+        "one run on each side of the gap"
+    );
 }
