@@ -104,6 +104,11 @@ cut 2 already removes two thirds of SemiBold's bytes.
       `git grep -n -i semibold -- crates docs/*.md` finds no other statement
       that SemiBold covers what Regular covers.
 
+- [ ] A SemiBold run containing a character outside the subset draws that
+      character from the Regular face, never as a missing-glyph box. A test with
+      a non-ASCII SemiBold label (for example "2024–Q1", with an en dash) checks
+      that every glyph has ink (orchestrator, 2026-10-18).
+
 ### AC3: `Selection` split
 
 - [ ] The `Layer` bodies move to non-generic functions in a new
