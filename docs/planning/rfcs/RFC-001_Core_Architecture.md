@@ -3516,3 +3516,51 @@ with `PickTicket` and `GpuPick` at the crate root. It supersedes §9's 5 × 5
 The API is as GUP-455's Decisions specify. A pick reports the stored row mapped
 at poll time; drop picks whose `generation` is older than the last resolve.
 Layers of marks without `gpu_pick` are skipped.
+
+## S9e findings (2026-10-18, GUP-456)
+
+`Plot` hovers and clicks through GPU picks when it has to, and says so to hosts.
+
+### The scheme
+
+- **Switch rule.** After each `resolve`, the plot is in GPU mode when some layer
+  whose mark has `gpu_pick` is not CPU-readable (`Layer::cpu_readable`: its CPU
+  columns are all kept, or its rows are). Then every layer is picked on the GPU,
+  for one semantics. Otherwise the synchronous CPU path is unchanged:
+  `needs_frame` is always false and `PointerMoved` submits nothing.
+- **Coalescing.** `PointerMoved` stores one pending point (the latest wins) and
+  returns `redraw: true`. `resolve` applies finished picks, then submits the
+  pending point if no hover pick is in flight. A finished hover pick is applied
+  only if no newer point is pending; otherwise it is dropped. Clicks are queued
+  and at most one is in flight; they are never dropped and land whatever the
+  view is by then.
+- **Stale picks.** A hover result whose `generation` is not the current one is
+  dropped and re-requested at the last pointer position (unless a drag is on). A
+  wheel step, and the start of a pan, brush or drag-zoom, forget the pending and
+  in-flight hover picks, as the CPU path leaves the hover on those.
+- **Anchors.** A row without a pick-index entry (no CPU data) attaches at the
+  pointer; it has no tooltip, as it has no rows.
+- **Handlers.** `Plot::on_row` runs for every `Enter`, `Leave` and `Click` with
+  the `EventInfo`, after the layer's own handlers, on both paths. In GPU mode
+  they run from inside `resolve`. `resolve` takes the finished picks while
+  something is pending, so a program that also calls `poll_picks` on such a plot
+  would race it.
+- **Hosts.** `Chart::needs_frame` (default false) is true while a pick is
+  pending or in flight. `GupApp` requests a redraw after each render while it is
+  true (`redraw_again`), and `CanvasApp` schedules another
+  `requestAnimationFrame` after a successful frame.
+
+### Results
+
+- Native: a hover lands on the second `resolve` after the move (the first
+  submits, the second collects), with a frame's time between them. Ten immediate
+  `resolve`s without any wait are not always enough.
+- SwiftShader WebGPU: hover took 6 animation frames the first time (pipeline
+  creation included), 2 for a click and 1 for the leave (which is synchronous).
+  The limit is 8.
+- CPU and GPU hover agree on 49 points around 12 rows
+  (`cpu_and_gpu_hover_agree`).
+- `mask wasm-size`: scatter 310,638 → 312,441 B gz (+0.6%), over wgpu 280,081 B.
+  `wasm.per_row_type.gz_bytes` read 2,569 against 1,502 for the same measurement
+  on the S9d commit; stubbing `cpu_readable` did not move it, so it is not these
+  methods and is probably the gzip of the two binaries differing.
