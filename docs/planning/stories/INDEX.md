@@ -352,7 +352,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   `Drag::Brush` selects rows by position through the pick index, drawn as an
   overlay, and `Drag::Zoom` zooms to a rectangle. Deps: GUP-453 📋, GUP-445 ✅,
   GUP-446 ✅.
-- [GUP-455](GUP-455_RFC_001_S9d_GPU_Pick_Pass.md) 📋 — RFC-001 step S9d
+- [GUP-455](GUP-455_RFC_001_S9d_GPU_Pick_Pass.md) 🚧 — RFC-001 step S9d
   (design): a one-texel GPU pick pass, with depth-encoded distances, that
   matches the CPU pick exactly and reaches `GpuOnly` layers
   (`request_pick`/`poll_picks`). Deps: GUP-451 📋, GUP-445 ✅, GUP-431 ✅,
