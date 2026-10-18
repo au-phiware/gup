@@ -457,7 +457,7 @@ findings", GUP-396).
 - [GUP-489](GUP-489_RFC_001_S14d_Revise_Architecture_Docs.md) 📋 — RFC-001 step
   S14d: TECHNICAL_APPROACH and IMPLEMENTATION_STRATEGY rewritten for `gup` as
   built, with compiled snippets, and the README entry points. Deps: GUP-488 📋.
-- [GUP-494](GUP-494_Bars_On_Numeric_Axes_Overhang_And_Baselines.md) 🚧 — `Rect`
+- [GUP-494](GUP-494_Bars_On_Numeric_Axes_Overhang_And_Baselines.md) ✅ — `Rect`
   overhang on numeric axes and constant/`Derived` positions in automatic
   domains. Deps: GUP-435 ✅, GUP-424 ✅.
 

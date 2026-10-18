@@ -2,8 +2,8 @@
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 🚧 In Progress **Created**:
-2026-10-19
+**Initiative**: RFC-001 Migration **Status**: ✅ Complete 2026-10-19
+**Created**: 2026-10-19
 
 ## Context
 
@@ -36,14 +36,16 @@ positions, so it should not), stop with `BLOCKED:`.
 
 ## Acceptance Criteria
 
-- [ ] `secondary_y.rs` drops its workarounds (`encode(|_| 0.0)` and the fixed x
+- [ ] (deferred: `secondary_y.rs` is not on this branch; GUP-479 is unmerged.
+      The orchestrator drops its two workarounds after merging both.)
+      `secondary_y.rs` drops its workarounds (`encode(|_| 0.0)` and the fixed x
       domain 0.5-12.5) and still renders correctly; re-bless if needed, with the
       reason.
-- [ ] New tests: end bars fully inside the plot rect (pixel check); a bar from a
+- [x] New tests: end bars fully inside the plot rect (pixel check); a bar from a
       `Derived` 0 baseline is visible with an automatic domain.
-- [ ] Every other golden unchanged unless the change is the intended fix; any
+- [x] Every other golden unchanged unless the change is the intended fix; any
       change listed with its reason.
-- [ ] `mask wasm-browser` passes; `mask wasm-size` reported.
+- [x] `mask wasm-browser` passes; `mask wasm-size` reported.
 
 ## Out of Scope
 
@@ -52,3 +54,31 @@ Band-axis bars, scatter/line domain behaviour.
 ## Definition of Done
 
 ACs met, `mask all-check` clean, evidence recorded below.
+
+## Implementation Summary
+
+- `Role::Width` and `Role::Height` (channel.rs, macro allow-list); `Rect`'s
+  `width`/`height` carry them. `Layer::overhang` returns
+  `Overhang {size, x, y}`: half a constant or `Derived` width reaches past x
+  only, half a height past y only. `Plot::resolve` uses per-axis overhang for
+  widening and insets; the extent is ignored on an ordinal (band) axis, which
+  makes its own room.
+- `Layer::fixed_positions` and `DynPositionScale::fit_position`: after the data
+  fit, constant and `Derived` position pixels are inverted through the scale and
+  unioned into an automatic domain (snapped to 1e-5 of the span so an `f32`
+  pixel round trip leaves 0 at 0).
+- Test: `numeric_axis_bars_fit_and_a_derived_baseline_is_in_the_domain`
+  (rect_png.rs). All gup-core tests pass; no golden changed. `mask wasm-browser`
+  passes; `mask wasm-size` all checks pass (scatter 321075 gz, +2% of baseline).
+
+## Retrospective
+
+**Completed**: 2026-10-19
+
+- A first, scalar overhang changed the bar builder golden (Band widths are
+  `Derived`). Overhang must be per axis and skip ordinal axes. Pattern: a
+  mark-wide scalar cannot describe an axis-specific extent.
+- A `Derived` position is pixels, so its data value is recovered with `invert`;
+  this is exact for any scale state, but needs snapping.
+- `secondary_y.rs` was not on the branch; its workaround removal is left to
+  after GUP-479 merges. No follow-up stories.
