@@ -3418,3 +3418,30 @@ us (budget 20 us; 99% of them hit something, in a dense field).
   `touch-action: none`; the browser pan step passes with synthetic events.
 - **Cost**: `wasm.scatter.gz_bytes` 296,149 to 296,974 (+825 B). The harness's
   per-row-type delta moved 1,003 to 1,144 B though no `Layer` method was added.
+
+## S9c findings (2026-10-18, GUP-454)
+
+- **Membership rule**: a row is brushed when its mark's position lies inside the
+  rectangle, edges included: a disc's or box's centre, a segment's midpoint, a
+  line's vertex (a capsule gives `a` for its row and `b` for the next, so each
+  vertex is in once). Partial overlap of a large mark does not count; the rule
+  is the same for every shape. `PickIndex::rows_in` visits only the grid cells
+  the rectangle overlaps and needs no second index.
+- **Lifecycle**: the brush is stored in data units with its rows, set on release
+  (handlers run once) and not recomputed afterwards. A new brush, a click (press
+  and release within 4 px, in any drag mode) and `clear_brush` change it; zoom,
+  pan, resize and `reset_view` do not. The overlay (a fill inside a 1 px border
+  on whole pixels, `Z_BRUSH = 250`) is recomposed on the cached resolve and
+  re-projected through the current scales, so brushing never resolves again. A
+  drag shows the same rectangle, clamped to the plot rect; `PointerLeft`
+  mid-drag cancels it.
+- **GpuOnly**: layers the CPU cannot read are not in the pick index, so they are
+  not brushed (as they are not picked).
+- **Drag-zoom**: on release, a rectangle wider and taller than the click slop
+  sets each movable axis's domain to the inverted corners; band axes are
+  skipped; it records home, so `reset_view` returns to the first view.
+- **Host**: the canvas host reads integer pointer offsets, so a synthetic event
+  at a fractional position lands on the truncated pixel; the browser steps use
+  whole pixels where they compare absolute values.
+- **Cost**: `wasm.scatter.gz_bytes` 296,974 (GUP-453) to 301,126 (+4,152 B,
+  harness hooks included); `wasm.per_row_type.gz_bytes` 1,144 to 1,325.

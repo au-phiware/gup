@@ -857,6 +857,48 @@ impl InteractiveScatter {
             .unwrap_or_default()
     }
 
+    /// What a primary-button drag does: 0 pan, 1 off, 2 brush, 3 zoom.
+    pub fn set_drag(&self, mode: u8) {
+        let drag = match mode {
+            0 => gup_core::Drag::Pan,
+            1 => gup_core::Drag::Off,
+            2 => gup_core::Drag::Brush,
+            _ => gup_core::Drag::Zoom,
+        };
+        self.app.with_chart(|chart| {
+            if let Some(plot) = chart.as_any_mut().downcast_mut::<Plot>() {
+                plot.drag(drag);
+            }
+        });
+    }
+
+    /// Back to the first view (`Plot::reset_view`).
+    pub fn reset_view(&self) {
+        self.app.with_chart(|chart| {
+            if let Some(plot) = chart.as_any_mut().downcast_mut::<Plot>() {
+                plot.reset_view();
+            }
+        });
+    }
+
+    /// Layer 0's brushed rows.
+    pub fn brushed_rows(&self) -> Vec<u32> {
+        self.app
+            .with_chart(|chart| {
+                let plot = chart.as_any_mut().downcast_mut::<Plot>()?;
+                let brush = plot.brush()?;
+                Some(
+                    brush
+                        .rows
+                        .iter()
+                        .filter(|r| r.layer == 0)
+                        .map(|r| r.row as u32)
+                        .collect(),
+                )
+            })
+            .unwrap_or_default()
+    }
+
     /// The centre of the plot rectangle: `[x, y]`.
     pub fn plot_centre(&self) -> Result<Vec<f32>, JsValue> {
         let r = self.resolved()?.layout.plot;

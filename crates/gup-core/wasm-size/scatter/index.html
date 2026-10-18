@@ -280,6 +280,55 @@
               return want.every((c, k) => Math.abs(img[i + k] - c) <= 8);
             });
           }
+          // Brush (GUP-454): drag over rows 1 and 2, grown by 10 px.
+          {
+            app.set_drag(2);
+            await frames();
+            const [ax, ay] = app.row_px(1);
+            const [bx, by] = app.row_px(2);
+            const box = [
+              Math.min(ax, bx) - 10,
+              Math.min(ay, by) - 10,
+              Math.max(ax, bx) + 10,
+              Math.max(ay, by) + 10,
+            ];
+            fire("pointerdown", box[0], box[1]);
+            fire("pointermove", (box[0] + box[2]) / 2, (box[1] + box[3]) / 2);
+            fire("pointermove", box[2], box[3]);
+            fire("pointerup", box[2], box[3]);
+            await frames();
+            await step("brush", async () => {
+              const rows = Array.from(app.brushed_rows());
+              if (rows.length !== 2 || rows[0] !== 1 || rows[1] !== 2)
+                return false;
+              const img = await app.render_rgba();
+              const i =
+                (Math.round(box[1] + 3) * w + Math.round(box[0] + 3)) * 4;
+              return img[i + 2] - img[i] >= 10;
+            });
+            // Drag-zoom: the domain becomes the box's data extent.
+            app.set_drag(3);
+            await frames();
+            const [qx, qy] = app.plot_centre();
+            // Whole pixels: the host reads integer pointer offsets.
+            const zb = [qx - 60, qy - 40, qx + 60, qy + 40].map(Math.round);
+            const va = app.value_at(zb[0], zb[1]);
+            const vb = app.value_at(zb[2], zb[3]);
+            fire("pointerdown", zb[0], zb[1]);
+            await frames();
+            fire("pointermove", qx, qy);
+            fire("pointermove", zb[2], zb[3]);
+            fire("pointerup", zb[2], zb[3]);
+            await frames();
+            await step("drag-zoom", async () => {
+              const [e0, e1] = app.x_domain();
+              const ok = (a, b) => Math.abs(a - b) <= 1e-9 * Math.abs(b);
+              return ok(e0, va[0]) && ok(e1, vb[0]);
+            });
+            app.reset_view();
+            app.set_drag(0);
+            await frames();
+          }
           await step("last-error", async () => app.last_error() == null);
           app.free();
         } catch (e) {
