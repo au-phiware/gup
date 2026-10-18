@@ -20,7 +20,8 @@
 #                   nothing with --metrics. scripts/wasm_size.sh uses it
 #
 # Measuring needs a display and a real GPU: it runs
-#   zoom_bench --present mailbox --uncapped   (release, fullscreen window)
+#   zoom_bench --present mailbox --uncapped   (release, fullscreen window),
+#     then again on 4M x-sorted rows in 64 chunks (zoom_culled.*, GUP-457)
 #   pipeline_timings                          (release lib test)
 #   scripts/wasm_size.sh                      (wasm32 release builds)
 # On Linux with an i915 GPU it also samples the GPU clock during zoom_bench
@@ -83,24 +84,35 @@ if [[ -z $metrics ]]; then
         fi
       done
     fi
-    if [[ -n $freq ]]; then
-      (while :; do
-        cat "$freq"
-        sleep 0.02
-      done) >"$work/clock" 2>/dev/null &
-      sampler=$!
-    fi
-    "${CARGO_TARGET_DIR:-$root/target}/release/examples/zoom_bench" \
-      --present mailbox --uncapped | tee "$work/zoom" >&2
-    if [[ -n ${sampler:-} ]]; then
-      kill "$sampler"
-      wait "$sampler" 2>/dev/null || true
-      sampler=""
-      sort -n "$work/clock" | awk '{v[NR] = $1} END {
-        if (NR) printf "metric zoom.gpu_clock.median_mhz %d\n", v[int((NR + 1) / 2)]
-      }' >>"$metrics"
-    fi
-    grep '^metric ' "$work/zoom" >>"$metrics"
+    # run_zoom PREFIX ARGS...: one zoom_bench run, its metric lines and the
+    # median GPU clock during it (as PREFIX.gpu_clock.median_mhz).
+    run_zoom() {
+      local prefix=$1
+      shift
+      if [[ -n $freq ]]; then
+        (while :; do
+          cat "$freq"
+          sleep 0.02
+        done) >"$work/clock" 2>/dev/null &
+        sampler=$!
+      fi
+      "${CARGO_TARGET_DIR:-$root/target}/release/examples/zoom_bench" \
+        --present mailbox --uncapped --metric-prefix "$prefix" "$@" |
+        tee "$work/$prefix" >&2
+      if [[ -n ${sampler:-} ]]; then
+        kill "$sampler"
+        wait "$sampler" 2>/dev/null || true
+        sampler=""
+        sort -n "$work/clock" | awk -v prefix="$prefix" '{v[NR] = $1} END {
+          if (NR) printf "metric %s.gpu_clock.median_mhz %d\n", prefix, v[int((NR + 1) / 2)]
+        }' >>"$metrics"
+      fi
+      grep '^metric ' "$work/$prefix" >>"$metrics"
+    }
+    run_zoom zoom
+    # Chunk culling (GUP-457): 4M x-sorted rows in 64 chunks, zoomed.
+    echo "perf-budget: zoom_bench (4M sorted points, 64 chunks, culling on)" >&2
+    run_zoom zoom_culled --points 4194304 --chunk-rows 65536 --sorted
 
     echo "perf-budget: pipeline_timings (release)" >&2
     cargo test --quiet -p gup-core --release --lib pipeline_timings \

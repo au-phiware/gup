@@ -251,3 +251,32 @@ range and nothing is culled. That case must cost almost nothing.
 - [ ] `mask old-path-loc` recorded (expected unchanged, 28,910)
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
+
+## Blocked (2026-10-18)
+
+**Question**: `wasm.scatter.gz_bytes` grew by 3,181 B gz (over the 2,000 B
+escalation trigger). Accept the growth, or have it trimmed?
+
+- Measured at the story's start commit (`d2400da`, worktree): 312,427 B gz. With
+  the change: 315,608 B gz (+3,181, +1.0%, within the +2% budget row).
+  `wasm.over_wgpu.gz_bytes` 280,067 to 283,248.
+- Everything else is done and green: unit tests, `zoom_uploads` (4 new), `pick`
+  (4 new), `mask perf-budget` (all rows pass, including the new `zoom_culled.*`
+  rows), `mask wasm-browser` (`interactive=ok`), `mask old-path-loc` (28,910
+  unchanged).
+- AC5 numbers (4,194,304 sorted rows, 64 chunks, mailbox uncapped, three
+  alternating runs, load 1.3 to 3.1): GPU pass median culled 9.89, 9.87, 10.31
+  ms; unculled 58.68, 59.30, 59.75 ms (about 83% lower). Draws per frame 14
+  against 67. CPU pick index at the deepest zoom: 196,608 items in 92 ms against
+  4,194,304 items in 1,150 ms.
+- Options: (a) accept +3,181 B gz and re-record `wasm.scatter.gz_bytes`; (b) I
+  trim (for example merge `cpu_values_where` into `cpu_values`, drop the
+  per-chunk range machinery in `hit_items` in favour of a boolean filter), which
+  costs part of the pick-index speedup; (c) feature-gate nothing (the code is in
+  every build).
+- Recommendation: (a). The growth is about 1% for the largest-effect change in
+  the series (GPU pass 6x lower at depth), and the budget row's own tolerance is
+  +2%.
+
+Remaining once decided: RFC-001 "S9f findings" (AC7), the retrospective, and the
+status change.

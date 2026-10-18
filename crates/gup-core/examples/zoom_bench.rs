@@ -22,6 +22,13 @@
 //!   --chunk-rows N                    at most N rows per column chunk, so
 //!                                      the layer draws several instanced
 //!                                      draws (default: the device's size)
+//!   --sorted                           sort the rows by x before building, so
+//!                                      chunks are spatially coherent and
+//!                                      culling has something to skip
+//!   --no-cull                          draw and pick every chunk
+//!                                      (`Plot::chunk_culling(false)`)
+//!   --metric-prefix NAME               prefix of every `metric` line
+//!                                      (default `zoom`)
 //!   --size WxH                         windowed at this physical size
 //!                                      (default: borderless fullscreen)
 //!   --uncapped                         draw frames back to back instead of
@@ -62,6 +69,9 @@ struct Options {
     size: Option<(u32, u32)>,
     uncapped: bool,
     time: bool,
+    sorted: bool,
+    cull: bool,
+    prefix: String,
 }
 
 fn options() -> Options {
@@ -76,6 +86,9 @@ fn options() -> Options {
         size: None,
         uncapped: false,
         time: false,
+        sorted: false,
+        cull: true,
+        prefix: "zoom".to_owned(),
     };
     let args: Vec<String> = std::env::args().skip(1).collect();
     let mut it = args.iter();
@@ -100,6 +113,9 @@ fn options() -> Options {
             }
             "--uncapped" => o.uncapped = true,
             "--time" => o.time = true,
+            "--sorted" => o.sorted = true,
+            "--no-cull" => o.cull = false,
+            "--metric-prefix" => o.prefix = value().clone(),
             "--size" => {
                 let (w, h) = value().split_once('x').expect("--size WxH");
                 o.size = Some((w.parse().expect("width"), h.parse().expect("height")));
@@ -149,6 +165,10 @@ struct Bench {
     uploads_before: UploadStats,
     uploads_during: Option<UploadStats>,
     gpu_ms: Vec<f64>,
+    /// `Prepared::draw_calls` of each measured frame.
+    draws: Vec<usize>,
+    /// Build time and items of the CPU pick index at the deepest zoom.
+    pick_index: Option<(Duration, usize)>,
     error: Option<String>,
     finished: bool,
 }
@@ -258,6 +278,9 @@ impl Bench {
         let desc = gpu.target.desc();
         let prepared = gpu.renderer.prepare(&gpu.cx, &resolved.scene, &desc)?;
         let t_prepare = Instant::now();
+        if measured.is_some() {
+            self.draws.push(prepared.draw_calls());
+        }
         let frame = gpu.target.acquire(&gpu.cx)?;
         let t_acquire = Instant::now();
         let mut encoder = gpu.cx.device().create_command_encoder(&Default::default());
@@ -289,6 +312,15 @@ impl Bench {
                 acquire: t_acquire - t_prepare,
                 submit: t_submit - t_acquire,
             };
+        }
+        // Once, at the deepest zoom: what the first CPU pick after a zoom
+        // costs. Outside every timed span of the frame's own phases it
+        // still delays the frame that follows by that much.
+        let deepest = ((self.o.warmup + self.o.frames) as f64 * 0.25) as usize;
+        if self.frame == deepest {
+            let t = Instant::now();
+            let items = self.plot.pick_item_count().unwrap_or(0);
+            self.pick_index = Some((t.elapsed(), items));
         }
         self.frame += 1;
         Ok(false)
@@ -443,36 +475,59 @@ impl Bench {
         // The same numbers, one per line, for `scripts/perf_budget.sh`
         // (`mask perf-budget`) to compare with `PERF_BUDGETS.md`.
         let frames = o.frames as u64;
+        let p = &o.prefix;
+        let mut draws = self.draws.clone();
+        draws.sort_unstable();
+        if let Some((build, items)) = self.pick_index {
+            println!(
+                "CPU pick index at the deepest zoom: {items} items in {:.2} ms",
+                build.as_secs_f64() * 1e3
+            );
+        }
         let mut metrics = vec![
-            ("zoom.size", format!("{w}x{h}")),
-            ("zoom.samples", o.samples.to_string()),
-            ("zoom.interval.median_ms", format!("{med:.3}")),
-            ("zoom.cpu.median_ms", format!("{cpu_med:.3}")),
-            ("zoom.cpu.p95_ms", format!("{cpu_p95:.3}")),
+            (format!("{p}.size"), format!("{w}x{h}")),
+            (format!("{p}.samples"), o.samples.to_string()),
+            (format!("{p}.interval.median_ms"), format!("{med:.3}")),
+            (format!("{p}.cpu.median_ms"), format!("{cpu_med:.3}")),
+            (format!("{p}.cpu.p95_ms"), format!("{cpu_p95:.3}")),
+            (
+                format!("{p}.draws.median"),
+                draws.get(draws.len() / 2).copied().unwrap_or(0).to_string(),
+            ),
         ];
         if let Some((gpu_med, gpu_p95)) = gpu {
-            metrics.push(("zoom.gpu_pass.median_ms", format!("{gpu_med:.3}")));
-            metrics.push(("zoom.gpu_pass.p95_ms", format!("{gpu_p95:.3}")));
+            metrics.push((format!("{p}.gpu_pass.median_ms"), format!("{gpu_med:.3}")));
+            metrics.push((format!("{p}.gpu_pass.p95_ms"), format!("{gpu_p95:.3}")));
         }
         metrics.extend([
-            ("zoom.columns.bytes", d.columns.bytes.to_string()),
-            ("zoom.columns.writes", d.columns.writes.to_string()),
-            ("zoom.validity.bytes", d.validity.bytes.to_string()),
+            (format!("{p}.columns.bytes"), d.columns.bytes.to_string()),
+            (format!("{p}.columns.writes"), d.columns.writes.to_string()),
+            (format!("{p}.validity.bytes"), d.validity.bytes.to_string()),
             (
-                "zoom.uniforms.bytes_per_frame",
+                format!("{p}.uniforms.bytes_per_frame"),
                 (d.uniforms.bytes / frames).to_string(),
             ),
             (
-                "zoom.uniforms.writes_per_frame",
+                format!("{p}.uniforms.writes_per_frame"),
                 (d.uniforms.writes / frames).to_string(),
             ),
-            ("zoom.instances.bytes", d.instances.bytes.to_string()),
             (
-                "zoom.instances.writes_per_frame",
+                format!("{p}.instances.bytes"),
+                d.instances.bytes.to_string(),
+            ),
+            (
+                format!("{p}.instances.writes_per_frame"),
                 (d.instances.writes / frames).to_string(),
             ),
-            ("zoom.textures.bytes", d.textures.bytes.to_string()),
+            (format!("{p}.textures.bytes"), d.textures.bytes.to_string()),
         ]);
+        if let Some((build, items)) = self.pick_index {
+            metrics.push((
+                format!("{p}.pick_index.ms"),
+                format!("{:.2}", build.as_secs_f64() * 1e3),
+            ));
+            metrics.push((format!("{p}.pick_index.items"), items.to_string()));
+        }
         for (key, value) in metrics {
             println!("metric {key} {value}");
         }
@@ -560,14 +615,18 @@ impl ApplicationHandler for Bench {
 fn main() {
     let o = options();
     let t = Instant::now();
-    let rows = scatter::countries_n(o.points);
-    let (plot, x, y) = if o.time {
+    let mut rows = scatter::countries_n(o.points);
+    if o.sorted {
+        rows.sort_by(|a, b| a.gdp_per_capita.total_cmp(&b.gdp_per_capita));
+    }
+    let (mut plot, x, y) = if o.time {
         let (plot, x, y) = time_plot(rows, Px(o.radius), o.chunk_rows);
         (plot, XScale::Time(x), y)
     } else {
         let (plot, x, y) = scatter::plot_rows_chunked(rows, Px(o.radius), o.chunk_rows);
         (plot, XScale::Linear(x), y)
     };
+    plot.chunk_culling(o.cull);
     println!(
         "generated {} rows in {:.1} ms",
         o.points,
@@ -595,6 +654,8 @@ fn main() {
         uploads_before: UploadStats::default(),
         uploads_during: None,
         gpu_ms: Vec::new(),
+        draws: Vec::new(),
+        pick_index: None,
         error: None,
         finished: false,
     };
