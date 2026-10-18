@@ -3,16 +3,16 @@
 
 //! Task 5: append points every 100 ms to a line chart and a 100k scatter.
 //!
-//! gup-core has no append yet (RFC-001 S12's `appender`), so each tick
-//! rebuilds both charts from their rows: the same full re-upload the old
-//! API did. Top: a random-walk line. Bottom: a 100k-point scatter that gets
-//! 50 new points per tick. Domains are fixed so the view does not rescale.
+//! Each chart is built once; every tick feeds the new samples through its
+//! `appender()`, and the next frame uploads only those rows (GUP-480). Top:
+//! a random-walk line. Bottom: a 100k-point scatter that gets 50 new points
+//! per tick. Domains are fixed so the view does not rescale.
 //!
 //! DOGFOOD_AUTO=1 runs ~6 s, prints timings, saves a screenshot, exits.
 
 use eframe::egui;
 use gup_core::prelude::*;
-use gup_core::{LineChart, ScatterChart};
+use gup_core::{Appender, LineChart, ScatterChart};
 use gup_dogfood::*;
 use std::time::{Duration, Instant};
 
@@ -50,10 +50,14 @@ fn scatter_chart(pts: &[S]) -> ScatterChart<S> {
 struct App {
     line: LineChart<S>,
     line_w: ChartTexture,
-    pts: Vec<S>,
+    line_feed: Appender<S>,
+    /// The last line sample and how many there are.
+    last_pt: S,
+    n_pts: usize,
     big: ScatterChart<S>,
     big_w: ChartTexture,
-    big_data: Vec<S>,
+    big_feed: Appender<S>,
+    n_big: usize,
     last: Instant,
     started: Instant,
     rng: u64,
@@ -90,13 +94,20 @@ impl App {
                 v: (b - 0.5) * 20.0,
             });
         }
+        let (n_pts, n_big) = (pts.len(), big_data.len());
+        let last_pt = *pts.last().unwrap();
+        let mut line = line_chart(&pts);
+        let mut big = scatter_chart(&big_data);
         Self {
-            line: line_chart(&pts),
+            line_feed: line.appender(),
+            line,
             line_w: ChartTexture::new(),
-            pts,
-            big: scatter_chart(&big_data),
+            last_pt,
+            n_pts,
+            big_feed: big.appender(),
+            big,
             big_w: ChartTexture::new(),
-            big_data,
+            n_big,
             last: Instant::now(),
             started: Instant::now(),
             rng: 99,
@@ -107,28 +118,32 @@ impl App {
     }
 
     fn tick(&mut self) {
-        // Line: append one point, rebuild.
-        let prev = *self.pts.last().unwrap();
+        // Line: append one point.
+        let prev = self.last_pt;
         let next = S {
             t: prev.t + 1.0,
             v: (prev.v + 2.0 * self.rand()).clamp(-10.0, 10.0),
         };
-        self.pts.push(next);
+        self.last_pt = next;
+        self.n_pts += 1;
         let t0 = Instant::now();
-        self.line = line_chart(&self.pts);
+        self.line_feed.push(next).expect("the chart is alive");
         let line_cost = t0.elapsed();
         self.line_w.dirty = true;
 
-        // Scatter: append 50 points, rebuild.
-        for _ in 0..50 {
-            let (a, b) = (self.rand() + 0.5, self.rand());
-            self.big_data.push(S {
-                t: a * X_MAX,
-                v: b * 20.0,
-            });
-        }
+        // Scatter: append 50 points.
+        let batch: Vec<S> = (0..50)
+            .map(|_| {
+                let (a, b) = (self.rand() + 0.5, self.rand());
+                S {
+                    t: a * X_MAX,
+                    v: b * 20.0,
+                }
+            })
+            .collect();
+        self.n_big += batch.len();
         let t1 = Instant::now();
-        self.big = scatter_chart(&self.big_data);
+        self.big_feed.extend(batch).expect("the chart is alive");
         self.timings.push((line_cost, t1.elapsed()));
         self.big_w.dirty = true;
     }
@@ -145,10 +160,7 @@ impl eframe::App for App {
             let (lw, bw) = self.timings.last().copied().unwrap_or_default();
             ui.label(format!(
                 "line: {} pts, update {:?} | scatter: {} pts, update {:?}",
-                self.pts.len(),
-                lw,
-                self.big_data.len(),
-                bw
+                self.n_pts, lw, self.n_big, bw
             ));
             let (r1, _) = ui.allocate_exact_size(egui::vec2(W, H), egui::Sense::hover());
             self.line_w.show(ui, r1, &mut self.line);

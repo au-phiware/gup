@@ -288,10 +288,6 @@ const DOUBLE_GAMMA: Gap = Gap(
 const NO_GRID: Gap = Gap(
     "grid is configured but not drawn in PNG/texture output; SVG has it (RFC-001 S3/S7 guides)",
 );
-const STREAM_NEVER_READY: Gap = Gap(
-    "a DataStream-fed Selection never becomes render-ready: prepare_render_bound fails with \
-     \"No attribute bindings set\" (RFC-001 S12 append replaces this route)",
-);
 const WGSL_DUPLICATE_UNIFORMS: Gap = Gap(
     "#[wgsl_function] output embeds its uniforms struct and Selection's shader assembly emits it \
      again (RFC-001 S5 ShaderFn v2 / module composition)",
@@ -809,24 +805,51 @@ fn t5_stream() -> Task {
         bin: "t5_stream",
         env: &[],
         kind: Kind::Headless,
-        intent: "task 5 (alt): Tutorial 5's DataStream -> Selection::stream route, PNG after each batch",
+        intent: "task 5 (alt): push points in batches through an appender, PNG after each batch",
         exit: Exit::Success,
         checks: vec![
-            gap(
+            check(
                 "t5_stream_0.png",
                 "first batch visible",
                 Measure::NotBlank {
                     min_fraction: 0.001,
                 },
-                STREAM_NEVER_READY,
             ),
-            gap(
+            check(
                 "t5_stream_2.png",
                 "all three batches visible",
                 Measure::NotBlank {
                     min_fraction: 0.003,
                 },
-                STREAM_NEVER_READY,
+            ),
+            // The plot rect of a fresh render's `Layout` (400x300): x 0.12..0.97,
+            // y 0.04..0.88; the x domain is 0..150, so batch n fills third n.
+            check(
+                "t5_stream_2.png",
+                "batch 1 drawn",
+                Measure::Hue {
+                    region: Region::new(0.12, 0.04, 0.39, 0.88),
+                    rgb: RED,
+                    min_px: 50,
+                },
+            ),
+            check(
+                "t5_stream_2.png",
+                "batch 2 drawn",
+                Measure::Hue {
+                    region: Region::new(0.42, 0.04, 0.67, 0.88),
+                    rgb: RED,
+                    min_px: 50,
+                },
+            ),
+            check(
+                "t5_stream_2.png",
+                "batch 3 drawn",
+                Measure::Hue {
+                    region: Region::new(0.70, 0.04, 0.97, 0.88),
+                    rgb: RED,
+                    min_px: 50,
+                },
             ),
         ],
     }
