@@ -7,6 +7,7 @@ use std::any::Any;
 use std::sync::Arc;
 
 use super::{DRAWN, plot_setters};
+use crate::Appender;
 use crate::geom::Point;
 use crate::prelude::*;
 use crate::{ColumnValue, Context, Input, Layout, Resolved, Response, Result, RowId};
@@ -268,6 +269,30 @@ impl<T: Send + Sync + 'static> ScatterChart<T> {
             .expect("the scatter layer was added by materialise")
     }
 
+    /// A handle that appends rows to the chart from any thread; rows
+    /// pushed between two frames are uploaded together (only they) by the
+    /// next resolve. Materialises the chart: layer setters panic after.
+    ///
+    /// ```
+    /// use gup_core::{ChartExt, Context};
+    /// # fn main() -> gup_core::Result<()> {
+    /// let mut chart = gup_core::scatter(vec![(0.0, 1.0)]).x(|p| p.0).y(|p| p.1);
+    /// let feed = chart.appender();
+    /// std::thread::spawn(move || {
+    ///     feed.extend((1..10).map(|i| (f64::from(i), f64::from(i * i)))).unwrap();
+    /// })
+    /// .join()
+    /// .unwrap();
+    /// # let cx = Context::new_blocking()?;
+    /// let image = chart.render(&cx, 320, 200)?;
+    /// assert!(image.pixels().any(|p| p.0 != [255, 255, 255, 255]));
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn appender(&mut self) -> Appender<T> {
+        self.layer_mut().appender()
+    }
+
     /// The inner plot. Materialises the chart.
     pub fn plot_mut(&mut self) -> &mut Plot {
         self.materialise();
@@ -306,6 +331,9 @@ impl<T: Send + Sync + 'static> Chart for ScatterChart<T> {
     }
     fn needs_frame(&self) -> bool {
         Chart::needs_frame(&self.plot)
+    }
+    fn set_waker(&mut self, waker: std::task::Waker) {
+        self.plot.set_waker(waker);
     }
     fn title_text(&self) -> Option<&str> {
         self.plot.title_text()

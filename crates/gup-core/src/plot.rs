@@ -150,6 +150,8 @@ pub struct Plot {
     /// closures they encode through the plot's scales (starts at 1).
     axes_generation: u64,
     pub(crate) layers: Vec<Box<dyn Layer>>,
+    /// The host's waker, given to every layer's feed (RFC-001 S12a).
+    waker: Option<std::task::Waker>,
     x_title: Option<String>,
     y_title: Option<String>,
     theme: Theme,
@@ -339,7 +341,13 @@ impl crate::chart::Chart for Plot {
         Plot::pick_row(self, at)
     }
     fn needs_frame(&self) -> bool {
-        self.gpu_hover.busy()
+        self.gpu_hover.busy() || self.layers.iter().any(|l| l.feed_pending())
+    }
+    fn set_waker(&mut self, waker: std::task::Waker) {
+        for layer in &mut self.layers {
+            layer.set_waker(Some(&waker));
+        }
+        self.waker = Some(waker);
     }
     fn title_text(&self) -> Option<&str> {
         Plot::title_text(self)
@@ -402,6 +410,7 @@ impl Plot {
             y: Box::new(ScaleRef::new(Linear::new())),
             axes_generation: 1,
             layers: Vec::new(),
+            waker: None,
             x_title: None,
             y_title: None,
             theme: Theme::default(),
@@ -562,6 +571,10 @@ impl Plot {
         layer: Selection<T, M>,
     ) -> &mut Selection<T, M> {
         self.revision = self.revision.wrapping_add(1);
+        let mut layer = layer;
+        if let Some(w) = &self.waker {
+            Layer::set_waker(&mut layer, Some(w));
+        }
         self.layers.push(Box::new(layer));
         self.layers
             .last_mut()
@@ -819,6 +832,11 @@ impl Plot {
     /// (same context, size, plot settings, layers and scale writes) this
     /// returns the previous result and does no work and no GPU writes.
     pub fn resolve(&mut self, cx: &Context, width: f32, height: f32) -> Result<&Resolved> {
+        // Rows pushed through appenders land first: they change the
+        // revision sum, so the cache check below misses.
+        for layer in &mut self.layers {
+            layer.drain_feed()?;
+        }
         let key = |plot: &Self| CacheKey {
             context: cx.id(),
             width: width.to_bits(),

@@ -12,14 +12,31 @@ use crate::render::Renderer;
 use crate::target::save_png;
 use crate::window::WindowTarget;
 use std::path::PathBuf;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use winit::application::ApplicationHandler;
 use winit::dpi::{LogicalSize, PhysicalSize};
 use winit::error::EventLoopError;
 use winit::event::{ElementState, KeyEvent, MouseButton, MouseScrollDelta, WindowEvent};
-use winit::event_loop::{ActiveEventLoop, EventLoop};
+use winit::event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy};
 use winit::keyboard::{Key, NamedKey};
 use winit::window::{Window, WindowId};
+
+/// The user event a chart's waker sends: rows arrived, redraw.
+struct Wake;
+
+/// The waker handed to the chart: wakes the event loop with [`Wake`].
+struct ProxyWaker(Mutex<EventLoopProxy<Wake>>);
+
+impl std::task::Wake for ProxyWaker {
+    fn wake(self: Arc<Self>) {
+        self.wake_by_ref();
+    }
+    fn wake_by_ref(self: &Arc<Self>) {
+        let proxy = self.0.lock().unwrap_or_else(|e| e.into_inner());
+        // The loop has exited: nothing to wake.
+        let _ = proxy.send_event(Wake);
+    }
+}
 
 /// Default window size in logical pixels.
 const DEFAULT_SIZE: (u32, u32) = (800, 500);
@@ -112,7 +129,7 @@ impl GupApp {
 
     /// Run the event loop. Once per process: a second call returns `Err`.
     pub fn run(self) -> Result<()> {
-        let mut builder = EventLoop::builder();
+        let mut builder = EventLoop::<Wake>::with_user_event();
         // Allow running from a test harness thread.
         #[cfg(target_os = "linux")]
         {
@@ -129,7 +146,10 @@ impl GupApp {
             ),
             e => Error::config("show", format!("cannot open a window: {e}")),
         })?;
+        let waker =
+            std::task::Waker::from(Arc::new(ProxyWaker(Mutex::new(event_loop.create_proxy()))));
         let mut app = App {
+            waker,
             chart: self.chart,
             title: self.title,
             size: self.size,
@@ -194,6 +214,7 @@ struct WindowState {
 }
 
 struct App {
+    waker: std::task::Waker,
     chart: Option<Box<dyn Chart>>,
     title: Option<String>,
     size: (u32, u32),
@@ -242,6 +263,10 @@ impl App {
         );
         let cx = Context::new_blocking()?;
         let target = WindowTarget::new(&cx, window)?;
+        // Before the first frame: rows pushed from now on wake the loop.
+        if let Some(chart) = self.chart.as_mut() {
+            chart.set_waker(self.waker.clone());
+        }
         Ok(WindowState { target, cx })
     }
 
@@ -290,7 +315,13 @@ fn redraw_again(chart: &dyn Chart) -> bool {
     chart.needs_frame()
 }
 
-impl ApplicationHandler for App {
+impl ApplicationHandler<Wake> for App {
+    fn user_event(&mut self, _event_loop: &ActiveEventLoop, _event: Wake) {
+        if let Some(state) = &self.state {
+            state.target.window().request_redraw();
+        }
+    }
+
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.state.is_some() {
             return;

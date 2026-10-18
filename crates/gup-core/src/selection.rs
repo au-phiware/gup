@@ -5,6 +5,7 @@
 //! (RFC-001 §4). S0a scope: data and `attr`; events, transitions and
 //! append are later S-stories.
 
+use crate::append::{Appender, FeedRx};
 use crate::channel::{Channel, ChannelDesc, ConstValue, Geometry, HitShape, Mark, Role, Visual};
 use crate::column::{ColumnFormat, ColumnStore};
 use crate::context::Context;
@@ -28,6 +29,7 @@ use crate::vector::{CpuLayer, LayerVector, MarkKind, VChan};
 use std::any::Any;
 use std::marker::PhantomData;
 use std::sync::Arc;
+use std::task::Waker;
 
 type Handler<T> = Box<dyn FnMut(&EventInfo, &T) + Send + Sync>;
 type TooltipFn<T> = Box<dyn Fn(&T) -> String + Send + Sync>;
@@ -148,6 +150,12 @@ pub struct Selection<T, M: Mark> {
     unbrushed: f32,
     /// The brushed data rows, sorted, while the plot has a brush.
     brush: Option<Vec<usize>>,
+    /// Rows other threads pushed through [`appender`](Self::appender), and
+    /// the waker given by the host.
+    feed: Option<FeedRx<T>>,
+    waker: Option<Waker>,
+    /// How many appends happened (part of the revision).
+    appended: u64,
     _mark: PhantomData<fn() -> M>,
 }
 
@@ -184,6 +192,9 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             brushable: false,
             unbrushed: 1.0,
             brush: None,
+            feed: None,
+            waker: None,
+            appended: 0,
             _mark: PhantomData,
         }
     }
@@ -199,18 +210,26 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         self
     }
 
-    /// Append `rows`: only they are evaluated, and the next resolve writes
-    /// only their bytes, at the tail of the last chunk (or in new chunks).
-    /// Auto domains refit to the grown stats on that resolve, and new keys
-    /// get the next dictionary codes. It works under every [`Retain`]
-    /// policy: the last chunk keeps its CPU copy, and appended rows are
-    /// released after their upload like the rest. (A handle to append to a
-    /// selection already in a plot is RFC-001 S12.)
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "the public append handle is RFC-001 S12")
-    )]
-    pub(crate) fn append(&mut self, rows: impl IntoIterator<Item = T>) -> Result<()> {
+    /// Append `rows`: only they are evaluated, and the next resolve of the
+    /// plot holding the selection uploads only their bytes, at the tail of
+    /// the last chunk (or in new chunks). Auto domains refit to the grown
+    /// stats on that resolve (a uniform write), and new keys get the next
+    /// dictionary codes. It works under every [`Retain`] policy: the last
+    /// chunk keeps its CPU copy, and appended rows are released after their
+    /// upload like the rest. To append from another thread, see
+    /// [`appender`](Self::appender).
+    ///
+    /// ```
+    /// use gup_core::prelude::*;
+    /// # fn main() -> gup_core::Result<()> {
+    /// let mut plot = Plot::new();
+    /// plot.circles(vec![(0.0, 1.0)]).x(|p: &(f64, f64)| p.0).y(|p: &(f64, f64)| p.1);
+    /// plot.layer_mut::<(f64, f64), Circle>().unwrap().append([(1.0, 2.0)])?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn append(&mut self, rows: impl IntoIterator<Item = T>) -> Result<()> {
+        self.appended = self.appended.wrapping_add(1);
         let start = self.rows.len();
         self.rows.extend(rows);
         if let Some(store) = &mut self.columns {
@@ -236,6 +255,17 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             }
         }
         Ok(())
+    }
+
+    /// A handle that appends rows to this selection from any thread. Rows
+    /// pushed between two frames are drained into one [`append`](Self::append)
+    /// by the next resolve of the plot holding the selection.
+    pub fn appender(&mut self) -> Appender<T> {
+        let feed = self.feed.get_or_insert_with(FeedRx::new);
+        if let Some(w) = &self.waker {
+            feed.set_waker(Some(w));
+        }
+        feed.appender()
     }
 
     /// Number of rows, including any dropped after upload.
@@ -642,6 +672,13 @@ pub(crate) trait Layer: wgpu::WasmNotSendSync {
     ) -> Result<()>;
     /// The layer's z-order among the plot's items.
     fn z(&self) -> i32;
+    /// Append every row queued through the layer's appenders as one batch
+    /// (so one draw-order batch). True when rows came.
+    fn drain_feed(&mut self) -> Result<bool>;
+    /// Whether rows are queued and not yet drained.
+    fn feed_pending(&self) -> bool;
+    /// Set the host's waker, which appenders wake when rows arrive.
+    fn set_waker(&mut self, waker: Option<&Waker>);
     /// Evaluate accessors (chunked for `cx`'s device) and fit every
     /// data-driven domain to its column's stats across every chunk.
     fn fit_domains(&mut self, cx: &Context) -> Result<()>;
@@ -852,7 +889,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
     }
 
     fn revision(&self) -> u64 {
-        let mut sum = 0u64;
+        let mut sum = self.appended;
         for enc in self.encodings.iter().flatten() {
             if let Encoding::Column(c) = enc {
                 for link in c.links() {
@@ -865,6 +902,29 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
 
     fn z(&self) -> i32 {
         self.z
+    }
+
+    fn drain_feed(&mut self) -> Result<bool> {
+        let rows = match &self.feed {
+            Some(feed) if feed.pending() => feed.drain(),
+            _ => return Ok(false),
+        };
+        if rows.is_empty() {
+            return Ok(false);
+        }
+        self.append(rows)?;
+        Ok(true)
+    }
+
+    fn feed_pending(&self) -> bool {
+        self.feed.as_ref().is_some_and(FeedRx::pending)
+    }
+
+    fn set_waker(&mut self, waker: Option<&Waker>) {
+        self.waker = waker.cloned();
+        if let Some(feed) = &self.feed {
+            feed.set_waker(waker);
+        }
     }
 
     fn fit_domains(&mut self, cx: &Context) -> Result<()> {
