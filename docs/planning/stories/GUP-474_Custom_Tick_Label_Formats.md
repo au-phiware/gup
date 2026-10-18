@@ -9,8 +9,8 @@ implementer-reason:
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 🚧 In Progress **Created**:
-2026-10-18
+**Initiative**: RFC-001 Migration **Status**: ✅ Complete (2026-10-18)
+**Created**: 2026-10-18
 
 ## Context
 
@@ -47,47 +47,47 @@ both must see the formatted strings.
 
 ### AC1: API from an external crate
 
-- [ ] `ScaleRef<S>::tick_format(&self, f: impl Fn(f64) -> String + Send + Sync + 'static)`
+- [x] `ScaleRef<S>::tick_format(&self, f: impl Fn(f64) -> String + Send + Sync + 'static)`
       exists for the position scales Linear, Pow, Log and Symlog, in the setter
       shape `ScaleRef` already uses (match it).
-- [ ] `ScaleRef<Time>` gets the same, and its argument is the value `Time` ticks
+- [x] `ScaleRef<Time>` gets the same, and its argument is the value `Time` ticks
       use (an `f64`; read `time.rs` to state the unit in the doc comment and
       doctest).
-- [ ] Band and Point scales do not get it; their labels stay from keys. A
+- [x] Band and Point scales do not get it; their labels stay from keys. A
       `compile_fail` doctest or test pins this.
-- [ ] A doctest or `tests/` file (an external-crate consumer) sets a format and
+- [x] A doctest or `tests/` file (an external-crate consumer) sets a format and
       reads the label strings back.
 
 ### AC2: Used everywhere ticks are labelled
 
-- [ ] Axis tick labels, legend ramp ticks and, if a tooltip default text renders
+- [x] Axis tick labels, legend ramp ticks and, if a tooltip default text renders
       a scale value, the tooltip text use the format. If the tooltip does not
       format scale values, the retrospective says so.
-- [ ] With no format set, output is byte-identical to today (the existing
+- [x] With no format set, output is byte-identical to today (the existing
       goldens still pass unchanged).
 
 ### AC3: Measurement uses the formatted strings
 
-- [ ] A test sets a very wide format (e.g.
+- [x] A test sets a very wide format (e.g.
       `|v| format!("{v:.0} million dollars")`) and asserts GUP-435 thinning
       drops ticks it would keep with the default labels.
-- [ ] A test asserts the GUP-452 held plot rect is computed from the widest
+- [x] A test asserts the GUP-452 held plot rect is computed from the widest
       formatted label.
 
 ### AC4: Goldens read by eye
 
-- [ ] Three goldens: a currency axis ("$1.2M"), a percent axis ("45%") and a
+- [x] Three goldens: a currency axis ("$1.2M"), a percent axis ("45%") and a
       date format (Time scale). The implementer reads each PNG and confirms
       labels are not clipped and the plot area is not overlapped.
 
 ### AC5: Callers and size
 
-- [ ] Search for every place that formats tick values by hand (tests, examples,
+- [x] Search for every place that formats tick values by hand (tests, examples,
       browser scenes, doctests; grep `format_log_tick`, `{}k`, `SI`) and update
       or note why left.
-- [ ] Run the browser smoke test (layout changes with label width) and report
+- [x] Run the browser smoke test (layout changes with label width) and report
       pass or fail.
-- [ ] WASM size (`gup-core/wasm-size/scatter`) is reported before and after in
+- [x] WASM size (`gup-core/wasm-size/scatter`) is reported before and after in
       the retrospective.
 
 ## Decisions
@@ -122,10 +122,10 @@ both must see the formatted strings.
 
 ## Technical Tasks
 
-- [ ] Add the formatter slot to `Shared<S>` and the `tick_format` setters.
-- [ ] Route axis, legend and tooltip label generation through it.
-- [ ] Make measurement and thinning read the formatted strings.
-- [ ] Add tests and the three goldens; update hand-formatted callers.
+- [x] Add the formatter slot to `Shared<S>` and the `tick_format` setters.
+- [x] Route axis, legend and tooltip label generation through it.
+- [x] Make measurement and thinning read the formatted strings.
+- [x] Add tests and the three goldens; update hand-formatted callers.
 
 ## Dependencies
 
@@ -144,8 +144,8 @@ both must see the formatted strings.
 
 ## Success Metrics
 
-- [ ] Existing goldens unchanged.
-- [ ] Three new goldens read and correct.
+- [x] Existing goldens unchanged.
+- [x] Three new goldens read and correct.
 
 ## Risk Assessment
 
@@ -155,10 +155,66 @@ both must see the formatted strings.
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (golden image or PNG read), if visual
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye (golden image or PNG read), if visual
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `ScaleRef<S: NumericTicks>::tick_format(&self, f) -> &Self` (Linear, Pow, Log,
+  Symlog, Time; Band/Point excluded by the `NumericTicks` marker, pinned by a
+  `compile_fail` doctest). The format is a `TickFormat` (`Arc<dyn Fn>`, manual
+  `Debug`) in `Shared<S>`; setting it bumps `revision`.
+- Axis labels: `DynPositionScale::ticks` for `ScaleRef` replaces the labels, so
+  measurement, thinning (GUP-435), held rect (GUP-452), scene text and SVG all
+  read the formatted strings with no further changes.
+- Legend ramp ticks: a hidden defaulted `tick_format` on `ShaderFn` and
+  `EncodeFn` (ScaleRef returns its format, `Then` forwards its first link's);
+  `Ramp::with_data_ticks` uses it.
+- `ScaleRef::tick_labels(count)` reads labels back (doctest and tests).
+- Tests: `crates/gup-core/tests/tick_format.rs` (7 tests; thinning, held rect,
+  legend, three goldens with SVG checks) and two doctests. Goldens:
+  `tests/golden/gup_core/tick_format_{currency,percent,date}.png`, read by eye:
+  "$1.2M", "45%", "Jan 2021" labels complete, clear of the plot.
+- Evidence: gup-core tests all pass; `mask wasm-size` scatter 319,085 -> 320,071
+  gz bytes (+986 B, +0.3%); `mask wasm-browser` PASS; `mask perf-budget` all
+  pass (load average about 3-4); old-path LOC 28910.
+
+## Retrospective
+
+**Completed**: 2026-10-18
+
+### Key Technical Learnings
+
+#### One route for all label consumers
+
+- **Challenge**: labels feed several consumers (measurement, thinning, held
+  rect, SVG).
+- **Solution**: every consumer reads `Ticks.labels` from
+  `DynPositionScale::ticks`, so formatting there covers all of them.
+- **Pattern**: put an override at the single producer, not at consumers.
+
+### Architectural Decisions
+
+#### Legend route through `EncodeFn`
+
+- **Decision**: legend ramp ticks are in the data's units, so the chain's first
+  link's format is exposed through a hidden `tick_format` on `ShaderFn` and
+  `EncodeFn`. No colour-scale format exists (out of scope); only a position
+  `ScaleRef` that starts a colour chain carries one.
+- **Trade-off**: two hidden defaulted trait methods; escalation trigger not
+  fired because ScaleRef's API shape did not widen.
+
+#### Tooltips and callers
+
+- Tooltips are user closures and do not format scale values; unaffected.
+- AC5 search: no hand-formatted tick callers in gup-core, examples or tests; the
+  only SI formatter is the frozen root crate's `src/label`, left as is.
+
+### Follow-up Stories
+
+None.
