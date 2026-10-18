@@ -47,7 +47,7 @@ pub struct TargetDesc {
 
 /// Uniform alignment for dynamic offsets (WebGPU's maximum
 /// `min_uniform_buffer_offset_alignment`).
-const DYNAMIC_ALIGN: u64 = 256;
+pub(crate) const DYNAMIC_ALIGN: u64 = 256;
 
 /// A linked glue module and the layouts to bind it.
 pub(crate) struct GlueProgram {
@@ -147,6 +147,8 @@ impl std::fmt::Debug for LayerGpu {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 enum PipelineKind {
     Mark(String),
+    /// A mark's GPU pick variant (RFC-001 S9d), by glue signature.
+    Pick(String),
     Rule,
     Rect,
     Gradient,
@@ -181,6 +183,7 @@ pub struct PipelineStats {
 pub(crate) struct PipelineCache {
     view_bgl: Option<wgpu::BindGroupLayout>,
     lut_bgl: Option<wgpu::BindGroupLayout>,
+    pick_bgl: Option<wgpu::BindGroupLayout>,
     programs: HashMap<String, Arc<GlueProgram>>,
     pipelines: HashMap<PipelineKey, wgpu::RenderPipeline>,
     pub stats: PipelineStats,
@@ -243,12 +246,25 @@ impl PipelineCache {
         self.pipelines.clear();
     }
 
-    fn view_bgl(&mut self, device: &wgpu::Device) -> wgpu::BindGroupLayout {
+    pub(crate) fn view_bgl(&mut self, device: &wgpu::Device) -> wgpu::BindGroupLayout {
         self.view_bgl
             .get_or_insert_with(|| {
                 device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                     label: Some("gup view"),
                     entries: &[uniform_entry(0, false)],
+                })
+            })
+            .clone()
+    }
+
+    /// Group 3 of a pick pipeline: the `Pick` uniform, one entry per layer
+    /// at a dynamic offset.
+    pub(crate) fn pick_bgl(&mut self, device: &wgpu::Device) -> wgpu::BindGroupLayout {
+        self.pick_bgl
+            .get_or_insert_with(|| {
+                device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some("gup pick"),
+                    entries: &[uniform_entry(0, true)],
                 })
             })
             .clone()
@@ -367,27 +383,8 @@ impl Context {
                         label: Some(signature),
                         source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(&program.wgsl)),
                     });
-                let glue = &program.glue;
-                // The columns, then a polyline's next-row columns.
-                let attributes: Vec<wgpu::VertexAttribute> = glue
-                    .columns
-                    .iter()
-                    .chain(glue.successors.iter().map(|&c| &glue.columns[c]))
-                    .enumerate()
-                    .map(|(loc, (_, f))| wgpu::VertexAttribute {
-                        format: f.vertex_format(),
-                        offset: 0,
-                        shader_location: loc as u32,
-                    })
-                    .collect();
-                let buffers: Vec<wgpu::VertexBufferLayout> = attributes
-                    .iter()
-                    .map(|a| wgpu::VertexBufferLayout {
-                        array_stride: a.format.size(),
-                        step_mode: wgpu::VertexStepMode::Instance,
-                        attributes: std::slice::from_ref(a),
-                    })
-                    .collect();
+                let attributes = vertex_attributes(&program.glue);
+                let buffers = vertex_buffers(&attributes);
                 let pipeline = create_pipeline(
                     self.device(),
                     signature,
@@ -401,6 +398,97 @@ impl Context {
                 cache.stats.last_create = start.elapsed();
                 cache.pipelines.insert(key.clone(), pipeline.clone());
                 Ok(pipeline)
+            },
+        )
+    }
+
+    /// The GPU pick pipeline for `program` (RFC-001 S9d), or `None` when
+    /// its mark does not draw in picks. Links the glue's pick variant on
+    /// first use, into the same bind group layouts as the colour program
+    /// plus the `Pick` uniform at group 3; one sample, an `Rg32Uint`
+    /// colour target and a `LessEqual` depth test.
+    pub(crate) fn pick_pipeline(
+        &self,
+        program: &GlueProgram,
+    ) -> Result<Option<wgpu::RenderPipeline>> {
+        let Some(source) = &program.glue.pick else {
+            return Ok(None);
+        };
+        let signature = &program.glue.signature;
+        let key = PipelineKey {
+            kind: PipelineKind::Pick(signature.clone()),
+            format: crate::gpu_pick::PICK_FORMAT,
+            samples: 1,
+        };
+        if let Some(p) = self.pipelines().hit(&key) {
+            return Ok(Some(p));
+        }
+        self.scoped(
+            || format!("pick pipeline `{signature}`"),
+            || {
+                if let Some(p) = self.pipelines().pipelines.get(&key) {
+                    return Ok(Some(p.clone()));
+                }
+                let start = Instant::now();
+                let label = format!("{signature} (pick)");
+                let wgsl = link(&label, source, &program.glue.modules)?;
+                let device = self.device();
+                let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                    label: Some(&label),
+                    source: wgpu::ShaderSource::Wgsl(Cow::Owned(wgsl)),
+                });
+                let (view_bgl, pick_bgl) = {
+                    let mut cache = self.pipelines();
+                    (cache.view_bgl(device), cache.pick_bgl(device))
+                };
+                let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some(&label),
+                    bind_group_layouts: &[
+                        &view_bgl,
+                        &program.enc_bgl,
+                        &program.chunk_bgl,
+                        &pick_bgl,
+                    ],
+                    push_constant_ranges: &[],
+                });
+                let attributes = vertex_attributes(&program.glue);
+                let buffers = vertex_buffers(&attributes);
+                let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+                    label: Some(&label),
+                    layout: Some(&layout),
+                    vertex: wgpu::VertexState {
+                        module: &module,
+                        entry_point: Some("vs_pick"),
+                        compilation_options: Default::default(),
+                        buffers: &buffers,
+                    },
+                    fragment: Some(wgpu::FragmentState {
+                        module: &module,
+                        entry_point: Some("fs_pick"),
+                        compilation_options: Default::default(),
+                        targets: &[Some(wgpu::ColorTargetState {
+                            format: crate::gpu_pick::PICK_FORMAT,
+                            blend: None,
+                            write_mask: wgpu::ColorWrites::ALL,
+                        })],
+                    }),
+                    primitive: wgpu::PrimitiveState::default(),
+                    depth_stencil: Some(wgpu::DepthStencilState {
+                        format: crate::gpu_pick::PICK_DEPTH,
+                        depth_write_enabled: true,
+                        depth_compare: wgpu::CompareFunction::LessEqual,
+                        stencil: wgpu::StencilState::default(),
+                        bias: wgpu::DepthBiasState::default(),
+                    }),
+                    multisample: wgpu::MultisampleState::default(),
+                    multiview: None,
+                    cache: None,
+                });
+                let mut cache = self.pipelines();
+                cache.stats.pipelines_created += 1;
+                cache.stats.last_create = start.elapsed();
+                cache.pipelines.insert(key.clone(), pipeline.clone());
+                Ok(Some(pipeline))
             },
         )
     }
@@ -438,7 +526,9 @@ impl Context {
                 &wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x2, 2 => Uint32, 3 => Uint32],
                 std::mem::size_of::<GradientInstance>(),
             ),
-            PipelineKind::Mark(_) => unreachable!("mark pipelines come from glue programs"),
+            PipelineKind::Mark(_) | PipelineKind::Pick(_) => {
+                unreachable!("mark pipelines come from glue programs")
+            }
         };
         let device = self.device();
         self.scoped(
@@ -495,6 +585,33 @@ impl PipelineCache {
         }
         pipeline
     }
+}
+
+/// A mark's vertex attributes: its columns, then a polyline's next-row
+/// columns, one buffer slot each.
+fn vertex_attributes(glue: &Glue) -> Vec<wgpu::VertexAttribute> {
+    glue.columns
+        .iter()
+        .chain(glue.successors.iter().map(|&c| &glue.columns[c]))
+        .enumerate()
+        .map(|(loc, (_, f))| wgpu::VertexAttribute {
+            format: f.vertex_format(),
+            offset: 0,
+            shader_location: loc as u32,
+        })
+        .collect()
+}
+
+/// One per-instance buffer slot per attribute.
+fn vertex_buffers(attributes: &[wgpu::VertexAttribute]) -> Vec<wgpu::VertexBufferLayout<'_>> {
+    attributes
+        .iter()
+        .map(|a| wgpu::VertexBufferLayout {
+            array_stride: a.format.size(),
+            step_mode: wgpu::VertexStepMode::Instance,
+            attributes: std::slice::from_ref(a),
+        })
+        .collect()
 }
 
 fn create_pipeline(
@@ -765,6 +882,27 @@ impl LayerGpu {
 
     /// Group 2 for chunk `index`: its own when the program reads validity
     /// bits, the shared one otherwise.
+    /// Bind groups 1 and 2 and record the layer's draws into `pass`, whose
+    /// pipeline and group 0 (and a pick's group 3) are set: one instanced
+    /// draw per span of a chunk's rows, with the chunk's `Chunk` entry
+    /// (row base, relative bases) and columns bound when the chunk changes.
+    pub(crate) fn record(&self, pass: &mut wgpu::RenderPass<'_>) {
+        pass.set_bind_group(1, self.enc_bind_group(), &[]);
+        let mut bound = None;
+        for span in &self.spans {
+            let k = span.chunk as usize;
+            if bound != Some(k) {
+                let chunk = &self.chunks[k];
+                pass.set_bind_group(2, self.chunk_bind_group(k), &[chunk.dynamic_offset]);
+                for (slot, (buffer, range)) in chunk.slots.iter().enumerate() {
+                    pass.set_vertex_buffer(slot as u32, buffer.slice(range.clone()));
+                }
+                bound = Some(k);
+            }
+            pass.draw(0..self.vertices_per_instance, span.rows.clone());
+        }
+    }
+
     pub(crate) fn chunk_bind_group(&self, index: usize) -> &wgpu::BindGroup {
         self.chunk_bind_groups
             .get(index)
@@ -839,10 +977,12 @@ struct GradientInstance {
 
 #[repr(C)]
 #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-struct ViewUniform {
-    size: [f32; 2],
-    dpr: f32,
-    padding: f32,
+pub(crate) struct ViewUniform {
+    pub size: [f32; 2],
+    pub dpr: f32,
+    /// How far marks grow their quads (`gup::view::View::pick_margin`):
+    /// 0 for colour, the pick tolerance in a GPU pick.
+    pub pick_margin: f32,
 }
 
 /// One recorded draw.
@@ -1023,7 +1163,7 @@ impl Renderer {
             bytemuck::bytes_of(&ViewUniform {
                 size: [scene.width, scene.height],
                 dpr,
-                padding: 0.0,
+                pick_margin: 0.0,
             }),
         );
 
@@ -1326,27 +1466,7 @@ impl Prepared {
                 Draw::Marks { pipeline, layer } => {
                     pass.set_pipeline(pipeline);
                     pass.set_bind_group(0, &self.view_bind_group, &[]);
-                    pass.set_bind_group(1, layer.enc_bind_group(), &[]);
-                    // One instanced draw per span of a chunk's rows, with
-                    // the chunk's `Chunk` entry (row base, relative bases)
-                    // and columns bound when the chunk changes.
-                    let mut bound = None;
-                    for span in &layer.spans {
-                        let k = span.chunk as usize;
-                        if bound != Some(k) {
-                            let chunk = &layer.chunks[k];
-                            pass.set_bind_group(
-                                2,
-                                layer.chunk_bind_group(k),
-                                &[chunk.dynamic_offset],
-                            );
-                            for (slot, (buffer, range)) in chunk.slots.iter().enumerate() {
-                                pass.set_vertex_buffer(slot as u32, buffer.slice(range.clone()));
-                            }
-                            bound = Some(k);
-                        }
-                        pass.draw(0..layer.vertices_per_instance, span.rows.clone());
-                    }
+                    layer.record(pass);
                 }
                 Draw::Instanced {
                     pipeline,

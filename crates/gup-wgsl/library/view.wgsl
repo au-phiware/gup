@@ -11,7 +11,10 @@ struct View {
     size: vec2<f32>,
     // Device pixels per logical pixel.
     dpr: f32,
-    padding: f32,
+    // How far, in logical pixels, a mark grows its quad past its outline:
+    // 0 when drawing colour, the pick tolerance (3) in a GPU pick pass,
+    // whose fragments measure their distance to the mark (RFC-001 S9d).
+    pick_margin: f32,
 }
 
 fn px_to_clip(p: vec2<f32>, view: View) -> vec4<f32> {

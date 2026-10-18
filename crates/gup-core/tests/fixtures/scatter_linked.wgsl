@@ -64,7 +64,7 @@ fn fs_main(v: gup_marks_circle_Varyings) -> @location(0) vec4<f32> {
 struct gup_view_View {
     size: vec2<f32>,
     dpr: f32,
-    padding: f32,
+    pick_margin: f32,
 }
 
 fn gup_view_px_to_clip(p: vec2<f32>, view: gup_view_View) -> vec4<f32> {
@@ -103,19 +103,19 @@ fn gup_marks_circle_corner(vertex_index: u32) -> vec2<f32> {
 fn gup_marks_circle_vertex(m: gup_marks_circle_CircleIn, vertex_index_1: u32, row: u32, view_1: gup_view_View) -> gup_marks_circle_Varyings {
     var out: gup_marks_circle_Varyings;
 
-    let half = (m.radius + (1f / view_1.dpr));
-    let _e8 = gup_marks_circle_corner(vertex_index_1);
-    let offset = (_e8 * half);
-    let _e16 = gup_view_px_to_clip((vec2<f32>(m.x, m.y) + offset), view_1);
-    out.clip = _e16;
+    let half = ((m.radius + (1f / view_1.dpr)) + view_1.pick_margin);
+    let _e10 = gup_marks_circle_corner(vertex_index_1);
+    let offset = (_e10 * half);
+    let _e18 = gup_view_px_to_clip((vec2<f32>(m.x, m.y) + offset), view_1);
+    out.clip = _e18;
     out.local = (offset * view_1.dpr);
     out.radius = (m.radius * view_1.dpr);
     out.fill = vec4<f32>(m.fill.xyz, (m.fill.w * m.fill_opacity));
     out.stroke = m.stroke;
     out.stroke_width = (m.stroke_width * view_1.dpr);
     out.row = row;
-    let _e40 = out;
-    return _e40;
+    let _e42 = out;
+    return _e42;
 }
 
 fn gup_marks_circle_compose(fill: vec4<f32>, stroke: vec4<f32>, outer: f32, ring: f32) -> vec4<f32> {
@@ -134,6 +134,14 @@ fn gup_marks_circle_shade(v: gup_marks_circle_Varyings) -> vec4<f32> {
     let inner = clamp((0.5f - (d - max((v.radius - v.stroke_width), 0f))), 0f, 1f);
     let _e24 = gup_marks_circle_compose(v.fill, v.stroke, outer_1, (outer_1 - inner));
     return _e24;
+}
+
+fn gup_marks_circle_hit_distance(v_1: gup_marks_circle_Varyings) -> f32 {
+    return select((length(v_1.local) - v_1.radius), 1000000000000000000000000000000f, (v_1.radius < 0f));
+}
+
+fn gup_marks_circle_hit_row(v_2: gup_marks_circle_Varyings) -> u32 {
+    return v_2.row;
 }
 
 // gup::scale::linear (flattened at build time)

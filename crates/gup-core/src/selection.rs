@@ -442,12 +442,6 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         None
     }
 
-    /// The draw order of the stored rows, for tests.
-    #[cfg(test)]
-    pub(crate) fn draw_order(&self) -> Option<&DrawOrder> {
-        self.order.as_ref()
-    }
-
     /// Two different shader functions with one WGSL import path (two
     /// `#[wgsl_function(path = "…")]`s, say) would share the glue's import
     /// alias, so one would silently call the other's WGSL. Refuse them,
@@ -499,6 +493,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             channels,
             validity: self.columns.as_ref().is_some_and(ColumnStore::has_nulls),
             polyline: M::GEOMETRY == Geometry::Polyline,
+            gpu_pick: M::GPU_PICK,
         })
     }
 
@@ -620,6 +615,9 @@ pub(crate) trait Layer: wgpu::WasmNotSendSync {
     /// Row `row` (an index into the rows the selection was given), if the
     /// layer still holds it.
     fn row_any(&self, row: usize) -> Option<&dyn Any>;
+    /// The layer's draw order, if it draws by size: how a GPU pick maps a
+    /// stored row back to its data row (`None` maps a row to itself).
+    fn draw_order(&self) -> Option<&DrawOrder>;
     /// Run the layer's handlers for `info.event` on the row `info.row`.
     /// Does nothing when the layer no longer holds the row.
     fn dispatch(&mut self, info: &EventInfo);
@@ -1120,6 +1118,10 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         };
         build_items(M::HIT, layer, self.z, &slots, &chans, out);
         Ok(())
+    }
+
+    fn draw_order(&self) -> Option<&DrawOrder> {
+        self.order.as_ref()
     }
 
     fn row_any(&self, row: usize) -> Option<&dyn Any> {

@@ -347,6 +347,10 @@ pub trait Mark: Send + Sync + 'static {
     const GEOMETRY: Geometry = Geometry::Quad;
     /// How CPU picking hit-tests the mark's rows.
     const HIT: HitShape = HitShape::Unpickable;
+    /// Whether the GPU pick ([`Plot::request_pick`](crate::Plot::request_pick))
+    /// draws the mark: its module defines `hit_distance` and `hit_row`
+    /// (`#[mark(.., gpu_pick)]`). Layers of other marks are skipped there.
+    const GPU_PICK: bool = false;
 }
 
 /// `[r, g, b, a]`: a WGSL `vec4<f32>` in a uniform.

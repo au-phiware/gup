@@ -292,6 +292,7 @@ fn permute(column: &mut ColumnData, perm: &[u32]) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::selection::Layer as _;
 
     /// The stored rows in draw order.
     fn drawn(order: &DrawOrder) -> Vec<u64> {

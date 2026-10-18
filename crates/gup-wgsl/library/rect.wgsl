@@ -8,7 +8,7 @@
 #define_import_path gup::marks::rect
 
 #import gup::view::{View, px_to_clip}
-#import gup::coverage::{rect_quad, box_coverage}
+#import gup::coverage::{rect_quad, grow_quad, box_coverage, box_distance}
 
 // One field per channel, in `Rect::CHANNELS` order.
 struct RectIn {
@@ -51,7 +51,12 @@ fn span(centre: f32, extent: f32, edge: f32) -> vec2<f32> {
 fn vertex(m: RectIn, vertex_index: u32, row: u32, view: View) -> Varyings {
     let sx = span(m.x, m.width, m.x_end);
     let sy = span(m.y, m.height, m.y_end);
-    let q = rect_quad(vec2<f32>(sx.x, sy.x), vec2<f32>(sx.y, sy.y), vertex_index, view.dpr);
+    let q = grow_quad(
+        rect_quad(vec2<f32>(sx.x, sy.x), vec2<f32>(sx.y, sy.y), vertex_index, view.dpr),
+        view.pick_margin,
+        vertex_index,
+        view.dpr,
+    );
     var out: Varyings;
     out.clip = px_to_clip(q.position, view);
     out.local = q.local;
@@ -79,4 +84,15 @@ fn shade(v: Varyings) -> vec4<f32> {
     let outer = box_coverage(v.local, v.half);
     let inner = box_coverage(v.local, max(v.half - vec2<f32>(v.stroke_width), vec2<f32>(0.0)));
     return compose(v.fill, v.stroke, outer, outer - inner);
+}
+
+// The signed distance from the fragment to the rect (its outer edge; the
+// stroke is inside), in physical pixels: negative inside (RFC-001 S9d).
+fn hit_distance(v: Varyings) -> f32 {
+    return box_distance(v.local, v.half);
+}
+
+// The row a pick of this rect reports.
+fn hit_row(v: Varyings) -> u32 {
+    return v.row;
 }

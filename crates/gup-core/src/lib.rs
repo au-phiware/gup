@@ -95,6 +95,7 @@ mod context;
 mod encoding;
 mod error;
 pub mod geom;
+mod gpu_pick;
 mod guide;
 mod input;
 pub mod marks;
@@ -132,6 +133,7 @@ pub use encoding::{
     KeyMarker, KeySource, NullableKey, NullableOwnedKey, OwnedKey, Resource, ShaderFn, Then,
 };
 pub use error::{Error, Result};
+pub use gpu_pick::{GpuPick, PickTicket};
 pub use input::{Button, Event, EventInfo, Input, Response};
 pub use marks::{Circle, CircleAttrs, Line, LineAttrs, Rect, RectAttrs, Segment, SegmentAttrs};
 pub use pick::{PICK_TOLERANCE, RowId};
