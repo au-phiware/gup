@@ -9,7 +9,8 @@ implementer-reason:
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 📋 Planned **Created**: 2026-10-18
+**Initiative**: RFC-001 Migration **Status**: ✅ Complete (2026-10-18)
+**Created**: 2026-10-18
 
 ## Context
 
@@ -57,66 +58,66 @@ which already happens after every brush (the overlay redraw).
 
 ### AC1: Dimmed by default
 
-- [ ] `brush_golden` is re-blessed. The implementer reads the PNG: rows 1 and 2
+- [x] `brush_golden` is re-blessed. The implementer reads the PNG: rows 1 and 2
       (inside) look as before, and rows 0, 3 and 4 are pale.
-- [ ] Pixel checks in that test, at each dot's centre:
+- [x] Pixel checks in that test, at each dot's centre:
   - rows 1 and 2 equal the pre-story golden's pixels exactly;
   - rows 0, 3 and 4 are within 3/255 per channel of `(179, 213, 232)`, which is
     `#0072B2` at opacity 0.3 over white in sRGB space.
-- [ ] Clearing the brush (`clear_brush`, then resolve) renders byte-identical to
+- [x] Clearing the brush (`clear_brush`, then resolve) renders byte-identical to
       the same plot never brushed.
 
 ### AC2: Every mark, every colour channel
 
-- [ ] A four-layer test (`Circle` with a stroke, `Rect`, `Segment`, `Line`),
+- [x] A four-layer test (`Circle` with a stroke, `Rect`, `Segment`, `Line`),
       half the rows of each inside a brush: at each unbrushed mark's centre the
       colour equals 0.3 opacity of its colour over white (±3/255), and at each
       brushed mark's centre it is unchanged.
-- [ ] A `Line` segment is dimmed when its first row is not brushed, and drawn at
+- [x] A `Line` segment is dimmed when its first row is not brushed, and drawn at
       full opacity when it is.
-- [ ] A `Retain::GpuOnly` layer past one chunk is dimmed entirely while a brush
+- [x] A `Retain::GpuOnly` layer past one chunk is dimmed entirely while a brush
       exists (it has no brushed rows, GUP-454).
-- [ ] On the brushed four-layer plot, `pick_row_gpu` returns the same row as
+- [x] On the brushed four-layer plot, `pick_row_gpu` returns the same row as
       `pick_row` at every mark's pick anchor (the pick pipelines bind the new
       layout).
 
 ### AC3: Theme
 
-- [ ] `Theme::unbrushed_opacity` (Decisions) set to 0.5 gives
+- [x] `Theme::unbrushed_opacity` (Decisions) set to 0.5 gives
       `0.5 · c + 0.5 · 255` (±3/255) at an unbrushed dot.
-- [ ] Set to 1.0, a brushing plot's glue, uploads and image are identical to a
+- [x] Set to 1.0, a brushing plot's glue, uploads and image are identical to a
       plot without this story's change. The glue signature has no `brushed` and
       no bits are written.
 
 ### AC4: Uploads
 
-- [ ] The resolve after a brush release writes exactly `4 · ⌈rows / 32⌉` bytes
+- [x] The resolve after a brush release writes exactly `4 · ⌈rows / 32⌉` bytes
       of `Upload::Brush` per layer and 4 bytes of `Upload::Uniform` per layer
       (the `brush_dim` field), and 0 column, validity and texture bytes.
-- [ ] Zooming and panning a brushed plot for 60 frames writes 0 `Upload::Brush`
+- [x] Zooming and panning a brushed plot for 60 frames writes 0 `Upload::Brush`
       bytes.
-- [ ] `context::tests::every_gpu_write_is_counted` passes.
+- [x] `context::tests::every_gpu_write_is_counted` passes.
 
 ### AC5: Size-ordered layers
 
-- [ ] A layer drawn size-descending (GUP-431 `DrawOrder`) dims exactly the rows
+- [x] A layer drawn size-descending (GUP-431 `DrawOrder`) dims exactly the rows
       outside the brush. Check per row at its pick anchor; the bits are indexed
       by stored row, mapped from `Brush::rows` through the inverse of
       `DrawOrder::row_of`.
 
 ### AC6: Changed default, searched
 
-- [ ] `git grep -n "Drag::Brush\|on_brush\|brush()\|brush_rect" -- crates examples tests dogfood`:
+- [x] `git grep -n "Drag::Brush\|on_brush\|brush()\|brush_rect" -- crates examples tests dogfood`:
       every test, example and harness scene that checks mark pixels after a
       brush is updated for dimming or clears the brush first. List them in the
       Implementation Summary.
-- [ ] The browser brush step also checks that row 0's centre is dimmed.
+- [x] The browser brush step also checks that row 0's centre is dimmed.
       `mask wasm-browser` passes. Any later step that checks a mark's colour
       runs after a `clear_brush()` hook call; its check is not loosened.
 
 ### AC7: Size
 
-- [ ] `mask wasm-size` passes. Growth over 3,000 B gz is an escalation, and the
+- [x] `mask wasm-size` passes. Growth over 3,000 B gz is an escalation, and the
       scatter row is re-recorded with the reason if it moves more than +2%.
 
 ## Decisions
@@ -183,13 +184,13 @@ which already happens after every brush (the overlay redraw).
 
 ## Technical Tasks
 
-- [ ] `Theme::unbrushed_opacity`; `Upload::Brush`.
-- [ ] Glue: the `brushed` spec flag, binding, field and WGSL; signature suffix.
-- [ ] `Selection`: buffer, bind group entry, `prepare(.., brushable)`,
+- [x] `Theme::unbrushed_opacity`; `Upload::Brush`.
+- [x] Glue: the `brushed` spec flag, binding, field and WGSL; signature suffix.
+- [x] `Selection`: buffer, bind group entry, `prepare(.., brushable)`,
       `write_brush` with the `DrawOrder` mapping.
-- [ ] `Plot`: brush generation; calling `write_brush` in `resolve`.
-- [ ] Tests (AC1–AC5); re-bless `gup_core/brush`; harness step (AC6).
-- [ ] `mask wasm-size`; `mask wasm-browser`.
+- [x] `Plot`: brush generation; calling `write_brush` in `resolve`.
+- [x] Tests (AC1–AC5); re-bless `gup_core/brush`; harness step (AC6).
+- [x] `mask wasm-size`; `mask wasm-browser`.
 
 ## Dependencies
 
@@ -214,9 +215,9 @@ which already happens after every brush (the overlay redraw).
 
 ## Success Metrics
 
-- [ ] A brushed chart shows its selection at a glance, in a window and in a
+- [x] A brushed chart shows its selection at a glance, in a window and in a
       browser.
-- [ ] Brushing costs one small bits upload per layer, never a column upload.
+- [x] Brushing costs one small bits upload per layer, never a column upload.
 
 ## Risk Assessment
 
@@ -228,16 +229,118 @@ which already happens after every brush (the overlay redraw).
 
 ## Definition of Done
 
-- [ ] First code commit within 30 minutes of starting; then commit at each
+- [x] First code commit within 30 minutes of starting; then commit at each
       checkpoint (story-worker "Checkpoint rule")
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1` and
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1` and
       `cargo test -p gup-core -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye: the re-blessed `brush.png` and
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye: the re-blessed `brush.png` and
       `browser_scatter.png`
-- [ ] `mask wasm-browser` and `mask wasm-size` pass
-- [ ] `mask old-path-loc` recorded (expected unchanged, 28,910)
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] `mask wasm-browser` and `mask wasm-size` pass
+- [x] `mask old-path-loc` recorded (expected unchanged, 28,910)
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+Rows outside the brush now fade to `Theme::unbrushed_opacity` (default 0.3).
+
+- **Glue** (`shader/glue.rs`): `GlueSpec::brushed` adds ` brushed` to the
+  signature, an `Encodings.brush_dim: f32` field, a
+  `@group(1) @binding(N) brush_bits` storage array after the LUTs, and, after
+  the `m.<channel>` assignments, one alpha multiply per `Role::Color` channel.
+  The lines sit outside the pick body, which never reads colour, but the pick
+  pipelines share the group 1 layout.
+- **GPU state** (`render.rs`): `EncodingsGpu` owns the bits buffer (created
+  zeroed, never written at creation) and keeps the LUT views and sampler so an
+  append that adds 32-row words can rebuild the bind group around a larger
+  buffer. `Upload::Brush` and `UploadStats::brush` are new.
+- **Selection** (`selection.rs`): `prepare(.., brushable)`, `write_brush`, a
+  layer-held copy of the brushed data rows (so a rebuild of the GPU state
+  rewrites the bits), and the `DrawOrder::row_of` inverse when a layer draws by
+  size. A brush change writes the bits whole, plus a 4-byte write of `brush_dim`
+  when a brush appears or clears.
+- **Plot** (`plot.rs`): a brush generation; `sync_brush` runs after the cache
+  check in every `resolve`, so a brush change does not invalidate the cached
+  scene. A layer count change also re-syncs (a layer added under a brush).
+- **Tests** (`tests/events.rs`, 6 new, 1 extended): `brush_golden` pixel checks;
+  clear equals never brushed; four marks with a stroked circle, each dimmed
+  colour, and CPU versus GPU picks; theme 0.5 and 1.0; upload counts (bits
+  `4 * ceil(rows/32)`, factor 4 bytes, 0 on 60 zoom frames); `GpuOnly`; size
+  order; culled chunks.
+- **Re-blessed**: `tests/golden/gup_core/brush.png` only.
+- **Browser**: the scatter brush step checks row 3 is `#2a6fdb` at 0.3 over
+  white (exact on SwiftShader). Row 0 is off the plot after the earlier pan
+  step, so row 3 is used. No later step checks a mark colour, so no
+  `clear_brush` hook was added.
+- **AC6 search**: `git grep` finds `crates/gup-core/tests/events.rs`,
+  `crates/gup-core/tests/pick.rs` (sets `Drag::Brush`, checks picks only) and
+  the wasm scatter harness. No example, dogfood scene or other test checks mark
+  pixels after a brush.
+- **A stroke dims over its fill**: `stroke` and `fill` each multiply their alpha
+  by 0.3 and then composite inside the shader, so a dimmed stroke shows the
+  dimmed fill under it: `0.3 * stroke + 0.7 * dimmed_fill`. AC2 says "0.3
+  opacity of its colour over white" at the mark's centre, which holds for fills;
+  the test checks the stroke against the composite.
+- **Evidence**: `cargo test -p gup-core -- --test-threads=1` all pass (184 lib,
+  34 events). `mask old-path-loc` 28,910 (unchanged). `mask wasm-size` scatter
+  +2,967 B gz (315,804 to 318,771, within the +2% band, below the 3,000 B
+  escalation), over wgpu 286,411 B. `mask wasm-browser` passes.
+  `mask perf-budget`: deterministic rows (zoom uniform bytes and writes,
+  columns, validity, textures, draws) pass; three runs each failed one different
+  timing row by under 25% or at 1.338 vs 1.332 ms (`zoom.cpu.p95`,
+  `zoom.gpu_pass`, `pipeline.link_create.median`), with other agents using the
+  GPU. The default, non-brushing glue is byte-identical to before.
+
+Read `brush.png`: the two brushed dots are the usual deep blue, inside a tinted
+rectangle; the other three are pale blue and clearly secondary but visible.
+
+## Retrospective
+
+**Completed**: 2026-10-18
+
+### Key Technical Learnings
+
+#### Stroke over fill
+
+- **Challenge**: AC2 asks every colour to read as 0.3 opacity over white.
+- **Solution**: Multiply each colour channel's alpha in the glue, as GUP-430
+  does. A stroke inside a fill therefore composites over the dimmed fill.
+- **Pattern**: A per-channel alpha multiply is not the same as a group opacity.
+  A true group fade would multiply the fragment's final alpha in `fs_main`,
+  which needs a varying; the story's glue-only decision rules that out.
+
+#### Where the bits live
+
+- **Challenge**: The bits are per layer, but appends rebuild the chunk half of
+  the GPU state and share the encodings half.
+- **Solution**: Put the bits buffer in `EncodingsGpu`, and rebuild the bind
+  group around a larger buffer only when the word count grows. The layer keeps
+  its brushed rows so any rebuild rewrites the bits.
+- **Pattern**: State that must survive a re-prepare lives on the layer, not in
+  the plot.
+
+### Architectural Decisions
+
+#### Plot syncs by generation; the layer deduplicates by construction
+
+- **Decision**: `Plot::sync_brush` runs after the cache check and only when the
+  brush generation or the layer count changed.
+- **Reasoning**: Zoom re-resolves every frame; a per-resolve rewrite would break
+  "0 bytes on zoom".
+- **Trade-off**: A plot adds layers or sets a brush without a resolve in
+  between: handled by the layer-count key.
+
+### Development Workflow Insights
+
+- The pre-commit hook runs clippy over `--all-targets` and wasm32; a test-only
+  `type_complexity` and an `Arc` of non-`Send` wgpu objects failed commits that
+  `cargo test` had passed. Run `mask all-check` before the first commit.
+- `perf-budget` timing rows were noisy with other agents on the GPU; compare the
+  exact rows first.
+
+### Follow-up Stories
+
+None. Brush styling beyond opacity is Out of Scope here.

@@ -208,6 +208,10 @@ pub struct Plot {
     home: Option<[Home; 2]>,
     /// The brush, in data units, with its rows.
     brush: Option<Brush>,
+    /// Bumped by every brush set or clear, and the generation (and layer
+    /// count) whose rows the layers last took (GUP-458).
+    brush_gen: u64,
+    brush_synced: (u64, usize),
     /// Called with the new brush on release, and with `None` when cleared.
     brush_handlers: Vec<BrushHandler>,
     /// The rectangle being dragged (logical pixels, clamped to the plot
@@ -421,6 +425,8 @@ impl Plot {
             dragging: None,
             home: None,
             brush: None,
+            brush_gen: 0,
+            brush_synced: (0, 0),
             brush_handlers: Vec::new(),
             marquee: None,
             gpu_mode: false,
@@ -835,6 +841,7 @@ impl Plot {
             // After resolving: it writes the scales.
             self.cache = Some((key(self), resolved));
         }
+        self.sync_brush(cx)?;
         self.gpu_step(cx)?;
         self.sync_overlay(cx);
         match (&self.overlay, &self.cache) {
@@ -842,6 +849,27 @@ impl Plot {
             (_, Some((_, resolved))) => Ok(resolved),
             _ => unreachable!("the cache was just filled"),
         }
+    }
+
+    /// Give every layer the brush's rows, if they changed since the last
+    /// time (or a layer was added): one bit per row, written whole. The
+    /// cached scene stays valid, since the bits live in buffers it holds.
+    fn sync_brush(&mut self, cx: &Context) -> Result<()> {
+        if self.brush_synced == (self.brush_gen, self.layers.len()) {
+            return Ok(());
+        }
+        for (i, layer) in self.layers.iter_mut().enumerate() {
+            let rows: Option<Vec<usize>> = self.brush.as_ref().map(|b| {
+                b.rows
+                    .iter()
+                    .filter(|r| r.layer == i)
+                    .map(|r| r.row)
+                    .collect()
+            });
+            layer.write_brush(cx, rows.as_deref())?;
+        }
+        self.brush_synced = (self.brush_gen, self.layers.len());
+        Ok(())
     }
 
     /// Apply finished GPU hover and click picks, then submit the pending
@@ -1147,6 +1175,7 @@ impl Plot {
             y: (y0.min(y1), y0.max(y1)),
             rows,
         });
+        self.brush_gen += 1;
         self.overlay = None;
         self.call_brush_handlers();
         true
@@ -1190,9 +1219,11 @@ impl Plot {
     /// Clear the brush, calling the handlers if there was one. Whether it
     /// did.
     fn drop_brush(&mut self) -> bool {
-        if self.brush.take().is_none() {
+        let had = self.brush.take().is_some();
+        if !had {
             return false;
         }
+        self.brush_gen += 1;
         self.overlay = None;
         self.call_brush_handlers();
         true
@@ -1739,12 +1770,13 @@ impl Plot {
         }
 
         // 6. Uniforms and columns, inside a GPU error scope (GUP-410).
+        let brushable = self.drag == Drag::Brush && th.unbrushed_opacity < 1.0;
         let mut batches = Vec::with_capacity(self.layers.len());
         let mut visible = Vec::with_capacity(self.layers.len());
         for layer in &mut self.layers {
             let batch = cx.scoped(
                 || "layer resolution (column upload, uniforms)".to_owned(),
-                || layer.prepare(cx, &th),
+                || layer.prepare(cx, &th, brushable),
             )?;
             // Only after the upload succeeded: CPU data the layer's
             // `Retain` policy does not keep.

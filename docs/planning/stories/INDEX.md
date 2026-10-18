@@ -366,7 +366,7 @@ criteria hold (RFC-001 "S0b findings", GUP-396).
   plot rect, for draws, CPU picks and GPU picks alike, with byte-identical
   images, a `zoom_bench --sorted` measurement and `zoom_culled.*` budget rows.
   Deps: GUP-455 ✅, GUP-456 ✅.
-- [GUP-458](GUP-458_RFC_001_S9g_Dim_Unbrushed_Rows.md) 📋 — RFC-001 step S9g:
+- [GUP-458](GUP-458_RFC_001_S9g_Dim_Unbrushed_Rows.md) ✅ — RFC-001 step S9g:
   rows outside a brush fade to `Theme::unbrushed_opacity` (default 0.3) through
   per-row brushed bits read in the glue, for every mark's colour channels; the
   `brush` golden is re-blessed. Deps: GUP-454 ✅, GUP-430 ✅, GUP-431 ✅.

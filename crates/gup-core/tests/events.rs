@@ -668,6 +668,29 @@ fn brush_golden() {
         .render_blocking(&cx, &resolved.scene)
         .unwrap();
     let vr = RgbaImage::new(W as u32, H as u32, image.into_raw()).unwrap();
+    // Rows 1 and 2 (inside) look as without dimming; the others are
+    // `#0072B2` at 0.3 over white.
+    plot.theme(Theme {
+        unbrushed_opacity: 1.0,
+        ..Theme::default()
+    });
+    let plain = render_bytes(&cx, &mut plot);
+    plot.theme(Theme::default());
+    let centre = |d: &[u8], p: Pt| {
+        let i = (p.y.round() as usize * W as usize + p.x.round() as usize) * 4;
+        [d[i], d[i + 1], d[i + 2]]
+    };
+    for row in 0..5 {
+        let p = anchor(&mut plot, row);
+        let (got, before) = (centre(vr.data(), p), centre(&plain, p));
+        if row == 1 || row == 2 {
+            assert_eq!(got, before, "row {row}");
+        } else {
+            for (g, w) in got.iter().zip([179u8, 213, 232]) {
+                assert!(g.abs_diff(w) <= 3, "row {row}: {got:?}");
+            }
+        }
+    }
     // A background pixel inside the brush, away from the dots, is tinted
     // blue; the border is the stroke colour.
     let rect = plot.brush_rect().unwrap();
@@ -689,6 +712,34 @@ fn brush_golden() {
     harness()
         .run("gup_core/brush", Ok((vr, layout_metadata(&layout))))
         .assert_ok();
+}
+
+/// The RGBA bytes of `plot` rendered at `W x H`.
+fn render_bytes(cx: &Context, plot: &mut Plot) -> Vec<u8> {
+    let resolved = plot.resolve(cx, W, H).unwrap();
+    ImageTarget::new(cx, W as u32, H as u32)
+        .unwrap()
+        .render_blocking(cx, &resolved.scene)
+        .unwrap()
+        .into_raw()
+}
+
+#[test]
+fn clearing_the_brush_renders_as_never_brushed() {
+    let cx = Context::new_blocking().expect("headless GPU context");
+    let mut plot = Plot::new();
+    plot.circles(rows(5)).x(|r| r.x).y(|r| r.y).radius(Px(5.0));
+    plot.drag(Drag::Brush);
+    let plain = render_bytes(&cx, &mut plot);
+    let (p1, p2) = (anchor(&mut plot, 1), anchor(&mut plot, 2));
+    drag(
+        &mut plot,
+        Pt::new(p1.x - 20.0, p1.y - 30.0),
+        Pt::new(p2.x + 20.0, p2.y + 30.0),
+    );
+    assert_ne!(render_bytes(&cx, &mut plot), plain, "dimmed while brushed");
+    plot.clear_brush();
+    assert_eq!(render_bytes(&cx, &mut plot), plain);
 }
 
 // ---- GPU-picked hover and click (GUP-456) ------------------------------
@@ -920,5 +971,377 @@ fn cpu_and_gpu_hover_agree() {
         settle(&mut cpu, &cx);
         settle(&mut gpu, &cx2);
         assert_eq!(cpu.hovered(), gpu.hovered(), "at {at:?}");
+    }
+}
+
+// ---- Dimming rows outside the brush (GUP-458) --------------------------
+
+/// A pixel's RGB.
+fn rgb_at(data: &[u8], x: f32, y: f32) -> [u8; 3] {
+    let i = (y.round() as usize * W as usize + x.round() as usize) * 4;
+    [data[i], data[i + 1], data[i + 2]]
+}
+
+/// `c` at opacity `k` over white, in sRGB space.
+fn over_white(c: [u8; 3], k: f32) -> [u8; 3] {
+    over(c, k, [255; 3])
+}
+
+/// `c` at opacity `k` over `base`.
+fn over(c: [u8; 3], k: f32, base: [u8; 3]) -> [u8; 3] {
+    [0, 1, 2].map(|i| (k * f32::from(c[i]) + (1.0 - k) * f32::from(base[i])).round() as u8)
+}
+
+fn within(got: [u8; 3], want: [u8; 3], tol: u8) -> bool {
+    got.iter().zip(want).all(|(g, w)| g.abs_diff(w) <= tol)
+}
+
+/// `plot` rendered with the theme's `unbrushed_opacity` set to `opacity`;
+/// the plot's own theme is restored.
+fn render_dimmed(cx: &Context, plot: &mut Plot, opacity: f32) -> Vec<u8> {
+    plot.theme(Theme {
+        unbrushed_opacity: opacity,
+        ..Theme::default()
+    });
+    let bytes = render_bytes(cx, plot);
+    plot.theme(Theme::default());
+    bytes
+}
+
+/// Brush everything left of data x = 50 (the whole plot height).
+fn brush_left_half(plot: &mut Plot, x50: f32) {
+    let r = plot.layout().unwrap().plot;
+    drag(
+        plot,
+        Pt::new(r.left() + 1.0, r.top() + 1.0),
+        Pt::new(x50, r.bottom() - 1.0),
+    );
+}
+
+/// Circles with a stroke, rects, segments and a line, each with one
+/// mark (or one line segment) in the left half and one in the right.
+fn four_marks(cx: &Context) -> (Plot, [ScaleRef<Linear>; 2]) {
+    let mut plot = Plot::new();
+    plot.legends(false);
+    let (x, y) = (
+        plot.x(Linear::new().domain(0.0, 100.0)),
+        plot.y(Linear::new().domain(0.0, 100.0)),
+    );
+    plot.add(Selection::<(f64, f64), Circle>::new(vec![
+        (20.0, 85.0),
+        (70.0, 85.0),
+    ]))
+    .attr(Circle::X, x.encode(|r: &(f64, f64)| r.0))
+    .attr(Circle::Y, y.encode(|r: &(f64, f64)| r.1))
+    .attr(Circle::RADIUS, Px(10.0))
+    .attr(Circle::STROKE, Color::hex(0xd55e00))
+    .attr(Circle::STROKE_WIDTH, Px(4.0));
+    plot.add(Selection::<[f64; 4], Rect>::new(vec![
+        [10.0, 60.0, 20.0, 70.0],
+        [60.0, 60.0, 70.0, 70.0],
+    ]))
+    .attr(Rect::X, x.encode(|r: &[f64; 4]| r[0]))
+    .attr(Rect::Y, y.encode(|r: &[f64; 4]| r[1]))
+    .attr(Rect::X_END, x.encode(|r: &[f64; 4]| r[2]))
+    .attr(Rect::Y_END, y.encode(|r: &[f64; 4]| r[3]))
+    .attr(Rect::FILL, Color::hex(0x009e73));
+    plot.add(Selection::<[f64; 4], Segment>::new(vec![
+        [10.0, 45.0, 30.0, 45.0],
+        [60.0, 45.0, 80.0, 45.0],
+    ]))
+    .attr(Segment::X, x.encode(|r: &[f64; 4]| r[0]))
+    .attr(Segment::Y, y.encode(|r: &[f64; 4]| r[1]))
+    .attr(Segment::X_END, x.encode(|r: &[f64; 4]| r[2]))
+    .attr(Segment::Y_END, y.encode(|r: &[f64; 4]| r[3]))
+    .attr(Segment::WIDTH, Px(6.0))
+    .attr(Segment::COLOR, Color::hex(0xd55e00));
+    plot.add(Selection::<(f64, f64), Line>::new(vec![
+        (10.0, 25.0),
+        (40.0, 25.0),
+        (60.0, 25.0),
+        (90.0, 25.0),
+    ]))
+    .attr(Line::X, x.encode(|r: &(f64, f64)| r.0))
+    .attr(Line::Y, y.encode(|r: &(f64, f64)| r.1))
+    .attr(Line::WIDTH, Px(6.0))
+    .attr(Line::COLOR, Color::hex(0xcc79a7));
+    plot.drag(Drag::Brush);
+    plot.resolve(cx, W, H).unwrap();
+    (plot, [x, y])
+}
+
+/// (name, brushed, pixel, colour).
+type Sample = (&'static str, bool, (f32, f32), [u8; 3]);
+
+/// The pixel of data value `v` on `scale`.
+fn at_value(scale: &ScaleRef<Linear>, v: f64) -> f32 {
+    scale.read().eval(v) as f32
+}
+
+#[test]
+fn every_mark_dims_every_colour_channel_outside_the_brush() {
+    let cx = Context::new_blocking().expect("headless GPU context");
+    let (mut plot, [x, y]) = four_marks(&cx);
+    brush_left_half(&mut plot, at_value(&x, 50.0));
+    // Mark positions in the left half are brushed; the line's vertices 0
+    // and 1 (x 10 and 40) are.
+    let brushed: Vec<(usize, usize)> = plot
+        .brush()
+        .unwrap()
+        .rows
+        .iter()
+        .map(|r| (r.layer, r.row))
+        .collect();
+    assert_eq!(brushed, [(0, 0), (1, 0), (2, 0), (3, 0), (3, 1)]);
+    let dim = render_bytes(&cx, &mut plot);
+    let full = render_dimmed(&cx, &mut plot, 1.0);
+
+    let (px, py) = (|v| at_value(&x, v), |v| at_value(&y, v));
+    let green = [0x00, 0x9e, 0x73];
+    let vermilion = [0xd5, 0x5e, 0x00];
+    let pink = [0xcc, 0x79, 0xa7];
+    let blue = [0x00, 0x72, 0xb2];
+    // A stroke is drawn over its fill inside the shader, and both fade.
+    let stroke_over_fill = over(vermilion, 0.3, over_white(blue, 0.3));
+    // (name, brushed, pixel, colour)
+    let samples: [Sample; 12] = [
+        ("circle 0 fill", true, (px(20.0), py(85.0)), blue),
+        (
+            "circle 0 stroke",
+            true,
+            (px(20.0) + 7.0, py(85.0)),
+            vermilion,
+        ),
+        ("circle 1 fill", false, (px(70.0), py(85.0)), blue),
+        (
+            "circle 1 stroke",
+            false,
+            (px(70.0) + 7.0, py(85.0)),
+            vermilion,
+        ),
+        ("rect 0", true, (px(15.0), py(65.0)), green),
+        ("rect 1", false, (px(65.0), py(65.0)), green),
+        ("segment 0", true, (px(20.0), py(45.0)), vermilion),
+        ("segment 1", false, (px(70.0), py(45.0)), vermilion),
+        ("line 0-1", true, (px(25.0), py(25.0)), pink),
+        // Its first row (1, at x 40) is brushed.
+        ("line 1-2", true, (px(50.0), py(25.0)), pink),
+        ("line 2-3", false, (px(75.0), py(25.0)), pink),
+        ("line 2-3 again", false, (px(80.0), py(25.0)), pink),
+    ];
+    for (name, brushed, (sx, sy), colour) in samples {
+        let (got, undimmed) = (rgb_at(&dim, sx, sy), rgb_at(&full, sx, sy));
+        if brushed {
+            assert_eq!(got, undimmed, "{name} is unchanged");
+        } else {
+            let want = if name.ends_with("stroke") {
+                stroke_over_fill
+            } else {
+                over_white(colour, 0.3)
+            };
+            assert!(within(got, want, 3), "{name}: {got:?}, want {want:?}");
+            assert_eq!(undimmed, colour, "{name} undimmed");
+        }
+    }
+
+    // The pick pipelines bind the new layout: GPU picks agree with CPU ones.
+    for (layer, row) in brushed.into_iter().chain([(0, 1), (1, 1), (2, 1), (3, 2)]) {
+        let id = RowId { layer, row };
+        let at = plot.pick_anchor(id).unwrap();
+        assert_eq!(plot.pick_row(at), Some(id), "CPU pick of {id:?}");
+        assert_eq!(plot.pick_row_gpu(&cx, at).unwrap(), Some(id), "GPU pick");
+    }
+}
+
+#[test]
+fn opacity_is_themable_and_one_turns_dimming_off() {
+    let cx = Context::new_blocking().expect("headless GPU context");
+    let (mut plot, [x, y]) = four_marks(&cx);
+    let blue = [0x00, 0x72, 0xb2];
+    let (cx1, cy1) = (at_value(&x, 70.0), at_value(&y, 85.0));
+    brush_left_half(&mut plot, at_value(&x, 50.0));
+    let half = render_dimmed(&cx, &mut plot, 0.5);
+    assert!(
+        within(rgb_at(&half, cx1, cy1), over_white(blue, 0.5), 3),
+        "{:?}",
+        rgb_at(&half, cx1, cy1)
+    );
+    // At 1.0 nothing fades, and a brush writes no bits.
+    plot.clear_brush();
+    plot.theme(Theme {
+        unbrushed_opacity: 1.0,
+        ..Theme::default()
+    });
+    plot.resolve(&cx, W, H).unwrap();
+    let before = cx.upload_stats();
+    brush_left_half(&mut plot, at_value(&x, 50.0));
+    let off = render_bytes(&cx, &mut plot);
+    assert_eq!(rgb_at(&off, cx1, cy1), blue);
+    let wrote = cx.upload_stats() - before;
+    assert_eq!(wrote.brush.bytes, 0, "{wrote:?}");
+}
+
+#[test]
+fn a_brush_release_writes_the_bits_and_the_factor_and_a_zoom_writes_none() {
+    let cx = Context::new_blocking().expect("headless GPU context");
+    let mut plot = Plot::new();
+    plot.circles(rows(70)).x(|r| r.x).y(|r| r.y).radius(Px(3.0));
+    plot.drag(Drag::Brush);
+    plot.resolve(&cx, W, H).unwrap();
+    let (p1, p2) = (anchor(&mut plot, 1), anchor(&mut plot, 2));
+    drag(
+        &mut plot,
+        Pt::new(p1.x - 20.0, p1.y - 30.0),
+        Pt::new(p2.x + 20.0, p2.y + 30.0),
+    );
+    assert!(plot.brush().is_some());
+    let before = cx.upload_stats();
+    plot.resolve(&cx, W, H).unwrap();
+    let wrote = cx.upload_stats() - before;
+    assert_eq!(wrote.brush.bytes, 4 * 70_u64.div_ceil(32), "{wrote:?}");
+    assert_eq!(wrote.brush.writes, 1);
+    assert_eq!(wrote.uniforms.bytes, 4, "{wrote:?}");
+    assert_eq!(
+        (
+            wrote.columns.bytes,
+            wrote.validity.bytes,
+            wrote.textures.bytes
+        ),
+        (0, 0, 0)
+    );
+
+    // Zooming and panning a brushed plot writes no bits.
+    let before = cx.upload_stats();
+    for frame in 0..60 {
+        let lines = if frame % 2 == 0 { 0.2 } else { -0.2 };
+        feed(&mut plot, Input::Wheel { at: p1, lines });
+        plot.resolve(&cx, W, H).unwrap();
+    }
+    let wrote = cx.upload_stats() - before;
+    assert_eq!(wrote.brush.bytes, 0, "{wrote:?}");
+    assert!(plot.brush().is_some());
+}
+
+#[test]
+fn a_gpu_only_layer_dims_entirely_while_a_brush_exists() {
+    let cx = Context::new_blocking().expect("headless GPU context");
+    let mut plot = Plot::new();
+    plot.legends(false);
+    let (x, y) = (
+        plot.x(Linear::new().domain(0.0, 100.0)),
+        plot.y(Linear::new().domain(0.0, 100.0)),
+    );
+    plot.add(Selection::<(f64, f64), Circle>::new(vec![(20.0, 85.0)]))
+        .attr(Circle::X, x.encode(|r: &(f64, f64)| r.0))
+        .attr(Circle::Y, y.encode(|r: &(f64, f64)| r.1))
+        .attr(Circle::RADIUS, Px(4.0));
+    let spots: Vec<(f64, f64)> = (0..12).map(|i| (5.0 + 3.5 * f64::from(i), 40.0)).collect();
+    let mut gpu_only = Selection::<(f64, f64), Circle>::new(spots.clone());
+    gpu_only.max_chunk_rows(4).retain(Retain::GpuOnly);
+    plot.add(gpu_only)
+        .attr(Circle::X, x.encode(|r: &(f64, f64)| r.0))
+        .attr(Circle::Y, y.encode(|r: &(f64, f64)| r.1))
+        .attr(Circle::RADIUS, Px(3.0));
+    plot.drag(Drag::Brush);
+    plot.resolve(&cx, W, H).unwrap();
+    let plain = render_bytes(&cx, &mut plot);
+    brush_left_half(&mut plot, at_value(&x, 50.0));
+    assert_eq!(plot.brush().unwrap().rows, [id(0, 0)]);
+    let dim = render_bytes(&cx, &mut plot);
+    let blue = [0x00, 0x72, 0xb2];
+    for (px, py) in &spots {
+        let at = (at_value(&x, *px), at_value(&y, *py));
+        assert_eq!(rgb_at(&plain, at.0, at.1), blue);
+        // Under the brush's tint, but faded: not blue.
+        let got = rgb_at(&dim, at.0, at.1);
+        assert!(got[0] >= 140, "{at:?}: {got:?}");
+    }
+}
+
+#[test]
+fn a_size_ordered_layer_dims_exactly_the_rows_outside_the_brush() {
+    let cx = Context::new_blocking().expect("headless GPU context");
+    let mut plot = Plot::new();
+    plot.legends(false);
+    let (x, y) = (
+        plot.x(Linear::new().domain(0.0, 70.0)),
+        plot.y(Linear::new().domain(0.0, 100.0)),
+    );
+    let radius = || Linear::new().domain(0.0, 20.0).range(Px(0.0), Px(20.0));
+    // (x, radius): the stored order (largest first) is not the data order.
+    let dots: Vec<(f64, f64)> = [5.0, 12.0, 8.0, 3.0, 10.0, 6.0]
+        .into_iter()
+        .enumerate()
+        .map(|(i, r)| (10.0 + 10.0 * i as f64, r))
+        .collect();
+    plot.add(Selection::<(f64, f64), Circle>::new(dots))
+        .attr(Circle::X, x.encode(|r: &(f64, f64)| r.0))
+        .attr(Circle::Y, y.encode(|_: &(f64, f64)| 50.0))
+        .attr(Circle::RADIUS, radius().encode(|r: &(f64, f64)| r.1));
+    plot.drag(Drag::Brush);
+    plot.resolve(&cx, W, H).unwrap();
+    // Brush x 15..45: rows 1, 2 and 3.
+    let r = plot.layout().unwrap().plot;
+    drag(
+        &mut plot,
+        Pt::new(at_value(&x, 15.0), r.top() + 1.0),
+        Pt::new(at_value(&x, 45.0), r.bottom() - 1.0),
+    );
+    assert_eq!(plot.brush().unwrap().rows, [id(0, 1), id(0, 2), id(0, 3)]);
+    let dim = render_bytes(&cx, &mut plot);
+    for row in 0..6 {
+        let at = anchor(&mut plot, row);
+        let got = rgb_at(&dim, at.x, at.y);
+        if (1..=3).contains(&row) {
+            assert!(got[0] < 80, "row {row} brushed: {got:?}");
+        } else {
+            assert!(
+                within(got, over_white([0x00, 0x72, 0xb2], 0.3), 3),
+                "row {row} unbrushed: {got:?}"
+            );
+        }
+    }
+}
+
+#[test]
+fn dimming_survives_culled_chunks() {
+    let cx = Context::new_blocking().expect("headless GPU context");
+    let mut plot = Plot::new();
+    plot.legends(false);
+    let (x, y) = (
+        plot.x(Linear::new().domain(0.0, 120.0)),
+        plot.y(Linear::new().domain(0.0, 100.0)),
+    );
+    let spots: Vec<(f64, f64)> = (0..12).map(|i| (5.0 + 10.0 * f64::from(i), 50.0)).collect();
+    plot.circles(spots)
+        .x_with(x.encode(|r: &(f64, f64)| r.0))
+        .y_with(y.encode(|r: &(f64, f64)| r.1))
+        .radius(Px(3.0))
+        .max_chunk_rows(4);
+    plot.drag(Drag::Brush);
+    plot.resolve(&cx, W, H).unwrap();
+    // Brush rows 8, 9 and 10 (x 85, 95, 105), then zoom to the last chunk
+    // and a half: the first chunk is culled.
+    let r = plot.layout().unwrap().plot;
+    drag(
+        &mut plot,
+        Pt::new(at_value(&x, 80.0), r.top() + 1.0),
+        Pt::new(at_value(&x, 110.0), r.bottom() - 1.0),
+    );
+    assert_eq!(plot.brush().unwrap().rows, [id(0, 8), id(0, 9), id(0, 10)]);
+    x.write().set_domain(70.0, 120.0).unwrap();
+    plot.resolve(&cx, W, H).unwrap();
+    let dim = render_bytes(&cx, &mut plot);
+    for row in 7..12 {
+        let at = anchor(&mut plot, row);
+        let got = rgb_at(&dim, at.x, at.y);
+        if (8..=10).contains(&row) {
+            assert!(got[0] < 80, "row {row} brushed: {got:?}");
+        } else {
+            assert!(
+                within(got, over_white([0x00, 0x72, 0xb2], 0.3), 3),
+                "row {row} unbrushed: {got:?}"
+            );
+        }
     }
 }

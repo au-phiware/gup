@@ -139,6 +139,13 @@ pub struct Selection<T, M: Mark> {
     /// prepares with the same program, context and columns only write
     /// uniforms into it.
     gpu: Option<(Arc<LayerGpu>, Luts)>,
+    /// Whether the last `prepare` generated the brushed glue (rows outside
+    /// the brush dim, GUP-458).
+    brushable: bool,
+    /// The theme's opacity for unbrushed rows at the last `prepare`.
+    unbrushed: f32,
+    /// The brushed data rows, sorted, while the plot has a brush.
+    brush: Option<Vec<usize>>,
     _mark: PhantomData<fn() -> M>,
 }
 
@@ -172,6 +179,9 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             order: None,
             max_chunk_rows: None,
             gpu: None,
+            brushable: false,
+            unbrushed: 1.0,
+            brush: None,
             _mark: PhantomData,
         }
     }
@@ -476,6 +486,44 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         Ok(())
     }
 
+    /// The opacity of unbrushed rows: 1.0 while there is no brush.
+    fn brush_dim(&self) -> f32 {
+        if self.brush.is_some() {
+            self.unbrushed
+        } else {
+            1.0
+        }
+    }
+
+    /// Write the brushed-row bits of `gpu` from the layer's brush (nothing
+    /// without a brush or bits; an unbrushed layer needs none, its factor
+    /// is 1.0).
+    fn write_bits(&self, cx: &Context, gpu: &LayerGpu) {
+        let (Some(brushed), Some(words), Some(store)) =
+            (&self.brush, gpu.brush_words(), &self.columns)
+        else {
+            return;
+        };
+        let mut bits = vec![0u32; words];
+        let mut set = |stored: u64| bits[(stored / 32) as usize] |= 1 << (stored % 32);
+        match &self.order {
+            // Stored rows are in size order: find each one's data row.
+            Some(order) => {
+                for s in 0..store.rows() {
+                    if brushed.binary_search(&(order.row_of(s) as usize)).is_ok() {
+                        set(s);
+                    }
+                }
+            }
+            None => {
+                for &r in brushed.iter().filter(|&&r| (r as u64) < store.rows()) {
+                    set(r as u64);
+                }
+            }
+        }
+        gpu.write_brush_bits(cx, &bits);
+    }
+
     fn glue(&self) -> Glue {
         let channels = M::CHANNELS
             .iter()
@@ -497,6 +545,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             validity: self.columns.as_ref().is_some_and(ColumnStore::has_nulls),
             polyline: M::GEOMETRY == Geometry::Polyline,
             gpu_pick: M::GPU_PICK,
+            brushed: self.brushable,
         })
     }
 
@@ -607,7 +656,15 @@ pub(crate) trait Layer: wgpu::WasmNotSendSync {
     /// current scales. Empty when the layer has no column store.
     fn visible_entries(&self, plot: Rect) -> Vec<bool>;
     /// Generate the glue, link it (cached), write uniforms and upload.
-    fn prepare(&mut self, cx: &Context, theme: &Theme) -> Result<MarkBatch>;
+    ///
+    /// `brushable`: the glue dims rows outside the plot's brush
+    /// ([`write_brush`](Self::write_brush) says which).
+    fn prepare(&mut self, cx: &Context, theme: &Theme, brushable: bool) -> Result<MarkBatch>;
+    /// Set the layer's brushed data rows (`None`: no brush) and write them,
+    /// as one bit per stored row, into the prepared GPU state. A layer
+    /// whose glue does not dim writes nothing; its next `prepare` writes
+    /// the bits again if the GPU state was rebuilt.
+    fn write_brush(&mut self, cx: &Context, rows: Option<&[usize]>) -> Result<()>;
     /// Apply the plot's theme to every column encoding (see
     /// [`ShaderFn::apply_theme`](crate::ShaderFn::apply_theme)). Called
     /// before fitting.
@@ -917,8 +974,10 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         }
     }
 
-    fn prepare(&mut self, cx: &Context, theme: &Theme) -> Result<MarkBatch> {
+    fn prepare(&mut self, cx: &Context, theme: &Theme, brushable: bool) -> Result<MarkBatch> {
         self.check_module_paths()?;
+        self.brushable = brushable;
+        self.unbrushed = theme.unbrushed_opacity;
         let glue = self.glue();
         let program = cx.program(&glue)?;
 
@@ -956,6 +1015,14 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
                 &program.encodings,
                 glue::NULL_COLOR_FIELD,
                 bytes,
+            )?;
+        }
+        if program.encodings.offset(glue::BRUSH_DIM_FIELD).is_some() {
+            write_field(
+                &mut encodings,
+                &program.encodings,
+                glue::BRUSH_DIM_FIELD,
+                bytemuck::bytes_of(&self.brush_dim()),
             )?;
         }
         // The LUTs, in binding order.
@@ -1014,6 +1081,9 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         let reads_validity = glue.validity;
         let validity = |c| chunk_validity(reads_validity, c, cx);
         let stored = store.chunks();
+        let brush_words = glue
+            .brush_binding
+            .map(|_| crate::render::brush_words(store.rows()));
         let entries = draw_entries(M::GEOMETRY, stored);
         let uploaded = || {
             entries.iter().map(|d| {
@@ -1065,8 +1135,11 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
                               native; on wasm32 wgpu's handles are neither"
                 )
             )]
-            let grown = Arc::new(gpu.with_chunks(cx, &chunks, draws)?);
+            let grown = Arc::new(gpu.with_chunks(cx, &chunks, draws, brush_words)?);
             grown.write_encodings(cx, &encodings);
+            if grown.brush_words() != gpu.brush_words() {
+                self.write_bits(cx, &grown);
+            }
             self.gpu = Some((Arc::clone(&grown), luts));
             return Ok(MarkBatch::new(grown, M::ANTIALIAS));
         }
@@ -1085,6 +1158,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
                 encodings,
                 chunks,
                 luts: luts.iter().map(Vec::as_slice).collect(),
+                brush_words,
             }
             .build(
                 cx,
@@ -1095,8 +1169,31 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
                 M::VERTICES_PER_INSTANCE,
             )?,
         );
+        self.write_bits(cx, &gpu);
         self.gpu = Some((Arc::clone(&gpu), luts));
         Ok(MarkBatch::new(gpu, M::ANTIALIAS))
+    }
+
+    fn write_brush(&mut self, cx: &Context, rows: Option<&[usize]>) -> Result<()> {
+        let had = self.brush.is_some();
+        self.brush = rows.map(|r| {
+            let mut r = r.to_vec();
+            r.sort_unstable();
+            r.dedup();
+            r
+        });
+        if !self.brushable {
+            return Ok(());
+        }
+        let Some((gpu, _)) = &self.gpu else {
+            return Ok(());
+        };
+        let gpu = Arc::clone(gpu);
+        self.write_bits(cx, &gpu);
+        if had != self.brush.is_some() {
+            gpu.write_brush_dim(cx, self.brush_dim());
+        }
+        Ok(())
     }
 
     fn release(&mut self) {
@@ -1505,7 +1602,7 @@ mod tests {
         }
         assert!(bases[0] < bases[1] && bases[1] < bases[2], "{bases:?}");
 
-        let batch = sel.prepare(&cx, &Theme::default()).unwrap();
+        let batch = sel.prepare(&cx, &Theme::default(), false).unwrap();
         let offsets: Vec<_> = batch.gpu.chunks.iter().map(|c| c.dynamic_offset).collect();
         assert_eq!(offsets, [0, 256, 512]);
         assert_eq!(batch.instances(), 20);
@@ -1598,7 +1695,7 @@ mod tests {
         assert_eq!(u(4, "row_base"), 15);
         assert_eq!(f(4, "x_next_base"), f(2, "x_base"));
 
-        let batch = sel.prepare(&cx, &Theme::default()).unwrap();
+        let batch = sel.prepare(&cx, &Theme::default(), false).unwrap();
         let gpu = &batch.gpu;
         let span = |chunk, n| Span { chunk, rows: 0..n };
         assert_eq!(
@@ -1627,7 +1724,7 @@ mod tests {
         let mut sel = reference();
         sel.max_chunk_rows(16);
         sel.fit_domains(&cx).unwrap();
-        let first = sel.prepare(&cx, &Theme::default()).unwrap();
+        let first = sel.prepare(&cx, &Theme::default(), false).unwrap();
         let start = cx.upload_stats();
         sel.append((21..=40).map(|i| {
             let i = f64::from(i);
@@ -1639,7 +1736,7 @@ mod tests {
         }))
         .unwrap();
         sel.fit_domains(&cx).unwrap();
-        let grown = sel.prepare(&cx, &Theme::default()).unwrap();
+        let grown = sel.prepare(&cx, &Theme::default(), false).unwrap();
         let written = cx.upload_stats() - start;
         // Three columns of 20 rows.
         assert_eq!(written.columns.bytes, 20 * 3 * 4, "{written:?}");
@@ -1652,7 +1749,7 @@ mod tests {
         assert!(Arc::ptr_eq(first.gpu.encodings(), grown.gpu.encodings()));
 
         let start = cx.upload_stats();
-        let again = sel.prepare(&cx, &Theme::default()).unwrap();
+        let again = sel.prepare(&cx, &Theme::default(), false).unwrap();
         let written = cx.upload_stats() - start;
         assert!(Arc::ptr_eq(&grown.gpu, &again.gpu));
         assert_eq!(written.columns, Default::default());
@@ -1970,7 +2067,7 @@ mod tests {
         // The radius chain ends in `Sqrt` onto 2..12 px: marks overhang
         // their positions by up to 12 px.
         assert!((sel.overhang() - 12.0).abs() < 1e-4, "{}", sel.overhang());
-        let batch = sel.prepare(&cx, &Theme::default()).unwrap();
+        let batch = sel.prepare(&cx, &Theme::default(), false).unwrap();
         assert_eq!(batch.instances(), 20);
     }
 
@@ -2085,7 +2182,7 @@ mod tests {
         assert_eq!(Some(glue.chunk.clone()), struct_layout(&linked, "Chunk"));
         // Two planes (x, y); the dictionary column has none.
         assert!(glue.source.contains("(instance_index / 32u) * 2u"));
-        let batch = sel.prepare(&cx, &Theme::default()).unwrap();
+        let batch = sel.prepare(&cx, &Theme::default(), false).unwrap();
         assert_eq!(batch.instances(), 40);
         assert!(batch.gpu.chunks.iter().all(|c| c.validity.is_some()));
     }
@@ -2109,7 +2206,7 @@ mod tests {
             &glue.signature,
             &link(&glue.signature, &glue.source, &glue.modules).unwrap(),
         );
-        sel.prepare(&cx, &Theme::default()).unwrap();
+        sel.prepare(&cx, &Theme::default(), false).unwrap();
     }
 
     /// The categorical null colour and key count land at naga's offsets,
