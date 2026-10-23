@@ -20,5 +20,8 @@ Quick access to planning documents. For individual stories, see
 
 - [STRATEGIC_REVIEW_2026-10.md](STRATEGIC_REVIEW_2026-10.md) — October 2026
   audit synthesis: diagnosis, north star, tracks T0–T7, backlog triage
+- [STRATEGIC_REVIEW_2026-11.md](STRATEGIC_REVIEW_2026-11.md) — post-migration
+  review: north-star gaps, process and token retrospective, tracks N0–N6, owner
+  decisions (proposed)
 - [stories/](stories/) — Individual story documents (GUP-NNN_Title.md)
 - [archive/](archive/) — Archived planning documents (historical reference)
