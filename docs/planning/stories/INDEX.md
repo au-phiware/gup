@@ -444,7 +444,7 @@ findings", GUP-396).
 - [GUP-485](GUP-485_RFC_001_S14a_Dogfood_Residue_On_Gup_Core.md) ✅ — RFC-001
   step S14a: `ref_export_png` and `t6_wgsl` on `gup-core`; the suite has no
   XFAIL and no `gup` dependency. Deps: GUP-465 ✅, GUP-480 ✅.
-- [GUP-486](GUP-486_RFC_001_S14b_Delete_Old_Chart_Builder.md) 📋 — RFC-001 step
+- [GUP-486](GUP-486_RFC_001_S14b_Delete_Old_Chart_Builder.md) 🚧 — RFC-001 step
   S14b: delete `chart_builder` (`ComposedChart` and the remaining old builders)
   and what stops compiling; old-path LOC ≤ 18,504. Deps: GUP-466 ✅, GUP-485 📋.
 - [GUP-487](GUP-487_Macros_Resolve_Crate_Path.md) ✅ — `#[derive(Mark)]` and
