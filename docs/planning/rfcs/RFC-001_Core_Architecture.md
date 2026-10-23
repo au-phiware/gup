@@ -3643,3 +3643,78 @@ secondary y axis.
   in `gup-egui` and `gup-bevy`, GUP-483 and GUP-484 (S13); `ComposedChart` with
   the old area, boxplot, violin, density, heatmap and choropleth builders,
   GUP-486 (S14b).
+
+## S12 findings (GUP-480–482)
+
+S12 makes a chart live: GUP-480 appends from any thread, GUP-481 wakes a browser
+host, and GUP-482 bounds what a long-running layer holds.
+
+- **API.** `Selection::append(rows)` and `Selection::appender() -> Appender<T>`
+  (`push`, `extend`; `Closed` once the chart drops); `Chart::set_waker`;
+  `ScatterChart`/`LineChart::appender`. Rows pushed between two frames land in
+  one `append` at the next resolve. `Window::{All, LastRows(n)}` with
+  `Selection::window`, `ScatterChart::window` and `LineChart::window` (per line
+  layer, so per key), in the prelude.
+- **The invariant.** A chunk leaves only from the front, and only when every
+  stored row in it is older than the newest `n`; it is checked after every
+  `append` and after every full evaluation. `n ≤ held < n + chunk_rows`, plus
+  the rows of an unfilled last chunk.
+- **Windowed size orders sort per chunk.** The size draw order (GUP-431) sorts
+  each appended batch; with one sort per batch, a batch larger than a chunk
+  spreads its newest rows over every chunk it fills, and none of them can leave
+  until the whole batch is old. AC2's 300-row batch in a 200-row window would
+  hold over 330 rows, past the `n + 2 × chunk_rows` bound. So a windowed layer
+  sorts each batch in runs that end at chunk boundaries
+  (`DrawOrder::push_runs`): every chunk holds a contiguous run of data rows,
+  eviction is the same test as for an unsorted layer, and the merged draw order
+  is unchanged (largest first, equal sizes in data order). Unwindowed layers
+  sort one run per batch, as before.
+- **Renumbering**, structure by structure:
+  - **Column store** (`ColumnStore::evict_front`): drops the chunks (buffers,
+    CPU copies, origins, stats) and subtracts the rows removed from every
+    remaining `row_base`. No column byte moves; the next prepare writes the new
+    bases into the chunk uniforms (it writes every entry anyway).
+  - **`DrawOrder::evict`**: drains keys and per-row batch indices, drops whole
+    batches (an eviction always ends a run), shifts the rest, cuts a segment
+    that started among evicted rows and joins segments the eviction made
+    adjacent. `O(rows + segments)`.
+  - **Row ids** stay data rows counted from the layer's first row ever. The
+    selection's `evicted` offset is added wherever a stored row becomes an id:
+    CPU pick items (`build_items(first, ..)`), `Layer::row_id` for GPU picks,
+    and brushed-row bits (which map ids back). `released` (the first row still
+    in `rows`) is kept `≥ evicted`, so `Plot::row`, tooltips and handlers return
+    nothing for an evicted id without a new check.
+  - **Brush bits** are rewritten whole at the next prepare after an eviction
+    (`bits_stale`), even when the word count did not change.
+  - **CPU pick grid** is rebuilt on the next query, as after any append.
+  - **GPU picks**: each layer has an `epoch`, bumped by an eviction and by a
+    full evaluation (compaction, a new chunk size). A pick records the epochs of
+    the scene it drew; `poll_picks` reports no row for a layer whose epoch
+    changed. This also fixes picks across a compaction, which mapped through the
+    new order before.
+  - **Hover** in GPU mode keeps the pointer anchor only while the layer `holds`
+    the row.
+  - **Lines**: the bridge into the first kept chunk leaves with its chunk; a
+    line starts at its first kept row.
+  - **Culling and SVG** read per-chunk stats and `row_base` at prepare, so they
+    follow without change.
+- **Chunk cap.** A windowed layer caps chunks at `max(1024, n.div_ceil(4))` rows
+  (below the device cap). `LastRows(100_000)` draws 25,000-row chunks: at most 5
+  chunks, 5 draws, over a 10M-row stream.
+- **Measured costs.** 10M rows in 10,000-row batches through `LastRows(100_000)`
+  (release, Intel HD 630): 0.60 ms per batch for append + evict + prepare,
+  80,000 B of columns (exactly the batch) and about 1.1 KB of chunk uniforms per
+  frame, 0.72 s for the whole stream. Rows a batch pushes past the window before
+  any upload are never uploaded (AC2's run uploaded 1,694 of 2,000 rows). AC2's
+  scatter wrote 23,580 B of uniforms in 59 writes over 20 resolves, and no brush
+  bytes (no brush).
+- **Compaction** needs at least half the segments of the last full evaluation as
+  well as the old threshold (`DrawOrder::mark_evaluated`): a windowed layer of
+  unordered sizes can never get below about one segment per row, and without the
+  floor it would re-evaluate on every append.
+- **What the decisions got wrong.** "A chunk boundary can split a batch … it
+  does not matter in which order rows beyond the window leave": correct for
+  safety but not for the memory bound; per-chunk runs (above) fix it. Windowed
+  size orders of unordered sizes draw about one instanced draw per row (segments
+  cannot merge across chunks sorted apart); a GPU sort or an index buffer would
+  remove that.
