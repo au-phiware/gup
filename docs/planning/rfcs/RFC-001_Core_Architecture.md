@@ -1448,6 +1448,9 @@ the one place the old and new paths get a device.
   point can share it.
 - **S13 (hosts):** never use `Device ==` to decide whether a host device is
   Gup's. Compare `ContextId`s, or wrap the host device once with `from_wgpu`.
+  Bevy components and resources need `Send + Sync`; the builders now provide it
+  (GUP-484 made `ScatterChart` `Sync`, as `Plot`, `LineChart` and `BarChart`
+  were).
 
 ## S2 findings (2026-10-06, GUP-400)
 

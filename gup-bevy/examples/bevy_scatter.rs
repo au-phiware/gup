@@ -8,7 +8,7 @@
 use bevy::prelude::*;
 use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use gup_bevy::prelude::*;
-use gup_core::prelude::*;
+use gup_core::prelude::Linear;
 use gup_core::{Appender, ScatterChart};
 
 const SIZE: UVec2 = UVec2::new(480, 320);
@@ -23,7 +23,7 @@ fn scatter_chart() -> ScatterChart<(f64, f64)> {
         .x_scale(Linear::new().domain(0.0, 10.0))
         .y(|p| p.1)
         .y_scale(Linear::new().domain(0.0, 10.0))
-        .fill(Color::hex(0x1f77b4))
+        .fill(gup_core::Color::hex(0x1f77b4))
         .radius(5.0)
         .title("Bevy scatter")
 }
@@ -59,7 +59,7 @@ fn append(mut feed: ResMut<Feed>, mut commands: Commands) {
 }
 
 fn main() {
-    let window = Window {
+    let window = bevy::window::Window {
         resolution: (640, 480).into(),
         title: "Gup in Bevy".into(),
         ..default()

@@ -145,3 +145,18 @@ macro_rules! plot_setters {
     };
 }
 pub(crate) use plot_setters;
+
+#[cfg(test)]
+mod send_sync {
+    fn assert_send_sync<T: Send + Sync>() {}
+
+    /// Hosts that keep charts in components or resources (Bevy) need
+    /// `Send + Sync`, as `Plot` has.
+    #[test]
+    fn builders_are_send_and_sync() {
+        assert_send_sync::<crate::Plot>();
+        assert_send_sync::<super::ScatterChart<(f64, f64)>>();
+        assert_send_sync::<super::LineChart<(f64, f64)>>();
+        assert_send_sync::<super::BarChart<(f64, f64)>>();
+    }
+}

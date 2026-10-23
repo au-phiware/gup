@@ -14,7 +14,7 @@ use crate::{ColumnValue, Context, Input, Layout, Resolved, Response, Result, Row
 
 type Key<T> = Arc<dyn for<'a> Fn(&'a T) -> &'a str + Send + Sync>;
 type Num<T> = Arc<dyn Fn(&T) -> f64 + Send + Sync>;
-type Op<T> = Box<dyn FnOnce(&mut Selection<T, Circle>) + Send>;
+type Op<T> = Box<dyn FnOnce(&mut Selection<T, Circle>) + Send + Sync>;
 
 /// Fix a closure's signature to the higher-ranked key form.
 fn key_fn<T, F: for<'a> Fn(&'a T) -> &'a str>(f: F) -> F {
@@ -91,7 +91,7 @@ impl<T: Send + Sync + 'static> ScatterChart<T> {
         assert!(self.rows.is_some(), "{DRAWN}");
     }
 
-    fn op(mut self, op: impl FnOnce(&mut Selection<T, Circle>) + Send + 'static) -> Self {
+    fn op(mut self, op: impl FnOnce(&mut Selection<T, Circle>) + Send + Sync + 'static) -> Self {
         self.check_open();
         self.ops.push(Box::new(op));
         self

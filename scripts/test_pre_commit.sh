@@ -31,24 +31,24 @@ expect 'mode=docs' COPYING
 # Docs a crate compiles (doctests, fonts) are that crate's sources.
 expect 'clippy=[gup gup-culling-lod]' docs/tutorials/01_getting_started.md
 expect 'clippy=[gup gup-culling-lod]' assets/fonts/default.ttf
-expect 'clippy=[gup gup-core gup-culling-lod gup-egui gup-text]' \
+expect 'clippy=[gup gup-bevy gup-core gup-culling-lod gup-egui gup-text]' \
   crates/gup-text/fonts/Inter-Regular.ttf
 
 # A leaf crate is checked alone; a dependency drags in its dependents.
-expect 'fmt=[gup-text] clippy=[gup gup-core gup-culling-lod gup-egui gup-text]' \
+expect 'fmt=[gup-text] clippy=[gup gup-bevy gup-core gup-culling-lod gup-egui gup-text]' \
   crates/gup-text/src/lib.rs
 expect 'clippy=[gup-culling-lod]' crates/gup-culling-lod/src/lib.rs
-expect 'fmt=[gup-core] clippy=[gup gup-core gup-culling-lod gup-egui]' \
+expect 'fmt=[gup-core] clippy=[gup gup-bevy gup-core gup-culling-lod gup-egui]' \
   crates/gup-core/src/lib.rs
 expect 'clippy=[gup gup-culling-lod gup-macros]' gup-macros/src/lib.rs
-expect 'clippy=[gup gup-core gup-culling-lod gup-egui gup-visual-regression]' \
+expect 'clippy=[gup gup-bevy gup-core gup-culling-lod gup-egui gup-visual-regression]' \
   crates/gup-visual-regression/src/lib.rs
 expect 'clippy=[gup gup-culling-lod]' src/lib.rs tests/kde_tests.rs
 expect 'clippy=[gup gup-culling-lod]' src/lib.rs README.md
 
 # The crates that build for wasm32 are linted on that target too (GUP-412);
 # the proc-macro and the quarantined parts bin are not.
-expect 'clippy=[gup gup-core gup-culling-lod gup-egui] wasm32=[gup gup-core]' \
+expect 'clippy=[gup gup-bevy gup-core gup-culling-lod gup-egui] wasm32=[gup gup-core]' \
   crates/gup-core/src/lib.rs
 expect 'clippy=[gup gup-culling-lod gup-macros] wasm32=[gup]' \
   gup-macros/src/lib.rs

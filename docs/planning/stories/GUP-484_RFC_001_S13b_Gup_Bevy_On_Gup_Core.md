@@ -218,35 +218,12 @@ measured here (AC1) with a decision rule, rather than guessed.
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
 
-## Blocked (2026-10-23)
+## Resolved (2026-10-23)
 
-**Question**: Escalation Trigger 1 fired: the chart builders are `Send` but not
-`Sync`, so `GupChart { chart: Box<dyn Chart + Send + Sync> }` (a Bevy
-`Component`, which must be `Send + Sync`) cannot hold a `ScatterChart`.
-
-**Evidence**: `gup_core::Plot` is `Send + Sync`. `ScatterChart<T>` is `Send` but
-not `Sync`: `crates/gup-core/src/builder/scatter.rs:17` has
-`type Op<T> = Box<dyn FnOnce(&mut Selection<T, Circle>) + Send>` (pending
-configuration ops), and the compiler reports
-`(dyn FnOnce(&mut Selection<..>) + Send) cannot be shared between threads safely`.
-`LineChart` and `BarChart` use the same pattern (to be confirmed).
-
-**Options**:
-
-1. Add `+ Sync` to the builders' pending-op closures (`Op<T>` in
-   `builder/{scatter,line,bar}.rs`). Cheapest and keeps Decisions' API; but it
-   is a gup-core edit (public bounds on builder methods taking closures, if they
-   flow through `Op`) outside this story's stated scope.
-2. `GupChart.chart: Mutex<Box<dyn Chart + Send>>` (Mutex makes it `Sync`).
-   Changes the Decisions' public field type and `as_any_mut` access.
-3. Call `.into_plot()`/materialise before spawning (only `Plot`, which is Sync):
-   loses the builder (and its `Appender`?).
-
-**Recommendation**: option 1, if the closures passed to builder methods can
-require `Sync` without breaking tests/doctests; otherwise option 2.
-
-**State**: the crate is rewritten on gup-core (src/, example, Cargo.toml) and
-committed WIP but kept in `exclude` (it does not compile until the Sync question
-is settled). Still to do: tests (`render_parity.rs`, `screenshot_parity.rs`:
-designed, to be recreated), the AC1 measurement, workspace/CI edits,
-READMEs/docs.
+Escalation Trigger 1 fired: `ScatterChart`'s pending-op closures were `Send` but
+not `Sync` (`builder/scatter.rs`), so it could not be a Bevy component.
+**Decision (orchestrator)**: option 1, as a class fix. `Send + Sync` added to
+scatter's `Op` and its `op` bound; line and bar already had it. A
+`builders_are_send_and_sync` test in `builder/mod.rs` asserts `Plot`,
+`ScatterChart`, `LineChart` and `BarChart` are `Send + Sync`. gup-core's tests,
+doctests and compile-fail suites pass unchanged.
