@@ -11,10 +11,10 @@ Quick access to all documents in `docs/`. For stories and planning, see
   principles, and reading guide
 - [MISSION_AND_GOALS.md](MISSION_AND_GOALS.md) — Project vision, goals, and
   success criteria
-- [TECHNICAL_APPROACH.md](TECHNICAL_APPROACH.md) — High-level technical
-  decisions and rationale
-- [IMPLEMENTATION_STRATEGY.md](IMPLEMENTATION_STRATEGY.md) — Architecture and
-  continuous development strategy
+- [TECHNICAL_APPROACH.md](TECHNICAL_APPROACH.md) — How Gup works today
+  (doctest-backed)
+- [IMPLEMENTATION_STRATEGY.md](IMPLEMENTATION_STRATEGY.md) — How work is done,
+  what is built, what is next
 
 ---
 

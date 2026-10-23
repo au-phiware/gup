@@ -3,11 +3,12 @@
 **Status**: Accepted 2026-10-04 with the amendments in "Orchestrator review"
 (owner decisions: accept; sRGB-space blending; wave 1 trimmed to surviving work)
 and in "Decisions (2026-10-09)" (owner decisions: shader composition moves to
-build time on every target; wasm targets WebGPU only, for now) **Date**:
-2026-10-04 **Tracks**: T2 (One Context / Scene / RenderTarget) and T3 (Core data
-model), from [STRATEGIC_REVIEW_2026-10](../STRATEGIC_REVIEW_2026-10.md)
-**Supersedes on acceptance**: the architecture sections of
-`TECHNICAL_APPROACH.md` and `IMPLEMENTATION_STRATEGY.md` (review decision 6)
+build time on every target; wasm targets WebGPU only, for now). Implemented:
+S0–S14 (GUP-395 to GUP-489) **Date**: 2026-10-04 **Tracks**: T2 (One Context /
+Scene / RenderTarget) and T3 (Core data model), from
+[STRATEGIC_REVIEW_2026-10](../STRATEGIC_REVIEW_2026-10.md) **Supersedes on
+acceptance**: the architecture sections of `TECHNICAL_APPROACH.md` and
+`IMPLEMENTATION_STRATEGY.md` (review decision 6)
 
 ## Summary
 

@@ -11,8 +11,9 @@ Gup aims to achieve and why.
 
 ### [🔧 Technical Approach](./TECHNICAL_APPROACH.md)
 
-Deep dive into Gup's unified shader function architecture - the core innovation
-that enables GPU-accelerated composable visualizations.
+How Gup works today: shader functions with CPU mirrors, the GPU column store,
+typed marks, scales, `Plot` and `Scene`, render targets, interaction, hosts and
+the gates. Every snippet is a doctest.
 
 ### [📊 Market Analysis](./MARKET_ANALYSIS.md)
 
@@ -21,8 +22,9 @@ compares to existing solutions and its market opportunity.
 
 ### [🚀 Implementation Strategy](./IMPLEMENTATION_STRATEGY.md)
 
-Development roadmap with detailed phases, timelines, and success criteria. The
-definitive guide to how Gup will be built.
+How work is done (stories, gates, dogfood), what RFC-001 built, and what is next
+(T5 builders, T6 gallery and docs-as-tests, T7 crate split and LOD). No
+milestones or dates.
 
 ## Research Documents
 
@@ -52,6 +54,11 @@ historical context and show the evolution of Gup's design.
 
 ## Tutorials
 
+> The tutorials and feature guides below were written for the crate that `gup`
+> was before the RFC-001 flip (GUP-488). Where they disagree with
+> [Technical Approach](./TECHNICAL_APPROACH.md), it wins. The tutorials are
+> rewritten as tested docs in the strategic review's T6 track.
+
 ### [📖 Tutorial Series](./tutorials/README.md)
 
 Six step-by-step tutorials that take you from your first chart to advanced
@@ -67,7 +74,7 @@ are new to Gup.
 4. [Interactions](./tutorials/04_interactions.md) — hover, click, brush,
    zoom/pan
 5. [Streaming Data](./tutorials/05_streaming_data.md) — live data with
-   `StreamingDataSource`
+   `Appender`
 6. [Custom Marks](./tutorials/06_custom_marks.md) — implement new mark types
 
 ## Feature Guides
@@ -81,8 +88,8 @@ tutorials, performance guide, and troubleshooting.
 ### [📊 Mark System](./mark-system/README.md)
 
 Comprehensive documentation for the mark system: architecture overview,
-component relationships, API reference for the Mark trait and MarkRegistry, and
-a performance optimization guide.
+component relationships, API reference for the Mark trait, and a performance
+optimization guide.
 
 ### [🔲 Custom Mark Guide](./CUSTOM_MARK_GUIDE.md)
 
@@ -93,7 +100,7 @@ Guide for building custom mark types and extending the mark system.
 Comprehensive analysis of existing Rust-to-GPU compilation solutions: rust-gpu
 ecosystem, naga/WebGPU assessment, academic and industry research review,
 alternative approaches (eDSLs, runtime compilation, hybrid), weighted comparison
-matrix, and strategic recommendation for Gup's transpilation approach.
+matrix, and a research-era recommendation that was not adopted.
 
 ### [🔤 Text Rendering Architecture](./text-rendering-architecture.md)
 
@@ -159,13 +166,14 @@ of every example, or view the [Examples Index](../examples/INDEX.md) for
 runnable code.
 
 **Want technical details?** Read [Technical Approach](./TECHNICAL_APPROACH.md)
-for the unified shader architecture.
+for how Gup works today.
 
 **Interested in market positioning?** See
 [Market Analysis](./MARKET_ANALYSIS.md) for competitive landscape.
 
 **Planning to contribute?** Check
-[Implementation Strategy](./IMPLEMENTATION_STRATEGY.md) for development phases.
+[Implementation Strategy](./IMPLEMENTATION_STRATEGY.md) for how work is done and
+what is next.
 
 ---
 

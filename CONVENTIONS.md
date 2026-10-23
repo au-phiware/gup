@@ -48,8 +48,8 @@ All public APIs must include:
 
 ### Naming Conventions
 
-- **Traits** - Descriptive names that avoid conflicts (e.g., `ShaderFunction`
-  not `Function`)
+- **Traits** - Descriptive names that avoid conflicts (e.g., `ShaderFn` not
+  `Function`)
 - **Types** - Clear, domain-specific names that indicate purpose
 - **Methods** - Follow Rust conventions with `snake_case`
 - **Constants** - Use `SCREAMING_SNAKE_CASE` for compile-time constants

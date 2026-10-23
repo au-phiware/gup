@@ -3,10 +3,10 @@
 > **Observable Plot's simplicity meets GPU performance for billion-point
 > datasets**
 
-Gup (GPU Update Pattern) is a high-performance data visualization library for
-Rust that combines the declarative elegance of D3.js with the raw power of GPU
-computing. Designed for real-time visualization of massive datasets, Gup enables
-smooth 60+ FPS interactions with millions to billions of data points.
+Gup (GPU Update Pattern) is a data visualization library for Rust. Data
+encodings (scales, palettes, transfer functions) are shader functions that run
+on the GPU, each with an exact CPU twin for axes, legends, picking and SVG, so
+zooming and panning change uniforms rather than data.
 
 ## Motivation
 
@@ -27,53 +27,16 @@ libraries don't leverage this power. Gup is built GPU-first from the ground up.
 
 ## Key Features
 
-### 🚀 Unprecedented Performance
-
-- **1 billion points** at 30+ FPS
-- **Real-time streaming** data updates
-- **GPU-parallel** data transformations
-- **Cross-platform** identical performance
-
-### 🎨 Dual API Design
-
-```rust
-// Observable Plot simplicity
-gup::plot()
-    .data(sales_data)
-    .scatter(x("revenue"), y("profit"))
-    .color("region")
-    .render()?;
-
-// D3.js-style control
-chart.select_all::<Circle>()
-    .data(sales_data)
-    .attr("position", position_transform)
-    .attr("color", color_scale)
-    .on("click", |event, datum| { /* ... */ });
-```
-
-### 🔧 Unified Shader Functions
-
-All data transformations are composable WGSL functions running on GPU:
-
-```rust
-chart.select_all::<Circle>()
-    .attr("position",
-        geographic_projection
-            .compose(screen_transform)
-    )
-    .attr("color",
-        temperature_scale
-            .compose(color_interpolation)
-    );
-```
-
-### ♿ Accessibility First
-
-- **Screen reader support** with semantic data descriptions
-- **Keyboard navigation** for all interactions
-- **High contrast** and color-blind friendly modes
-- **WCAG 2.1 AA** compliance from day one
+- **Encodings are GPU functions.** Scales and palettes are WGSL with f64 CPU
+  mirrors; write your own with `#[wgsl_function]`.
+- **A chunked GPU column store.** Accessors run once; zooming writes no column
+  bytes.
+- **One chart, every target.** A window, a PNG, an SVG, a texture for egui or
+  Bevy, and a WebGPU canvas.
+- **Typed channels.** A wrong value type, an unknown channel or the wrong mark
+  does not compile.
+- **Builders that do not trap you.** Start from `gup::scatter`, then drop to the
+  typed `Selection` API.
 
 ## Quick Start
 
@@ -84,109 +47,70 @@ Add to `Cargo.toml`:
 gup = "0.1"
 ```
 
-Create your first visualization:
+Create your first visualization (this is the doctest in `src/lib.rs`):
 
 ```rust
 use gup::prelude::*;
 
-// Load your data
-let data = load_csv("sales_data.csv")?;
-
-// Create scatter plot
-gup::plot()
-    .data(data)
-    .scatter(x("revenue"), y("profit"))
-    .color("region")
-    .size("market_cap")
-    .render()?;
-```
-
-### Type Construction with Macros
-
-Gup provides ergonomic macros for creating GPU-compatible vectors and matrices:
-
-```rust
-use gup::*;
-
-// Create vectors
-let position = vec3![1.0, 2.0, 3.0];
-let color = vec4![1.0, 0.5, 0.0, 1.0];
-
-// Create matrices
-let transform = mat4![
-    1.0, 0.0, 0.0, 0.0,
-    0.0, 1.0, 0.0, 0.0,
-    0.0, 0.0, 1.0, 0.0,
-    0.0, 0.0, 0.0, 1.0
+struct Row { gdp: f64, life_exp: f64, continent: String, population: f64 }
+let data = vec![
+    Row { gdp: 1e3, life_exp: 55.0, continent: "Africa".into(), population: 3e7 },
+    Row { gdp: 2e4, life_exp: 74.0, continent: "Europe".into(), population: 6e7 },
+    Row { gdp: 6e4, life_exp: 81.0, continent: "Asia".into(), population: 1e9 },
 ];
+
+let mut chart = gup::scatter(data)
+    .x(|d| d.gdp)
+    .y(|d| d.life_exp)
+    .color(|d| d.continent.as_str())
+    .size(|d| d.population);
+let image = chart.render(&Context::shared()?, 800, 500)?;
+assert_eq!(image.dimensions(), (800, 500));
+# Ok::<(), gup::Error>(())
 ```
 
-These macros ensure proper GPU memory alignment and provide zero-cost
-abstractions. See the
-[Type Construction Guide](./docs/TYPE_CONSTRUCTION_GUIDE.md) for complete
-documentation.
+To open a window instead, pass the chart to `gup::show(chart)`.
 
 ## Architecture Highlights
 
-### GPU-First Design
+See [`TECHNICAL_APPROACH.md`](./docs/TECHNICAL_APPROACH.md).
 
-- **Vertex buffers** store data directly on GPU
-- **Compute shaders** handle statistical analysis
-- **Parallel processing** for all transformations
-- **Streaming updates** without CPU bottlenecks
-
-### Universal Composability
-
-Following D3.js's philosophy, everything in Gup composes naturally:
-
-- **Shader functions** chain like D3 methods
-- **Scales** mix with **selections**
-- **Interactions** compose with **animations**
-- **Custom marks** integrate seamlessly
-
-### Type Safety
-
-Rust's type system ensures correctness:
-
-- **Compile-time validation** of shader function composition
-- **Automatic WGSL generation** from Rust types
-- **IDE support** with full IntelliSense
-- **Migration assistance** from existing libraries
-
-## Market Position
-
-> **"Observable Plot for the GPU Era"**
-
-Gup uniquely combines:
-
-- **Observable Plot's ease**: One-line chart creation
-- **D3.js's power**: Deep customization and control
-- **GPU performance**: Handle datasets 1000x larger
-- **Rust safety**: Eliminate entire classes of runtime errors
+- **Shader functions with CPU mirrors**: `ShaderFn`, `then` and
+  `#[wgsl_function]`, composed at build time.
+- **GPU column store**: chunked, relative origins, validity bits, dictionaries,
+  `Retain`, `append` and `Window`.
+- **Typed channels and marks**: `#[derive(Mark)]`, compile-time errors.
+- **One scale family**: linear, pow, log, symlog, time, band, point and colour
+  scales, with ticks and legends from the mirrors.
+- **`Plot` and `Scene`**: layout, guides and legends resolve to a plain scene.
+- **Render targets**: image, window, texture, canvas and SVG, one render pass.
+- **Interaction**: CPU and GPU picking, tooltips, zoom, pan, brush and culling.
+- **Builders**: `scatter`, `line` and `bar`, over the same `Plot`.
+- **Hosts**: `show`, a WebGPU canvas, `gup-egui` and `gup-bevy`.
+- **Gates**: performance and WASM budgets, visual regression, a browser smoke
+  test and a dogfood suite.
 
 ## Development Status
 
-**Phase 1: Low-Level Foundation** (In Progress)
-
-- Core GPU primitives and Selection API
-- Unified shader function system
-- Basic mark types and scales
-- Cross-platform support
-
-See [`IMPLEMENTATION_STRATEGY.md`](./docs/IMPLEMENTATION_STRATEGY.md) for
-detailed roadmap.
+RFC-001 (the core architecture) is implemented: steps S0 to S14, with `gup` a
+facade over `gup-core`. Next, from the
+[strategic review](./docs/planning/STRATEGIC_REVIEW_2026-10.md): T5, more
+builders on `gup`; T6, a flagship gallery and docs-as-tests; T7, the crate
+split, level of detail and the mobile integrations. See
+[`IMPLEMENTATION_STRATEGY.md`](./docs/IMPLEMENTATION_STRATEGY.md).
 
 ## Documentation
 
-### Technical Documentation
-
 - [`MISSION_AND_GOALS.md`](./docs/MISSION_AND_GOALS.md) - Project vision and
   objectives
-- [`TECHNICAL_APPROACH.md`](./docs/TECHNICAL_APPROACH.md) - Architecture deep
-  dive
+- [`TECHNICAL_APPROACH.md`](./docs/TECHNICAL_APPROACH.md) - How Gup works today
+- [`IMPLEMENTATION_STRATEGY.md`](./docs/IMPLEMENTATION_STRATEGY.md) - How it is
+  built, and what is next
 - [`MARKET_ANALYSIS.md`](./docs/MARKET_ANALYSIS.md) - Competitive positioning
-- [`TYPE_CONSTRUCTION_GUIDE.md`](./docs/TYPE_CONSTRUCTION_GUIDE.md) - Guide to
-  GPU-compatible type construction
+- [docs/README.md](docs/README.md) and [docs/INDEX.md](docs/INDEX.md) - Reading
+  guide and full listing
+- [docs/planning/stories/INDEX.md](docs/planning/stories/INDEX.md) - All stories
+  and their status
 
 ## Contributing
 
@@ -195,86 +119,36 @@ for technical details and architectural decisions.
 
 ## Examples
 
-Check out the `examples/` directory for complete working examples:
-
 ```bash
-# Run an interactive scatter plot demo with window
-cargo run --example scatter_plot_demo
-
-# Interactive visual blend mode demonstration
-cargo run --example visual_blend_demo
-
-# GPU buffer management demonstration
-cargo run --example buffer_demo
+cargo run --example hello_world       # a sine wave with tooltips
+cargo run --example 04_bar_chart      # grouped bars (--stacked to stack)
+cargo run -p gup-core --example live_append   # rows appended from a thread
 ```
 
-See [examples/INDEX.md](examples/INDEX.md) for a full listing, or
-[examples/README.md](examples/README.md) for a guided learning path.
-
-For WebAssembly builds:
-
-```bash
-# Build and serve examples in browser
-mask start
-```
-
-## Documentation
-
-Full documentation is in the [`docs/`](docs/) directory. See
-[docs/INDEX.md](docs/INDEX.md) for a complete listing, or start with:
-
-- [docs/README.md](docs/README.md) — Architecture overview and reading guide
-- [docs/IMPLEMENTATION_STRATEGY.md](docs/IMPLEMENTATION_STRATEGY.md) —
-  Development strategy
-- [docs/planning/stories/INDEX.md](docs/planning/stories/INDEX.md) — All stories
-  and their status
-
-## Project Structure
-
-```text
-gup/
-├── src/
-│   ├── core/       # Core data structures and Selection API
-│   ├── gpu/        # GPU abstraction and WebGPU integration
-│   ├── marks/      # Visualization mark implementations
-│   └── utils/      # Utility functions and helpers
-├── examples/       # Example applications and tutorials
-├── benches/        # Performance benchmarks
-└── docs/          # Comprehensive documentation and guides
-```
+See [examples/README.md](examples/README.md) for the full list. Set
+`GUP_SCREENSHOT_PATH=out.png` to render one frame headless. For a browser build,
+see `mask wasm-browser`.
 
 ## Workspace Crates
 
 A plain `cargo build` or `cargo test` at the repository root builds only the
-`gup` crate (`default-members = ["."]`). The other workspace members are built
-with `-p`:
+`gup` crate (`default-members = ["."]`), a facade over `gup-core`. The other
+workspace members are built with `-p`:
 
 | Crate                          | Status                                                                |
 | ------------------------------ | --------------------------------------------------------------------- |
+| `crates/gup-core`              | The core: context, column store, scales, marks, plot, scene, targets. |
+| `crates/gup-core-macros`       | `#[wgsl_function]` and `#[derive(Mark)]`.                             |
+| `crates/gup-wgsl`              | WGSL library, build-time composition and the run-time linker.         |
+| `crates/gup-text`              | Font loading, shaping and the glyph atlas.                            |
 | `crates/gup-visual-regression` | Golden-image and structural check harness (`mask visual-regression`). |
-| `crates/gup-culling-lod`       | **Parked** (GUP-488). GPU culling and LOD code, out of the workspace. |
+| `gup-egui`                     | egui integration (`GupWidget`).                                       |
+| `gup-bevy`                     | Bevy integration (`GupPlugin`), built by the `integrations` CI job.   |
 
-`crates/gup-culling-lod` holds the compute instance filter, occlusion culler,
-radix sort, batch renderer, LOD pyramid and adaptive renderer. No chart builder
-calls this code, but the RFC-001 core is expected to draw from it for GPU chunk
-culling and LOD (strategic review T3/T7), so it was quarantined rather than
-deleted. It is parked: out of the workspace and CI. See its
+`crates/gup-culling-lod` holds GPU culling and LOD code from before the core was
+rewritten. It is parked: out of the workspace and CI, until the LOD work in
+strategic review T7 ports what it needs. See its
 [README](crates/gup-culling-lod/README.md).
-
-### The `debug` feature
-
-GPU debugging, profiling and performance-report tooling (`gup::debug`,
-`gup::performance`, `gup::performance_export`, `gup::performance_targets` and
-`GupContext`'s performance profiler) is behind the `debug` Cargo feature, which
-is off by default. The examples and tests that use it declare
-`required-features = ["debug"]`, so a default `cargo test` skips them:
-
-```bash
-cargo test --features debug -- --test-threads=1
-cargo run --features debug --example gpu_debug_demo
-```
-
-`web-dashboard` implies `debug`.
 
 ### Parked integration crates
 
@@ -299,9 +173,9 @@ CARGO_TARGET_DIR=target cargo check --manifest-path gup-ios/Cargo.toml
 CARGO_TARGET_DIR=target cargo check --manifest-path gup-android/Cargo.toml
 ```
 
-`gup-egui` and `gup-bevy` are workspace members (not default):
-`cargo test -p gup-egui`. `gup-bevy` is built by the `integrations` CI job, not
-by `mask all-check`: `cargo test -p gup-bevy -- --test-threads=1`.
+`cargo test -p gup-egui` tests the egui integration. `gup-bevy` is built by the
+`integrations` CI job, not by `mask all-check`:
+`cargo test -p gup-bevy -- --test-threads=1`.
 
 ## License
 
