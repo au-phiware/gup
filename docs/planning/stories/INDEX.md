@@ -433,7 +433,7 @@ findings", GUP-396).
   (design): `Window::LastRows(n)` whole-chunk eviction that keeps draw order,
   line bridges, brush bits, CPU and GPU picks and culling consistent, with
   stored rows renumbered from 0. Deps: GUP-480 ✅.
-- [GUP-483](GUP-483_RFC_001_S13a_Gup_Egui_On_Gup_Core.md) 📋 — RFC-001 step
+- [GUP-483](GUP-483_RFC_001_S13a_Gup_Egui_On_Gup_Core.md) 🚧 — RFC-001 step
   S13a: `gup-egui` rewritten on `gup-core` (egui's device via `from_wgpu`, a
   sampled `TextureTarget`, input and repaint), back in the workspace, used by
   dogfood t4 and t5. Deps: GUP-480 ✅.
