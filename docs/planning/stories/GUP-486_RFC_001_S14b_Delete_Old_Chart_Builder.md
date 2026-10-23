@@ -201,3 +201,40 @@ strategic review approved breaking changes with no deprecation (Decision 2).
 - [ ] `mask old-path-loc` at most 18,504, recorded in INDEX.md
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
+
+## Blocked (2026-10-23)
+
+**Question**: Deleting `chart_builder`, `export/html` and
+`scale::AccessorFunction` breaks two old-core modules outside the
+`chart_builder` closure: `src/axis_system.rs` and `src/wasm_api.rs`. Is it
+intended to delete items from them (the Escalation Trigger "a module of the old
+core fails to compile")?
+
+**Evidence** (`cargo check --lib` after the AC1 deletions; the working tree was
+reset, nothing is committed beyond the Start commit):
+
+- `scale.rs` `AccessorFunction`, `From<AccessorValue> for DataValue` and
+  `DataAnalyzer::analyze_field` all name `AccessorValue` (deleted per AC1).
+  `src/axis_system.rs` then fails: it imports `scale::AccessorFunction`,
+  `AxisMappings` holds four `Option<AccessorFunction<T>>` fields with setters,
+  and `analyze_data_for_scales` calls `analyze_field` four times (51 accessor
+  mentions in 933 lines). `AxisMappings` is public (`lib.rs:242`, used by
+  `examples/scale_axis_integration_demo.rs` and `axis_system` doctests).
+- `src/wasm_api.rs` imports `export::html::{ChartBundle, ChartSnapshot}` in
+  `render_from_bundle` (a `wasm_bindgen` entry point, line ~492-560) and
+  `parse_bundle_json` (line ~572-615) plus their tests. The story lists
+  `wasm_api.rs` under "Not deleted here".
+
+**Options**:
+
+1. Delete the items: `AxisMappings` accessor fields/setters,
+   `analyze_data_for_scales` (and the auto-scale path that uses it) in
+   `axis_system.rs`; `render_from_bundle`, `parse_bundle_json` and tests in
+   `wasm_api.rs`. Keeps the "delete, never port" rule; the old core's public API
+   shrinks.
+2. Keep `export/html` (`ChartBundle`, `ChartSnapshot`, snapshot only, without
+   `HtmlExporter`) and port `AccessorValue` into `scale.rs`. Smaller deletion,
+   LOC target 18,504 may not be met.
+
+**Recommendation**: option 1, with the owner confirming `AxisMappings` and
+`render_from_bundle` may lose those items (both die in GUP-488 anyway).
