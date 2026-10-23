@@ -245,3 +245,31 @@ of RFC-001 S11's named deletions.
 - [ ] `mask old-path-loc` recorded (expected unchanged)
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
+
+## Blocked (2026-10-23)
+
+**Question**: the colour-parity Escalation Trigger fired: the Decisions' "egui
+samples the sRGB view" is wrong for egui 0.33. May the widget register the
+`Rgba8Unorm` view with egui instead (a one-line change, already in the WIP
+commit)?
+
+**Evidence**: the example screenshot under Xvfb + lavapipe, with the sRGB view
+registered, shows the scatter fill as dark navy (expected `#1f77b4`) and the
+line as dark red (expected `#d62728`): the values are decoded twice. With the
+non-sRGB (`Rgba8Unorm`) view of the same texture, registered the same way, the
+colours match the chart's own render by eye (`/tmp/gup483_egui.png` sRGB view,
+wrong; `/tmp/gup483_egui2.png` Unorm view, right). egui's shader works on gamma
+values (its own textures are `Rgba8Unorm` holding sRGB bytes) and does no decode
+of its own, so an sRGB view decodes a second time. Gup writes sRGB bytes through
+its non-sRGB view, so the texture needs no sRGB view at all; the
+`Rgba8UnormSrgb` texture with `view_formats: [Rgba8Unorm]` is still needed only
+because `TextureTarget` documents that pairing, and an `Rgba8Unorm` texture
+would do as well.
+
+**Options**: (a) Unorm view for egui, keep the sRGB texture (what the WIP commit
+does); (b) plain `Rgba8Unorm` texture, no `view_formats` (simplest, same bytes).
+**Recommendation**: (b) or (a); both amend the Decisions' Texture paragraph. Not
+done yet: the ΔE parity test, dogfood t4/t5_live, docs, `clippy_wasm32.sh` and
+the READMEs. Done: crate rewrite, `to_input` (6 unit tests), parity tests
+(`render_into` at dpr 1 and 2, byte-identical), example, workspace member (one
+wgpu in `Cargo.lock`).

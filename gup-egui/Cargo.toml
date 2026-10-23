@@ -11,15 +11,15 @@ keywords = ["gpu", "visualization", "egui", "gui", "data"]
 categories = ["graphics", "visualization", "gui"]
 
 [dependencies]
-gup = { path = ".." }
+gup-core = { path = "../crates/gup-core" }
 egui = "0.33"
 eframe = { version = "0.33", features = ["wgpu"] }
-wgpu = { version = "27.0", features = ["wgsl"] }
-log = "0.4"
-env_logger = "0.10"
-pollster = "0.3"
 
 [dev-dependencies]
+env_logger = "0.10"
+image = { version = "0.24", default-features = false, features = ["png"] }
+pollster = "0.3"
+gup-visual-regression = { path = "../crates/gup-visual-regression" }
 
 [[example]]
 name = "egui_chart"
