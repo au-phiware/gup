@@ -172,3 +172,52 @@ Both blockers were resolved by the orchestrator.
   an accessor counter (`appended_seen`, polled with `within`, no `with_chart`),
   then checks the pixel through `render_rgba`. Recorded in RFC-001 "S12b
   findings".
+
+## Implementation Summary
+
+`CanvasApp` registers in a wasm32 thread-local `Vec` and passes
+`chart.set_waker` a `CanvasWake(id)`; a wake schedules one frame, is skipped
+when the state is borrowed, and is a no-op after drop. The harness gained
+`append_row`, `appended_seen` and the tooltip fix. Smoke steps: `append-before`,
+`append-wake` (counter, `within`, 1 frame), `append-pixel` (`render_rgba`,
+colour 2a6fdb). Files: `crates/gup-core/src/web.rs`,
+`crates/gup-core/wasm-size/scatter/{src/lib.rs,index.html}`, RFC-001 S12b
+findings. Evidence: gup-core tests pass (191 unit plus integration),
+`mask all-check` and `mask wasm-browser` pass, `mask old-path-loc` TOTAL 26,601
+(unchanged). Scatter 330,986 B gz (+5,628 over 325,358: web.rs ~+740, harness
+appender ~+4,800); per_row_type 763 B. `mask perf-budget`: all pass except
+`pipeline.link_create.median_ms` 1.368 vs 1.332 limit (not touched here; load
+average 4.5 to 9, uptime 20:36); not re-run. The pixel check is `render_rgba`,
+not the visible canvas (see Resolved).
+
+## Retrospective
+
+**Completed**: 2026-10-23
+
+### Key Technical Learnings
+
+#### Headless canvas readback
+
+- **Challenge**: the story asked for a canvas pixel; a WebGPU canvas reads back
+  transparent in headless SwiftShader by `drawImage` and by CDP screenshot.
+- **Solution**: an accessor-evaluation counter proves the frame, `render_rgba`
+  proves the pixel.
+- **Pattern**: `with_chart` schedules and resolves, so a waker test must touch
+  the app only through the appender and atomics.
+
+### Architectural Decisions
+
+#### Vec registry
+
+- **Decision**: `thread_local Vec<(id, Weak)>` over `HashMap`.
+- **Reasoning**: a handful of canvases; smaller code. **Trade-off**: linear
+  lookup. **Future**: GUP-483 can reuse the shape for other hosts.
+
+### Development Workflow Insights
+
+- About an hour went on canvas readback attempts; the three-attempt rule would
+  have stopped it sooner. Harness appender cost (~4.8 KB) is the feed machinery.
+
+### Follow-up Stories
+
+None.
