@@ -219,6 +219,33 @@ impl<T: Send + Sync + 'static> ScatterChart<T> {
         })
     }
 
+    /// How many rows to keep as rows are appended (default [`Window::All`]):
+    /// see [`Selection::window`].
+    ///
+    /// ```
+    /// use gup_core::prelude::*;
+    /// # fn main() -> gup_core::Result<()> {
+    /// let cx = Context::new_blocking()?;
+    /// let mut chart = gup_core::scatter(Vec::<(f64, f64)>::new())
+    ///     .x(|p| p.0)
+    ///     .y(|p| p.1)
+    ///     .window(Window::LastRows(5_000));
+    /// let feed = chart.appender();
+    /// for k in 0..20 {
+    ///     feed.extend((0..1_000).map(|i| (f64::from(k * 1_000 + i), 0.0))).unwrap();
+    ///     chart.resolve(&cx, 320.0, 200.0)?;
+    /// }
+    /// let held = chart.layer_mut().len();
+    /// assert!((5_000..5_000 + 2 * 1_250).contains(&held), "{held}");
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn window(self, window: Window) -> Self {
+        self.op(move |s| {
+            s.window(window);
+        })
+    }
+
     /// Build the layer from the recorded settings, once.
     fn materialise(&mut self) {
         let Some(rows) = self.rows.take() else {

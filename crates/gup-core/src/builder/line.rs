@@ -185,6 +185,35 @@ impl<T: Send + Sync + 'static> LineChart<T> {
         })
     }
 
+    /// How many rows each line keeps as rows are appended (default
+    /// [`Window::All`]), per line: with [`color`](Self::color), each key's
+    /// layer keeps its own newest `n` rows. A line starts at its first kept
+    /// row. See [`Selection::window`].
+    ///
+    /// ```
+    /// use gup_core::prelude::*;
+    /// # fn main() -> gup_core::Result<()> {
+    /// let cx = Context::new_blocking()?;
+    /// let mut chart = gup_core::line(Vec::<(f64, f64)>::new())
+    ///     .x(|p| p.0)
+    ///     .y(|p| p.1)
+    ///     .window(Window::LastRows(3_000));
+    /// let feed = chart.appender();
+    /// for k in 0..10 {
+    ///     feed.extend((0..1_000).map(|i| (f64::from(k * 1_000 + i), 0.0))).unwrap();
+    ///     chart.resolve(&cx, 320.0, 200.0)?;
+    /// }
+    /// let held = chart.layers_mut()[0].len();
+    /// assert!((3_000..3_000 + 2 * 1_024).contains(&held), "{held}");
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn window(self, window: Window) -> Self {
+        self.op(move |s| {
+            s.window(window);
+        })
+    }
+
     /// Title the colour legend.
     pub fn legend_title(mut self, title: impl Into<String>) -> Self {
         self.check_open();

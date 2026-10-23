@@ -152,7 +152,7 @@ pub use scale::{
     Swatch, Symlog, Ticks, Time,
 };
 pub use scene::Scene;
-pub use selection::{Retain, Selection};
+pub use selection::{Retain, Selection, Window};
 pub use shader::WgslModule;
 pub use svg::{SvgOptions, SvgTarget, VectorTarget};
 pub use target::{DEFAULT_SAMPLES, Frame, ImageTarget, RenderTarget, TargetOptions, TextureTarget};
@@ -300,7 +300,7 @@ pub mod prelude {
         CpuMirror, Derived, Diverging, Drag, EncodeFn, Event, Line, LineAttrs, Linear, Log, Mark,
         Offset, Plot, Point, PositionScale, Pow, Px, Rect, RectAttrs, Retain, ScaleRef, Segment,
         SegmentAttrs, Selection, Sequential, ShaderFn, Symlog, Theme, Time, Unbrushed, Unit,
-        wgsl_function,
+        Window, wgsl_function,
     };
 }
 

@@ -73,6 +73,10 @@ struct Pending {
     ticket: PickTicket,
     at: Point,
     generation: u64,
+    /// Each layer's [`epoch`](crate::selection::Layer::epoch) when the
+    /// drawn state was resolved: a layer that renumbered its stored rows
+    /// since (a window eviction) reports no row.
+    epochs: Vec<u64>,
     /// 0 while mapping, 1 mapped, 2 failed.
     state: Arc<AtomicU8>,
 }
@@ -386,6 +390,7 @@ impl Plot {
             ticket,
             at,
             generation,
+            epochs: self.drawn_epochs.clone(),
             state,
         });
         Ok(ticket)
@@ -398,7 +403,10 @@ impl Plot {
     /// it is when polled; compare [`GpuPick::generation`] with
     /// [`resolve_generation`](Self::resolve_generation) to discard picks
     /// drawn before the last resolve. A pick whose readback failed (a lost
-    /// device) reports no row.
+    /// device), or whose layer evicted rows ([`Window`](crate::Window)) or
+    /// evaluated its columns again since the pick was drawn, reports no row:
+    /// its stored rows were renumbered, so it is dropped rather than mapped
+    /// to another row.
     pub fn poll_picks(&mut self, cx: &Context) -> Vec<GpuPick> {
         self.collect_picks(cx);
         let Some(picker) = &mut self.gpu_pick else {
@@ -492,10 +500,9 @@ impl Plot {
                 .then(|| (id[0] as usize - 1, u64::from(id[1] - 1)))
                 .and_then(|(layer, stored)| {
                     let l = self.layers.get(layer)?;
-                    let row = l.draw_order().map_or(stored, |o| o.row_of(stored));
-                    Some(RowId {
+                    (pending.epochs.get(layer) == Some(&l.epoch())).then(|| RowId {
                         layer,
-                        row: row as usize,
+                        row: l.row_id(stored),
                     })
                 });
             picker.done.push(GpuPick {

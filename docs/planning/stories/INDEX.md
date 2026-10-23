@@ -429,7 +429,7 @@ findings", GUP-396).
 - [GUP-481](GUP-481_RFC_001_S12b_Web_Canvas_Waker.md) ✅ — RFC-001 step S12b:
   `CanvasApp` wakes on appended rows through a wasm32 thread-local registry,
   checked by a browser step with no input. Deps: GUP-480 ✅.
-- [GUP-482](GUP-482_RFC_001_S12c_Window_Eviction.md) 📋 — RFC-001 step S12c
+- [GUP-482](GUP-482_RFC_001_S12c_Window_Eviction.md) ✅ — RFC-001 step S12c
   (design): `Window::LastRows(n)` whole-chunk eviction that keeps draw order,
   line bridges, brush bits, CPU and GPU picks and culling consistent, with
   stored rows renumbered from 0. Deps: GUP-480 ✅.
@@ -457,6 +457,10 @@ findings", GUP-396).
 - [GUP-489](GUP-489_RFC_001_S14d_Revise_Architecture_Docs.md) 📋 — RFC-001 step
   S14d: TECHNICAL_APPROACH and IMPLEMENTATION_STRATEGY rewritten for `gup` as
   built, with compiled snippets, and the README entry points. Deps: GUP-488 📋.
+- [GUP-492](GUP-492_Windowed_Size_Order_Draws.md) 💡 — bounded draw calls for a
+  windowed layer sized by a column whose sizes do not follow data order
+  (per-chunk sort runs draw about one instance per draw today). Deps: GUP-482
+  ✅.
 - [GUP-494](GUP-494_Bars_On_Numeric_Axes_Overhang_And_Baselines.md) ✅ — `Rect`
   overhang on numeric axes and constant/`Derived` positions in automatic
   domains. Deps: GUP-435 ✅, GUP-424 ✅.
