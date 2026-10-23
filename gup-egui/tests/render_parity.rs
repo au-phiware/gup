@@ -35,11 +35,11 @@ fn widget_pixels(cx: &Context, size: (u32, u32), dpr: f32) -> image::RgbaImage {
         mip_level_count: 1,
         sample_count: 1,
         dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::Rgba8UnormSrgb,
+        format: wgpu::TextureFormat::Rgba8Unorm,
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT
             | wgpu::TextureUsages::TEXTURE_BINDING
             | wgpu::TextureUsages::COPY_SRC,
-        view_formats: &[wgpu::TextureFormat::Rgba8Unorm],
+        view_formats: &[],
     });
     let mut target =
         TextureTarget::new(cx, texture.clone(), TargetOptions::default().with_dpr(dpr)).unwrap();

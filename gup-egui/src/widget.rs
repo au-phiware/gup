@@ -211,15 +211,13 @@ impl GupWidget {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::Rgba8UnormSrgb,
+            format: wgpu::TextureFormat::Rgba8Unorm,
             usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING,
-            view_formats: &[wgpu::TextureFormat::Rgba8Unorm],
+            view_formats: &[],
         });
-        // egui samples the sRGB view: it decodes the values Gup wrote.
-        let view = texture.create_view(&wgpu::TextureViewDescriptor {
-            format: Some(wgpu::TextureFormat::Rgba8Unorm),
-            ..Default::default()
-        });
+        // Gup writes sRGB bytes and egui's shader works on gamma bytes:
+        // sample them raw (an sRGB view would decode them a second time).
+        let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
         let target = TextureTarget::new(&self.cx, texture, TargetOptions::default().with_dpr(ppp))?;
         let mut egui_renderer = self.render_state.renderer.write();
         let device = &self.render_state.device;
