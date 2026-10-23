@@ -81,4 +81,6 @@ pub use gup_core::*;
 mod architecture_docs {
     #[doc = include_str!("../docs/TECHNICAL_APPROACH.md")]
     struct TechnicalApproach;
+    #[doc = include_str!("../docs/IMPLEMENTATION_STRATEGY.md")]
+    struct ImplementationStrategy;
 }

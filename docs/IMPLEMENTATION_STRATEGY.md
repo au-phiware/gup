@@ -1,553 +1,114 @@
-# Gup Implementation Strategy
+# Implementation Strategy
 
-## Core Development Philosophy
+How Gup is built, what has been built, and what is next. The architecture itself
+is in [TECHNICAL_APPROACH.md](./TECHNICAL_APPROACH.md). The reasons for the
+current plan are in the
+[strategic review](./planning/STRATEGIC_REVIEW_2026-10.md) (its "North star",
+"Strategy" and "Decisions" sections); the design log is
+[RFC-001](./planning/rfcs/RFC-001_Core_Architecture.md). This document has no
+milestones, dates or estimates: the stories index records status, and a strategy
+that carries dates is out of date by the next story.
 
-### "Engineering Excellence First, Composability Always"
+## North star
 
-1. **Low-Level Foundation First**: Build rock-solid GPU primitives and Selection
-   API
-2. **Dog-food Our Own API**: Use low-level API internally to ensure it's
-   powerful enough
-3. **Universal Composability**: Everything must compose naturally like D3's
-   primitives
-4. **High-Level APIs Second**: Build Observable Plot-style convenience on proven
-   foundation
-
-### Why This Approach
-
-**High-level APIs cannot be built reliably without a solid, well-tested
-low-level foundation.** Building convenience APIs on an unproven base leads to
-compounding technical debt that becomes increasingly expensive to unwind.
-
-**Dog-fooding Requirement**: We must use our own low-level API to build
-everything else. This ensures:
-
-- The low-level API is powerful enough for any use case
-- API ergonomics are proven through internal usage
-- Complex compositions work reliably
-- Performance architecture scales with complexity
-
-### Development Model
-
-Work is organised into **stories** — self-contained units of work with clear
-acceptance criteria. Stories may optionally belong to **initiatives** (thematic
-groupings). **Dependencies between stories** are the primary tool for managing
-complexity and sequencing work.
-
-There are no phases, milestones, or delivery targets. Progress is tracked in
-[`docs/planning/stories/INDEX.md`](planning/stories/INDEX.md).
-
----
-
-## Initiative 1: Core GPU Primitives and Selection API
-
-**Universal Composability Foundation**:
+A user writes about five to ten lines and gets a publication-quality chart,
+identical in a window, a PNG, an SVG and WASM, with data encodings evaluated on
+the GPU, and can drop from that chart into the low-level `Selection` API without
+starting over. The code below is that sentence, and it is a doctest, so it stays
+true.
 
 ```rust
-// The fundamental composable unit - everything can be combined
-pub trait Mixable {
-    type Output;
+use gup::prelude::*;
 
-    fn mix<T: Mixable>(self, other: T) -> ComposedVisualization<Self, T>
-    where Self: Sized;
+struct Row { gdp: f64, life_exp: f64, continent: String, population: f64 }
+let data = vec![
+    Row { gdp: 1e3, life_exp: 55.0, continent: "Africa".into(), population: 3e7 },
+    Row { gdp: 6e4, life_exp: 81.0, continent: "Asia".into(), population: 1e9 },
+];
 
-    fn render(&self, context: &mut RenderContext) -> Result<(), GupError>;
-}
+let mut chart = gup::scatter(data)
+    .x(|d| d.gdp)
+    .y(|d| d.life_exp)
+    .color(|d| d.continent.as_str())
+    .size(|d| d.population);
+let image = chart.render(&Context::shared()?, 800, 500)?;
+assert_eq!(image.dimensions(), (800, 500));
 
-// Core selection system - the heart of composability
-pub struct Selection<T, M: Mark> {
-    data: Vec<T>,
-    mark_type: PhantomData<M>,
-
-    // GPU resources
-    vertex_buffer: GpuBuffer<M::Vertex>,
-    instance_buffer: GpuBuffer<InstanceData>,
-
-    // Shader function pipeline
-    shader_pipeline: ShaderPipeline,
-    attribute_mappings: HashMap<String, String>,
-
-    context: Arc<GupContext>,
-}
-
-impl<T, M: Mark> Selection<T, M> {
-    // Attributes are shader functions, not CPU closures
-    pub fn attr<F>(&mut self, name: &str, shader_func: F) -> &mut Self
-    where
-        F: ShaderFunction + 'static,
-        F::Input: Compatible<T>,
-        F::Output: Compatible<M::AttributeValue>,
-    {
-        self.shader_pipeline.add_function(shader_func);
-        self.attribute_mappings.insert(name.to_string(), F::function_name().to_string());
-        self.mark_dirty();
-        self
-    }
-}
+// Drop down a level: the plot and its typed layers are ordinary values.
+let mut plot = chart.into_plot();
+plot.title("Wealth and health");
+assert_eq!(plot.title_text(), Some("Wealth and health"));
+# Ok::<(), gup::Error>(())
 ```
 
----
-
-## Initiative 2: Unified Shader Function System
-
-**ShaderFunction Trait and Composition**:
-
-```rust
-pub trait ShaderFunction {
-    type Input: ShaderType;
-    type Output: ShaderType;
-    type Uniforms: bytemuck::Pod + bytemuck::Zeroable = ();
-
-    fn wgsl_function() -> &'static str;
-    fn create_uniforms(&self) -> Option<Self::Uniforms> { None }
-    fn function_name() -> &'static str;
-}
-
-// WGSL Function Macro - write WGSL, get Rust traits
-#[wgsl_function]
-fn linear_scale(value: f32, scale: LinearScaleUniforms) -> f32 {
-    let normalized = (value - scale.domain_min) / (scale.domain_max - scale.domain_min);
-    return scale.range_min + normalized * (scale.range_max - scale.range_min);
-}
-
-#[wgsl_function]
-fn temperature_to_color(temp: f32, palette: TemperaturePalette) -> vec4<f32> {
-    let normalized = clamp((temp - palette.min_temp) / (palette.max_temp - palette.min_temp), 0.0, 1.0);
-    let index = u32(normalized * f32(palette.color_count - 1u));
-    return palette.colors[index];
-}
-```
-
-**Shader Pipeline Builder**:
-
-```rust
-pub struct ShaderPipeline {
-    functions: Vec<Box<dyn ShaderFunction>>,
-    uniform_buffers: HashMap<String, wgpu::Buffer>,
-}
-
-impl ShaderPipeline {
-    pub fn generate_vertex_shader(&self) -> String {
-        let mut shader = String::from("// Auto-generated Gup vertex shader\n\n");
-
-        // Add uniform buffer bindings
-        for (i, (name, _)) in self.uniform_buffers.iter().enumerate() {
-            shader.push_str(&format!(
-                "@group(0) @binding({}) var<uniform> {}: {}Uniforms;\n",
-                i, name, name
-            ));
-        }
-
-        // Add all function definitions
-        for func in &self.functions {
-            shader.push_str(func.wgsl_function());
-            shader.push_str("\n\n");
-        }
-
-        // Generate main vertex function
-        shader.push_str(&self.generate_main_vertex_function());
-        shader
-    }
-}
-```
-
----
-
-## Initiative 3: Mark System and Type Integration
-
-**Enhanced Mark Trait with Generated Shaders**:
-
-```rust
-pub trait Mark: Clone + Send + Sync + 'static {
-    type Vertex: bytemuck::Pod + bytemuck::Zeroable;
-    type AttributeValue;
-
-    // Pre-written shaders (fastest) or generated shaders (flexible)
-    const VERTEX_SHADER: Option<&'static str> = None;
-    const FRAGMENT_SHADER: Option<&'static str> = None;
-
-    fn generate_vertex_shader(pipeline: &ShaderPipeline) -> String {
-        pipeline.generate_vertex_shader() // Default implementation
-    }
-}
-
-// Circle mark with both manual and generated shader support
-impl Mark for Circle {
-    type Vertex = CircleVertex;
-    type AttributeValue = CircleAttributes;
-
-    // Manual shaders for maximum performance
-    const VERTEX_SHADER: Option<&'static str> = Some(include_str!("shaders/circle.vert.wgsl"));
-    const FRAGMENT_SHADER: Option<&'static str> = Some(include_str!("shaders/circle.frag.wgsl"));
-}
-```
-
-**Type-Safe Composition**:
-
-```rust
-// Complex visualization with shader function composition
-chart.select_all::<Circle>()
-    .data(weather_data)
-    .attr("position",
-        geographic_projection::new(viewport)
-            .mix(screen_transform::new(dimensions))
-    )
-    .attr("color",
-        temperature_scale::new(-10.0, 40.0)
-            .mix(color_interpolation::new(temp_palette))
-    );
-```
-
----
-
-## Initiative 4: Interaction System and Performance
-
-**GPU-Based Interaction System**:
-
-```rust
-pub struct InteractionSystem {
-    spatial_compute: wgpu::ComputePipeline,
-    query_buffer: wgpu::Buffer,
-    result_buffer: wgpu::Buffer,
-}
-
-impl InteractionSystem {
-    pub async fn pick_elements(&mut self,
-        position: [f32; 2],
-        selections: &[&dyn Renderable]
-    ) -> Vec<ElementId> {
-        // Use compute shader for parallel hit testing
-        for selection in selections {
-            self.query_selection_gpu(selection, position).await;
-        }
-
-        // Collect results from GPU memory
-        self.collect_hit_results().await
-    }
-}
-
-// Event handling with shader function integration
-impl<T, M: Mark> Selection<T, M> {
-    pub fn on<F>(&mut self, event: &str, handler: F) -> &mut Self
-    where F: Fn(InteractionEvent, &T) + Send + Sync + 'static
-    {
-        self.interaction_system.register_hit_test_for_mark::<M>();
-        self.event_handlers.insert(event.to_string(), Box::new(handler));
-        self
-    }
-}
-```
-
-### Foundation Success Metrics
-
-#### Technical Validation
-
-- **Shader Function Completeness**: All common transformations work as
-  composable WGSL functions
-- **Performance Foundation**: 100K points at 60 FPS with complex shader
-  pipelines
-- **Composability Proof**: Complex visualizations built by composing simple
-  functions
-- **GPU Integration**: All transformations happen on GPU with no CPU bottlenecks
-
-#### Dog-fooding Validation
-
-- **Self-hosting**: All internal features built using shader function system
-- **Macro Validation**: `#[wgsl_function]` macro works reliably for common cases
-- **Performance Scalability**: Shader composition doesn't degrade performance
-- **Type Safety**: Shader function composition catches type mismatches at
-  compile time
-
-#### API Ergonomics
-
-- **Natural Composition**: Shader functions compose as naturally as D3 method
-  chaining
-- **Error Messages**: Clear feedback when shader function types don't match
-- **Debug Support**: Generated shaders can be inspected and debugged
-- **Flexibility**: Both manual WGSL and macro-generated functions work
-  seamlessly
-
----
-
-## High-Level Convenience APIs
-
-Build convenience APIs only on a proven foundation:
-
-### Observable Plot-Style API
-
-```rust
-// High-level APIs built on validated low-level foundation
-pub fn scatter_plot<T>() -> ScatterPlotBuilder<T> {
-    ScatterPlotBuilder::new()
-}
-
-impl<T> ScatterPlotBuilder<T> {
-    pub fn data(self, data: Vec<T>) -> BoundScatterPlot<T> {
-        // Internally uses Selection API we've already validated
-        let selection = Selection::<T, Circle>::new(data, context);
-        BoundScatterPlot { selection }
-    }
-}
-
-impl<T> BoundScatterPlot<T> {
-    pub fn x<F>(mut self, accessor: F) -> Self
-    where F: Fn(&T) -> f32 + Send + Sync + 'static
-    {
-        // Uses proven attribute binding system
-        self.selection.attr("x", accessor);
-        self
-    }
-
-    pub fn render(self) -> Result<Chart, GupError> {
-        // Composes proven primitives
-        let x_scale = LinearScale::new().domain_auto(&self.data).range([0.0, 800.0]);
-        let y_scale = LinearScale::new().domain_auto(&self.data).range([600.0, 0.0]);
-
-        self.selection
-            .mix(x_scale)
-            .mix(y_scale)
-            .render()
-    }
-}
-
-// Usage - Observable Plot simplicity with proven performance
-gup::scatter_plot()
-    .data(sales_data)
-    .x(|d| d.revenue)
-    .y(|d| d.profit)
-    .color(|d| d.region)
-    .render()?;
-```
-
-### Seamless API Interoperability
-
-```rust
-// Start with high-level, customize with low-level
-let mut chart = gup::plot()
-    .data(data)
-    .scatter(x("x"), y("y"))
-    .build()?; // Returns customizable chart
-
-// Add custom interactions using proven low-level API
-chart.select_all::<Circle>()
-    .on("hover", |event, datum| {
-        // Custom hover behavior
-    })
-    .transition()
-    .duration(500)
-    .attr("stroke_width", 2.0);
-```
-
-### High-Level API Goals
-
-- Observable Plot-equivalent convenience APIs for common chart types
-- All high-level APIs built using low-level Selection and shader function
-  primitives
-- Migration guide from D3.js showing low-level API power
-- Performance maintained: 100K+ points with high-level APIs
-- External validation with teams using both API levels
-
----
-
-## Advanced Features and Scale
-
-### Billion-Point Architecture
-
-```rust
-pub struct BillionPointRenderer {
-    // Hierarchical level-of-detail system
-    lod_pyramid: Vec<GpuBuffer<VertexData>>,
-
-    // Adaptive rendering based on viewport and performance
-    adaptive_renderer: AdaptiveRenderer,
-
-    // Streaming data management
-    streaming_manager: StreamingDataManager,
-}
-
-impl BillionPointRenderer {
-    pub fn render_adaptive(&mut self, viewport: Viewport) -> RenderResult {
-        // Select appropriate LOD based on viewport and data density
-        let lod_level = self.calculate_optimal_lod(viewport);
-        let data_buffer = &self.lod_pyramid[lod_level];
-
-        // Use compute shader for frustum culling
-        let visible_indices = self.frustum_cull_compute(data_buffer, viewport).await;
-
-        // Render visible subset
-        self.render_indexed(data_buffer, &visible_indices)
-    }
-}
-```
-
-### GPU-Accelerated Layouts
-
-```rust
-pub struct LayoutEngine {
-    // Pre-compiled layout algorithms
-    force_directed_pipeline: ComputePipeline,
-    treemap_pipeline: ComputePipeline,
-}
-
-impl LayoutEngine {
-    pub async fn force_directed_layout(&self,
-        nodes: &[Node],
-        edges: &[Edge],
-        iterations: u32
-    ) -> LayoutResult {
-        // GPU-parallel force simulation
-        let mut node_buffer = GpuBuffer::from_data(nodes);
-
-        for _ in 0..iterations {
-            self.compute_forces(&mut node_buffer, &edge_buffer).await;
-            self.update_positions(&mut node_buffer).await;
-
-            if self.has_converged(&node_buffer).await {
-                break;
-            }
-        }
-
-        LayoutResult { nodes: node_buffer.read().await }
-    }
-}
-```
-
-### Scale Goals
-
-- 1 billion points rendering at 30+ FPS with adaptive LOD
-- GPU-accelerated force-directed layout for 100K+ nodes
-- 3D visualization support with lighting and materials
-- Professional axes, legends, and annotations
-- Real-world validation with scientific datasets
-
----
-
-## Ecosystem Integration
-
-### Framework Integrations
-
-```rust
-// Bevy game engine integration
-pub mod bevy {
-    #[derive(Component)]
-    pub struct GupChart {
-        chart: Chart,
-        auto_update: bool,
-    }
-
-    fn gup_chart_render_system(
-        mut charts: Query<&mut GupChart>,
-        mut gup_context: ResMut<GupContext>,
-    ) {
-        for mut chart in charts.iter_mut() {
-            chart.render(&mut gup_context);
-        }
-    }
-}
-
-// egui integration
-pub mod egui {
-    pub struct GupWidget {
-        chart: Chart,
-        size: Vec2,
-    }
-
-    impl Widget for GupWidget {
-        fn ui(self, ui: &mut Ui) -> Response {
-            // Embed Gup chart in egui
-            let texture = self.chart.render_to_texture(self.size);
-            ui.painter().image(texture.id(), rect, Color32::WHITE);
-        }
-    }
-}
-```
-
-### Export and Production Features
-
-```rust
-// High-quality export system
-pub struct ExportEngine {
-    svg_renderer: SvgRenderer,
-    pdf_renderer: PdfRenderer,
-    png_renderer: PngRenderer,
-}
-
-impl ExportEngine {
-    pub async fn export_svg(&self, chart: &Chart, options: SvgExportOptions) -> Vec<u8> {
-        // Convert GPU rendering to vector paths
-        let paths = self.extract_vector_paths(chart);
-        self.svg_renderer.create_svg_document(paths, options).to_bytes()
-    }
-}
-```
-
-### Ecosystem Goals
-
-- Production-ready integrations for Bevy, egui, Tauri, winit
-- High-quality export to SVG, PDF, PNG, HTML formats
-- Comprehensive test suite with performance regression detection
-- Enterprise deployment documentation
-
----
-
-## Development Methodology
-
-### Quality Gates
-
-Each story must demonstrate:
-
-- **Engineering Excellence**: Reliable, well-tested, high-performance code
-- **Dog-fooding Success**: All features built using our own APIs
-- **Performance**: Measurable, no regressions against benchmarks
-- **Cross-Platform Consistency**: Identical behavior on native, web, mobile
-- **External Validation**: Real users solving real problems
-
-### Testing Strategy
-
-- **Unit Tests**: Core algorithms and data structures
-- **Integration Tests**: Cross-platform compatibility
-- **Performance Tests**: Automated benchmarks for regression detection
-- **Visual Tests**: Screenshot comparison for rendering correctness
-- **Accessibility Tests**: WCAG 2.1 AA compliance validation
-
-### Community Development
-
-- **Open Development**: Public roadmap, regular progress updates
-- **External Validation**: Partner with real projects from Phase 1
-- **Contribution Guidelines**: Clear process for community contributions
-- **Documentation First**: Comprehensive tutorials and examples
-
-## Risk Mitigation
-
-### Technical Risks
-
-- **WebGPU Adoption**: Focus native desktop first, web deployment second
-- **Performance Promises**: Conservative initial claims, aggressive optimization
-- **API Stability**: Careful design review before public API commitment
-
-### Market Risks
-
-- **Learning Curve**: Extensive documentation and migration tools
-- **Competition**: Monitor D3.js evolution, maintain performance advantage
-- **Ecosystem Size**: Focus on quality over quantity in early phases
-
-### Resource Risks
-
-- **Development Capacity**: Plan sustainable pace, avoid burnout
-- **Community Building**: Start open development early
-- **Funding**: Consider sponsorship/grants for open source development
-
-## Summary
-
-Gup is built on the principle that composability and engineering excellence must
-be established at the foundation before convenience APIs are layered on top.
-Work is driven by stories with explicit dependency mapping — this replaces
-phases and milestones as the primary organising principle.
-
-The four technical initiatives (GPU Primitives, Shader Functions, Mark System,
-Interaction) form the foundation. High-level APIs, advanced scale features, and
-ecosystem integrations build on that foundation as stories are completed and
-dependencies are satisfied.
-
-See [`docs/planning/stories/INDEX.md`](planning/stories/INDEX.md) for the
-current state of all stories.
+## How work is done
+
+- **Stories.** All work is a story in `docs/planning/stories/`, with acceptance
+  criteria, decisions, escalation triggers and a definition of done. Each story
+  is small enough for one implementer to finish and review. The index
+  (`docs/planning/stories/INDEX.md`) is the only list of status.
+- **Fix the class, not the instance.** When a bug is fixed in one builder, mark
+  or export path, every sibling with the same bug is fixed in the same story,
+  unless the siblings are genuinely large, and then a follow-up is written.
+- **Acceptance is what a user sees.** For anything visual the implementer
+  renders a PNG and looks at it, and a golden image persists the check. "Not
+  blank" is not acceptance.
+- **Dogfood.** The detached `dogfood/` crate uses only the public `gup` API for
+  realistic tasks. Gaps it exposes are tracked there, not remembered.
+- **Gates are never bypassed.** The pre-commit hook, `mask all-check` and CI
+  (lint, tests, visual regression, WASM size, the browser smoke test, dogfood)
+  decide what merges. No `--no-verify`, no `#[ignore]`, no loosened tolerance. A
+  budget is re-recorded only with a measured reason, in the same commit as the
+  change. A known-broken output is a tracked entry in
+  `tests/visual_regression/expected_failures.toml` that names the story that
+  will fix it.
+- **Breaking changes are allowed** (pre-alpha). A wrong API is replaced or
+  deleted, never kept beside its replacement, and nothing is left as a silent
+  no-op.
+- **Orchestrator and implementers.** An orchestrator plans the sequence, writes
+  and sizes stories and merges. Implementers (agents, in
+  `.github/agents/story-worker.md`) take one story each, stop and report when an
+  acceptance criterion cannot be met as written, and write a retrospective that
+  feeds the next story.
+- **Measure before claiming.** Performance and size claims come from
+  `crates/gup-core/PERF_BUDGETS.md`, and counts of uploads and draws are exact
+  and deterministic.
+
+## What has been built
+
+RFC-001 steps S0 to S14 (GUP-395 to GUP-489) are implemented. In one paragraph:
+one cloneable `Context`; a chunked GPU column store with relative origins,
+validity bits, dictionaries, `Retain`, append and `Window`; typed channels and
+`#[derive(Mark)]` with the built-in `Circle`, `Rect`, `Segment` and `Line`; one
+scale family in which each scale is a `ShaderFn` with an exact f64 `CpuMirror`;
+build-time shader composition and `#[wgsl_function]`; a resolved `Scene` drawn
+by image, window, texture and canvas targets and written as SVG; the `Chart`
+trait with `Plot` as the universal container; layout, guides, legends, themes,
+CPU and GPU picking, tooltips, pan, zoom, brush and culling; the `scatter`,
+`line` and `bar` builders; and the egui and Bevy integrations. S14 made `gup` a
+facade over `gup-core` and deleted the old render path (208,932 lines in the
+flip). Each step's decisions and measurements are in RFC-001's findings
+sections: see
+[S14](./planning/rfcs/RFC-001_Core_Architecture.md#s14-findings-gup-485488) for
+what the flip deleted and kept.
+
+## What is next
+
+The tracks below are defined in the strategic review ("Strategy: tracks and
+sequencing"); the stories index holds their stories and status.
+
+- **T5, builders onto `gup`.** Add what the builders do not yet have (area, box,
+  violin, density, heatmap and choropleth builders) on the channels, scales and
+  scene that exist, keeping the user's row type in the output types, and deliver
+  the real-world features the dogfood audit found missing.
+- **T6, flagship gallery and docs-as-tests.** Eight to ten polished charts
+  rendered in CI, including one that shows the GPU advantage, a README hero
+  image, and tutorials whose every snippet compiles and renders under test. The
+  doctest include used by these two documents is the pattern.
+- **T7, crate split, LOD and mobile.** Split the workspace into focused crates,
+  feature-gate platform dependencies, wire GPU culling and level of detail into
+  the core (`crates/gup-culling-lod` is parked until then), and re-wire the iOS,
+  Android and Tauri integrations onto the single render path.
+
+Parked items stay parked until the strategic review's decisions say otherwise; a
+story that extends one needs a decision first.
