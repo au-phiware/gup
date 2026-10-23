@@ -14,6 +14,7 @@ use eframe::egui;
 use gup_core::prelude::*;
 use gup_core::{Appender, LineChart, ScatterChart};
 use gup_dogfood::*;
+use gup_egui::GupWidget;
 use std::time::{Duration, Instant};
 
 const W: f32 = 900.0;
@@ -51,13 +52,13 @@ fn scatter_chart(pts: &[S]) -> ScatterChart<S> {
 
 struct App {
     line: LineChart<S>,
-    line_w: ChartTexture,
+    line_w: GupWidget,
     line_feed: Appender<S>,
     /// The last line sample and how many there are.
     last_pt: S,
     n_pts: usize,
     big: ScatterChart<S>,
-    big_w: ChartTexture,
+    big_w: GupWidget,
     big_feed: Appender<S>,
     n_big: usize,
     last: Instant,
@@ -77,7 +78,7 @@ impl App {
         ((self.rng >> 40) as f64 / (1u64 << 24) as f64) - 0.5
     }
 
-    fn new() -> Self {
+    fn new(render_state: &eframe::egui_wgpu::RenderState) -> Self {
         let pts: Vec<S> = (0..20)
             .map(|i| S {
                 t: i as f64,
@@ -103,12 +104,12 @@ impl App {
         Self {
             line_feed: line.appender(),
             line,
-            line_w: ChartTexture::new(),
+            line_w: GupWidget::new(render_state),
             last_pt,
             n_pts,
             big_feed: big.appender(),
             big,
-            big_w: ChartTexture::new(),
+            big_w: GupWidget::new(render_state),
             n_big,
             last: Instant::now(),
             started: Instant::now(),
@@ -131,7 +132,6 @@ impl App {
         let t0 = Instant::now();
         self.line_feed.push(next).expect("the chart is alive");
         let line_cost = t0.elapsed();
-        self.line_w.dirty = true;
 
         // Scatter: append 50 points.
         let batch: Vec<S> = (0..50)
@@ -147,7 +147,6 @@ impl App {
         let t1 = Instant::now();
         self.big_feed.extend(batch).expect("the chart is alive");
         self.timings.push((line_cost, t1.elapsed()));
-        self.big_w.dirty = true;
     }
 }
 
@@ -164,10 +163,8 @@ impl eframe::App for App {
                 "line: {} pts, update {:?} | scatter: {} pts, update {:?}",
                 self.n_pts, lw, self.n_big, bw
             ));
-            let (r1, _) = ui.allocate_exact_size(egui::vec2(W, H), egui::Sense::hover());
-            self.line_w.show(ui, r1, &mut self.line);
-            let (r2, _) = ui.allocate_exact_size(egui::vec2(W, H), egui::Sense::hover());
-            self.big_w.show(ui, r2, &mut self.big);
+            self.line_w.show(ui, egui::vec2(W, H), &mut self.line);
+            self.big_w.show(ui, egui::vec2(W, H), &mut self.big);
         });
         if self.auto {
             if self.started.elapsed() > Duration::from_secs(6) && self.frame < 1_000_000 {
@@ -183,11 +180,9 @@ impl eframe::App for App {
                         (a.0 + t.0, a.1 + t.1)
                     });
                 println!(
-                    "ticks={n} avg line update={:?} avg 100k-scatter update={:?}; last render+upload line={:?} scatter={:?}",
+                    "ticks={n} avg line update={:?} avg 100k-scatter update={:?}",
                     sl / n,
-                    sb / n,
-                    self.line_w.last_render,
-                    self.big_w.last_render
+                    sb / n
                 );
                 ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             }
@@ -205,6 +200,9 @@ fn main() -> eframe::Result {
     eframe::run_native(
         "gup dogfood t5",
         options,
-        Box::new(|_cc| Ok(Box::new(App::new()))),
+        Box::new(|cc| {
+            let rs = cc.wgpu_render_state.as_ref().expect("the wgpu backend");
+            Ok(Box::new(App::new(rs)))
+        }),
     )
 }

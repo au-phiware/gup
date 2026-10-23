@@ -8,10 +8,10 @@
 //! DOGFOOD_AUTO=1 performs a scripted brush drag and saves a screenshot.
 
 use eframe::egui;
-use gup_core::geom::Point;
+use gup_core::ScatterChart;
 use gup_core::prelude::*;
-use gup_core::{Button, Input, ScatterChart};
 use gup_dogfood::*;
+use gup_egui::GupWidget;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -102,8 +102,8 @@ fn right_chart(data: &[Pt], selected: &[usize]) -> ScatterChart<R> {
 }
 
 struct App {
-    tex_left: ChartTexture,
-    tex_right: ChartTexture,
+    widget_left: GupWidget,
+    widget_right: GupWidget,
     data: Vec<Pt>,
     left: ScatterChart<Pt>,
     right: ScatterChart<R>,
@@ -115,13 +115,13 @@ struct App {
 }
 
 impl App {
-    fn new() -> Self {
+    fn new(render_state: &eframe::egui_wgpu::RenderState) -> Self {
         let mut data = load_points().expect("points.csv");
         data.truncate(N);
         let shared = Arc::new(Shared::default());
         Self {
-            tex_left: ChartTexture::new(),
-            tex_right: ChartTexture::new(),
+            widget_left: GupWidget::new(render_state),
+            widget_right: GupWidget::new(render_state),
             left: left_chart(&data, shared.clone()),
             right: right_chart(&data, &[]),
             data,
@@ -163,43 +163,9 @@ impl eframe::App for App {
         egui::TopBottomPanel::bottom("status").show(ctx, |ui| ui.label(&self.status));
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.horizontal(|ui| {
-                let (rect, _) = ui.allocate_exact_size(egui::vec2(W, H), egui::Sense::drag());
-                self.tex_left.show(ui, rect, &mut self.left);
-                // Pointer events to the left chart, in texture-local pixels.
-                let local = |p: egui::Pos2| Point::new(p.x - rect.min.x, p.y - rect.min.y);
-                let events = ctx.input(|i| i.events.clone());
-                for e in events {
-                    let input = match e {
-                        egui::Event::PointerMoved(p) => Input::PointerMoved { at: local(p) },
-                        egui::Event::PointerButton {
-                            pos,
-                            button: egui::PointerButton::Primary,
-                            pressed,
-                            ..
-                        } if pressed && rect.contains(pos) => Input::PointerDown {
-                            at: local(pos),
-                            button: Button::Primary,
-                        },
-                        egui::Event::PointerButton {
-                            pos,
-                            button: egui::PointerButton::Primary,
-                            pressed: false,
-                            ..
-                        } => Input::PointerUp {
-                            at: local(pos),
-                            button: Button::Primary,
-                        },
-                        _ => continue,
-                    };
-                    if self.left.handle(input).redraw {
-                        self.tex_left.dirty = true;
-                    }
-                }
-                let r2 = egui::Rect::from_min_size(
-                    rect.right_top() + egui::vec2(10.0, 0.0),
-                    egui::vec2(W, H),
-                );
-                self.tex_right.show(ui, r2, &mut self.right);
+                let size = egui::vec2(W, H);
+                self.widget_left.show(ui, size, &mut self.left);
+                self.widget_right.show(ui, size, &mut self.right);
             });
         });
         // Propagate selection changes: rebuild the right chart.
@@ -209,7 +175,6 @@ impl eframe::App for App {
             let t0 = Instant::now();
             let rows = self.shared.rows.lock().unwrap().clone();
             self.right = right_chart(&self.data, &rows);
-            self.tex_right.dirty = true;
             self.status = format!("brushed {} of {N} (rebuild {:?})", rows.len(), t0.elapsed());
         }
         if self.auto {
@@ -234,6 +199,9 @@ fn main() -> eframe::Result {
     eframe::run_native(
         "gup dogfood t4",
         options,
-        Box::new(|_cc| Ok(Box::new(App::new()))),
+        Box::new(|cc| {
+            let rs = cc.wgpu_render_state.as_ref().expect("the wgpu backend");
+            Ok(Box::new(App::new(rs)))
+        }),
     )
 }

@@ -1548,8 +1548,18 @@ dependencies = [
  "eframe",
  "env_logger",
  "gup-core",
+ "gup-egui",
  "image 0.24.9",
  "pollster 0.3.0",
+]
+
+[[package]]
+name = "gup-egui"
+version = "0.1.0"
+dependencies = [
+ "eframe",
+ "egui",
+ "gup-core",
 ]
 
 [[package]]
