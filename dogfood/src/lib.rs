@@ -50,6 +50,12 @@ pub struct ChartTexture {
     pub last_render: std::time::Duration,
 }
 
+impl Default for ChartTexture {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ChartTexture {
     pub fn new() -> Self {
         Self {

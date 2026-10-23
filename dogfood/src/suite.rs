@@ -295,27 +295,6 @@ impl Measure {
 }
 
 // --------------------------------------------------------------------------
-// Known gaps (each one observed in the task outputs on 2026-10-04)
-// --------------------------------------------------------------------------
-
-const NO_TEXT: Gap =
-    Gap("PNG/texture output renders no text: no title, tick labels or legend (RFC-001 S2/S3)");
-const DOUBLE_GAMMA: Gap = Gap(
-    "colours are gamma-encoded twice, e.g. #1f77b4 renders ~#8ebddb (T4a; RFC-001 S3 colour policy)",
-);
-const NO_GRID: Gap = Gap(
-    "grid is configured but not drawn in PNG/texture output; SVG has it (RFC-001 S3/S7 guides)",
-);
-const WGSL_DUPLICATE_UNIFORMS: Gap = Gap(
-    "#[wgsl_function] output embeds its uniforms struct and Selection's shader assembly emits it \
-     again (RFC-001 S5 ShaderFn v2 / module composition)",
-);
-const SELECTION_CLIP_SPACE: Gap = Gap(
-    "a raw Selection draws in whole-canvas clip space while ComposedChart axes use the plot rect, \
-     so data mapped with the axis scales lands outside the axes (RFC-001 S7 Layout)",
-);
-
-// --------------------------------------------------------------------------
 // Palette and regions shared by several tasks
 // --------------------------------------------------------------------------
 
@@ -336,15 +315,6 @@ fn check(file: &'static str, what: &'static str, measure: Measure) -> Check {
         what,
         measure,
         gap: None,
-    }
-}
-
-fn gap(file: &'static str, what: &'static str, measure: Measure, gap: Gap) -> Check {
-    Check {
-        file,
-        what,
-        measure,
-        gap: Some(gap),
     }
 }
 
@@ -374,8 +344,7 @@ pub fn tasks() -> Vec<Task> {
         t2(),
         t3_png(),
         t5_stream(),
-        t6_tutorial(),
-        t6_workaround(),
+        t6(),
         t3_window(),
         t4(),
         t5_live(),
@@ -445,7 +414,7 @@ fn ref_export_png() -> Task {
         bin: "ref_export_png",
         env: &[],
         kind: Kind::Headless,
-        intent: "reference: gup's own PNG export example (Selection + ComposedChart, title, grid), built externally",
+        intent: "reference: PNG export of a titled, gridded scatter at 1x, 2x and a large size, built externally",
         exit: Exit::Success,
         checks: vec![
             check(
@@ -478,7 +447,7 @@ fn ref_export_png() -> Task {
                     min_fraction: 0.002,
                 },
             ),
-            gap(
+            check(
                 f,
                 "steel blue renders as configured",
                 Measure::Colour {
@@ -487,34 +456,32 @@ fn ref_export_png() -> Task {
                     tol: 12,
                     min_px: 500,
                 },
-                DOUBLE_GAMMA,
             ),
-            gap(
+            check(
                 f,
                 "title text present",
                 Measure::Ink {
                     region: title_band(0.08),
                     min_px: 30,
                 },
-                NO_TEXT,
             ),
-            gap(
+            check(
                 f,
                 "grid lines drawn in the empty plot area",
                 Measure::Grey {
                     region: Region::new(0.55, 0.55, 0.9, 0.78),
                     min_px: 300,
                 },
-                NO_GRID,
             ),
-            gap(
+            check(
                 f,
                 "no points left of the y axis",
                 Measure::NoColour {
-                    region: Region::new(0.0, 0.05, 0.15, 0.95),
+                    // Left of the plot rect (x 0.051..0.985, y 0.07..0.945 of a
+                    // fresh 800x600 `Layout`); was 0.0..0.15 x 0.05..0.95.
+                    region: Region::new(0.0, 0.07, 0.045, 0.945),
                     max_px: 0,
                 },
-                SELECTION_CLIP_SPACE,
             ),
         ],
     }
@@ -873,29 +840,17 @@ fn t5_stream() -> Task {
     }
 }
 
-fn t6_tutorial() -> Task {
-    Task {
-        name: "t6_wgsl_tutorial",
-        bin: "t6_wgsl",
-        env: &[("RAW_MACRO", "1")],
-        kind: Kind::Headless,
-        intent: "task 6: a custom #[wgsl_function] GPU transform in a downstream crate, exactly as Tutorial 3 shows",
-        exit: Exit::Fails {
-            stderr_contains: "redefinition of `KneeRadiusUniforms`",
-            gap: WGSL_DUPLICATE_UNIFORMS,
-        },
-        checks: vec![],
-    }
-}
-
-fn t6_workaround() -> Task {
+// The plot rect of a fresh 600x600 `Layout` is x 0.08..0.98, y 0.02..0.945;
+// the 20 columns of points sit at 0.125, 0.168 .. 0.935 (old regions spanned
+// the whole canvas: 0..0.08 and 0.92..1.0).
+fn t6() -> Task {
     let f = "t6_wgsl.png";
     Task {
-        name: "t6_wgsl_workaround",
+        name: "t6_wgsl",
         bin: "t6_wgsl",
         env: &[],
         kind: Kind::Headless,
-        intent: "task 6 workaround: the same transform, wrapped to strip the duplicate uniforms struct",
+        intent: "task 6: custom #[wgsl_function] GPU transforms (radius and colour ramp) in a downstream crate",
         exit: Exit::Success,
         checks: vec![
             check(
@@ -907,7 +862,7 @@ fn t6_workaround() -> Task {
                 f,
                 "v=0 column: small radius",
                 Measure::Coverage {
-                    region: Region::new(0.0, 0.0, 0.08, 1.0),
+                    region: Region::new(0.10, 0.02, 0.15, 0.945),
                     min: 0.0,
                     max: 0.08,
                 },
@@ -916,7 +871,7 @@ fn t6_workaround() -> Task {
                 f,
                 "v=1 column: large radius",
                 Measure::Coverage {
-                    region: Region::new(0.92, 0.0, 1.0, 1.0),
+                    region: Region::new(0.92, 0.02, 0.97, 0.945),
                     min: 0.25,
                     max: 1.0,
                 },
@@ -926,21 +881,20 @@ fn t6_workaround() -> Task {
                 f,
                 "v=1 column: orange-family fill",
                 Measure::Hue {
-                    region: Region::new(0.92, 0.0, 1.0, 1.0),
+                    region: Region::new(0.92, 0.02, 0.97, 0.945),
                     rgb: ORANGE,
                     min_px: 1000,
                 },
             ),
-            gap(
+            check(
                 f,
                 "v=1 column: fill renders as configured",
                 Measure::Colour {
-                    region: Region::new(0.92, 0.0, 1.0, 1.0),
+                    region: Region::new(0.92, 0.02, 0.97, 0.945),
                     rgb: [1.0, 0.3, 0.0],
                     tol: 16,
                     min_px: 500,
                 },
-                DOUBLE_GAMMA,
             ),
         ],
     }

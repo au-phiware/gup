@@ -1,60 +1,66 @@
 // Copyright (C) 2026 Corin Lawson
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Task 6: a custom GPU transform with #[wgsl_function] in a downstream
-//! crate, wired through `attr_shader`, following Tutorial 3 verbatim.
+//! Task 6: custom GPU transforms with `#[wgsl_function]` in a downstream
+//! crate: a soft-knee radius and a blue-to-orange colour ramp, each applied
+//! to a `Circle` channel.
 
-use gup::prelude::*;
-use gup::proc_macros::wgsl_function;
-// The audit needed `use gup::*;` here and a direct `bytemuck` dependency
-// because the macro expanded to `crate::`/bare `bytemuck::` paths. Both
-// workarounds were removed after GUP-377 made the expansion use `::gup`.
-use std::sync::Arc;
+use gup_core::prelude::*;
 
 /// Map a normalised value to a radius with a soft-knee curve.
-#[wgsl_function]
-fn knee_radius(v: f32, min_r: f32, max_r: f32) -> f32 {
-    return min_r + (max_r - min_r) * (v * v) / (v * v + 0.1);
+#[derive(Clone, Debug)]
+struct Knee {
+    min_r: f32,
+    max_r: f32,
 }
 
-/// Second workaround: the macro's `wgsl_function()` string embeds the
-/// uniforms struct and Selection's shader assembly emits it again, so wgpu
-/// panics with "redefinition of `KneeRadiusUniforms`". Wrap and strip it.
-#[derive(Debug, Clone)]
-struct KneeFixed(KneeRadius);
+#[wgsl_function(wgsl = r#"
+    struct Params { min_r: f32, max_r: f32 }
 
-impl gup::shader_function::core::ComposableShaderFunction for KneeFixed {
-    type Input = f32;
-    type Output = f32;
-    type Uniforms = KneeRadiusUniforms;
-    fn wgsl_function() -> &'static str {
-        static S: std::sync::OnceLock<String> = std::sync::OnceLock::new();
-        S.get_or_init(|| {
-            let src = KneeRadius::wgsl_function();
-            src[src.find("fn ").unwrap()..].to_string()
-        })
+    fn knee_radius(v: f32, p: Params) -> f32 {
+        return p.min_r + (p.max_r - p.min_r) * (v * v) / (v * v + 0.1);
     }
-    fn create_uniforms(&self) -> Option<Self::Uniforms> {
-        self.0.create_uniforms()
+"#)]
+impl ShaderFn for Knee {
+    type Out = Px;
+
+    fn params(&self) -> KneeParams {
+        KneeParams {
+            min_r: self.min_r,
+            max_r: self.max_r,
+        }
     }
-    fn function_name() -> &'static str {
-        KneeRadius::function_name()
+}
+
+/// Map a value in 0..1 to a colour from blue to orange-red.
+#[derive(Clone, Debug)]
+struct Ramp;
+
+#[wgsl_function(wgsl = r#"
+    struct Params { pad: f32 }
+
+    fn ramp(v: f32, p: Params) -> vec4<f32> {
+        return vec4<f32>(v, 0.3, 1.0 - v, 1.0);
+    }
+"#)]
+impl ShaderFn for Ramp {
+    fn params(&self) -> RampParams {
+        RampParams { pad: 0.0 }
     }
 }
 
 #[derive(Debug, Clone)]
 struct Reading {
-    x: f32,
-    y: f32,
-    v: f32,
+    x: f64,
+    y: f64,
+    v: f64,
 }
 
-#[tokio::main]
-async fn main() -> GupResult<()> {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
     let data: Vec<Reading> = (0..400)
         .map(|i| {
-            let (gx, gy) = ((i % 20) as f32 / 19.0, (i / 20) as f32 / 19.0);
+            let (gx, gy) = ((i % 20) as f64 / 19.0, (i / 20) as f64 / 19.0);
             Reading {
                 x: gx * 1.8 - 0.9,
                 y: gy * 1.8 - 0.9,
@@ -63,38 +69,23 @@ async fn main() -> GupResult<()> {
         })
         .collect();
 
-    println!("generated WGSL:\n{}", KneeRadius::wgsl_function());
-
-    let context = Arc::new(RenderContext::new().await?);
-    let mut sel = Selection::<Reading, Circle>::new(data, context.clone())?;
-    sel.attr("center", |d: &Reading| [d.x, d.y])
-        .attr("fill_color", |d: &Reading| [d.v, 0.3, 1.0 - d.v, 1.0])
-        .attr("stroke_width", |_: &Reading| 0.0f32);
-    if std::env::var("BUILTIN").is_ok() {
-        sel.attr_shader(
-            "radius",
-            |d: &Reading| d.v,
-            LinearScale::new(0.0, 1.0, 0.005, 0.04),
-        );
-    } else if std::env::var("RAW_MACRO").is_ok() {
-        // Panics at prepare time: duplicate uniforms struct in the shader.
-        sel.attr_shader("radius", |d: &Reading| d.v, KneeRadius::new(0.005, 0.04));
-    } else {
-        sel.attr_shader(
-            "radius",
-            |d: &Reading| d.v,
-            KneeFixed(KneeRadius::new(0.005, 0.04)),
-        );
-    }
-    sel.prepare_render_bound(context.device(), context.queue(), None, None)?;
-
-    // Render it via a ComposedChart so we can use export_png.
-    let config = gup::chart_builder::ChartConfig {
-        show_axes: false,
-        ..Default::default()
-    };
-    let mut chart = gup::chart_builder::ComposedChart::new(sel, config);
-    chart.export_png("/tmp/gup-dogfood/t6_wgsl.png", 600, 600)?;
+    let cx = Context::new_blocking()?;
+    let mut plot = Plot::new();
+    plot.x(Linear::new().domain(-1.0, 1.0));
+    plot.y(Linear::new().domain(-1.0, 1.0));
+    plot.circles(data)
+        .x(|r: &Reading| r.x)
+        .y(|r: &Reading| r.y)
+        .attr(
+            Circle::RADIUS,
+            Knee {
+                min_r: 1.5,
+                max_r: 12.0,
+            }
+            .encode(|r: &Reading| r.v),
+        )
+        .attr(Circle::FILL, Ramp.encode(|r: &Reading| r.v));
+    plot.save_png(&cx, "/tmp/gup-dogfood/t6_wgsl.png", 600, 600)?;
     println!("wrote /tmp/gup-dogfood/t6_wgsl.png");
     Ok(())
 }

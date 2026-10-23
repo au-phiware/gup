@@ -210,7 +210,7 @@ whatever it cannot fix, so only the strict runs after it can fail.
 
 ```bash
 concurrently --group --names clippy,statix,mdl,gha \
-   'cargo clippy --allow-no-vcs --fix --workspace --all-targets --all-features && cargo fmt --all && cargo clippy --workspace --all-targets -- -D warnings && cargo clippy --workspace --all-targets --all-features -- -D warnings && cargo clippy -p gup-core --lib --no-default-features -- -D warnings && ./scripts/clippy_wasm32.sh' \
+   'cargo clippy --allow-no-vcs --fix --workspace --all-targets --all-features && cargo clippy --allow-no-vcs --fix --manifest-path dogfood/Cargo.toml --all-targets && cargo fmt --all && cargo clippy --workspace --all-targets -- -D warnings && cargo clippy --workspace --all-targets --all-features -- -D warnings && cargo clippy --manifest-path dogfood/Cargo.toml --all-targets -- -D warnings && cargo clippy -p gup-core --lib --no-default-features -- -D warnings && ./scripts/clippy_wasm32.sh' \
    'statix fix flake.nix' \
    'mdl --git-recurse .' \
    'actionlint .github/workflows/*.y*ml'
@@ -226,7 +226,7 @@ default features and with all features, then the wasm32 libs
 
 ```bash
 concurrently --group --names clippy,statix,mdl,gha \
-   'cargo clippy --workspace --all-targets -- -D warnings && cargo clippy --workspace --all-targets --all-features -- -D warnings && cargo clippy -p gup-core --lib --no-default-features -- -D warnings && ./scripts/clippy_wasm32.sh' \
+   'cargo clippy --workspace --all-targets -- -D warnings && cargo clippy --workspace --all-targets --all-features -- -D warnings && cargo clippy --manifest-path dogfood/Cargo.toml --all-targets -- -D warnings && cargo clippy -p gup-core --lib --no-default-features -- -D warnings && ./scripts/clippy_wasm32.sh' \
    'statix check flake.nix' \
    'mdl --git-recurse .' \
    'actionlint .github/workflows/*.y*ml'
@@ -269,7 +269,7 @@ only checks.
 ```bash
 shopt -qs globstar
 concurrently --group --names rs,nix,md,gha \
-   'git grep -lz --untracked "[[:space:]]\+$" -- "*.rs" | xargs -0 -r sed -i "/[[:space:]]\+$/s///" && cargo fmt --all && cargo fmt --manifest-path dogfood/Cargo.toml && cargo clippy --allow-no-vcs --fix --workspace --all-targets --all-features && cargo clippy --workspace --all-targets -- -D warnings && cargo clippy --workspace --all-targets --all-features -- -D warnings && cargo clippy -p gup-core --lib --no-default-features -- -D warnings && ./scripts/clippy_wasm32.sh' \
+   'git grep -lz --untracked "[[:space:]]\+$" -- "*.rs" | xargs -0 -r sed -i "/[[:space:]]\+$/s///" && cargo fmt --all && cargo fmt --manifest-path dogfood/Cargo.toml && cargo clippy --allow-no-vcs --fix --workspace --all-targets --all-features && cargo clippy --workspace --all-targets -- -D warnings && cargo clippy --workspace --all-targets --all-features -- -D warnings && cargo clippy --manifest-path dogfood/Cargo.toml --all-targets -- -D warnings && cargo clippy -p gup-core --lib --no-default-features -- -D warnings && ./scripts/clippy_wasm32.sh' \
    'nixfmt flake.nix && statix fix flake.nix' \
    'prettier --cache --log-level warn --write "**/*.md" && mdl --git-recurse .' \
    'actionlint .github/workflows/*.y*ml'
@@ -311,7 +311,7 @@ the index. CI runs its own full checks on every push regardless.
 shopt -qs globstar
 concurrently --group --names '\s,rs,nix,md,gha,marks,gallery,hook' \
    'git --no-pager grep --untracked --name-only --full-name "[[:space:]]\+$" -- "*.rs"; test $? -eq 1' \
-   'cargo fmt --all -- --check && cargo fmt --manifest-path dogfood/Cargo.toml -- --check && cargo clippy --workspace --all-targets -- -D warnings && cargo clippy --workspace --all-targets --all-features -- -D warnings && cargo clippy -p gup-core --lib --no-default-features -- -D warnings && ./scripts/clippy_wasm32.sh' \
+   'cargo fmt --all -- --check && cargo fmt --manifest-path dogfood/Cargo.toml -- --check && cargo clippy --workspace --all-targets -- -D warnings && cargo clippy --workspace --all-targets --all-features -- -D warnings && cargo clippy --manifest-path dogfood/Cargo.toml --all-targets -- -D warnings && cargo clippy -p gup-core --lib --no-default-features -- -D warnings && ./scripts/clippy_wasm32.sh' \
    'nixfmt --check flake.nix && statix check flake.nix' \
    'prettier --cache --log-level warn --check "**/*.md" && mdl --git-recurse .' \
    'actionlint .github/workflows/*.y*ml' \

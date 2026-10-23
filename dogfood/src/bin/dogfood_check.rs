@@ -226,10 +226,10 @@ fn run_task(bin_dir: &Path, task: Task, timeout: Duration, skip_windowed: bool) 
             }
         }
     }
-    if let RunResult::Exited { stderr, .. } = &result {
-        if lines.iter().any(|l| l.status.is_failure()) {
-            report.log_tail = tail(stderr, 8);
-        }
+    if let RunResult::Exited { stderr, .. } = &result
+        && lines.iter().any(|l| l.status.is_failure())
+    {
+        report.log_tail = tail(stderr, 8);
     }
 
     if run_checks {

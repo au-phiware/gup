@@ -13,9 +13,8 @@ therefore tracked continuously instead of being recorded once.
 ## Why it is a detached crate
 
 `Cargo.toml` declares its own empty `[workspace]` and depends on
-`gup = { path = ".." }` (the old API, for the tasks that have not moved) and
 `gup-core = { path = "../crates/gup-core" }` (the new core, until RFC-001 S14
-renames it to `gup`). As a result it:
+renames it to `gup`). No task uses the old `gup` API any more. As a result it:
 
 - is **not** a member of the parent workspace, so `cargo build` at the repo root
   does not build it, and it cannot see `pub(crate)` items;
@@ -64,10 +63,9 @@ Never "fix" a gap by loosening its check. Fix Gup instead, watch the check
   deliberately small and should migrate to the shared visual-assertion module
   (GUP-388) once that lands.
 - `src/bin/*.rs` are the tasks. `t0` to `t5_stream` are written against
-  `gup_core` (GUP-465, GUP-480); `ref_export_png` and `t6_*` still use the old
-  `gup` API until RFC-001 S14. When the new core replaces that API, rewrite the
-  remaining binaries. The manifest stays put, so the bar the task has to clear
-  does not move. RFC-001 step S10's exit criterion is "dogfood tasks 1-3 pass".
+  `gup_core` (GUP-465, GUP-480, GUP-485). The manifest stays put, so the bar the
+  task has to clear does not move. RFC-001 step S10's exit criterion is "dogfood
+  tasks 1-3 pass".
 - `src/bin/dogfood_check.rs` is the runner.
 
 ## The tasks
@@ -83,13 +81,11 @@ The others are recorded here, from the task sources, but have no pixel check.
   dots are smaller than the old builder's stretched ellipses, so a plain
   coverage fraction no longer fits). The audit also tried the README-style
   `plot().scatter(x("x"), y("y"))` route; GUP-389 deleted that API.
-- **`ref_export_png`**: Gup's own `examples/export_png.rs` (a raw `Selection`
-  inside a `ComposedChart`, with title, subtitle and grid), copied and built as
-  an external crate, so the reference path is checked from outside too. Steel
-  blue points render, but at a lighter colour than configured _(tracked: double
-  gamma)_. Title missing _(tracked)_. Grid missing _(tracked)_. The point at x=1
-  lands left of the y axis because the selection draws in whole-canvas clip
-  space while the axes use the plot rect _(tracked)_.
+- **`ref_export_png`**: a titled, gridded scatter of ten points (a plain
+  `circles` layer on a `Plot`), exported at 800x600, as a 1600x1200 `@2x` image
+  (`dpr` 2) and at 2400x1600, built as an external crate. Title, ticks, grid and
+  steel-blue points with dark rims render as configured; no tracked failures.
+  The old subtitle is dropped (`gup-core` has no subtitle).
 
 ### Task 1: `t1_timeseries`
 
@@ -157,18 +153,15 @@ Append points every 100 ms without rebuilding the chart.
 
 ### Task 6: `t6_wgsl`
 
-A custom `#[wgsl_function]` GPU transform (a soft-knee radius) in a downstream
-crate, wired through `attr_shader`, following Tutorial 3.
+Two custom `#[wgsl_function]` GPU transforms in a downstream crate: a soft-knee
+radius (`Knee`, in `Px`) and a blue-to-orange-red colour ramp (`Ramp`,
+`vec4<f32>`), applied to `Circle::RADIUS` and `Circle::FILL` of a 20x20 grid on
+a plot with fixed -1..1 domains.
 
-- Since GUP-377, the macro compiles in an external crate with no workarounds.
-  The audit's `use gup::*;` glob and direct `bytemuck` dependency are gone.
-- `t6_wgsl_tutorial` (`RAW_MACRO=1`) uses the macro output exactly as the
-  tutorial shows. It still **panics**: wgpu reports "redefinition of
-  `KneeRadiusUniforms`", because the macro's WGSL embeds the uniforms struct and
-  `Selection`'s shader assembly emits it again _(tracked expected failure)_.
-- `t6_wgsl_workaround` wraps the generated type and strips the struct from its
-  WGSL. Point radii then grow left to right as intended. Colours are not the
-  exact configured values _(tracked: double gamma)_.
+- The macro compiles in an external crate with no workarounds (`Params` must be
+  padded; the macro reports the rule at compile time).
+- Point radii grow left to right and the fill runs blue to orange-red, at the
+  exact configured values. No tracked failures.
 
 ## Fixtures
 

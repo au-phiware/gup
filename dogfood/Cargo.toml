@@ -9,9 +9,7 @@ publish = false
 [workspace]
 
 [dependencies]
-gup = { path = ".." }
 gup-core = { path = "../crates/gup-core" }
-tokio = { version = "1", features = ["full"] }
 csv = "1.3"
 chrono = "0.4"
 env_logger = "0.10"
