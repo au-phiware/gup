@@ -441,7 +441,7 @@ findings", GUP-396).
   S13b: `gup-bevy` rewritten on `gup-core`, back in the workspace, with its CI
   placement decided by a measured compile-cost rule. Deps: GUP-480 ✅, GUP-483
   📋 (soft).
-- [GUP-485](GUP-485_RFC_001_S14a_Dogfood_Residue_On_Gup_Core.md) 🚧 — RFC-001
+- [GUP-485](GUP-485_RFC_001_S14a_Dogfood_Residue_On_Gup_Core.md) ✅ — RFC-001
   step S14a: `ref_export_png` and `t6_wgsl` on `gup-core`; the suite has no
   XFAIL and no `gup` dependency. Deps: GUP-465 ✅, GUP-480 ✅.
 - [GUP-486](GUP-486_RFC_001_S14b_Delete_Old_Chart_Builder.md) 📋 — RFC-001 step

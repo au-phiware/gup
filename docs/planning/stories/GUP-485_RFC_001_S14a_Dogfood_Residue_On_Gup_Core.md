@@ -9,8 +9,8 @@ implementer-reason:
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 🚧 In Progress **Created**:
-2026-10-19
+**Initiative**: RFC-001 Migration **Status**: ✅ Complete (2026-10-23)
+**Created**: 2026-10-19
 
 ## Context
 
@@ -52,8 +52,8 @@ the dogfood suite has no tracked gap left from the old path, and
 
 ### AC1: `ref_export_png`
 
-- [ ] Rewritten as in Decisions; imports only `gup_core` (and non-Gup crates).
-- [ ] Its checks keep their measures and thresholds. The gap checks "steel blue
+- [x] Rewritten as in Decisions; imports only `gup_core` (and non-Gup crates).
+- [x] Its checks keep their measures and thresholds. The gap checks "steel blue
       renders as configured", "title text present", "grid lines drawn in the
       empty plot area" and "no points left of the y axis" become plain checks;
       regions that moved are re-derived from a fresh render's `Layout` and
@@ -61,29 +61,29 @@ the dogfood suite has no tracked gap left from the old path, and
 
 ### AC2: `t6_wgsl`
 
-- [ ] Rewritten as in Decisions, with no workaround type and no `RAW_MACRO`
+- [x] Rewritten as in Decisions, with no workaround type and no `RAW_MACRO`
       branch; imports only `gup_core`.
-- [ ] `t6_tutorial` and `t6_workaround` become one task, `t6_wgsl`, with the
+- [x] `t6_tutorial` and `t6_workaround` become one task, `t6_wgsl`, with the
       workaround task's checks: "fill renders as configured" becomes a plain
       check; the column regions are re-derived from `Layout` (the plot now has
       axes) and listed old → new. No threshold is lowered.
 
 ### AC3: Gaps and dependency
 
-- [ ] `NO_TEXT`, `DOUBLE_GAMMA`, `NO_GRID`, `SELECTION_CLIP_SPACE` and
+- [x] `NO_TEXT`, `DOUBLE_GAMMA`, `NO_GRID`, `SELECTION_CLIP_SPACE` and
       `WGSL_DUPLICATE_UNIFORMS` are deleted from `suite.rs`; `git grep` finds no
       use. If GUP-480 has landed, `STREAM_NEVER_READY` is already gone.
-- [ ] `dogfood/Cargo.toml` no longer depends on `gup` (nor `tokio`, if nothing
+- [x] `dogfood/Cargo.toml` no longer depends on `gup` (nor `tokio`, if nothing
       else uses it). `git grep -n "gup::" dogfood/` is empty.
-- [ ] `xvfb-run -a ./dogfood/run_all.sh` reports no FAIL, no XPASS and no XFAIL:
+- [x] `xvfb-run -a ./dogfood/run_all.sh` reports no FAIL, no XPASS and no XFAIL:
       paste the summary line.
-- [ ] The implementer reads `ref_export_png.png` (title, ticks, grid, ten
+- [x] The implementer reads `ref_export_png.png` (title, ticks, grid, ten
       steel-blue points with dark rims inside the plot) and `t6_wgsl.png` (a
       20×20 grid, radii growing left to right, blue to orange-red).
 
 ### AC4: Docs
 
-- [ ] `dogfood/README.md` describes both tasks as they now are (no tracked
+- [x] `dogfood/README.md` describes both tasks as they now are (no tracked
       failures, the dropped subtitle), and its intro says no task uses the old
       path.
 
@@ -149,9 +149,9 @@ the dogfood suite has no tracked gap left from the old path, and
 
 ## Technical Tasks
 
-- [ ] Port `ref_export_png`; re-derive regions; turn gaps into checks.
-- [ ] Port `t6_wgsl`; merge the two tasks; re-derive regions.
-- [ ] Delete gaps and the `gup` dependency; README; suite run.
+- [x] Port `ref_export_png`; re-derive regions; turn gaps into checks.
+- [x] Port `t6_wgsl`; merge the two tasks; re-derive regions.
+- [x] Delete gaps and the `gup` dependency; README; suite run.
 
 ## Dependencies
 
@@ -173,7 +173,7 @@ the dogfood suite has no tracked gap left from the old path, and
 
 ## Success Metrics
 
-- [ ] Dogfood has no XFAIL and no dependency on the old path.
+- [x] Dogfood has no XFAIL and no dependency on the old path.
 
 ## Risk Assessment
 
@@ -185,16 +185,70 @@ the dogfood suite has no tracked gap left from the old path, and
 
 ## Definition of Done
 
-- [ ] First code commit within 30 minutes of starting; then commit at each
+- [x] First code commit within 30 minutes of starting; then commit at each
       checkpoint (story-worker "Checkpoint rule")
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] `cargo test --manifest-path dogfood/Cargo.toml` passes
-- [ ] `xvfb-run -a ./dogfood/run_all.sh` passes (no FAIL, no XPASS, no XFAIL)
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] `mask wasm-browser`: not needed (dogfood only; no layout, input or wasm
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] `cargo test --manifest-path dogfood/Cargo.toml` passes
+- [x] `xvfb-run -a ./dogfood/run_all.sh` passes (no FAIL, no XPASS, no XFAIL)
+- [x] Lint and format clean: `mask all-fix`
+- [x] `mask wasm-browser`: not needed (dogfood only; no layout, input or wasm
       change); say so in the Implementation Summary
-- [ ] WASM size: no library code changes; record "unchanged"
-- [ ] Rendered output verified by eye: `ref_export_png.png`, `t6_wgsl.png`
-- [ ] `mask old-path-loc` recorded (expected unchanged)
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] WASM size: no library code changes; record "unchanged"
+- [x] Rendered output verified by eye: `ref_export_png.png`, `t6_wgsl.png`
+- [x] `mask old-path-loc` recorded (expected unchanged)
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `ref_export_png` and `t6_wgsl` ported to `gup_core` as in Decisions. `Knee`
+  needed `type Out = Px;` (a `Circle::RADIUS` channel is `Px`; the macro's own
+  rule, not an escalation). The subtitle and the gallery hook are dropped.
+- Suite: `NO_TEXT`, `DOUBLE_GAMMA`, `NO_GRID`, `SELECTION_CLIP_SPACE`,
+  `WGSL_DUPLICATE_UNIFORMS`, the unused `gap()` helper and the
+  `t6_wgsl_tutorial` task are deleted; `t6_wgsl_workaround` is now `t6_wgsl`.
+  The `Gap` / `Exit::Fails` runner machinery stays for future gaps.
+- Regions, old -> new (from fresh `Layout`s; thresholds unchanged):
+  - ref "no points left of the y axis": (0, 0.05, 0.15, 0.95) -> (0, 0.07,
+    0.045, 0.945); plot rect is x 0.051..0.985, y 0.07..0.945.
+  - t6 v=0 column: (0, 0, 0.08, 1) -> (0.10, 0.02, 0.15, 0.945); v=1 column
+    (0.92, 0, 1, 1) -> (0.92, 0.02, 0.97, 0.945); plot rect x 0.08..0.98, y
+    0.02..0.945.
+- `dogfood/Cargo.toml` drops `gup` and `tokio`; `git grep "gup::" dogfood/src`
+  is empty. README updated.
+- Gate: `mask all-fix`/`all-check` now run
+  `cargo clippy --manifest-path dogfood/Cargo.toml --all-targets -- -D warnings`;
+  fixed `ChartTexture` (`Default`) and a collapsible `if` in `dogfood_check`.
+- Evidence: dogfood suite `Tasks: 10 pass, 0 XFAIL, 0 FAIL, 0 XPASS` (Xvfb +
+  lavapipe); `cargo test --manifest-path dogfood/Cargo.toml` 18 pass;
+  `mask all-check` passes; old-path LOC 26,601 (unchanged); WASM over_wgpu
+  299,241 B gz (unchanged, no library change); `mask wasm-browser` not needed.
+  Read `ref_export_png.png` (title, ticks, grid, ten steel-blue points with dark
+  rims inside the plot) and `t6_wgsl.png` (20x20 grid, radii growing left to
+  right, blue to orange-red).
+
+## Retrospective
+
+**Completed**: 2026-10-23
+
+### Key Technical Learnings
+
+- **Challenge**: `Knee` rejected on `Circle::RADIUS` (Output f32 vs Px).
+  **Solution**: `type Out = Px;` in the `ShaderFn` impl. **Pattern**: pixel
+  channels need `Out = Px`.
+- The `t3_scatter_window` run failed with a Vulkan ICD from the i686 lavapipe
+  json; use `lvp_icd.x86_64.json`.
+
+### Architectural Decisions
+
+- Kept the `Gap` machinery with no current user, so the next tracked gap needs
+  only a helper, not a framework. Trade-off: unused-code surface in the runner.
+
+### Development Workflow Insights
+
+- A temporary bin printing `resolve(..).layout.plot` gave exact regions in one
+  run.
+
+### Follow-up Stories
+
+None.
