@@ -1,0 +1,5 @@
+# Detached from the gup workspace: a stand-in for the `gup` facade and a
+# user crate that depends only on it, under a rename (GUP-487).
+[workspace]
+members = ["facade", "user"]
+resolver = "3"

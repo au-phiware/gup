@@ -1,0 +1,9 @@
+[package]
+name = "reexport-user"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+# Depends on the facade only, renamed; not on gup-core.
+[dependencies]
+charts = { package = "gup", path = "../facade" }

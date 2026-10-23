@@ -196,8 +196,8 @@ pub fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
     let name = &input.ident;
     let name_str = name.to_string();
     let vis = &input.vis;
-    let root = quote!(::gup_core);
-    let private = quote!(::gup_core::__private);
+    let root = crate::root::crate_root();
+    let private = quote!(#root::__private);
 
     let Some(geometry) = &args.geometry else {
         return Err(syn::Error::new(

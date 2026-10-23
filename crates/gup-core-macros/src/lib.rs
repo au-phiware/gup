@@ -20,6 +20,7 @@
 
 mod convention;
 mod mark;
+mod root;
 
 use convention::{Convention, Input, Member, Output};
 use gup_wgsl::compose::{Library, PAD_PREFIX, Source, library, validate_wgsl};
@@ -62,6 +63,7 @@ fn stub(attr: TokenStream2, item: TokenStream2) -> TokenStream2 {
     let Some((None, trait_path, _)) = &imp.trait_ else {
         return TokenStream2::new();
     };
+    let root = root::crate_root();
     let (impl_generics, _, where_clause) = imp.generics.split_for_impl();
     let self_ty = &imp.self_ty;
     // The user's items, but for those the macro derives and `params`,
@@ -78,7 +80,7 @@ fn stub(attr: TokenStream2, item: TokenStream2) -> TokenStream2 {
         .unwrap_or(false);
     let mut out = if colour {
         quote!(
-            type Out = ::gup_core::Color;
+            type Out = #root::Color;
         )
     } else {
         quote!(
@@ -106,12 +108,12 @@ fn stub(attr: TokenStream2, item: TokenStream2) -> TokenStream2 {
             type In = f32;
             #out
             type Params = f32;
-            const MODULE: &'static ::gup_core::WgslModule = &::gup_core::__private::wgsl::VIEW;
+            const MODULE: &'static #root::WgslModule = &#root::__private::wgsl::VIEW;
             const ENTRY: &'static str = "";
             fn params(&self) -> f32 {
                 ::core::unreachable!()
             }
-            fn input_format(&self) -> ::gup_core::column::ColumnFormat {
+            fn input_format(&self) -> #root::column::ColumnFormat {
                 ::core::unreachable!()
             }
             #(#kept)*
@@ -478,8 +480,8 @@ fn expand(attr: TokenStream2, item: TokenStream2) -> syn::Result<TokenStream2> {
         ImplItem::Type(t) if t.ident == "Out" => Some(t.ty.clone()),
         _ => None,
     });
-    let root = quote!(::gup_core);
-    let private = quote!(::gup_core::__private);
+    let root = crate::root::crate_root();
+    let private = quote!(#root::__private);
     let in_ty = match conv.input {
         Input::U32 => quote!(u32),
         _ => quote!(f32),
