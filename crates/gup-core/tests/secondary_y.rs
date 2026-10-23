@@ -51,11 +51,9 @@ fn months() -> Vec<Month> {
 fn fixture() -> Fixture {
     let cx = Context::new_blocking().unwrap();
     let mut plot = Plot::new();
-    let (x, y) = (
-        plot.x(Linear::new().domain(0.5, 12.5)),
-        plot.y(Linear::new()),
-    );
+    let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
     let right = plot.y_right(Linear::new());
+    let floor = right.clone();
     plot.title("Rainfall and temperature")
         .x_title("Month")
         .y_title("Temperature (°C)")
@@ -64,7 +62,10 @@ fn fixture() -> Fixture {
         .attr(Rect::X, x.encode(|m: &Month| m.n))
         .attr(Rect::WIDTH, Px(18.0))
         .attr(Rect::Y, right.encode(|m: &Month| m.rain))
-        .attr(Rect::Y_END, right.encode(|_: &Month| 0.0));
+        .attr(
+            Rect::Y_END,
+            Derived::new(move || Px(floor.read().eval(0.0) as f32)),
+        );
     plot.add(Selection::<Month, Line>::new(months()))
         .attr(Line::X, x.encode(|m: &Month| m.n))
         .attr(Line::Y, y.encode(|m: &Month| m.temp))

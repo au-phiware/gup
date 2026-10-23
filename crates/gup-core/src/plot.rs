@@ -1664,6 +1664,19 @@ impl Plot {
         for layer in &mut self.layers {
             layer.fit_domains(cx)?;
         }
+        // Constant and derived positions (a bar's baseline) join the union
+        // of the scale their layer's y is bound to.
+        for layer in &self.layers {
+            let on_right = right.is_some_and(|r| layer.y_axis_id() == Some(r.identity()));
+            for (is_x, px) in layer.fixed_positions() {
+                let s = match (is_x, on_right, right) {
+                    (true, ..) => x,
+                    (false, true, Some(r)) => r,
+                    _ => y,
+                };
+                s.fit_position(f64::from(px));
+            }
+        }
         for s in [Some(x), Some(y), right].into_iter().flatten() {
             if s.is_auto() {
                 s.nice();
@@ -1784,14 +1797,36 @@ impl Plot {
             })
         };
         // 5. Ranges, inset so marks on the domain edge stay inside.
-        let mark_overhang = self.layers.iter().map(|l| l.overhang()).fold(0.0, f32::max);
-        let inset = mark_overhang + th.plot_padding.0;
+        // A width reaches past x only, a height past y only; a band axis
+        // makes its own room, so they do not count there.
+        let right_id = right.map(|r| r.identity());
+        let (mut size, mut ext_x, mut ext_y, mut ext_r) = (0.0f32, 0.0f32, 0.0f32, 0.0f32);
+        for layer in &self.layers {
+            let o = layer.overhang();
+            size = size.max(o.size);
+            ext_x = ext_x.max(o.x);
+            if right_id.is_some() && layer.y_axis_id() == right_id {
+                ext_r = ext_r.max(o.y);
+            } else {
+                ext_y = ext_y.max(o.y);
+            }
+        }
+        let over = |s: &dyn DynPositionScale, ext: f32| {
+            if s.reads_keys() { size } else { size.max(ext) }
+        };
+        let over = [
+            over(&**x, ext_x),
+            over(&**y, ext_y),
+            right.map_or(0.0, |r| over(&**r, ext_r)),
+        ];
+        let mark_overhang = over.into_iter().fold(0.0, f32::max);
+        let inset = over.map(|o| o + th.plot_padding.0);
         // A widened axis already holds the inset in its domain, so its
         // range is the whole plot rect. Any other axis insets only its far
         // end (right, top), so the axes meet at the corner and a baseline
         // sits on its axis.
         let set_ranges = |plot: Rect, widened: [bool; 3]| {
-            let far = |i: usize| if widened[i] { 0.0 } else { inset };
+            let far = |i: usize| if widened[i] { 0.0 } else { inset[i] };
             x.set_range(Px(plot.left()), Px(plot.right() - far(0)));
             y.set_range(Px(plot.bottom()), Px(plot.top() + far(1)));
             if let Some(r) = right {
@@ -1812,10 +1847,10 @@ impl Plot {
             !s.is_auto() && self.zoomed[i].is_some() && self.zoomed[i] == s.current_domain()
         };
         let widened = [
-            x.widen(lay.plot.left(), lay.plot.right(), mark_overhang) || kept(0, &**x),
-            y.widen(lay.plot.bottom(), lay.plot.top(), mark_overhang) || kept(1, &**y),
+            x.widen(lay.plot.left(), lay.plot.right(), over[0]) || kept(0, &**x),
+            y.widen(lay.plot.bottom(), lay.plot.top(), over[1]) || kept(1, &**y),
             right.is_some_and(|r| {
-                r.widen(lay.plot.bottom(), lay.plot.top(), mark_overhang) || kept(2, &**r)
+                r.widen(lay.plot.bottom(), lay.plot.top(), over[2]) || kept(2, &**r)
             }),
         ];
         self.widened = widened;
@@ -1941,12 +1976,12 @@ impl Plot {
         let (x_from, x_to) = if x.is_auto() || widened[0] {
             (ay_x, plot.right() - 0.5)
         } else {
-            (ay_x, plot.right() - inset)
+            (ay_x, plot.right() - inset[0])
         };
         let (y_from, y_to) = if y.is_auto() || widened[1] {
             (plot.top() + 0.5, ax_y)
         } else {
-            (plot.top() + inset, ax_y)
+            (plot.top() + inset[1], ax_y)
         };
         rules.push(axis(Point::new(x_from, ax_y), Point::new(x_to, ax_y)));
         rules.push(axis(Point::new(ay_x, y_from), Point::new(ay_x, y_to)));
@@ -1956,7 +1991,7 @@ impl Plot {
             let (from, to) = if r.is_auto() || widened[2] {
                 (plot.top() + 0.5, ax_y)
             } else {
-                (plot.top() + inset, ax_y)
+                (plot.top() + inset[2], ax_y)
             };
             rules.push(axis(Point::new(by_x, from), Point::new(by_x, to)));
         }

@@ -295,3 +295,46 @@ fn horizontal_bars_measure_to_their_band_and_value() {
         assert!(x1 >= f64::from(right) - 1.0);
     }
 }
+
+/// GUP-494: a constant bar width on a numeric axis reports half itself as
+/// overhang, so the end bars are whole inside the plot rect, not clipped
+/// to half; and a `Derived` baseline of 0 joins the automatic domain, so
+/// the bar from it is drawn.
+#[test]
+fn numeric_axis_bars_fit_and_a_derived_baseline_is_in_the_domain() {
+    let cx = Context::new_blocking().unwrap();
+    let rows: Vec<(f64, f64)> = (1..=5)
+        .map(|i| (f64::from(i), 20.0 + 5.0 * f64::from(i)))
+        .collect();
+    let mut plot = Plot::new();
+    let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
+    let floor = y.clone();
+    plot.add(Selection::<(f64, f64), Rect>::new(rows))
+        .attr(Rect::X, x.encode(|r: &(f64, f64)| r.0))
+        .attr(Rect::WIDTH, Px(30.0))
+        .attr(Rect::Y, y.encode(|r: &(f64, f64)| r.1))
+        .attr(
+            Rect::Y_END,
+            Derived::new(move || Px(floor.read().eval(0.0) as f32)),
+        );
+    let resolved = plot.resolve(&cx, WIDTH as f32, HEIGHT as f32).unwrap();
+    let image = ImageTarget::new(&cx, WIDTH, HEIGHT)
+        .unwrap()
+        .render_blocking(&cx, &resolved.scene)
+        .unwrap();
+    let p = resolved.layout.plot;
+    let (y0, _) = y.read().current_domain().unwrap();
+    assert!(y0 <= 0.0, "the baseline 0 is in the y domain: {y0}");
+    // Every bar, the end ones included, is 30 px wide, inside the plot rect.
+    let row = (y.read().eval(0.0) - 4.0) as u32;
+    for i in [1.0, 3.0, 5.0] {
+        let c = x.read().eval(i) as u32;
+        let (a, b) = run(&image, c, row, true);
+        // The axis line may touch the first bar; a clipped one is 15 px.
+        assert!((30..=32).contains(&(b - a)), "bar at {i}: ink {a}..{b}");
+        assert!(
+            a as f32 >= p.left() - 2.0 && b as f32 <= p.right(),
+            "{a}..{b} in {p:?}"
+        );
+    }
+}
