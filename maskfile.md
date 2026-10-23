@@ -166,7 +166,7 @@ Build every example and run the headless ones, under Xvfb when available
 for the `GUP_SMOKE_*` knobs)
 
 Examples are built without debug info, stripped, into a separate target
-directory: with debug info the 109 example binaries take about 17 GB.
+directory: with debug info the example binaries take many GB.
 
 ```bash
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-target}/smoke"
@@ -184,14 +184,6 @@ if [ "${GUP_SMOKE_WINDOWED:-}" != 1 ] && command -v xvfb-run >/dev/null; then
 else
   "${smoke[@]}"
 fi
-```
-
-## test-tutorials
-
-Compile-check tutorial code snippets (doctests + integration tests)
-
-```bash
-cargo test --doc -p gup -- tutorial_doctests && cargo test --test tutorial_snippet_tests -- --test-threads=1
 ```
 
 ## lint
@@ -300,13 +292,12 @@ the index. CI runs its own full checks on every push regardless.
 
 ```bash
 shopt -qs globstar
-concurrently --group --names '\s,rs,nix,md,gha,marks,gallery,hook' \
+concurrently --group --names '\s,rs,nix,md,gha,gallery,hook' \
    'git --no-pager grep --untracked --name-only --full-name "[[:space:]]\+$" -- "*.rs"; test $? -eq 1' \
    'cargo fmt --all -- --check && cargo fmt --manifest-path dogfood/Cargo.toml -- --check && cargo clippy --workspace --exclude gup-bevy --all-targets -- -D warnings && cargo clippy --workspace --exclude gup-bevy --all-targets --all-features -- -D warnings && cargo clippy --manifest-path dogfood/Cargo.toml --all-targets -- -D warnings && cargo clippy -p gup-core --lib --no-default-features -- -D warnings && ./scripts/clippy_wasm32.sh' \
    'nixfmt --check flake.nix && statix check flake.nix' \
    'prettier --cache --log-level warn --check "**/*.md" && mdl --git-recurse .' \
    'actionlint .github/workflows/*.y*ml' \
-   'mask validate-marks' \
    './scripts/check_gallery_sync.sh' \
    './scripts/test_pre_commit.sh && ./scripts/test_shared_build_dir.sh && ./scripts/test_prune_build_dir.sh'
 ```
@@ -356,10 +347,8 @@ workflows do (`WGPU_BACKEND=vulkan` also keeps `gup-core`, which accepts every
 backend, off a hardware GL adapter). Each subcommand mirrors one file in
 `.github/workflows/`; change both together. Run this before pushing: the hook
 (`mask pre-commit`) is scoped to the change and does not render. Expect 30-60
-minutes from cold; `mask ci <workflow>` runs one. Not covered: the weekly
-Comprehensive Benchmarking job (316 Criterion benchmarks; `--list` checks every
-bench target accepts Criterion's flags), the Gallery deploy, and the
-manual-dispatch mobile workflows.
+minutes from cold; `mask ci <workflow>` runs one. Not covered: the Gallery
+deploy and the manual-dispatch mobile workflows.
 
 ```bash
 set -euo pipefail
@@ -369,7 +358,6 @@ mask ci wasm
 mask ci visual-regression
 mask ci tests
 mask ci dogfood
-mask ci performance
 echo "mask ci: all workflows passed locally"
 ```
 
@@ -407,8 +395,6 @@ cargo build --release --examples
 ```bash
 set -euo pipefail
 cargo build --target wasm32-unknown-unknown --lib
-wasm-pack build --target web --out-dir "${CARGO_TARGET_DIR:-target}/ci-pkg" -- --features wasm-start
-grep -q run_wasm_axis_benchmarks "${CARGO_TARGET_DIR:-target}/ci-pkg/gup.js"
 ```
 
 ### ci visual-regression
@@ -434,10 +420,9 @@ mask smoke-examples
 
 ### ci tests
 
-> Tests workflow: every workspace member's tests, then the `debug` feature
+> Tests workflow: every workspace member's tests
 
-The only CI job that runs the root crate's full suite. Built without debug info
-(as on CI) so the 111 integration-test binaries fit on disk; even so, check that
+Built without debug info (as on CI) so the test binaries fit on disk; check that
 the build directory (`CARGO_BUILD_BUILD_DIR`, else `CARGO_TARGET_DIR`) has about
 10 GB free.
 
@@ -448,7 +433,6 @@ export WGPU_BACKEND=vulkan
 export CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_DEV_STRIP=debuginfo CARGO_INCREMENTAL=0
 unset WAYLAND_DISPLAY
 xvfb-run -a cargo test --workspace --exclude gup-bevy -- --test-threads=1
-./scripts/test_debug_feature.sh
 ```
 
 ### ci dogfood
@@ -466,23 +450,6 @@ export WGPU_BACKEND=vulkan
 unset WAYLAND_DISPLAY
 (cd dogfood && cargo fmt -- --check && cargo test --release --lib --bin dogfood_check)
 xvfb-run -a -s "-screen 0 1920x1080x24" ./dogfood/run_all.sh
-```
-
-### ci performance
-
-> Performance Testing workflow's push-to-main jobs (benchmarks listed, not run)
-
-```bash
-set -euo pipefail
-export VK_ICD_FILENAMES="${GUP_LAVAPIPE_ICD:-$LIBGL_DRIVERS_PATH/../../share/vulkan/icd.d/lvp_icd.x86_64.json}"
-export WGPU_BACKEND=vulkan
-mask perf-check
-cargo test --features debug --test performance_ci_tests -- --test-threads=1
-cargo test --test cross_platform_axis_performance_tests -- --test-threads=1
-cargo test -p gup --lib wasm_bench_axis -- --test-threads=1
-# Every bench target must accept Criterion's flags (the lib's libtest harness
-# once rejected --save-baseline); --list checks that without running them.
-cargo bench --all-features -- --list --save-baseline ci
 ```
 
 ## clean
@@ -616,86 +583,6 @@ Count non-test LOC remaining in the frozen old render path (RFC-001 metric)
 
 ```bash
 scripts/old_path_loc.pl | tail -1
-```
-
-## validate-marks
-
-Validate all built-in mark types (CI gate)
-
-```bash
-cargo run --bin validate_marks
-```
-
-## bench
-
-Run performance benchmarks
-
-```bash
-cargo bench
-```
-
-## bench-interaction
-
-Run interaction system benchmarks only
-
-```bash
-cargo bench --bench interaction_benchmarks --bench interaction_memory_benchmarks
-```
-
-## bench-wasm-native
-
-Run native benchmarks in WASM-compatible format (JSON output)
-
-```bash
-scripts/wasm_benchmark.sh native
-```
-
-## bench-wasm-build
-
-Build WASM benchmark package for browser testing
-
-```bash
-scripts/wasm_benchmark.sh build
-```
-
-## bench-wasm-serve
-
-Build WASM and serve the benchmark runner
-
-```bash
-scripts/wasm_benchmark.sh serve
-```
-
-## perf-check
-
-Run performance regression tests (CI-friendly)
-
-```bash
-cargo test --test interaction_performance_tests -- --test-threads=1
-```
-
-## perf-alert
-
-Run performance alert system (threshold tests + report generation)
-
-```bash
-scripts/perf_alert.sh --skip-benchmarks "$@"
-```
-
-## perf-trend-record
-
-Record a performance trend data point
-
-```bash
-scripts/perf_trend.sh record
-```
-
-## perf-trend-report
-
-Generate a performance trend report
-
-```bash
-scripts/perf_trend.sh report "${1:-10}"
 ```
 
 ## tauri-example

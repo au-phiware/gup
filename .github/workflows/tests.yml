@@ -34,8 +34,8 @@ jobs:
     name: cargo test --workspace (lavapipe)
     runs-on: ubuntu-latest
     timeout-minutes: 120
-    # 111 integration-test binaries each link the whole crate. Without debug
-    # info and stripped, they fit the runner's disk; with it they do not.
+    # Without debug info and stripped, the test binaries fit the runner's disk;
+    # with it they do not.
     env:
       CARGO_PROFILE_DEV_DEBUG: "0"
       CARGO_PROFILE_DEV_STRIP: "debuginfo"
@@ -83,13 +83,6 @@ jobs:
         run:
           xvfb-run -a cargo test --workspace --exclude gup-bevy --
           --test-threads=1
-
-      # The `debug` feature gates the profiling modules, their lib unit tests
-      # and the integration tests with `required-features = ["debug"]`, which
-      # the step above skips. The list comes from Cargo.toml, so a new gated
-      # test cannot be left out.
-      - name: Test the debug feature
-        run: ./scripts/test_debug_feature.sh
 
       - name: Disk usage
         if: always()

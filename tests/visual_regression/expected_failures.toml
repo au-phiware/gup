@@ -18,14 +18,3 @@
 # Examples (old `gup` path, frozen per RFC-001; verified 2026-10-04)
 # ---------------------------------------------------------------------------
 
-[[expected]]
-case = "examples/gpu_debug_demo"
-check = "render"
-reason = "exits 1: ValidationError 'Failed to write CSV row: cannot serialize tuple container inside struct when writing headers from structs'"
-tracking = "T7 gup-debug split (csv cannot write headers for array fields of a generic Serialize struct; GUP-390 only feature-gates this code)"
-
-[[expected]]
-case = "examples/pattern_pipeline_demo"
-check = "render"
-reason = "panics at src/accessibility/platform.rs:212 'Cannot start a runtime from within a runtime' (block_on inside the tokio main runtime)"
-tracking = "RFC-001 S14 (old accessibility wiring replaced) / follow-up if the example survives"

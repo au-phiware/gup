@@ -66,7 +66,7 @@
 #          crates plus every workspace member that depends on them, since a
 #          change can break a dependent. Those of them that build for
 #          wasm32 are linted on that target too (scripts/clippy_wasm32.sh,
-#          GUP-412). validate-marks runs when `gup` is in that set.
+#          GUP-412).
 #   workflows
 #          .github/workflows/* (except Markdown): actionlint on every workflow
 #          file, and no Rust check. Scoped rather than full (GUP-409): a
@@ -422,10 +422,6 @@ if [[ $mode == scoped ]]; then
     joined=$(printf ' && %s' "${rust[@]}")
     checks+=("${joined# && }")
     names+=',rs'
-  fi
-  if [[ -n ${lint[$root_member]:-} ]]; then
-    checks+=('mask validate-marks')
-    names+=',marks'
   fi
 fi
 

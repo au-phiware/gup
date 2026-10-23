@@ -22,8 +22,7 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  # validate_marks creates a device; the runners have no GPU, so the dev
-  # shell points Vulkan at Mesa's lavapipe.
+  # The runners have no GPU, so the dev shell points Vulkan at Mesa's lavapipe.
   GUP_SOFTWARE_GPU: "1"
   WGPU_BACKEND: vulkan
 

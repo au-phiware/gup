@@ -153,9 +153,12 @@ fn skip_list() -> BTreeMap<String, String> {
         .parse()
         .unwrap_or_else(|e| panic!("{}: {e}", path.display()));
     let mut skips = BTreeMap::new();
-    let tables = doc
-        .get("skip")
-        .and_then(|i| i.as_array_of_tables())
+    // No `[[skip]]` table at all means every example runs headless.
+    let Some(item) = doc.get("skip") else {
+        return skips;
+    };
+    let tables = item
+        .as_array_of_tables()
         .unwrap_or_else(|| panic!("{}: expected [[skip]] tables", path.display()));
     for (i, t) in tables.iter().enumerate() {
         let get = |k: &str| {
