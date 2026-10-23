@@ -80,8 +80,8 @@ X) or `info` (printed, never fails).
 | `pipeline.link_create.cold_ms`     | 1.04      | <= 10     | `pipeline_timings`, its first run                   |
 | `pipeline.link_create.max_ms`      | 1.06      | info      | `pipeline_timings`                                  |
 | `wasm.wgpu.gz_bytes`               | 32,360    | info      | `scripts/wasm_size.sh`, bare wgpu                   |
-| `wasm.scatter.gz_bytes`            | 331,601   | +2%       | `scripts/wasm_size.sh`, the reference scatter       |
-| `wasm.over_wgpu.gz_bytes`          | 299,241   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10         |
+| `wasm.scatter.gz_bytes`            | 334,149   | +2%       | `scripts/wasm_size.sh`, the reference scatter       |
+| `wasm.over_wgpu.gz_bytes`          | 301,789   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10         |
 | `wasm.per_row_type.gz_bytes`       | 1,730     | <= 2600   | `scripts/wasm_size.sh`, one more Selection row type |
 
 A legitimate change that moves a number (a new guide, a bigger feature) records
@@ -480,3 +480,8 @@ seeded violation (GUP-417 retrospective).
   harness's new append step links about 4,800 of gup-core's feed machinery. That
   is the real cost any web app that appends will pay. GUP-494 (per-axis
   overhang, fixed positions in domain fits) adds the rest.
+- **S13 and S14 (2026-10-24, orchestrator)**: GUP-482 (window eviction), 487
+  (macro crate path), 483/484 (egui and Bevy on gup-core) and 488 (the flip:
+  `gup` is a facade over gup-core) leave the WASM scatter at 334,149 B gz and
+  over bare wgpu at 301,789 (98 KB of headroom). Most of the +2,548 since
+  GUP-481 is GUP-482's eviction and draw-order runs.
