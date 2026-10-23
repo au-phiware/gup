@@ -75,3 +75,10 @@
 //! ```
 
 pub use gup_core::*;
+
+/// The architecture documents' snippets, compiled as doctests.
+#[cfg(doctest)]
+mod architecture_docs {
+    #[doc = include_str!("../docs/TECHNICAL_APPROACH.md")]
+    struct TechnicalApproach;
+}
