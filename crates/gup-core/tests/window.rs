@@ -209,6 +209,11 @@ fn stride(kind: Kind) -> u64 {
     }
 }
 
+fn vr(image: &image::RgbaImage) -> gup_visual_regression::RgbaImage {
+    gup_visual_regression::RgbaImage::new(image.width(), image.height(), image.as_raw().clone())
+        .unwrap()
+}
+
 /// AC2 for one layer kind under one policy.
 fn window_run(cx: &Context, kind: Kind, retain: Retain) -> Run {
     let mut run = Run::new(cx, kind, retain);
@@ -229,7 +234,17 @@ fn window_run(cx: &Context, kind: Kind, retain: Retain) -> Run {
     );
     eprintln!("{kind:?} {retain:?}: {written:?}");
     let expected = run.fresh().render(cx, W, H).unwrap();
-    if image != expected {
+    // The draw order is a fresh plot's, row for row (the `DrawOrder` unit
+    // tests assert it, ties included). The pixels are not always byte-
+    // equal: the windowed layer's chunks start at different rows than the
+    // fresh plot's, so a mark's position is summed from a different chunk
+    // origin and a software rasteriser (lavapipe) can round an antialiased
+    // edge pixel the other way. So compare within the harness tolerance.
+    let tol = gup_visual_regression::DiffTolerance::default();
+    let stats =
+        gup_visual_regression::diff::perceptual_diff(&vr(&expected), &vr(&image), &tol).unwrap();
+    eprintln!("{kind:?} {retain:?}: vs fresh: {stats}");
+    if !stats.within(&tol) {
         let dir = std::env::temp_dir();
         image
             .save(dir.join(format!("gup482_{kind:?}_{retain:?}.png")))
@@ -237,7 +252,7 @@ fn window_run(cx: &Context, kind: Kind, retain: Retain) -> Run {
         expected
             .save(dir.join(format!("gup482_{kind:?}_{retain:?}_fresh.png")))
             .unwrap();
-        panic!("{kind:?} {retain:?}: the windowed image differs from a fresh plot");
+        panic!("{kind:?} {retain:?}: the windowed image differs from a fresh plot: {stats}");
     }
     if std::env::var_os("GUP482_SAVE").is_some() {
         image
