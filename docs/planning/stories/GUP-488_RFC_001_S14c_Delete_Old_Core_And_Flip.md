@@ -9,8 +9,8 @@ implementer-reason:
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 🚧 In Progress **Created**:
-2026-10-19
+**Initiative**: RFC-001 Migration **Status**: ✅ Complete (2026-10-24)
+**Created**: 2026-10-19
 
 ## Context
 
@@ -63,48 +63,48 @@ still uses the old core: the quarantined `crates/gup-culling-lod` (`GupContext`,
 
 ### AC1: The facade
 
-- [ ] `src/` holds only `lib.rs`: the copyright header, crate docs with the
+- [x] `src/` holds only `lib.rs`: the copyright header, crate docs with the
       north-star example as a doctest (Decisions), and `pub use gup_core::*;`.
-- [ ] Root `Cargo.toml`: `[lib] crate-type = ["rlib"]`; `[dependencies]` is
+- [x] Root `Cargo.toml`: `[lib] crate-type = ["rlib"]`; `[dependencies]` is
       `gup-core` only; `[dev-dependencies]` only what `tests/examples_smoke.rs`
       and the remaining examples use; `[features]` is empty or gone; the
       `[[example]]`, `[[test]]` and `[[bench]]` lists match what is left.
-- [ ] `gup-macros/` is deleted and out of `members`.
-- [ ] A second doctest in `lib.rs` defines a colour function with
+- [x] `gup-macros/` is deleted and out of `members`.
+- [x] A second doctest in `lib.rs` defines a colour function with
       `gup::wgsl_function` and renders a layer with it, proving GUP-487's `gup`
       row from a crate that depends only on `gup` (doctests are external
       crates).
 
 ### AC2: Users renamed
 
-- [ ] The five gup-core examples (`hello_world`, `basic/01_hello_chart`,
+- [x] The five gup-core examples (`hello_world`, `basic/01_hello_chart`,
       `basic/03_line_chart`, `basic/04_bar_chart`, `composite_mixed_data`) use
       `gup::` and run under `examples_smoke`; read their screenshots.
-- [ ] `dogfood/Cargo.toml` depends on `gup` (path) and not on `gup-core`; every
+- [x] `dogfood/Cargo.toml` depends on `gup` (path) and not on `gup-core`; every
       `gup_core::` in `dogfood/` is `gup::`;
       `xvfb-run -a     ./dogfood/run_all.sh` passes with no FAIL, XPASS or
       XFAIL.
-- [ ] `gup-egui` and `gup-bevy` keep depending on `gup-core` (Decisions) and
+- [x] `gup-egui` and `gup-bevy` keep depending on `gup-core` (Decisions) and
       still build and test.
 
 ### AC3: Deleted, with gates in step
 
-- [ ] Every root `examples/`, `tests/` and `benches/` file that used the old
+- [x] Every root `examples/`, `tests/` and `benches/` file that used the old
       path is deleted; `examples/INDEX.md`, `examples/README.md`,
       `scripts/gallery_config.toml` and `tests/visual_regression/*.toml` list
       only what is left; `scripts/check_gallery_sync.sh` passes. List counts in
       the Implementation Summary.
-- [ ] CI and mask edits exactly as in Decisions; `actionlint` passes;
+- [x] CI and mask edits exactly as in Decisions; `actionlint` passes;
       `mask     all-check` passes; `mask ci` passes locally where it can run.
-- [ ] `crates/gup-culling-lod` is parked as in Decisions.
+- [x] `crates/gup-culling-lod` is parked as in Decisions.
 
 ### AC4: The metric is zero
 
-- [ ] `mask old-path-loc` prints `TOTAL 0`; paste it. Then
+- [x] `mask old-path-loc` prints `TOTAL 0`; paste it. Then
       `scripts/old_path_loc.pl` and the `old-path-loc` task are deleted, and
       INDEX.md's "RFC-001 Migration" header says "Old-path LOC: 0 (GUP-488,
       <date>); the metric is retired."
-- [ ] RFC-001 gains "S14 findings (GUP-485–488)": what was deleted (files and
+- [x] RFC-001 gains "S14 findings (GUP-485–488)": what was deleted (files and
       lines per step, from git), what was parked, and that the remaining
       builders are T5.
 
@@ -187,13 +187,13 @@ still uses the old core: the quarantined `crates/gup-culling-lod` (`GupContext`,
 
 ## Technical Tasks
 
-- [ ] Record the last pre-flip commit for the culling-lod README.
-- [ ] Delete `src/*` except `lib.rs`, `gup-macros/`, old examples, tests,
+- [x] Record the last pre-flip commit for the culling-lod README.
+- [x] Delete `src/*` except `lib.rs`, `gup-macros/`, old examples, tests,
       benches, `src/bin`; write the facade and its doctests.
-- [ ] Root `Cargo.toml`: deps, dev-deps, features, targets, members.
-- [ ] Rename the five examples and dogfood to `gup::`; run both.
-- [ ] Park `gup-culling-lod`; CI, mask and script edits; `actionlint`.
-- [ ] `old-path-loc` to 0, then retire it; INDEX header; RFC findings.
+- [x] Root `Cargo.toml`: deps, dev-deps, features, targets, members.
+- [x] Rename the five examples and dogfood to `gup::`; run both.
+- [x] Park `gup-culling-lod`; CI, mask and script edits; `actionlint`.
+- [x] `old-path-loc` to 0, then retire it; INDEX header; RFC findings.
 
 ## Dependencies
 
@@ -220,8 +220,8 @@ still uses the old core: the quarantined `crates/gup-culling-lod` (`GupContext`,
 
 ## Success Metrics
 
-- [ ] Old-path LOC 0; `src/` is one file.
-- [ ] An external crate depending only on `gup` builds every dogfood task.
+- [x] Old-path LOC 0; `src/` is one file.
+- [x] An external crate depending only on `gup` builds every dogfood task.
 
 ## Risk Assessment
 
@@ -235,18 +235,130 @@ still uses the old core: the quarantined `crates/gup-culling-lod` (`GupContext`,
 
 ## Definition of Done
 
-- [ ] First code commit within 30 minutes of starting; then commit at each
+- [x] First code commit within 30 minutes of starting; then commit at each
       checkpoint (story-worker "Checkpoint rule")
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test --workspace -- --test-threads=1`
-- [ ] `xvfb-run -a ./dogfood/run_all.sh` passes (no FAIL, no XPASS, no XFAIL)
-- [ ] Lint and format clean: `mask all-fix`, then `mask all-check`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] `mask wasm-browser` passes (this story changes the wasm build and the
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test --workspace -- --test-threads=1`
+- [x] `xvfb-run -a ./dogfood/run_all.sh` passes (no FAIL, no XPASS, no XFAIL)
+- [x] Lint and format clean: `mask all-fix`, then `mask all-check`
+- [x] All examples compile: `cargo check --examples`
+- [x] `mask wasm-browser` passes (this story changes the wasm build and the
       workflows)
-- [ ] `mask wasm-size` run and the figures reported in the Implementation
+- [x] `mask wasm-size` run and the figures reported in the Implementation
       Summary (expected unchanged; the orchestrator re-records)
-- [ ] Rendered output verified by eye: the five examples' screenshots
-- [ ] `mask old-path-loc` TOTAL 0 recorded before the task is retired
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] Rendered output verified by eye: the five examples' screenshots
+- [x] `mask old-path-loc` TOTAL 0 recorded before the task is retired
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+Six commits from `06a5cef8` (the last pre-flip commit): start, park, delete old
+examples/tests/benches/bins/perf workflow, the flip, retire the metric, and this
+summary.
+
+- **Facade**: `src/lib.rs` is the header, two doctests (the north-star scatter;
+  a `#[gup::wgsl_function]` colour ramp, with `path = "ramp_demo"` because a
+  doctest in package `gup` would otherwise land in the reserved `gup::`
+  namespace) and `pub use gup_core::*;`. Root `Cargo.toml`: `rlib`, dependency
+  on `gup-core` only, dev-dependencies for `examples_smoke`, no `[features]`.
+- **Deleted** (counts from git): 200 `src/` files (132,465 lines), 114 `tests/`
+  files (35,230), 21 `benches/` files (4,765), 74 `examples/` files (27,307),
+  `gup-macros`, `src/bin`, `assets/`, `performance.yml`, nine perf, benchmark
+  and debug-feature scripts, `perf-thresholds.toml` and stray generated files
+  (`rust_out`, CSV/JSON/DOT dumps). 477 files, 208,932 lines in all.
+- **Kept**: five examples, `tests/examples_smoke.rs`, `tests/golden/`,
+  `tests/visual_regression/*.toml` (the skip list is now empty; the smoke test
+  accepts a list with no `[[skip]]` tables), and `gallery_config.toml` /
+  `examples/INDEX.md` / `examples/README.md` cut to match.
+- **Renamed**: the five examples and `dogfood/` use `gup::`; `dogfood` depends
+  on `gup` (path) alone. `gup-egui` and `gup-bevy` keep `gup-core`.
+- **Parked**: `crates/gup-culling-lod` (workspace `exclude`, CI steps and
+  `smoke-examples` flag gone, README names `06a5cef8`).
+- **CI and mask**: as in Decisions; also `mask ci performance`, the `ci wasm`
+  wasm-pack lines, `scripts/pre_commit.sh`'s validate-marks hook and the
+  `test_pre_commit.sh` cases, and `scripts/clippy_wasm32.sh` entries for the
+  deleted crates. `.github/workflows/README.md` was rewritten without the
+  performance sections.
+- **Metric**: `mask old-path-loc` printed `TOTAL 0` after the flip; the task and
+  `scripts/old_path_loc.pl` are deleted; INDEX header and RFC-001 "S14 findings
+  (GUP-485-488)" written.
+
+### Evidence
+
+- `cargo test --workspace --exclude gup-bevy -- --test-threads=1` under Xvfb:
+  592 passed, 0 failed. `gup-bevy` tests pass. `cargo test --doc -p gup`: 2
+  passed. `mask smoke-examples`: 3 passed (all five examples run headless).
+- Dogfood (lavapipe, Xvfb): 10 pass, 0 XFAIL, 0 FAIL, 0 XPASS.
+- `mask all-check`: all seven checks exit 0; `mask ci wasm` and
+  `cargo check --examples` pass; `actionlint` passes.
+- `mask wasm-browser`: `GUP PASS` (Chrome/155, SwiftShader).
+- `mask wasm-size`: scatter 334,149 B gz (recorded 331,601; +0.8%), over wgpu
+  301,789 B (budget 400,000), per row type 1,539 B; every check passed. The
+  numbers come from `gup-core`, which this story did not edit.
+- Screenshots of `hello_world`, `01_hello_chart`, `03_line_chart`,
+  `04_bar_chart` and `composite_mixed_data` read: titles, axes, legends, series
+  colours and geometry all present and inside the plot area.
+- `mask old-path-loc`: `TOTAL 0` (18,504 before).
+- Not run locally: `mask ci` end to end (the Tests and Visual regression
+  workflows' parts were run piecewise above); `gup-ios`, `gup-android` and the
+  Tauri app (parked; they name the deleted `ios-shim` and `android-shim`
+  features).
+
+## Retrospective
+
+**Completed**: 2026-10-24
+
+### Key Technical Learnings
+
+#### Deleting in step with the gates
+
+- **Challenge**: `mask all-check` and the pre-commit hook test the hook's own
+  scoping (`test_pre_commit.sh`), which names workspace members, so parking a
+  crate or deleting `gup-macros` fails the gate until those cases change.
+- **Solution**: update the expectations in the same commit as the manifest
+  change; run the script by hand first.
+- **Pattern**: a workspace-shape change touches `maskfile.md`, `pre_commit.sh`,
+  `test_pre_commit.sh`, `clippy_wasm32.sh`, the workflows and the smoke test
+  together.
+
+#### The smoke test classified examples by source text
+
+- **Challenge**: after renaming `gup_core::` to `gup::`, every example timed out
+  at 60 s: `examples_smoke` decided "headless-capable" by searching for the text
+  `gup_core::show(`.
+- **Solution**: search for `gup::show(`. A text-matching classifier is a hidden
+  coupling to a rename.
+- **Pattern**: rename, then run the smoke test before anything else.
+
+#### Doctests in package `gup`
+
+- **Challenge**: `#[gup::wgsl_function]` in a `gup` doctest was refused: the
+  macro derives its path from the package name and `gup::` is reserved.
+- **Solution**: `path = "ramp_demo"` in the doctest.
+- **Pattern**: macros that key off `CARGO_PKG_NAME` misfire in doctests of a
+  package named like the library.
+
+### Architectural Decisions
+
+#### An empty skip list is valid
+
+- **Decision**: `examples_skip_list.toml` has no `[[skip]]` tables; the test
+  treats a missing key as empty.
+- **Reasoning**: all five surviving examples have a headless path.
+- **Trade-off**: a typo in the key name now reads as "no skips".
+- **Future**: windowed examples added later add entries again.
+
+### Development Workflow Insights
+
+- Deleting first (examples, tests, benches, workflow, scripts), then flipping,
+  kept each commit green and made the big one reviewable: the flip commit holds
+  `src/`, `gup-macros` and the renames only.
+- Cold clippy and test builds were the slow steps; everything else was
+  mechanical.
+
+### Follow-up Stories
+
+None. The root README and TECHNICAL_APPROACH (including the stale `debug`
+feature section) are GUP-489; porting the parked crates is T7; the remaining
+builders are T5.

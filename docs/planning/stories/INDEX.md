@@ -443,7 +443,7 @@ findings", GUP-396).
 - [GUP-487](GUP-487_Macros_Resolve_Crate_Path.md) ✅ — `#[derive(Mark)]` and
   `#[wgsl_function]` resolve `gup_core` or `gup` (renames included) with
   `proc-macro-crate`. Deps: GUP-420 ✅, GUP-422 ✅.
-- [GUP-488](GUP-488_RFC_001_S14c_Delete_Old_Core_And_Flip.md) 🚧 — RFC-001 step
+- [GUP-488](GUP-488_RFC_001_S14c_Delete_Old_Core_And_Flip.md) ✅ — RFC-001 step
   S14c, the flip: `src/` becomes `pub use gup_core::*`, the old core,
   `gup-macros`, old examples, tests, benches and workflows go, culling/LOD is
   parked, old-path LOC 0. Deps: GUP-486 📋, GUP-487 📋, GUP-483 📋, GUP-484 📋.
