@@ -577,14 +577,6 @@ Show dependency tree
 cargo tree
 ```
 
-## old-path-loc
-
-Count non-test LOC remaining in the frozen old render path (RFC-001 metric)
-
-```bash
-scripts/old_path_loc.pl | tail -1
-```
-
 ## tauri-example
 
 Build the Gup WASM package and launch the Tauri example application

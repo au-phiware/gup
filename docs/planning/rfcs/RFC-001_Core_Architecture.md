@@ -3741,3 +3741,37 @@ host, and GUP-482 bounds what a long-running layer holds.
   size orders of unordered sizes draw about one instanced draw per row (segments
   cannot merge across chunks sorted apart); a GPU sort or an index buffer would
   remove that.
+
+## S14 findings (GUP-485–488)
+
+S14 deleted the old render path and made `gup` a facade over `gup-core`
+(`src/lib.rs` is `pub use gup_core::*;`). Counts are from git.
+
+- **GUP-485** (dogfood residue): ported the last two tasks, no deletions of
+  note.
+- **GUP-486** (old chart builder): 75 files, 34,040 lines deleted, with what
+  stopped compiling (`axis_system`, `wasm_api`).
+- **GUP-487**: the shader-function macros resolve `gup_core` or `gup` through
+  re-exports; no deletions.
+- **GUP-488** (the flip): 477 files, 208,932 lines deleted (236 added) from the
+  last pre-flip commit `06a5cef8`: 200 `src/` files (132,465 lines), 114
+  `tests/` files (35,230), 21 `benches/` files (4,765), 74 `examples/` files
+  (27,307), the `gup-macros` crate, `src/bin`, `performance.yml` and its
+  scripts, the benchmark, perf-trend and tutorial `mask` tasks, and `assets/`
+  (old fonts and GeoJSON). `mask old-path-loc` went 18,504 (after GUP-486) to 0
+  and the metric was retired. Of the old `src/`, `gup-core` kept nothing: its
+  scales, ticks, picking and timing replaced the leaf modules.
+- **What stayed**: five examples (`hello_world`, `01_hello_chart`,
+  `03_line_chart`, `04_bar_chart`, `composite_mixed_data`) now written against
+  `gup::`, `tests/examples_smoke.rs` and `tests/golden/`. `gup-egui` and
+  `gup-bevy` keep depending on `gup-core` (same types, fewer crates). The
+  dogfood crate depends on `gup` alone.
+- **Parked**: `crates/gup-culling-lod` (out of the workspace and CI; its README
+  names the commit to build it at; T7 ports what it needs), and the mobile and
+  Tauri crates (`gup-ios`, `gup-android`, `examples/gup-tauri`), which still
+  name the deleted `ios-shim` and `android-shim` features.
+- **Not re-added yet**: area, boxplot, violin, density, heatmap and choropleth.
+  The remaining builders are T5.
+- **A finding**: a doctest in the `gup` package is a crate named `gup`, so
+  `#[gup::wgsl_function]` there needs an explicit `path = "…"`: the macro keeps
+  the `gup::` namespace for Gup's own library.

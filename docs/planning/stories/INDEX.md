@@ -105,17 +105,10 @@ survives into `gup-core`.
 
 ## RFC-001 Migration
 
-**Old-path LOC remaining: 18504 (re-measured 2026-10-23 after GUP-486: the old
-`chart_builder` deleted, 26601 to 18504, Δ -8097; before that 28910 to 26601
-after GUP-466)**. Measured as the non-blank, non-comment-only,
-non-`#[cfg(test)]`-block line count of the old render path (`src/selection.rs`,
-`src/mark/`, `src/shader_function/`, `src/shader_pipeline.rs`,
-`src/chart_builder*`, `src/context.rs`, `src/render.rs`). Re-measure with
-`mask old-path-loc` (`scripts/old_path_loc.pl`) after each RFC-001 story. This
-metric exists per [RFC-001](../rfcs/RFC-001_Core_Architecture.md)'s Orchestrator
-review point 1 ("parallel-system risk"): it must trend to 0 as S14 (the flip and
-delete) lands, or the old and new paths will ossify side by side the way four
-scale systems and three composition systems did before.
+**Old-path LOC: 0 (GUP-488, 2026-10-23); the metric is retired.** It counted the
+non-test lines of the old render path and trended from 28910 (GUP-466) to 0 as
+RFC-001 S14 deleted it, per the RFC's Orchestrator review point 1
+("parallel-system risk").
 
 Stories implementing
 [RFC-001: Core Architecture](../rfcs/RFC-001_Core_Architecture.md) (accepted
