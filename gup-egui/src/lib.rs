@@ -3,41 +3,54 @@
 
 //! egui integration for the Gup GPU-accelerated data visualization library.
 //!
-//! This crate provides [`GupWidget`], a stateful widget that renders a Gup
-//! chart inside any [`egui`] panel. Charts are rendered off-screen to a GPU
-//! texture via Gup's existing rendering pipeline, then uploaded to egui's
-//! texture manager as a [`ColorImage`](egui::ColorImage). Pointer events
-//! emitted by egui are translated into Gup's [`InteractionEvent`] type and
-//! exposed for the host application to dispatch.
+//! [`GupWidget`] draws any [`gup_core::Chart`] in an egui panel. It makes a
+//! [`gup_core::Context`] over egui's own device, renders the chart into a
+//! texture that egui samples directly (no CPU readback), and forwards
+//! pointer input to [`Chart::handle`](gup_core::Chart::handle). egui
+//! repaints when the chart is interacted with or fed from another thread.
 //!
-//! # Quick Start
+//! # Quick start
 //!
-//! ```rust,ignore
+//! ```no_run
 //! use gup_egui::GupWidget;
 //!
-//! // Wrap any chart that implements DynChart.
-//! let mut widget = GupWidget::new(my_chart);
+//! struct App {
+//!     widget: GupWidget,
+//!     chart: gup_core::ScatterChart<(f64, f64)>,
+//! }
 //!
-//! // Inside your egui frame:
-//! ui.add(&mut widget);
+//! impl App {
+//!     fn new(cc: &eframe::CreationContext<'_>) -> Self {
+//!         let render_state = cc.wgpu_render_state.as_ref().expect("the wgpu backend");
+//!         Self {
+//!             widget: GupWidget::new(render_state),
+//!             chart: gup_core::scatter(vec![(1.0, 2.0), (2.0, 3.0), (3.0, 5.0)])
+//!                 .x(|p| p.0)
+//!                 .y(|p| p.1),
+//!         }
+//!     }
+//! }
 //!
-//! // When data changes:
-//! widget.mark_dirty();
+//! impl eframe::App for App {
+//!     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+//!         egui::CentralPanel::default().show(ctx, |ui| {
+//!             self.widget.show(ui, egui::vec2(480.0, 320.0), &mut self.chart);
+//!         });
+//!     }
+//! }
+//!
+//! fn main() -> eframe::Result {
+//!     let options = eframe::NativeOptions {
+//!         renderer: eframe::Renderer::Wgpu,
+//!         ..Default::default()
+//!     };
+//!     eframe::run_native("chart", options, Box::new(|cc| Ok(Box::new(App::new(cc)))))
+//! }
 //! ```
-//!
-//! See the `egui_chart` example for a full live-updating scatter plot demo.
 
-mod bridge;
-mod context;
+mod input;
+mod render;
 mod widget;
 
-/// Convenience re-exports for common usage.
-pub mod prelude {
-    pub use crate::bridge::translate_response;
-    pub use crate::context::GupEguiContext;
-    pub use crate::widget::{DynChart, GupWidget};
-}
-
-pub use bridge::translate_response;
-pub use context::GupEguiContext;
-pub use widget::{DynChart, GupWidget};
+pub use input::to_input;
+pub use widget::{GupWidget, context};

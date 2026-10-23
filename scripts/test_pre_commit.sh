@@ -31,24 +31,24 @@ expect 'mode=docs' COPYING
 # Docs a crate compiles (doctests, fonts) are that crate's sources.
 expect 'clippy=[gup gup-culling-lod]' docs/tutorials/01_getting_started.md
 expect 'clippy=[gup gup-culling-lod]' assets/fonts/default.ttf
-expect 'clippy=[gup gup-core gup-culling-lod gup-text]' \
+expect 'clippy=[gup gup-core gup-culling-lod gup-egui gup-text]' \
   crates/gup-text/fonts/Inter-Regular.ttf
 
 # A leaf crate is checked alone; a dependency drags in its dependents.
-expect 'fmt=[gup-text] clippy=[gup gup-core gup-culling-lod gup-text]' \
+expect 'fmt=[gup-text] clippy=[gup gup-core gup-culling-lod gup-egui gup-text]' \
   crates/gup-text/src/lib.rs
 expect 'clippy=[gup-culling-lod]' crates/gup-culling-lod/src/lib.rs
-expect 'fmt=[gup-core] clippy=[gup gup-core gup-culling-lod]' \
+expect 'fmt=[gup-core] clippy=[gup gup-core gup-culling-lod gup-egui]' \
   crates/gup-core/src/lib.rs
 expect 'clippy=[gup gup-culling-lod gup-macros]' gup-macros/src/lib.rs
-expect 'clippy=[gup gup-core gup-culling-lod gup-visual-regression]' \
+expect 'clippy=[gup gup-core gup-culling-lod gup-egui gup-visual-regression]' \
   crates/gup-visual-regression/src/lib.rs
 expect 'clippy=[gup gup-culling-lod]' src/lib.rs tests/kde_tests.rs
 expect 'clippy=[gup gup-culling-lod]' src/lib.rs README.md
 
 # The crates that build for wasm32 are linted on that target too (GUP-412);
 # the proc-macro and the quarantined parts bin are not.
-expect 'clippy=[gup gup-core gup-culling-lod] wasm32=[gup gup-core]' \
+expect 'clippy=[gup gup-core gup-culling-lod gup-egui] wasm32=[gup gup-core]' \
   crates/gup-core/src/lib.rs
 expect 'clippy=[gup gup-culling-lod gup-macros] wasm32=[gup]' \
   gup-macros/src/lib.rs
@@ -79,7 +79,7 @@ expect 'mode=docs' .github/workflows/README.md
 expect 'clippy=[gup-culling-lod] wasm32=[] dogfood=0 actionlint=1' \
   .github/workflows/lint.yml crates/gup-culling-lod/src/lib.rs
 expect 'mode=full' .github/workflows/lint.yml maskfile.md
-expect 'mode=full' gup-egui/src/lib.rs
+expect 'fmt=[gup-egui] clippy=[gup-egui] wasm32=[] ' gup-egui/src/lib.rs
 expect 'mode=full' examples/gup-tauri/src-tauri/src/main.rs
 expect 'mode=full' crates/gup-core/src/lib.rs Cargo.lock
 expect 'mode=full' README.md some/new/file.rs

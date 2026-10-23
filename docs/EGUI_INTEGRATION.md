@@ -1,184 +1,83 @@
 # egui Integration Guide
 
-This guide covers embedding GPU-accelerated Gup charts inside an
-[egui](https://github.com/emilk/egui) application using the `gup-egui` crate.
+`gup-egui` puts any [`gup_core::Chart`] in an egui panel. It renders on egui's
+own GPU device into a texture that egui samples directly (no CPU readback) and
+forwards pointer input to the chart.
 
-## Adding the Dependency
-
-Add `gup-egui` alongside `gup` in your `Cargo.toml`:
+## Adding the dependency
 
 ```toml
 [dependencies]
-gup      = { git = "https://github.com/au-phiware/gup" }
-gup-egui = { git = "https://github.com/au-phiware/gup" }
-eframe   = "0.33"
-pollster = "0.3"
+gup-egui = { path = "gup-egui" }
+gup-core = { path = "crates/gup-core" }
+eframe = { version = "0.33", features = ["wgpu"] }
 ```
 
-`gup-egui` re-exports `egui` so you can use its types directly; `eframe`
-provides the native and web application shell.
+The app must use eframe's wgpu backend
+(`NativeOptions { renderer: eframe::Renderer::Wgpu, .. }`).
 
-## Minimal Code: Embedding a Chart
+## Minimal code
 
-Three steps are needed to display a Gup chart in an egui panel:
-
-### Step 1 — Build a chart
-
-Use Gup's chart-builder API to construct a `ComposedChart`:
-
-```rust
-use gup::chart_builder::ChartBuilder;
-use gup::chart_builder::accessor::AccessorValue;
-use gup::chart_builder::builders::{AccessorFunction, scatter};
-use gup::render::RenderContext;
-use std::sync::Arc;
-
-#[derive(Debug, Clone)]
-struct DataPoint { x: f32, y: f32 }
-
-fn build_chart(data: Vec<DataPoint>)
-    -> gup::chart_builder::ComposedChart<DataPoint, gup::mark::Circle>
-{
-    let ctx = Arc::new(
-        pollster::block_on(RenderContext::new())
-            .expect("GPU context"),
-    );
-
-    scatter()
-        .x(AccessorFunction::new(|d: &DataPoint| AccessorValue::Float(d.x)))
-        .y(AccessorFunction::new(|d: &DataPoint| AccessorValue::Float(d.y)))
-        .point_size(6.0)
-        .build_with_data(data, ctx)
-        .expect("chart")
-}
-```
-
-### Step 2 — Wrap in a GupWidget
-
-```rust
+```rust,ignore
+use gup_core::prelude::*;
 use gup_egui::GupWidget;
 
-let mut widget = GupWidget::new(build_chart(initial_data));
-```
+struct App {
+    widget: GupWidget,
+    chart: gup_core::ScatterChart<(f64, f64)>,
+}
 
-`GupWidget` takes ownership of the chart and manages the off-screen GPU texture,
-dirty tracking, and egui texture upload internally.
+impl App {
+    fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        let render_state = cc.wgpu_render_state.as_ref().expect("the wgpu backend");
+        Self {
+            widget: GupWidget::new(render_state),
+            chart: gup_core::scatter(vec![(1.0, 2.0), (2.0, 3.0)]).x(|p| p.0).y(|p| p.1),
+        }
+    }
+}
 
-### Step 3 — Display in a panel
-
-Inside your `eframe::App::update` implementation:
-
-```rust
-egui::CentralPanel::default().show(ctx, |ui| {
-    ui.add(&mut widget);
-});
-```
-
-`GupWidget` implements `egui::Widget` for `&mut GupWidget`, so it can be passed
-directly to `ui.add()`.
-
-## Pushing Live Data Updates
-
-When your data changes, replace the inner chart and the widget will
-automatically re-render on the next frame:
-
-```rust
-widget.set_chart(build_chart(new_data));
-```
-
-Alternatively, if you have mutable access to the chart and update it in-place,
-call:
-
-```rust
-widget.mark_dirty();
-```
-
-The widget only re-renders when dirty or when the panel size has changed.
-Unchanged frames reuse the previously uploaded texture without issuing new GPU
-draw calls.
-
-## Retrieving Interaction Events
-
-egui pointer events (hover, click, drag, scroll) are automatically translated
-into Gup `InteractionEvent` types with coordinates mapped to the chart's
-physical pixel space:
-
-```rust
-let events = widget.take_events();
-for ev in &events {
-    println!("{} at ({}, {})", ev.interaction_type,
-             ev.screen_position.x, ev.screen_position.y);
+impl eframe::App for App {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            self.widget.show(ui, egui::vec2(480.0, 320.0), &mut self.chart);
+        });
+    }
 }
 ```
 
-Scroll events that egui does not consume are forwarded as `"scroll"` events with
-`scroll_x` / `scroll_y` metadata.
+Keep one `GupWidget` per chart. The chart stays yours (`&mut dyn Chart`), so
+mutate it, rebuild it or swap it between frames freely.
 
-## Complete Example
+## Live data
 
-See `gup-egui/examples/egui_chart.rs` for a full application that:
+Take an `Appender` from the chart (`chart.appender()`) and push from any thread.
+`show` hands the chart a waker that calls `egui::Context::request_repaint`, so
+egui repaints when rows arrive. `examples/egui_chart.rs` feeds a line from a
+thread this way.
 
-- Opens an `eframe` window.
-- Renders a live-updating scatter plot (data changes each second) in a
-  `CentralPanel`.
-- Shows interaction events in a `SidePanel`.
+## Interaction
 
-Run it with:
-
-```bash
-cargo run --manifest-path gup-egui/Cargo.toml --example egui_chart
-```
+`show` maps egui's pointer events to `gup_core::Input` (`gup_egui::to_input`)
+and calls `Chart::handle`: moves, presses inside the widget, releases (also
+outside, after a press), the mouse wheel while hovered, and the pointer leaving.
+Tooltips, brushing and zoom are the chart's own. `show` returns the
+`egui::Response` of the allocated rect.
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────┐
-│  egui / eframe (wgpu 27)                    │
-│                                             │
-│   ┌──────────────┐    ┌──────────────────┐  │
-│   │  egui UI     │    │ TextureManager   │  │
-│   │  ui.add(w)   │───▶│  ColorImage      │  │
-│   └──────────────┘    └──────────────────┘  │
-│          │                     ▲             │
-│          │  Response           │ RGBA pixels │
-│          ▼                     │             │
-│   ┌──────────────┐    ┌───────┴──────────┐  │
-│   │ Event Bridge │    │  PNG decode      │  │
-│   │ egui→Gup     │    └───────┬──────────┘  │
-│   └──────────────┘            │             │
-└───────────────────────────────┼─────────────┘
-                                │
-┌───────────────────────────────┼─────────────┐
-│  gup (wgpu 26)                │             │
-│                       ┌───────┴──────────┐  │
-│                       │ render_to_png()  │  │
-│                       │ OffscreenTarget  │  │
-│                       └──────────────────┘  │
-└─────────────────────────────────────────────┘
-```
+- `gup_egui::context(render_state)` makes one `gup_core::Context` over egui's
+  device (`Context::from_wgpu`) and keeps it in the renderer's
+  `callback_resources`, so widgets share pipelines and caches.
+- Each widget owns an `Rgba8Unorm` texture of `size × pixels_per_point` and
+  draws the chart's scene into it with Gup's own pass (`TextureTarget` and
+  `Renderer::render`). egui samples the texture raw: Gup writes sRGB bytes and
+  egui's shader works on gamma bytes, so an sRGB view would decode them twice.
+- `show` renders on every call; a chart that has not changed uploads nothing.
 
-Gup creates its own headless GPU device (wgpu 26) for off-screen rendering.
-egui/eframe brings its own wgpu 27. The two wgpu versions coexist as separate
-Cargo dependencies and do **not** share device/queue. Pixel data crosses the
-boundary as plain `Vec<u8>`.
+## Known limitations
 
-## Known Limitations
-
-- **Two wgpu versions linked**: Because gup uses wgpu 26 and eframe 0.33 uses
-  wgpu 27, the final binary links both. This increases compile time and binary
-  size but is functionally correct. When gup upgrades to wgpu 27 device sharing
-  will become possible.
-
-- **Headless / software-renderer environments**: The chart rendering path
-  requires a GPU device (or software Vulkan via lavapipe). If no GPU is
-  available at all, `RenderContext::new()` will fail. In CI, use lavapipe or
-  skip the chart construction.
-
-- **PNG round-trip overhead**: The current pipeline encodes the chart to PNG on
-  the GPU side, then decodes it on the egui side. This is the same approach used
-  by `gup-bevy` and is fast enough for interactive use, but a future
-  optimisation could transfer raw pixels directly.
-
-- **Single chart per widget**: Each `GupWidget` wraps exactly one chart. For
-  multi-chart layouts, create multiple `GupWidget` instances and place them in
-  separate egui panels.
+- Native only; egui on the web is out of scope (`gup_core::web` is the browser
+  host).
+- The chart is drawn in its own pass, not inside egui's, so it cannot be clipped
+  by egui paint callbacks or layered between egui shapes in one pass.

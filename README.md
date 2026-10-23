@@ -284,7 +284,6 @@ These crates are excluded from the workspace (`[workspace] exclude`), so
 
 | Crate                          | Re-wired at                     |
 | ------------------------------ | ------------------------------- |
-| `gup-egui`                     | RFC-001 S13                     |
 | `gup-bevy`                     | RFC-001 S13                     |
 | `gup-ios`                      | Strategic review T7 (after S13) |
 | `gup-android`                  | Strategic review T7 (after S13) |
@@ -292,8 +291,8 @@ These crates are excluded from the workspace (`[workspace] exclude`), so
 
 They are parked, not deleted
 ([strategic review](docs/planning/STRATEGIC_REVIEW_2026-10.md#decisions),
-Decision 3). `gup-egui` and `gup-bevy` do compile against `main`, but they are
-built on `ComposedChart`, `DynChart` and the context types that
+Decision 3). `gup-bevy` does compile against `main`, but it is built on
+`ComposedChart`, `DynChart` and the context types that
 [RFC-001](docs/planning/rfcs/RFC-001_Core_Architecture.md) replaces. Keeping
 them compiling through every RFC-001 step would be churn for code that S13
 rewrites anyway. The iOS and Android workflows run only on manual dispatch.
@@ -302,14 +301,13 @@ To work on one of them, build it from its own manifest. It gets its own
 lockfile; sharing the root target directory avoids rebuilding everything:
 
 ```bash
-CARGO_TARGET_DIR=target cargo check --manifest-path gup-egui/Cargo.toml
 CARGO_TARGET_DIR=target cargo check --manifest-path gup-bevy/Cargo.toml
 CARGO_TARGET_DIR=target cargo check --manifest-path gup-ios/Cargo.toml
 CARGO_TARGET_DIR=target cargo check --manifest-path gup-android/Cargo.toml
 ```
 
-`cargo check -p gup-egui` no longer works from the root, because the crate is
-not a workspace member.
+`gup-egui` is back in the workspace (not a default member):
+`cargo test -p gup-egui`.
 
 ## License
 
