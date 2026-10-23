@@ -29,33 +29,31 @@ expect 'mode=docs' docs/planning/stories/INDEX.md crates/gup-core/README.md
 expect 'mode=docs' COPYING
 
 # Docs a crate compiles (doctests, fonts) are that crate's sources.
-expect 'clippy=[gup gup-culling-lod]' docs/tutorials/01_getting_started.md
-expect 'clippy=[gup gup-culling-lod]' assets/fonts/default.ttf
-expect 'clippy=[gup gup-bevy gup-core gup-culling-lod gup-egui gup-text]' \
+expect 'clippy=[gup]' docs/tutorials/01_getting_started.md
+expect 'clippy=[gup]' assets/fonts/default.ttf
+expect 'clippy=[gup gup-bevy gup-core gup-egui gup-text]' \
   crates/gup-text/fonts/Inter-Regular.ttf
 
 # A leaf crate is checked alone; a dependency drags in its dependents.
-expect 'fmt=[gup-text] clippy=[gup gup-bevy gup-core gup-culling-lod gup-egui gup-text]' \
+expect 'fmt=[gup-text] clippy=[gup gup-bevy gup-core gup-egui gup-text]' \
   crates/gup-text/src/lib.rs
-expect 'clippy=[gup-culling-lod]' crates/gup-culling-lod/src/lib.rs
-expect 'fmt=[gup-core] clippy=[gup gup-bevy gup-core gup-culling-lod gup-egui]' \
+expect 'fmt=[gup-core] clippy=[gup gup-bevy gup-core gup-egui]' \
   crates/gup-core/src/lib.rs
-expect 'clippy=[gup gup-culling-lod gup-macros]' gup-macros/src/lib.rs
-expect 'clippy=[gup gup-bevy gup-core gup-culling-lod gup-egui gup-visual-regression]' \
+expect 'clippy=[gup gup-macros]' gup-macros/src/lib.rs
+expect 'clippy=[gup gup-bevy gup-core gup-egui gup-visual-regression]' \
   crates/gup-visual-regression/src/lib.rs
-expect 'clippy=[gup gup-culling-lod]' src/lib.rs tests/kde_tests.rs
-expect 'clippy=[gup gup-culling-lod]' src/lib.rs README.md
+expect 'clippy=[gup]' src/lib.rs tests/kde_tests.rs
+expect 'clippy=[gup]' src/lib.rs README.md
 
 # The crates that build for wasm32 are linted on that target too (GUP-412);
-# the proc-macro and the quarantined parts bin are not.
-expect 'clippy=[gup gup-bevy gup-core gup-culling-lod gup-egui] wasm32=[gup gup-core]' \
+# the proc-macro crates are not.
+expect 'clippy=[gup gup-bevy gup-core gup-egui] wasm32=[gup gup-core]' \
   crates/gup-core/src/lib.rs
-expect 'clippy=[gup gup-culling-lod gup-macros] wasm32=[gup]' \
+expect 'clippy=[gup gup-macros] wasm32=[gup]' \
   gup-macros/src/lib.rs
 expect 'wasm32=[gup gup-core gup-text]' crates/gup-text/src/lib.rs
 expect 'wasm32=[gup gup-core gup-visual-regression]' \
   crates/gup-visual-regression/src/lib.rs
-expect 'clippy=[gup-culling-lod] wasm32=[] ' crates/gup-culling-lod/src/lib.rs
 expect 'mode=full' scripts/clippy_wasm32.sh
 
 # The detached dogfood crate gets its own rustfmt check.
@@ -76,8 +74,8 @@ expect 'mode=full' scripts/rustc_workspace_wrapper.sh
 expect 'mode=workflows' .github/workflows/tests.yml
 expect 'actionlint=1' .github/workflows/tests.yml
 expect 'mode=docs' .github/workflows/README.md
-expect 'clippy=[gup-culling-lod] wasm32=[] dogfood=0 actionlint=1' \
-  .github/workflows/lint.yml crates/gup-culling-lod/src/lib.rs
+expect 'clippy=[gup-egui] wasm32=[] dogfood=0 actionlint=1' \
+  .github/workflows/lint.yml gup-egui/src/lib.rs
 expect 'mode=full' .github/workflows/lint.yml maskfile.md
 expect 'fmt=[gup-egui] clippy=[gup-egui] wasm32=[] ' gup-egui/src/lib.rs
 expect 'mode=full' examples/gup-tauri/src-tauri/src/main.rs

@@ -9,10 +9,8 @@ repository = "https://github.com/au-phiware/gup"
 readme = "README.md"
 publish = false
 
-# Quarantined from the `gup` crate by GUP-390 (strategic review 2026-10,
-# Decision 1). It is a workspace member so `cargo check -p gup-culling-lod`
-# works and CI keeps it compiling, but it is not a default member: a plain
-# `cargo build` / `cargo test` at the repository root does not build it.
+# Parked by GUP-488: excluded from the workspace (see the root Cargo.toml) and
+# from CI. It builds against the pre-flip `gup`; see README.md.
 
 [dependencies]
 gup = { path = "../.." }

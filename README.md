@@ -249,17 +249,17 @@ A plain `cargo build` or `cargo test` at the repository root builds only the
 `gup` crate (`default-members = ["."]`). The other workspace members are built
 with `-p`:
 
-| Crate                          | Status                                                                  |
-| ------------------------------ | ----------------------------------------------------------------------- |
-| `gup-macros`                   | Proc macros used by `gup` (`#[derive(Mark)]`, `#[wgsl_function]`).      |
-| `crates/gup-visual-regression` | Golden-image and structural check harness (`mask visual-regression`).   |
-| `crates/gup-culling-lod`       | **Experimental, unwired.** GPU culling and LOD code moved out of `gup`. |
+| Crate                          | Status                                                                |
+| ------------------------------ | --------------------------------------------------------------------- |
+| `gup-macros`                   | Proc macros used by `gup` (`#[derive(Mark)]`, `#[wgsl_function]`).    |
+| `crates/gup-visual-regression` | Golden-image and structural check harness (`mask visual-regression`). |
+| `crates/gup-culling-lod`       | **Parked** (GUP-488). GPU culling and LOD code, out of the workspace. |
 
 `crates/gup-culling-lod` holds the compute instance filter, occlusion culler,
 radix sort, batch renderer, LOD pyramid and adaptive renderer. No chart builder
 calls this code, but the RFC-001 core is expected to draw from it for GPU chunk
 culling and LOD (strategic review T3/T7), so it was quarantined rather than
-deleted. CI keeps it compiling and its tests passing. See its
+deleted. It is parked: out of the workspace and CI. See its
 [README](crates/gup-culling-lod/README.md).
 
 ### The `debug` feature

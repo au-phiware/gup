@@ -33,7 +33,6 @@ declare -A excluded=(
   [gup-macros]="a proc-macro, which always compiles for the host"
   [gup-egui]="a native host integration; the browser host is gup_core::web"
   [gup-bevy]="a native host integration; the browser host is gup_core::web"
-  [gup-culling-lod]="the quarantined parts bin (GUP-390): nothing builds it for wasm32, and code ported from it into gup-core is linted there"
 )
 
 list=0

@@ -21,7 +21,7 @@
 //! info they take about 17 GB), or:
 //!
 //! ```text
-//! cargo build --examples --all-features -p gup -p gup-culling-lod
+//! cargo build --examples --all-features -p gup
 //! cargo test --all-features --test examples_smoke -- --ignored --test-threads=1
 //! ```
 //!
@@ -70,10 +70,7 @@ fn root() -> &'static Path {
 }
 
 /// Workspace packages whose examples the smoke test covers.
-/// `gup-culling-lod` is not a default workspace member (GUP-390), so its
-/// examples are built explicitly with `-p gup-culling-lod`; covering them here
-/// keeps the quarantined culling/LOD code running, not just compiling.
-const PACKAGES: &[&str] = &["gup", "gup-culling-lod"];
+const PACKAGES: &[&str] = &["gup"];
 
 /// Example targets of the [`PACKAGES`], from `cargo metadata`.
 fn examples() -> Vec<Example> {
@@ -376,7 +373,7 @@ fn examples_run_headless() {
                 ));
             } else {
                 problems.push(format!(
-                    "{}: binary {} missing; run `cargo build --examples --all-features -p gup -p gup-culling-lod` first",
+                    "{}: binary {} missing; run `cargo build --examples --all-features -p gup` first",
                     ex.name,
                     bin.display()
                 ));

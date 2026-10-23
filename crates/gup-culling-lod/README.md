@@ -1,4 +1,8 @@
-# gup-culling-lod (experimental, unwired)
+# gup-culling-lod (parked)
+
+> **Parked (GUP-488):** built against the pre-flip `gup` at `06a5cef8`; T7 ports
+> what it needs onto gup-core. It is out of the workspace and CI, and the code
+> is kept frozen as reference. To build it, check out that commit.
 
 GPU culling and level-of-detail (LOD) code, quarantined out of the `gup` crate
 by GUP-390.

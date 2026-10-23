@@ -171,7 +171,7 @@ directory: with debug info the 109 example binaries take about 17 GB.
 ```bash
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-target}/smoke"
 export CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_DEV_STRIP=true CARGO_INCREMENTAL=0
-cargo build --examples --all-features -p gup -p gup-culling-lod
+cargo build --examples --all-features -p gup
 smoke=(cargo test --all-features --test examples_smoke -- --include-ignored --test-threads=1)
 # `gup_core::show` examples capture a frame in a real (Xvfb) window, so they
 # need a display. Windowed runs (GUP_SMOKE_WINDOWED=1) use the real one.
@@ -413,16 +413,13 @@ grep -q run_wasm_axis_benchmarks "${CARGO_TARGET_DIR:-target}/ci-pkg/gup.js"
 
 ### ci visual-regression
 
-> Visual regression workflow: goldens, gup-core, culling/LOD, examples smoke,
-> browser
+> Visual regression workflow: goldens, gup-core, examples smoke, browser
 
 ```bash
 set -euo pipefail
 export VK_ICD_FILENAMES="${GUP_LAVAPIPE_ICD:-$LIBGL_DRIVERS_PATH/../../share/vulkan/icd.d/lvp_icd.x86_64.json}"
 export WGPU_BACKEND=vulkan
 cargo test -p gup-visual-regression
-cargo check -p gup-culling-lod --all-targets --all-features
-cargo test -p gup-culling-lod -- --test-threads=1
 cargo test -p gup-text -- --test-threads=1
 cargo test -p gup-core --lib --test scatter_png --test targets \
   --test scene_items --test msaa --test svg -- --test-threads=1
