@@ -429,7 +429,7 @@ findings", GUP-396).
 - [GUP-481](GUP-481_RFC_001_S12b_Web_Canvas_Waker.md) 📋 — RFC-001 step S12b:
   `CanvasApp` wakes on appended rows through a wasm32 thread-local registry,
   checked by a browser step with no input. Deps: GUP-480 ✅.
-- [GUP-482](GUP-482_RFC_001_S12c_Window_Eviction.md) 🚧 — RFC-001 step S12c
+- [GUP-482](GUP-482_RFC_001_S12c_Window_Eviction.md) ✅ — RFC-001 step S12c
   (design): `Window::LastRows(n)` whole-chunk eviction that keeps draw order,
   line bridges, brush bits, CPU and GPU picks and culling consistent, with
   stored rows renumbered from 0. Deps: GUP-480 ✅.
