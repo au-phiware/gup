@@ -9,7 +9,7 @@ publish = false
 [workspace]
 
 [dependencies]
-gup-core = { path = "../crates/gup-core" }
+gup = { path = ".." }
 gup-egui = { path = "../gup-egui" }
 csv = "1.3"
 chrono = "0.4"

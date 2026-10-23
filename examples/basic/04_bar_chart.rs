@@ -11,7 +11,7 @@ struct Sale {
     sales: f64,
 }
 
-fn main() -> gup_core::Result<()> {
+fn main() -> gup::Result<()> {
     let rows = ["Q1", "Q2", "Q3", "Q4"]
         .into_iter()
         .enumerate()
@@ -22,15 +22,15 @@ fn main() -> gup_core::Result<()> {
                 sales: base + 6.0 * i as f64,
             })
         });
-    let chart = gup_core::bar(rows)
+    let chart = gup::bar(rows)
         .x(|s| s.quarter)
         .y(|s| s.sales)
         .color(|s| s.region)
         .padding(0.15)
         .title("Sales by quarter and region");
     if std::env::args().any(|a| a == "--stacked") {
-        gup_core::show(chart.stack(|s| s.region))
+        gup::show(chart.stack(|s| s.region))
     } else {
-        gup_core::show(chart.group(|s| s.region))
+        gup::show(chart.group(|s| s.region))
     }
 }

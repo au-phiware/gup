@@ -6,8 +6,8 @@
 //! built once, empty; each batch is evaluated and uploaded when the next
 //! render resolves.
 
-use gup_core::ChartExt;
-use gup_core::prelude::*;
+use gup::ChartExt;
+use gup::prelude::*;
 
 /// A sample: its index and a sine of it.
 struct S {
@@ -26,7 +26,7 @@ fn sample(i: u32) -> S {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
     let cx = Context::new_blocking()?;
-    let mut chart = gup_core::scatter(Vec::<S>::new())
+    let mut chart = gup::scatter(Vec::<S>::new())
         .x(|s| s.i)
         .y(|s| s.v)
         .fill(Color::hex(0xd62728))

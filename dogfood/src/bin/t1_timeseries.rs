@@ -4,7 +4,7 @@
 //! Task 1: multi-line time series from CSV with date axis, legend, title, PNG.
 
 use chrono::NaiveDate;
-use gup_core::prelude::*;
+use gup::prelude::*;
 
 struct Row {
     /// Unix seconds.
@@ -38,7 +38,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
     let rows = load("/tmp/gup-dogfood/prices.csv")?;
     let cx = Context::new_blocking()?;
-    gup_core::line(rows)
+    gup::line(rows)
         .x(|r| r.t)
         .x_scale(Time::new())
         .y(|r| r.price)

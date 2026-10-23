@@ -5,7 +5,7 @@
 //! crate: a soft-knee radius and a blue-to-orange colour ramp, each applied
 //! to a `Circle` channel.
 
-use gup_core::prelude::*;
+use gup::prelude::*;
 
 /// Map a normalised value to a radius with a soft-knee curve.
 #[derive(Clone, Debug)]

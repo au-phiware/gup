@@ -11,8 +11,8 @@
 //! DOGFOOD_AUTO=1 runs ~6 s, prints timings, saves a screenshot, exits.
 
 use eframe::egui;
-use gup_core::prelude::*;
-use gup_core::{Appender, LineChart, ScatterChart};
+use gup::prelude::*;
+use gup::{Appender, LineChart, ScatterChart};
 use gup_dogfood::*;
 use gup_egui::GupWidget;
 use std::time::{Duration, Instant};
@@ -28,7 +28,7 @@ struct S {
 }
 
 fn line_chart(pts: &[S]) -> LineChart<S> {
-    gup_core::line(pts.to_vec())
+    gup::line(pts.to_vec())
         .x(|s| s.t)
         .x_scale(Linear::new().domain(0.0, X_MAX))
         .y(|s| s.v)
@@ -38,7 +38,7 @@ fn line_chart(pts: &[S]) -> LineChart<S> {
 }
 
 fn scatter_chart(pts: &[S]) -> ScatterChart<S> {
-    gup_core::scatter(pts.to_vec())
+    gup::scatter(pts.to_vec())
         .x(|s| s.t)
         .x_scale(Linear::new().domain(0.0, X_MAX))
         .y(|s| s.v)

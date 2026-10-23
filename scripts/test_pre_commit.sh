@@ -29,8 +29,7 @@ expect 'mode=docs' docs/planning/stories/INDEX.md crates/gup-core/README.md
 expect 'mode=docs' COPYING
 
 # Docs a crate compiles (doctests, fonts) are that crate's sources.
-expect 'clippy=[gup]' docs/tutorials/01_getting_started.md
-expect 'clippy=[gup]' assets/fonts/default.ttf
+expect 'mode=docs' docs/tutorials/01_getting_started.md
 expect 'clippy=[gup gup-bevy gup-core gup-egui gup-text]' \
   crates/gup-text/fonts/Inter-Regular.ttf
 
@@ -39,7 +38,8 @@ expect 'fmt=[gup-text] clippy=[gup gup-bevy gup-core gup-egui gup-text]' \
   crates/gup-text/src/lib.rs
 expect 'fmt=[gup-core] clippy=[gup gup-bevy gup-core gup-egui]' \
   crates/gup-core/src/lib.rs
-expect 'clippy=[gup gup-macros]' gup-macros/src/lib.rs
+expect 'clippy=[gup gup-bevy gup-core gup-core-macros gup-egui]' \
+  crates/gup-core-macros/src/lib.rs
 expect 'clippy=[gup gup-bevy gup-core gup-egui gup-visual-regression]' \
   crates/gup-visual-regression/src/lib.rs
 expect 'clippy=[gup]' src/lib.rs tests/kde_tests.rs
@@ -49,8 +49,8 @@ expect 'clippy=[gup]' src/lib.rs README.md
 # the proc-macro crates are not.
 expect 'clippy=[gup gup-bevy gup-core gup-egui] wasm32=[gup gup-core]' \
   crates/gup-core/src/lib.rs
-expect 'clippy=[gup gup-macros] wasm32=[gup]' \
-  gup-macros/src/lib.rs
+expect 'wasm32=[gup gup-core gup-core-macros]' \
+  crates/gup-core-macros/src/lib.rs
 expect 'wasm32=[gup gup-core gup-text]' crates/gup-text/src/lib.rs
 expect 'wasm32=[gup gup-core gup-visual-regression]' \
   crates/gup-visual-regression/src/lib.rs

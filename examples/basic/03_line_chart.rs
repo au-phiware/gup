@@ -5,7 +5,7 @@
 //!
 //! Set `GUP_SCREENSHOT_PATH=out.png` to render one frame headless.
 
-use gup_core::prelude::*;
+use gup::prelude::*;
 
 struct Sample {
     t: f64,
@@ -13,7 +13,7 @@ struct Sample {
     series: &'static str,
 }
 
-fn main() -> gup_core::Result<()> {
+fn main() -> gup::Result<()> {
     let rows = (0..40).flat_map(|i| {
         let t = f64::from(i) / 4.0;
         [
@@ -29,12 +29,12 @@ fn main() -> gup_core::Result<()> {
             },
         ]
     });
-    let chart = gup_core::line(rows)
+    let chart = gup::line(rows)
         .x(|s| s.t)
         .y(|s| s.value)
         .color(|s| s.series)
         .width(2.0)
         .grid(Axes::Y)
         .title("Two series");
-    gup_core::show(chart)
+    gup::show(chart)
 }

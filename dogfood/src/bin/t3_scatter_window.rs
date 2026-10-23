@@ -8,15 +8,15 @@
 //! and asks the window to hover there and save a screenshot to
 //! /tmp/gup-dogfood/t3_window.png, then exit.
 
-use gup_core::prelude::*;
-use gup_core::{RowId, ScatterChart};
+use gup::prelude::*;
+use gup::{RowId, ScatterChart};
 use gup_dogfood::{PALETTE_HEX, Pt, load_points};
 
 const W: f32 = 1000.0;
 const H: f32 = 700.0;
 
 fn chart(data: Vec<Pt>) -> ScatterChart<Pt> {
-    gup_core::scatter(data)
+    gup::scatter(data)
         .x(|p| p.income)
         .x_scale(Log::new())
         .y(|p| p.spend)
@@ -34,7 +34,7 @@ fn chart(data: Vec<Pt>) -> ScatterChart<Pt> {
         })
 }
 
-fn main() -> gup_core::Result<()> {
+fn main() -> gup::Result<()> {
     env_logger::init();
     let mut chart = chart(load_points().expect("points.csv"));
     if std::env::var("DOGFOOD_AUTO").is_ok() {
@@ -64,5 +64,5 @@ fn main() -> gup_core::Result<()> {
             std::env::set_var("GUP_SCREENSHOT_HEIGHT", "700");
         }
     }
-    gup_core::show(chart)
+    gup::show(chart)
 }

@@ -1508,6 +1508,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "gup"
+version = "0.1.0"
+dependencies = [
+ "gup-core",
+]
+
+[[package]]
 name = "gup-core"
 version = "0.1.0"
 dependencies = [
@@ -1547,7 +1554,7 @@ dependencies = [
  "csv",
  "eframe",
  "env_logger",
- "gup-core",
+ "gup",
  "gup-egui",
  "image 0.24.9",
  "pollster 0.3.0",

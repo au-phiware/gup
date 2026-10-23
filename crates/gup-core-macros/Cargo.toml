@@ -8,8 +8,7 @@ license = "GPL-3.0-or-later"
 repository = "https://github.com/au-phiware/gup"
 publish = false
 
-# Not the frozen old path's `gup-macros` (which transpiles Rust-syntax
-# bodies to WGSL for the old render path). This macro takes authored WGSL,
+# This macro takes authored WGSL,
 # composes it with naga_oil against Gup's library at expansion through
 # gup-wgsl's `compose` feature, and emits Rust only. Use it through
 # `gup_core::wgsl_function`: the generated code names `::gup_core`.

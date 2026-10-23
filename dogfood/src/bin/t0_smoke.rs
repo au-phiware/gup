@@ -3,14 +3,14 @@
 
 //! Control: the simplest possible chart -> PNG, to check text/axes render.
 
-use gup_core::prelude::*;
+use gup::prelude::*;
 
 struct P {
     x: f32,
     y: f32,
 }
 
-fn main() -> gup_core::Result<()> {
+fn main() -> gup::Result<()> {
     env_logger::init();
     let data: Vec<P> = (0..20)
         .map(|i| P {
@@ -20,7 +20,7 @@ fn main() -> gup_core::Result<()> {
         .collect();
 
     let cx = Context::new_blocking()?;
-    gup_core::scatter(data)
+    gup::scatter(data)
         .x(|p| p.x)
         .y(|p| p.y)
         .title("Smoke test")

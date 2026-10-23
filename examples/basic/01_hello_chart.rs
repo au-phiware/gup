@@ -10,13 +10,13 @@ struct Point {
     y: f64,
 }
 
-fn main() -> gup_core::Result<()> {
+fn main() -> gup::Result<()> {
     let data =
         [(1.0, 2.0), (2.0, 4.0), (3.0, 3.0), (4.0, 5.0), (5.0, 4.5)].map(|(x, y)| Point { x, y });
-    let chart = gup_core::scatter(data)
+    let chart = gup::scatter(data)
         .x(|p| p.x)
         .y(|p| p.y)
         .radius(5.0)
         .title("Hello, chart");
-    gup_core::show(chart)
+    gup::show(chart)
 }

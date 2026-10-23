@@ -5,14 +5,14 @@
 //!
 //! Set `GUP_SCREENSHOT_PATH=out.png` to render one frame headless.
 
-use gup_core::prelude::*;
+use gup::prelude::*;
 
 struct Observation {
     x: f64,
     y: f64,
 }
 
-fn main() -> gup_core::Result<()> {
+fn main() -> gup::Result<()> {
     let observations: Vec<Observation> = (0..60)
         .map(|i| {
             let x = f64::from(i) / 6.0;
@@ -31,5 +31,5 @@ fn main() -> gup_core::Result<()> {
         .y(|o| o.y)
         .radius(Px(3.0));
     plot.line(fit).x(|f| f.0).y(|f| f.1).width(Px(2.0));
-    gup_core::show(plot)
+    gup::show(plot)
 }

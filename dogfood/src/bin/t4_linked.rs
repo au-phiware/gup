@@ -8,8 +8,8 @@
 //! DOGFOOD_AUTO=1 performs a scripted brush drag and saves a screenshot.
 
 use eframe::egui;
-use gup_core::ScatterChart;
-use gup_core::prelude::*;
+use gup::ScatterChart;
+use gup::prelude::*;
 use gup_dogfood::*;
 use gup_egui::GupWidget;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -40,7 +40,7 @@ fn palette() -> impl Iterator<Item = Color> {
 }
 
 fn left_chart(data: &[Pt], shared: Arc<Shared>) -> ScatterChart<Pt> {
-    let mut chart = gup_core::scatter(data.to_vec())
+    let mut chart = gup::scatter(data.to_vec())
         .x(|p| p.income)
         .x_scale(Log::new())
         .y(|p| p.spend)
@@ -86,7 +86,7 @@ fn right_chart(data: &[Pt], selected: &[usize]) -> ScatterChart<R> {
     } else {
         std::iter::once(Color::hex(GREY)).chain(palette()).collect()
     };
-    gup_core::scatter(rows)
+    gup::scatter(rows)
         .x(|r| r.pt.weight)
         .y(|r| r.pt.spend)
         .color(|r| {

@@ -3,10 +3,10 @@
 
 //! Reference: PNG export of a titled, gridded scatter plot at three sizes
 //! (1x, a 2x device-pixel-ratio render and a large one), built externally on
-//! `gup-core`.
+//! `gup`.
 
-use gup_core::prelude::*;
-use gup_core::{ImageTarget, TargetOptions};
+use gup::prelude::*;
+use gup::{ImageTarget, TargetOptions};
 
 /// A data point for the scatter plot.
 #[derive(Debug, Clone)]

@@ -4,7 +4,7 @@
 //! Task 2: grouped + stacked bar chart (region x quarter) with legend,
 //! exported to PNG. Value labels are not available and are not checked.
 
-use gup_core::prelude::*;
+use gup::prelude::*;
 
 struct Sale {
     region: String,
@@ -39,7 +39,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             quarter: s.quarter.clone(),
             sales: s.sales,
         });
-        let chart = gup_core::bar(rows)
+        let chart = gup::bar(rows)
             .x(|d| d.quarter.as_str())
             .y(|d| d.sales)
             .color(|d| d.region.as_str())

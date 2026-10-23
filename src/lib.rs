@@ -1,439 +1,77 @@
-// Gup - GPU-Accelerated Data Visualization Library
-// Copyright (C) 2025 Corin Lawson <corin@phiware.com.au>
-//
-// This program is free software: you can redistribute it and/or modify
-// it under the terms of the GNU General Public License as published by
-// the Free Software Foundation, either version 3 of the License, or
-// (at your option) any later version.
-//
-// This program is distributed in the hope that it will be useful,
-// but WITHOUT ANY WARRANTY; without even the implied warranty of
-// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-// GNU General Public License for more details.
-//
-// You should have received a copy of the GNU General Public License
-// along with this program.  If not, see <https://www.gnu.org/licenses/>.
-//
-//! # Gup - GPU-Accelerated Data Visualization Library
+// Copyright (C) 2024 Corin Lawson
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+//! # gup
 //!
-//! Gup is a high-performance data visualization library that leverages GPU acceleration through
-//! WebGPU to create interactive, scalable visualizations that work both natively and in web
-//! browsers.
+//! GPU-accelerated data visualization. This crate is the public face of
+//! [`gup_core`]: everything `gup-core` exports (its root items, the
+//! [`prelude`], `wgpu`, the shader-function macros) is re-exported here, and
+//! this crate adds nothing of its own.
 //!
-//! ## Features
+//! ## A scatter chart in a few lines
 //!
-//! - **GPU-Accelerated Rendering**: Utilizes WebGPU for high-performance graphics
-//! - **Cross-Platform**: Works on desktop (Windows, macOS, Linux) and web (WebAssembly)
-//! - **Interactive Visualizations**: Built-in support for user interactions and animations
-//! - **Extensible Architecture**: Modular design allowing custom marks and interactions
-//!
-//! ## Architecture Overview
-//!
-//! Gup is organised around several core abstractions that compose into a full
-//! visualisation pipeline:
-//!
-//! - **[`Selection`]** – The primary data-binding type. A selection associates
-//!   data elements with GPU-resident mark instances and drives the
-//!   enter/update/exit lifecycle.
-//! - **`ShaderFunction`** – Composable GPU
-//!   shader functions that map data attributes to visual channels (position,
-//!   colour, size, …) and can be combined through the
-//!   [`ComposableShaderFunction`] trait.
-//! - **[`Mark`]** – Visual primitives (circle, rectangle, line, …)
-//!   rendered on the GPU. Marks declare their vertex layout and shader code and
-//!   are registered in a [`MarkRegistry`].
-//! - **[`GupContext`]** – The central GPU context that owns the wgpu device,
-//!   queue, surface, and auxiliary caches (buffer pool, pipeline cache, texture
-//!   pool).
-//! - **[`ChartBuilder`]** – A high-level, fluent
-//!   API for constructing common chart types (scatter, line, bar, area, …)
-//!   without manual shader or mark wiring.
-//!
-//! Data flows through the library as follows:
-//!
-//! ```text
-//! Data  ──▶  Selection  ──▶  ShaderFunction (scale/encode)  ──▶  Mark (GPU draw)
-//!                                     │
-//!                                     ▼
-//!                            Axis / Grid / Label (annotation layer)
 //! ```
-//!
-//! ## Quick Start
-//!
-//! ```rust,ignore
 //! use gup::prelude::*;
 //!
-//! // Create GPU-compatible types with ergonomic macros
-//! let position = vec3![1.0, 2.0, 3.0];
-//! let color = vec4![1.0, 0.5, 0.0, 1.0];
+//! struct Row { gdp: f64, life_exp: f64, continent: String, population: f64 }
+//! let data = vec![
+//!     Row { gdp: 1e3, life_exp: 55.0, continent: "Africa".into(), population: 3e7 },
+//!     Row { gdp: 2e4, life_exp: 74.0, continent: "Europe".into(), population: 6e7 },
+//!     Row { gdp: 6e4, life_exp: 81.0, continent: "Asia".into(), population: 1e9 },
+//! ];
+//!
+//! let mut chart = gup::scatter(data)
+//!     .x(|d| d.gdp)
+//!     .y(|d| d.life_exp)
+//!     .color(|d| d.continent.as_str())
+//!     .size(|d| d.population);
+//! let image = chart.render(&Context::shared()?, 800, 500)?;
+//! assert_eq!(image.dimensions(), (800, 500));
+//! # Ok::<(), gup::Error>(())
 //! ```
 //!
-//! ## Type Construction
+//! ## Your own shader function
 //!
-//! Gup provides ergonomic macros for GPU-compatible vector and matrix types:
+//! `#[gup::wgsl_function]` turns WGSL into a typed shader function. Here a
+//! colour ramp colours each circle. A doctest is an external crate that
+//! depends on `gup` alone; `path` is set because its package is named `gup`.
 //!
-//! - `vec2![x, y]` - 2D vectors
-//! - `vec3![x, y, z]` - 3D vectors with automatic GPU padding
-//! - `vec4![x, y, z, w]` - 4D vectors (colours, homogeneous coordinates)
-//! - `mat2![...]`, `mat3![...]`, `mat4![...]` - Matrix construction
+//! ```
+//! use gup::prelude::*;
 //!
-//! These macros ensure proper GPU memory alignment and provide zero-cost abstractions.
+//! /// Blue for low values, orange-red for high ones.
+//! #[derive(Clone, Debug)]
+//! struct Ramp;
 //!
-//! ## Module Organisation
+//! #[gup::wgsl_function(path = "ramp_demo", wgsl = r#"
+//!     struct Params { pad: f32 }
 //!
-//! | Module | Purpose |
-//! |--------|---------|
-//! | [`accessibility`] | Screen reader support, ARIA tree, focus management |
-//! | [`axis`] / [`axis_system`] | Axis rendering, tick generation, axis layout |
-//! | [`buffer`] | GPU buffer pool, upload/download helpers |
-//! | [`context`] | [`GupContext`] — device, queue, surface management |
-//! | [`error`] | [`GupError`] variants and the [`GupResult`] type alias |
-//! | [`grid`] | GPU-accelerated grid line rendering |
-//! | [`interaction`] | GPU hit-testing, event handling, gesture recognition |
-//! | [`mark`] | Mark trait, registry, built-in marks (circle, rect, line, …) |
-//! | [`scale`] | Scale types (linear, log, ordinal, …) |
-//! | [`selection`] | [`Selection<T, M>`](Selection) — data-binding core |
-//! | [`shader_function`] | Composable GPU shader functions |
-//! | [`text`] | SDF-based GPU text rendering pipeline |
-//! | [`prelude`] | Convenience re-exports for common imports |
+//!     fn ramp(v: f32, p: Params) -> vec4<f32> {
+//!         return vec4<f32>(v, 0.3, 1.0 - v, 1.0);
+//!     }
+//! "#)]
+//! impl ShaderFn for Ramp {
+//!     fn params(&self) -> RampParams {
+//!         RampParams { pad: 0.0 }
+//!     }
+//! }
+//!
+//! struct Reading { x: f64, y: f64, v: f64 }
+//! let readings: Vec<Reading> = (0..16)
+//!     .map(|i| Reading { x: f64::from(i % 4), y: f64::from(i / 4), v: f64::from(i) / 15.0 })
+//!     .collect();
+//!
+//! let cx = Context::shared()?;
+//! let mut plot = Plot::new();
+//! plot.x(Linear::new().domain(-1.0, 4.0));
+//! plot.y(Linear::new().domain(-1.0, 4.0));
+//! plot.circles(readings)
+//!     .x(|r: &Reading| r.x)
+//!     .y(|r: &Reading| r.y)
+//!     .attr(Circle::FILL, Ramp.encode(|r: &Reading| r.v));
+//! let (image, _) = plot.render_resolved(&cx, 320, 320)?;
+//! assert!(image.pixels().any(|p| p.0 != [255, 255, 255, 255]));
+//! # Ok::<(), gup::Error>(())
+//! ```
 
-#![cfg_attr(docsrs, feature(doc_cfg))]
-#![deny(missing_docs)]
-
-// Allow `gup::` paths in proc macro-generated code from within this crate.
-extern crate self as gup;
-
-pub mod accessibility;
-pub mod app;
-pub mod axis;
-pub mod axis3d;
-pub mod axis_performance;
-pub mod axis_system;
-pub mod brush;
-pub mod buffer;
-pub mod camera;
-pub mod color_descriptor;
-pub mod context;
-#[cfg(feature = "debug")]
-#[cfg_attr(docsrs, doc(cfg(feature = "debug")))]
-pub mod debug;
-pub mod depth;
-pub mod error;
-pub mod event;
-#[doc(hidden)]
-pub mod export;
-pub mod gpu_timer;
-pub mod grid;
-#[doc(hidden)]
-pub mod interaction;
-pub mod label;
-pub mod layout;
-pub mod lighting;
-pub mod linked_selection;
-pub mod mark;
-pub mod mark_selection;
-pub mod math;
-#[cfg(feature = "debug")]
-#[cfg_attr(docsrs, doc(cfg(feature = "debug")))]
-pub mod performance;
-#[cfg(feature = "debug")]
-#[cfg_attr(docsrs, doc(cfg(feature = "debug")))]
-pub mod performance_export;
-#[cfg(feature = "debug")]
-#[cfg_attr(docsrs, doc(cfg(feature = "debug")))]
-pub mod performance_targets;
-pub mod pipeline_cache;
-pub mod platform;
-pub mod prelude;
-pub mod render;
-pub mod scale;
-pub mod selection;
-pub mod selection_mask;
-pub mod shader_function;
-pub mod shader_pipeline;
-pub mod spatial_index;
-pub mod streaming;
-#[doc(hidden)]
-pub mod test_utils;
-pub mod text;
-pub mod tick_generator;
-pub mod transition;
-#[doc(hidden)]
-pub mod visual_test_utils;
-pub mod wasm_api;
-#[doc(hidden)]
-pub mod wasm_bench;
-#[doc(hidden)]
-pub mod wasm_bench_axis;
-#[doc(hidden)]
-pub mod wasm_bench_interaction;
-pub mod zoom;
-
-/// Hidden module for procedural macro support.
-///
-/// This module re-exports types and crates that procedural macros need to
-/// reference in generated code. Do not use directly.
-#[doc(hidden)]
-pub mod __private {
-    /// Re-exported so macro-generated `Pod`/`Zeroable` derives work in crates
-    /// that do not depend on `bytemuck` directly.
-    pub use bytemuck;
-
-    pub use crate::error::GupError;
-    pub use crate::mark::Mark;
-    pub use crate::shader_pipeline::ComposableShaderPipeline;
-}
-
-// ---------------------------------------------------------------------------
-// Conditional Send/Sync marker traits for cross-platform (native + WASM) support.
-//
-// On native targets wgpu types are Send + Sync, so async futures and trait
-// objects must be Send/Sync too.  On WASM the WebGPU backend wraps JS objects
-// (Rc, *mut u8, RefCell…) that are inherently !Send/!Sync, but WASM is
-// single-threaded so this is fine.  These helper traits let the rest of the
-// crate express "Send if native" without duplicating every trait definition.
-// ---------------------------------------------------------------------------
-
-/// Marker trait that equals `Send` on native and is auto-implemented on WASM.
-#[cfg(not(target_arch = "wasm32"))]
-pub trait MaybeSend: Send {}
-#[cfg(not(target_arch = "wasm32"))]
-impl<T: Send> MaybeSend for T {}
-
-/// Marker trait that equals `Send` on native and is auto-implemented on WASM.
-#[cfg(target_arch = "wasm32")]
-pub trait MaybeSend {}
-#[cfg(target_arch = "wasm32")]
-impl<T> MaybeSend for T {}
-
-/// Marker trait that equals `Sync` on native and is auto-implemented on WASM.
-#[cfg(not(target_arch = "wasm32"))]
-pub trait MaybeSync: Sync {}
-#[cfg(not(target_arch = "wasm32"))]
-impl<T: Sync> MaybeSync for T {}
-
-/// Marker trait that equals `Sync` on native and is auto-implemented on WASM.
-#[cfg(target_arch = "wasm32")]
-pub trait MaybeSync {}
-#[cfg(target_arch = "wasm32")]
-impl<T> MaybeSync for T {}
-
-// Export application shell
-pub use app::{AppRenderer, GupApp};
-
-pub use color_descriptor::{
-    ColorNamer, Hsl, describe_color, describe_color_detailed, describe_color_with, rgba_to_hsl,
-};
-
-// Export accessibility system components
-pub use accessibility::high_contrast::{
-    AccessibilityOverrides, Color as AccessibilityColor, calculate_contrast_ratio,
-};
-pub use accessibility::{
-    AccessibilityAction, AccessibilitySettings, AccessibilitySystem, AriaLive, AriaNode,
-    AriaProperties, AriaRelevant, AriaRole, AriaTree, AriaUpdate, AudioEvent, AudioParameter,
-    AudioTrack, ContrastMode, ContrastTheme, DataPatterns, Direction, ElementId, ElementType,
-    FocusManager, FocusableElement, HighContrastRenderer, KeyEvent, MappingFunction,
-    NavigationMode, NodeId, Pattern, PatternLibrary, SonificationEngine, SonificationMapping,
-    Trend,
-};
-pub use axis::*;
-pub use axis_system::{AxisLayout, AxisMargins, AxisSystem, ChartArea, ScaleConfiguration};
-pub use buffer::*;
-pub use context::*;
-#[cfg(feature = "debug")]
-pub use debug::*;
-pub use error::*;
-pub use grid::*;
-pub use label::*;
-pub use scale::*;
-// Export interaction system components (excluding ambiguous types)
-pub use interaction::{
-    CustomInteractionQuery, ElementData, ElementHit, EventHandler, GestureRecognizer, GestureType,
-    GpuInteractionQuery, InteractionElement, InteractionEvent, InteractionResult,
-    InteractionSystem, InteractionType, PropagationPhase, QueryHandle, QueryStats, Rect,
-    Renderable, TouchPoint,
-};
-// Export event handling system
-pub use event::{
-    CoalescingConfig, EventManager, EventResult, EventType, ModifierFlags, RawInputEvent,
-    ViewportTransform,
-};
-// Export zoom/pan behaviour
-pub use render::*;
-pub use shader_function::*;
-pub use shader_pipeline::*;
-pub use text::*;
-pub use zoom::{GpuViewportTransform, ZoomBehavior};
-// Export brush selection system
-pub use brush::{
-    BrushBehavior, BrushEvent, BrushExtent, BrushMark, BrushOverlayRenderer, BrushStyle,
-    GpuBrushConfig,
-};
-// Export tick generator with explicit types to avoid conflicts
-pub use tick_generator::{
-    // Renamed to avoid conflict with shader_function::LinearScale (the GPU
-    // shader function). tick_generator::LinearScale is a CPU-side type used for
-    // axis tick generation; shader_function::LinearScale is the GPU-side type
-    // that generates WGSL code for data scaling on the GPU.
-    LinearScale as TickLinearScale,
-    LinearTickGenerator,
-    LogarithmicScale,
-    LogarithmicTickGenerator,
-    Scale,
-    TickGenerator,
-    TimeInterval,
-    TimeScale,
-    TimeTickGenerator,
-    TimeUnit,
-};
-
-// Export mark system with explicit re-exports to avoid conflicts
-pub use mark::advanced_rendering::{
-    DynamicAttributeBufferManager, DynamicAttributeMap, DynamicAttributeValue, MarkBlendConfig,
-    MarkViewport, MultiPassConfig, MultiPassRenderer, RenderPassConfig, RenderStateManager,
-    RenderStateSnapshot, ScissorRect, UploadStats,
-};
-pub use mark::boxplot::{
-    BoxPlot, BoxPlotAttributes, BoxPlotInstance, BoxPlotOrientation, BoxPlotVertex,
-};
-pub use mark::circle::{Circle, CircleAttributes, CircleInstance, CircleVertex};
-pub use mark::filled_polygon::{
-    FilledPolygon, FilledPolygonAttributes, FilledPolygonVertex, TriangleInstance,
-    tessellate_polygon,
-};
-pub use mark::line::{Line, LineAttributes, LineInstance, LineStyle, LineVertex};
-pub use mark::rectangle::{Rectangle, RectangleAttributes, RectangleInstance, RectangleVertex};
-pub use mark::{Mark, MarkInfo, MarkInfoImpl, MarkRegistry};
-
-// Export selection system
-pub use pipeline_cache::PipelineCache;
-pub use selection::{
-    AccessibleMark, AriaUpdateConfig, AttrValue, InteractionData, IntoAttrValue, IntoAttrValues,
-    MarkInstanceBuilder, Selection, ViewportUniforms,
-};
-
-// Export transition system
-pub use transition::{
-    TransitionBuilder, TransitionConfig, TransitionState,
-    builder::{CommittedTransition, EasingFn, ElementTransition, TransitionGroup},
-    diff::{DiffResult, diff_by_key},
-};
-
-// Export interactive mark selection system
-pub use mark_selection::{
-    BitSet, HapticFeedback, KeyModifiers, MarkSelectionSystem, SelectionEvent, SelectionMode,
-    SelectionOperation, SelectionState, SelectionStatistics, SelectionStyle, SelectionTool,
-    SelectionToolKind, ToolResult, ToolState, TouchEvent, TouchPhase, TouchSelectionAdapter,
-    TouchSelectionConfig, point_in_polygon,
-};
-
-// Export linked-view coordination system
-pub use linked_selection::{
-    DimInstance, KeyedSelectionState, SharedSelectionState, build_dimmed_instances,
-    has_changed_since,
-};
-
-// Export layout engine
-pub use layout::{
-    ForceDirected, GraphChartBuilder, GraphLayout, LayoutEdge, LayoutEngine, LayoutNode,
-    LayoutRect, LayoutResult, NodePosition, TreeNode, TreemapAlgorithm, TreemapCell,
-    TreemapOptions, TreemapResult,
-};
-
-// Re-export procedural macros from gup_macros for convenience.
-//
-// NOTE: `wgsl_function` cannot be re-exported at the crate root because `gup`
-// already defines a `macro_rules! wgsl_function` in `shader_function::macros`.
-// It is available through `gup::proc_macros::wgsl_function` instead.
-pub use gup_macros::Mark;
-
-/// Re-exported procedural macros from `gup_macros`.
-///
-/// The `wgsl_function` attribute macro lives here to avoid a name collision
-/// with the `macro_rules!` helper of the same name at the crate root.
-///
-/// Generated code refers to this library through absolute `::gup::` paths, so
-/// no glob import is needed at the call site:
-///
-/// ```
-/// use gup::proc_macros::wgsl_function;
-/// use gup::shader_function::ComposableShaderFunction;
-///
-/// #[wgsl_function]
-/// fn double(value: f32, factor: f32) -> f32 {
-///     return value * factor;
-/// }
-///
-/// assert_eq!(Double::function_name(), "double");
-/// assert_eq!(Double::new(2.0).create_uniforms().unwrap().factor, 2.0);
-/// ```
-///
-/// Crates that re-export `gup` under another name can point the macro at the
-/// re-export with `crate = "..."`:
-///
-/// ```
-/// mod engine {
-///     pub use gup as plotting;
-/// }
-///
-/// #[gup::proc_macros::wgsl_function(crate = "engine::plotting")]
-/// fn halve(value: f32) -> f32 {
-///     return value * 0.5;
-/// }
-///
-/// use gup::shader_function::ComposableShaderFunction;
-/// assert_eq!(Halve::function_name(), "halve");
-/// ```
-pub mod proc_macros {
-    pub use gup_macros::wgsl_function;
-}
-
-#[cfg(all(target_arch = "wasm32", feature = "wasm-start"))]
-use wasm_bindgen::prelude::*;
-
-/// WebAssembly entry point (`wasm-start` feature): routes panics to the
-/// browser console and installs a console logger at `Warn` level.
-#[cfg(all(target_arch = "wasm32", feature = "wasm-start"))]
-#[wasm_bindgen(start)]
-pub fn main() {
-    std::panic::set_hook(Box::new(console_error_panic_hook::hook));
-    console_log::init_with_level(log::Level::Warn).expect("Couldn't initialize logger");
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_library_loads() {
-        // Basic smoke test to ensure the library loads correctly
-    }
-}
-
-// ---------------------------------------------------------------------------
-// Tutorial snippet compilation tests (GUP-351).
-//
-// Each tutorial Markdown file is included as a doc comment on a dummy struct.
-// Rustdoc extracts fenced Rust code blocks and compiles them as doctests.
-// Blocks marked `rust,ignore` are skipped; blocks marked `rust,no_run` are
-// compiled but not executed (they require a GPU).
-// ---------------------------------------------------------------------------
-#[cfg(doctest)]
-mod tutorial_doctests {
-    #[doc = include_str!("../docs/tutorials/01_getting_started.md")]
-    struct Tutorial01GettingStarted;
-
-    #[doc = include_str!("../docs/tutorials/02_data_binding.md")]
-    struct Tutorial02DataBinding;
-
-    #[doc = include_str!("../docs/tutorials/03_custom_shader_functions.md")]
-    struct Tutorial03CustomShaderFunctions;
-
-    #[doc = include_str!("../docs/tutorials/04_interactions.md")]
-    struct Tutorial04Interactions;
-
-    #[doc = include_str!("../docs/tutorials/05_streaming_data.md")]
-    struct Tutorial05StreamingData;
-
-    #[doc = include_str!("../docs/tutorials/06_custom_marks.md")]
-    struct Tutorial06CustomMarks;
-}
+pub use gup_core::*;

@@ -11,7 +11,7 @@
 //!   `examples/` expected-failure entry names a real example.
 //! - `examples_run_headless` (ignored by default; needs built example
 //!   binaries): runs every non-skipped example. Examples that call
-//!   `gup::export::gallery::screenshot_request()` or `gup_core::show` run with
+//!   `screenshot_request()` or `gup::show` run with
 //!   `GUP_SCREENSHOT_PATH` set (they render one frame offscreen and exit) and
 //!   must write a non-blank PNG; console examples must exit zero. Each result
 //!   is reconciled with `tests/visual_regression/expected_failures.toml`.
@@ -114,9 +114,9 @@ fn examples() -> Vec<Example> {
         .map(|t| {
             let source = PathBuf::from(t["src_path"].as_str().expect("src_path"));
             let text = std::fs::read_to_string(&source).expect("example source");
-            // `gup_core::show` honours GUP_SCREENSHOT_PATH itself (it draws one
+            // `gup::show` honours GUP_SCREENSHOT_PATH itself (it draws one
             // frame in a window, reads it back and exits).
-            let kind = if text.contains("screenshot_request") || text.contains("gup_core::show(") {
+            let kind = if text.contains("screenshot_request") || text.contains("gup::show(") {
                 Kind::Screenshot
             } else if text.contains("EventLoop")
                 || text.contains("ApplicationHandler")

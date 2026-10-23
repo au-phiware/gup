@@ -162,8 +162,8 @@ done
 ## smoke-examples
 
 Build every example and run the headless ones, under Xvfb when available
-(`gup_core::show` examples capture from a window; see `tests/examples_smoke.rs`
-for the `GUP_SMOKE_*` knobs)
+(`gup::show` examples capture from a window; see `tests/examples_smoke.rs` for
+the `GUP_SMOKE_*` knobs)
 
 Examples are built without debug info, stripped, into a separate target
 directory: with debug info the example binaries take many GB.
@@ -173,7 +173,7 @@ export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-target}/smoke"
 export CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_DEV_STRIP=true CARGO_INCREMENTAL=0
 cargo build --examples --all-features -p gup
 smoke=(cargo test --all-features --test examples_smoke -- --include-ignored --test-threads=1)
-# `gup_core::show` examples capture a frame in a real (Xvfb) window, so they
+# `gup::show` examples capture a frame in a real (Xvfb) window, so they
 # need a display. Windowed runs (GUP_SMOKE_WINDOWED=1) use the real one.
 if [ "${GUP_SMOKE_WINDOWED:-}" != 1 ] && command -v xvfb-run >/dev/null; then
   unset WAYLAND_DISPLAY

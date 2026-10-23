@@ -13,8 +13,8 @@ therefore tracked continuously instead of being recorded once.
 ## Why it is a detached crate
 
 `Cargo.toml` declares its own empty `[workspace]` and depends on
-`gup-core = { path = "../crates/gup-core" }` (the new core, until RFC-001 S14
-renames it to `gup`). No task uses the old `gup` API any more. As a result it:
+`gup = { path = ".." }`, which since the RFC-001 S14 flip (GUP-488) is a facade
+over `gup-core`. As a result it:
 
 - is **not** a member of the parent workspace, so `cargo build` at the repo root
   does not build it, and it cannot see `pub(crate)` items;
@@ -62,10 +62,10 @@ Never "fix" a gap by loosening its check. Fix Gup instead, watch the check
   (background, coverage, ink, hue, exact colour, grey, horizontal runs). It is
   deliberately small and should migrate to the shared visual-assertion module
   (GUP-388) once that lands.
-- `src/bin/*.rs` are the tasks. `t0` to `t5_stream` are written against
-  `gup_core` (GUP-465, GUP-480, GUP-485). The manifest stays put, so the bar the
-  task has to clear does not move. RFC-001 step S10's exit criterion is "dogfood
-  tasks 1-3 pass".
+- `src/bin/*.rs` are the tasks. `t0` to `t5_stream` are written against `gup`
+  (GUP-465, GUP-480, GUP-485). The manifest stays put, so the bar the task has
+  to clear does not move. RFC-001 step S10's exit criterion is "dogfood tasks
+  1-3 pass".
 - `src/bin/dogfood_check.rs` is the runner.
 
 ## The tasks
@@ -76,7 +76,7 @@ The others are recorded here, from the task sources, but have no pixel check.
 ### Control and reference
 
 - **`t0_smoke`**: the simplest scatter (20 points) with a title and axes,
-  exported to PNG through `gup_core::scatter`. Works: title, tick labels and 20
+  exported to PNG through `gup::scatter`. Works: title, tick labels and 20
   separate points, each checked to within 1 px of its datum's pixel (the default
   dots are smaller than the old builder's stretched ellipses, so a plain
   coverage fraction no longer fits). The audit also tried the README-style
@@ -92,7 +92,7 @@ The others are recorded here, from the task sources, but have no pixel check.
 Multi-line time series (three tickers, five years of daily prices with gaps)
 from CSV, with a date axis, legend and title, exported to PNG.
 
-- `gup_core::line(rows)` with Unix-second `f64` x values and `Time::new()`, an
+- `gup::line(rows)` with Unix-second `f64` x values and `Time::new()`, an
   `Option<f64>` y (a `None` breaks the line), `.color(|r| r.ticker.as_str())`
   with an explicit palette, `.width(1.5)`, `.grid(Axes::Y)` and a title. No
   hand-computed domain, plot rect, legend or SVG workaround.
@@ -103,7 +103,7 @@ from CSV, with a date axis, legend and title, exported to PNG.
 ### Task 2: `t2_bars`
 
 A grouped and a stacked bar chart (4 regions x 4 quarters) with legend, exported
-to PNG through `gup_core::bar` with `.group(..)` / `.stack(..)`.
+to PNG through `gup::bar` with `.group(..)` / `.stack(..)`.
 
 - Works: grouped bars (16), stacked bars (4), palette colours, title and legend.
   The old workaround part is gone.
@@ -114,25 +114,25 @@ to PNG through `gup_core::bar` with `.group(..)` / `.stack(..)`.
 A 200k-point scatter: colour = categorical segment, size = numeric weight, log x
 axis.
 
-- `t3_scatter_png`: `gup_core::scatter` with `Log::new()`, a palette, `size`,
+- `t3_scatter_png`: `gup::scatter` with `Log::new()`, a palette, `size`,
   `opacity(0.35)`, `grid(Axes::Both)` and a title. All five segments, title,
   ticks and grid render. Categorical colours follow first-seen order, so the
   manifest labels colours, not segments. The SVG is a full-scene `SvgTarget`
   render and has all 200k `<circle>` marks (GUP-467).
 - Dropped: the old `$Nk` x tick format.
-- `t3_scatter_window`: the same chart with `.tooltip(..)` in `gup_core::show`.
-  With `DOGFOOD_AUTO=1` it resolves headless, takes a row's `pick_anchor`, and
-  sets `GUP_SCREENSHOT_*` so the window hovers there. The window check
-  recognises a tooltip panel of any style (`Measure::Tooltip`) on the default
-  tooltip. egui is not used.
+- `t3_scatter_window`: the same chart with `.tooltip(..)` in `gup::show`. With
+  `DOGFOOD_AUTO=1` it resolves headless, takes a row's `pick_anchor`, and sets
+  `GUP_SCREENSHOT_*` so the window hovers there. The window check recognises a
+  tooltip panel of any style (`Measure::Tooltip`) on the default tooltip. egui
+  is not used.
 
 ### Task 4: `t4_linked`
 
 Two linked scatter views (30k points) in egui through `gup_egui::GupWidget`,
-which renders any `gup_core::Chart` on egui's device. egui pointer events reach
-the left chart's `Chart::handle`; it uses `Drag::Brush` and `on_brush` writes
-the brushed rows to shared state. The right chart is rebuilt from the rows
-whenever the selection changes (grey for unselected, colours for selected). This
+which renders any `gup::Chart` on egui's device. egui pointer events reach the
+left chart's `Chart::handle`; it uses `Drag::Brush` and `on_brush` writes the
+brushed rows to shared state. The right chart is rebuilt from the rows whenever
+the selection changes (grey for unselected, colours for selected). This
 **works**. The left chart's own dimming of unbrushed rows is `Unbrushed::Grey`
 (a theme setting): rows outside the brush are drawn in `#bfbfbf`, visible but
 colourless, because a fade keeps the hue and the check wants grey only there.
@@ -143,10 +143,10 @@ hidden (at least 500 grey pixels).
 
 Append points every 100 ms without rebuilding the chart.
 
-- `t5_live`: a line chart (random walk) and a 100k-point scatter on `gup_core`.
-  Each chart is built once and fed through `appender()`: every tick `extend`s
-  the new samples and the next frame uploads only those rows (GUP-480). The
-  window wakes when rows arrive.
+- `t5_live`: a line chart (random walk) and a 100k-point scatter on `gup`. Each
+  chart is built once and fed through `appender()`: every tick `extend`s the new
+  samples and the next frame uploads only those rows (GUP-480). The window wakes
+  when rows arrive.
 - `t5_stream`: a scatter chart built empty; three batches of 50 rows go through
   its `appender()`, with a PNG after each. Three checks on `t5_stream_2.png`
   find each batch in its third of the plot.

@@ -4,8 +4,8 @@
 //! Task 3a: 200k-point scatter, colour = categorical segment, size = numeric
 //! weight, log-scale x axis; PNG and SVG (guides only) export.
 
-use gup_core::prelude::*;
-use gup_core::{SvgTarget, VectorTarget};
+use gup::prelude::*;
+use gup::{SvgTarget, VectorTarget};
 use gup_dogfood::{PALETTE_HEX, load_points};
 use std::time::Instant;
 
@@ -16,7 +16,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("loaded {} rows in {:?}", data.len(), t0.elapsed());
     let cx = Context::new_blocking()?;
 
-    let mut chart = gup_core::scatter(data)
+    let mut chart = gup::scatter(data)
         .x(|p| p.income)
         .x_scale(Log::new())
         .y(|p| p.spend)

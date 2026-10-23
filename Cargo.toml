@@ -1,5 +1,5 @@
 [workspace]
-members = ["gup-macros", "gup-egui", "gup-bevy", "crates/gup-visual-regression", "crates/gup-core", "crates/gup-core-macros", "crates/gup-text", "crates/gup-wgsl"]
+members = ["gup-egui", "gup-bevy", "crates/gup-visual-regression", "crates/gup-core", "crates/gup-core-macros", "crates/gup-text", "crates/gup-wgsl"]
 # The root package `gup` is a member implicitly; listing "." here would stop
 # `exclude` from working (Cargo treats it as a prefix of every subdirectory).
 # A plain `cargo build` / `cargo test` at the root builds only `gup`. The other
@@ -26,106 +26,17 @@ categories = ["graphics", "visualization", "wasm"]
 
 [lib]
 name = "gup"
-crate-type = ["cdylib", "rlib"]
-# The lib has no #[bench] functions; benchmarks are the Criterion targets in
-# benches/. Excluding the lib's libtest bench harness lets
-# `cargo bench -- --save-baseline <name>` pass Criterion flags to every target.
-bench = false
+crate-type = ["rlib"]
 
+# The facade has no code of its own: `src/lib.rs` is `pub use gup_core::*`.
 [dependencies]
-wgpu = { version = "27.0", features = ["wgsl"] }
-winit = "0.30"
-bytemuck = { version = "1.23", features = ["derive"] }
-pollster = "0.3"
-raw-window-handle = "0.6"
-futures-intrusive = "0.5"
-futures-channel = "0.3"
-futures = "0.3"
-async-trait = "0.1"
-tokio-util = { version = "0.7" }
-env_logger = "0.10"
-paste = "1.0"
-gup-macros = { path = "gup-macros" }
-# RFC-001 S1: `RenderContext` and `GupContext` take their device and queue
-# from `gup_core::Context` (one device per process). Not re-exported until
-# the S14 flip.
 gup-core = { path = "crates/gup-core" }
-image = "0.24"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-chrono = { version = "0.4", features = ["serde"] }
-csv = "1.3"
-base64 = "0.22"
-thiserror = "2.0"
-log = "0.4"
-fontdue = "0.9"
-unicode-normalization = "0.1"
-ttf-parser = "0.21.1"
-lru = "0.12"
 
-# Web dashboard dependencies (optional, feature-gated)
-tiny_http = { version = "0.12", optional = true }
-fontdb = "0.23"
-
-
-# Tokio: use rt-multi-thread on native, limited features on WASM
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-tokio = { version = "1.0", features = ["rt", "rt-multi-thread", "macros", "time"] }
-uuid = { version = "1.0", features = ["v4", "serde"] }
-
-[dependencies.web-sys]
-version = "0.3"
-features = [
-  "console",
-  "Document",
-  "Element",
-  "HtmlCanvasElement",
-  "HtmlHeadElement",
-  "Window",
-  "Location",
-  "Performance",
-  "Touch",
-  "TouchEvent",
-  "TouchList",
-]
-
-[target.'cfg(target_os = "macos")'.dependencies]
-objc2 = "0.5"
-objc2-foundation = { version = "0.2", features = ["NSArray", "NSString", "NSDictionary"] }
-objc2-app-kit = { version = "0.2", features = ["NSAccessibility"] }
-
-[target.'cfg(target_os = "windows")'.dependencies]
-windows = { version = "0.58", features = [
-    "Win32_Foundation",
-    "Win32_System_Com",
-    "Win32_UI_Accessibility",
-] }
-
-[target.'cfg(target_os = "linux")'.dependencies]
-zbus = "5.2"
-
-[target.'cfg(target_arch = "wasm32")'.dependencies]
-wasm-bindgen = "0.2"
-wasm-bindgen-futures = "0.4"
-console_error_panic_hook = "0.1"
-console_log = "1.0"
-log = "0.4"
-tokio = { version = "1.0", features = ["rt", "macros", "time", "sync"] }
-uuid = { version = "1.0", features = ["v4", "serde", "js"] }
-
-[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-criterion = { version = "0.7", features = ["html_reports"] }
-tokio-test = "0.4"
-
+# Only what `tests/examples_smoke.rs` uses. The examples use `gup` alone.
 [dev-dependencies]
-futures-channel = "0.3"
-# Visual regression harness (golden images + structural checks) and the
-# TOML parser used by the examples smoke test's skip list.
 gup-visual-regression = { path = "crates/gup-visual-regression" }
+serde_json = "1.0"
 toml_edit = { version = "0.23", default-features = false, features = ["parse"] }
-
-[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
-wasm-bindgen-test = "0.3"
 
 [[example]]
 name = "hello_world"
@@ -142,30 +53,6 @@ path = "examples/basic/03_line_chart.rs"
 [[example]]
 name = "04_bar_chart"
 path = "examples/basic/04_bar_chart.rs"
-
-[features]
-default = []
-## GPU debugging, profiling and performance-report tooling: the `debug`,
-## `performance`, `performance_export` and `performance_targets` modules and
-## `GupContext`'s performance profiler. Off by default (GUP-390).
-debug = []
-## Live performance web dashboard (`debug::web_dashboard` server).
-web-dashboard = ["debug", "tiny_http"]
-## Feature gate for GPU benchmarks that require a GPU device.
-gpu-bench = []
-## Include `#[wasm_bindgen(start)]` entry point.
-## Disable when running `wasm-pack test` (the test harness provides its own
-## entry point and the duplicate `main` symbol causes a wasm-ld conflict).
-wasm-start = []
-## iOS embedding shim.  Enables the `platform::ios` module with Metal surface
-## helpers, UITouch→TouchEvent translation, and the C ABI consumed by the
-## companion Swift package in `pkg/ios/GupSwift/`.
-ios-shim = []
-## Android embedding shim.  Enables the `platform::android` module with
-## ANativeWindow surface helpers, MotionEvent→TouchEvent translation, and the
-## JNI C ABI consumed by the companion Kotlin library in
-## `pkg/android/GupKotlin/`.
-android-shim = []
 
 [package.metadata.docs.rs]
 all-features = true

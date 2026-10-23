@@ -251,7 +251,6 @@ with `-p`:
 
 | Crate                          | Status                                                                |
 | ------------------------------ | --------------------------------------------------------------------- |
-| `gup-macros`                   | Proc macros used by `gup` (`#[derive(Mark)]`, `#[wgsl_function]`).    |
 | `crates/gup-visual-regression` | Golden-image and structural check harness (`mask visual-regression`). |
 | `crates/gup-culling-lod`       | **Parked** (GUP-488). GPU culling and LOD code, out of the workspace. |
 
