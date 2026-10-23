@@ -773,6 +773,7 @@ pub struct InteractiveScatter {
     last_clicked: Arc<AtomicI32>,
     size: (f32, f32),
     appender: gup_core::Appender<(usize, f64, f64)>,
+    appended_seen: Arc<AtomicU32>,
     rows: std::cell::Cell<usize>,
 }
 
@@ -789,6 +790,8 @@ pub async fn show_scatter(
     let hovered = Arc::new(AtomicI32::new(-1));
     let clicks = Arc::new(AtomicU32::new(0));
     let last_clicked = Arc::new(AtomicI32::new(-1));
+    let appended_seen = Arc::new(AtomicU32::new(0));
+    let seen = Arc::clone(&appended_seen);
     let mut plot = Plot::new();
     let x = plot.x(Linear::new().domain(0.0, 100.0));
     let y = plot.y(Linear::new().domain(0.0, 10.0));
@@ -799,7 +802,16 @@ pub async fn show_scatter(
     let (count, last) = (Arc::clone(&clicks), Arc::clone(&last_clicked));
     plot.title("Interactive scatter")
         .add(Selection::<(usize, f64, f64), Circle>::new(rows))
-        .attr(Circle::X, x.encode(|r: &(usize, f64, f64)| r.1))
+        .attr(
+            Circle::X,
+            x.encode(move |r: &(usize, f64, f64)| {
+                // Evaluated only when a frame resolves the appended rows.
+                if r.0 >= NAMES.len() {
+                    seen.fetch_add(1, Ordering::SeqCst);
+                }
+                r.1
+            }),
+        )
         .attr(Circle::Y, y.encode(|r: &(usize, f64, f64)| r.2))
         .attr(Circle::FILL, Color::hex(0x2a6fdb))
         .attr(Circle::RADIUS, Px(8.0))
@@ -825,6 +837,7 @@ pub async fn show_scatter(
         last_clicked,
         size,
         appender,
+        appended_seen,
         rows: std::cell::Cell::new(NAMES.len()),
     })
 }
@@ -891,6 +904,13 @@ impl InteractiveScatter {
         if self.appender.push((n, x, y)).is_err() {
             web_error("append_row: the chart is closed");
         }
+    }
+
+    /// How many times the appended rows' x accessor has run: nonzero once a
+    /// frame has resolved them. Does not touch the chart, so it schedules no
+    /// frame.
+    pub fn appended_seen(&self) -> u32 {
+        self.appended_seen.load(Ordering::SeqCst)
     }
 
     /// Back to the first view (`Plot::reset_view`).

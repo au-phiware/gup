@@ -369,6 +369,32 @@
             app.set_drag(0);
             await frames();
           }
+          // GUP-481: a row appended with no input is drawn by the waker
+          // alone. Only the appender and `appended_seen` touch the app:
+          // `with_chart` (row_px, render_rgba) would schedule its own
+          // frame. A WebGPU canvas reads back transparent in headless
+          // SwiftShader (drawImage and DevTools screenshots), so the proof
+          // is the accessor count, then the pixel in `render_rgba`.
+          {
+            const [p0x, p0y] = app.row_px(0);
+            const [p1x, p1y] = app.row_px(1);
+            const [p5x] = app.row_px(5);
+            const nx = Math.round(p0x + ((50 - 10) / (85 - 10)) * (p5x - p0x));
+            const ny = Math.round(p0y + ((9 - 3) / (7 - 3)) * (p1y - p0y));
+            await frames();
+            await step("append-before", async () => app.appended_seen() === 0);
+            app.append_row(50, 9);
+            await step("append-wake", () =>
+              within("append-wake", () => app.appended_seen() > 0)
+            );
+            await step("append-pixel", async () => {
+              const img = await app.render_rgba();
+              const i = (ny * w + nx) * 4;
+              return [0x2a, 0x6f, 0xdb].every(
+                (c, k) => Math.abs(img[i + k] - c) <= 2
+              );
+            });
+          }
           await step("last-error", async () => app.last_error() == null);
           app.free();
           // RFC-001 S9e: a GpuOnly layer hovers and clicks through GPU

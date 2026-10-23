@@ -28,7 +28,6 @@ use crate::render::{Renderer, TargetDesc};
 use crate::surface::surface_config;
 use crate::target::{DEFAULT_SAMPLES, Frame, RenderTarget, check_samples, msaa_view};
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::rc::{Rc, Weak};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -273,7 +272,7 @@ impl State {
 thread_local! {
     /// Canvases by wake id. `Wake` needs `Send + Sync`; an id is both, and
     /// wasm32 has one thread.
-    static CANVASES: RefCell<HashMap<u64, Weak<RefCell<State>>>> = Default::default();
+    static CANVASES: RefCell<Vec<(u64, Weak<RefCell<State>>)>> = const { RefCell::new(Vec::new()) };
 }
 
 static NEXT_CANVAS_ID: AtomicU64 = AtomicU64::new(1);
@@ -287,7 +286,12 @@ impl std::task::Wake for CanvasWake {
     }
     fn wake_by_ref(self: &Arc<Self>) {
         // Clone the `Weak` and release the registry before scheduling.
-        let weak = CANVASES.with(|c| c.borrow().get(&self.0).cloned());
+        let weak = CANVASES.with(|c| {
+            c.borrow()
+                .iter()
+                .find(|e| e.0 == self.0)
+                .map(|e| e.1.clone())
+        });
         let Some(rc) = weak.and_then(|w| w.upgrade()) else {
             return;
         };
@@ -408,7 +412,7 @@ impl CanvasApp {
         st.chart
             .set_waker(std::task::Waker::from(Arc::new(CanvasWake(wake_id))));
         let state = Rc::new(RefCell::new(st));
-        CANVASES.with(|c| c.borrow_mut().insert(wake_id, Rc::downgrade(&state)));
+        CANVASES.with(|c| c.borrow_mut().push((wake_id, Rc::downgrade(&state))));
         let mut app = Self {
             state,
             listeners: Vec::new(),
@@ -554,7 +558,7 @@ impl CanvasApp {
 impl Drop for CanvasApp {
     fn drop(&mut self) {
         self.state.borrow_mut().closed = true;
-        CANVASES.with(|c| c.borrow_mut().remove(&self.wake_id));
+        CANVASES.with(|c| c.borrow_mut().retain(|e| e.0 != self.wake_id));
         for l in self.listeners.drain(..) {
             // Removing a listener that is already gone is harmless.
             let _ = l

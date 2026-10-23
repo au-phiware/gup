@@ -9,8 +9,8 @@ implementer-reason:
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 🚧 In Progress **Created**:
-2026-10-19
+**Initiative**: RFC-001 Migration **Status**: ✅ Complete (2026-10-19)
+**Created**: 2026-10-19
 
 ## Context
 
@@ -160,28 +160,15 @@ the canvas's state.
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
 
-## Blocked (2026-10-19)
+## Resolved (2026-10-19)
 
-Two problems. Code state: `web.rs` registry, `CanvasWake` and `set_waker` are
-implemented; the harness `append_row` and the tooltip fix are in. The smoke step
-is not committed.
+Both blockers were resolved by the orchestrator.
 
-1. **Escalation trigger 2 fires.** `wasm.scatter.gz_bytes` is 330,965 against a
-   recorded 325,358 (clean `main`, same command): +5,607 B, over the 3,000 B
-   limit. Not yet split between `web.rs` (`Arc`, `HashMap`, `Wake`) and the
-   harness appender. Options: accept and re-record; replace the `HashMap` with a
-   `Vec<(u64, Weak<..>)>` and measure; or drop the harness appender.
-2. **AC2 as written cannot be checked by pixels.** A WebGPU canvas reads back
-   transparent in headless SwiftShader: `drawImage(canvas)` in the rAF round
-   after the app's frame gives `[0,0,0,0]` even at a drawn dot, and a CDP
-   `Page.captureScreenshot` of the canvas rect is wholly transparent too
-   (`/tmp/shot.png`, RGBA, all zero). `render_rgba` and `row_px` go through
-   `with_chart`, which schedules a frame itself and drains the feed, so they
-   cannot prove the waker. The waker works: console logging showed `wake`
-   followed by `frame` with no input. Options: (a) a CPU-side proof, counting
-   accessor evaluations of the appended row through an `Arc<AtomicUsize>` in the
-   `Circle::X` closure (no `with_chart`, no pixels); (b) chase the screenshot
-   (WIP kept at `/tmp/index_wip.html`, `/tmp/browser_smoke_wip.mjs`, a
-   `GUP SHOT` handshake); (c) a gup-core hook exposing a frame counter.
-   Recommendation: (a), with the pixel check on `render_rgba` after the frame as
-   a second step.
+- **Size**: the `HashMap` became a `Vec` (scatter 330,879 B gz, +5,521 B over
+  325,358). Split: `web.rs` +736 B (accepted, at most 2,500 B); the harness
+  appender about +4,785 B (the feed machinery, linked once used).
+- **Pixels**: a WebGPU canvas reads back transparent in headless SwiftShader
+  (`drawImage` and CDP `captureScreenshot` both). The step proves the wake with
+  an accessor counter (`appended_seen`, polled with `within`, no `with_chart`),
+  then checks the pixel through `render_rgba`. Recorded in RFC-001 "S12b
+  findings".

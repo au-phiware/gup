@@ -3643,3 +3643,20 @@ secondary y axis.
   in `gup-egui` and `gup-bevy`, GUP-483 and GUP-484 (S13); `ComposedChart` with
   the old area, boxplot, violin, density, heatmap and choropleth builders,
   GUP-486 (S14b).
+
+## S12b findings (2026-10-19, GUP-481)
+
+- **A WebGPU canvas reads back transparent in headless SwiftShader.**
+  `drawImage(canvas)` (in the rAF round after the app's frame) returns
+  `[0,0,0,0]` even at a drawn dot, and a DevTools `Page.captureScreenshot` of
+  the canvas rect is wholly transparent. Future browser steps must use
+  `render_rgba` (an `ImageTarget`) or CPU-side counters, never canvas readback.
+- **`with_chart` masks a waker.** It schedules a frame itself and resolves,
+  draining the feed, so `row_px`, `render_rgba` and the like cannot prove a
+  wake. The smoke step proves it with an accessor-evaluation counter read
+  without touching the app, then checks the pixel in `render_rgba`.
+- **Registry**: a `thread_local` `Vec<(id, Weak<RefCell<State>>)>`; a wake that
+  finds the state borrowed (inside `with_chart` or a frame) is skipped, since
+  both schedule a frame.
+- **Size**: the scatter grew 5,521 B gz: +736 B in `web.rs`, about +4,785 B in
+  the harness (the appender's feed code, linked only once used).
