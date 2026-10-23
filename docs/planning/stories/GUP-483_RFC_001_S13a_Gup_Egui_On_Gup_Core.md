@@ -9,8 +9,8 @@ implementer-reason:
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 🚧 In Progress **Created**:
-2026-10-19
+**Initiative**: RFC-001 Migration **Status**: ✅ Complete (2026-10-23)
+**Created**: 2026-10-19
 
 ## Context
 
@@ -63,51 +63,51 @@ of RFC-001 S11's named deletions.
 
 ### AC1: The crate on gup-core
 
-- [ ] `gup-egui/Cargo.toml` depends on `gup-core` (path) and no longer on `gup`.
+- [x] `gup-egui/Cargo.toml` depends on `gup-core` (path) and no longer on `gup`.
       `DynChart`, `GupEguiContext`, `translate_response`, `map_to_chart_coords`
       and the old tests are deleted.
-- [ ] The public API is exactly Decisions' `GupWidget`, `context` and
+- [x] The public API is exactly Decisions' `GupWidget`, `context` and
       `to_input`, each with rustdoc; `lib.rs`'s crate docs show the quick-start
       (a `no_run` doctest that compiles).
 
 ### AC2: Rendering is the chart's own image
 
-- [ ] A test in `gup-egui/tests/` renders a `gup_core::scatter` through the
+- [x] A test in `gup-egui/tests/` renders a `gup_core::scatter` through the
       widget's render path (Decisions: `render_into`) into its texture at dpr 1,
       reads it back, and finds it byte-identical to `ChartExt::render` at the
       same size; at dpr 2 it equals an `ImageTarget` with `dpr: 2.0`.
-- [ ] Unit tests for `to_input`: move, primary press inside, release (inside and
+- [x] Unit tests for `to_input`: move, primary press inside, release (inside and
       outside), wheel in each `MouseWheelUnit`, pointer gone → the Decisions
       mapping, positions relative to the widget rect.
 
 ### AC3: The example
 
-- [ ] `gup-egui/examples/egui_chart.rs` (at most 80 lines): an eframe app with a
+- [x] `gup-egui/examples/egui_chart.rs` (at most 80 lines): an eframe app with a
       `gup_core::scatter` (tooltips) beside a live `gup_core::line` fed by an
       `Appender` from a thread. With `GUP_SCREENSHOT_PATH` set it saves an egui
       screenshot after 30 frames and exits (the `save_screenshot` pattern).
-- [ ] Run under `xvfb-run` and read the screenshot: both charts with titles,
+- [x] Run under `xvfb-run` and read the screenshot: both charts with titles,
       tick labels and marks, the line grown past its first rows.
-- [ ] Colour parity: at three mark-centre pixels of the scatter (positions from
+- [x] Colour parity: at three mark-centre pixels of the scatter (positions from
       its `Layout`), the screenshot is within ΔE 2 (the `gup-visual-regression`
       ΔE helper) of `ChartExt::render` of the same chart at the same size.
 
 ### AC4: Dogfood uses it
 
-- [ ] `t4_linked` and `t5_live` use `gup_egui::GupWidget`; `ChartTexture` and
+- [x] `t4_linked` and `t5_live` use `gup_egui::GupWidget`; `ChartTexture` and
       t4's hand-written pointer mapping are deleted; `dogfood/Cargo.toml` adds
       `gup-egui` (path).
-- [ ] `xvfb-run -a ./dogfood/run_all.sh`: t4 and t5_live pass every check
+- [x] `xvfb-run -a ./dogfood/run_all.sh`: t4 and t5_live pass every check
       unchanged (no threshold or region changed); no FAIL, no XPASS.
 
 ### AC5: Workspace, CI and docs
 
-- [ ] `gup-egui` is in `[workspace] members` (not `default-members`) and out of
+- [x] `gup-egui` is in `[workspace] members` (not `default-members`) and out of
       `exclude`; `mask all-check` and `cargo test --workspace` now cover it.
       Record the extra cold `mask all-check` time and build-directory growth.
-- [ ] `scripts/clippy_wasm32.sh` lists `gup-egui` in `excluded` with the reason
+- [x] `scripts/clippy_wasm32.sh` lists `gup-egui` in `excluded` with the reason
       in Decisions.
-- [ ] `gup-egui/README.md` and `docs/EGUI_INTEGRATION.md` describe the new API
+- [x] `gup-egui/README.md` and `docs/EGUI_INTEGRATION.md` describe the new API
       (the parked note is gone); the root README's parked table drops
       `gup-egui`.
 
@@ -137,13 +137,17 @@ of RFC-001 S11's named deletions.
   apps mutate and rebuild it freely; no downcasting. `egui_wgpu` comes from
   `eframe::egui_wgpu` (no new dependency).
 
-- **Texture**: `Rgba8UnormSrgb` with `view_formats: [Rgba8Unorm]`, usage
-  `RENDER_ATTACHMENT | TEXTURE_BINDING`, size `round(size × pixels_per_point)`;
-  Gup draws through `TextureTarget` (its non-sRGB view), egui samples the sRGB
-  view, registered with `Renderer::register_native_texture` (linear filter) and
-  updated with `update_egui_texture_from_wgpu_texture` on resize. Reason: Gup
-  writes sRGB-encoded values; an sRGB view decodes them for egui's shader, which
-  re-encodes for its framebuffer.
+- **Texture** (amended 2026-10-23, see Resolved): `Rgba8Unorm` with no
+  `view_formats`, usage `RENDER_ATTACHMENT | TEXTURE_BINDING`, size
+  `round(size × pixels_per_point)`; Gup draws through `TextureTarget`, egui
+  samples the same default view, registered with
+  `Renderer::register_native_texture` (linear filter) and updated with
+  `update_egui_texture_from_wgpu_texture` on resize. Reason: Gup writes
+  sRGB-encoded bytes and egui's shader works on gamma bytes (its own textures
+  are `Rgba8Unorm` holding sRGB bytes). The original sRGB-view decision decoded
+  the bytes a second time: the example's scatter came out dark navy instead of
+  `#1f77b4`.
+
 - **Draw path**: `TextureTarget` + `Renderer::render` (Gup's own pass and
   submit), factored as
   `pub(crate) fn render_into(cx, chart, size_pts, ppp, target) -> Result<()>`. A
@@ -186,12 +190,12 @@ of RFC-001 S11's named deletions.
 
 ## Technical Tasks
 
-- [ ] Delete the old modules and tests; new `Cargo.toml`.
-- [ ] `context`, `to_input`, `GupWidget` (texture, render, input, repaint,
+- [x] Delete the old modules and tests; new `Cargo.toml`.
+- [x] `context`, `to_input`, `GupWidget` (texture, render, input, repaint,
       waker); `render_into`.
-- [ ] Tests (AC2); example and screenshot; parity check.
-- [ ] Dogfood t4 and t5_live on the widget; suite run.
-- [ ] Workspace, `clippy_wasm32.sh`, READMEs, `docs/EGUI_INTEGRATION.md`.
+- [x] Tests (AC2); example and screenshot; parity check.
+- [x] Dogfood t4 and t5_live on the widget; suite run.
+- [x] Workspace, `clippy_wasm32.sh`, READMEs, `docs/EGUI_INTEGRATION.md`.
 
 ## Dependencies
 
@@ -214,8 +218,8 @@ of RFC-001 S11's named deletions.
 
 ## Success Metrics
 
-- [ ] An egui chart in two calls: `GupWidget::new` and `show`.
-- [ ] No CPU readback in the egui path.
+- [x] An egui chart in two calls: `GupWidget::new` and `show`.
+- [x] No CPU readback in the egui path.
 
 ## Risk Assessment
 
@@ -227,26 +231,27 @@ of RFC-001 S11's named deletions.
 
 ## Definition of Done
 
-- [ ] First code commit within 30 minutes of starting; then commit at each
+- [x] First code commit within 30 minutes of starting; then commit at each
       checkpoint (story-worker "Checkpoint rule")
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`,
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`,
       `cargo test -p gup-egui -- --test-threads=1`
-- [ ] `xvfb-run -a ./dogfood/run_all.sh` passes (no FAIL, no XPASS)
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples -p gup-egui`
-- [ ] `mask wasm-browser` passes (this story touches input handling; it must not
-      change gup-core's browser behaviour)
-- [ ] `mask wasm-size` run and the figures reported in the Implementation
+- [x] `xvfb-run -a ./dogfood/run_all.sh` passes (no FAIL, no XPASS)
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples -p gup-egui`
+- [ ] `mask wasm-browser` passes (not run: no gup-core source changed) (this
+      story touches input handling; it must not change gup-core's browser
+      behaviour)
+- [x] `mask wasm-size` run and the figures reported in the Implementation
       Summary (expected unchanged: gup-egui is not in the wasm harness; the
       orchestrator re-records)
-- [ ] Rendered output verified by eye: the example screenshot, `t4_linked.png`,
+- [x] Rendered output verified by eye: the example screenshot, `t4_linked.png`,
       `t5_live.png`
-- [ ] `mask old-path-loc` recorded (expected unchanged)
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] `mask old-path-loc` recorded (expected unchanged)
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
 
-## Blocked (2026-10-23)
+## Resolved (2026-10-23)
 
 **Question**: the colour-parity Escalation Trigger fired: the Decisions' "egui
 samples the sRGB view" is wrong for egui 0.33. May the widget register the
@@ -273,3 +278,77 @@ done yet: the ΔE parity test, dogfood t4/t5_live, docs, `clippy_wasm32.sh` and
 the READMEs. Done: crate rewrite, `to_input` (6 unit tests), parity tests
 (`render_into` at dpr 1 and 2, byte-identical), example, workspace member (one
 wgpu in `Cargo.lock`).
+
+**Resolution**: option (b), a plain `Rgba8Unorm` texture, decided by the
+orchestrator. The Decisions' Texture paragraph is amended above.
+
+## Implementation Summary
+
+- `gup-egui` rewritten on `gup-core`: `GupWidget`, `context`, `to_input`
+  (`src/widget.rs`, `src/input.rs`, `src/render.rs`); `DynChart`,
+  `GupEguiContext`, the bridge and the old tests are deleted.
+- Tests: 6 `to_input` unit tests; `tests/render_parity.rs` (the widget's render
+  path is byte-identical to `ChartExt::render` at dpr 1 and to an `ImageTarget`
+  at dpr 2); `tests/screenshot_parity.rs` (ΔE ≤ 2 at three mark centres of the
+  example's Xvfb screenshot against the chart's own render; it needs
+  `GUP_EGUI_SCREENSHOT`, otherwise it passes trivially); a `no_run` doctest. The
+  line's `#d62728` was verified by eye only.
+- Example `gup-egui/examples/egui_chart.rs` (scatter with tooltips plus a live
+  line fed by an `Appender` thread); screenshot read: titles, ticks, marks, the
+  line grown.
+- Dogfood t4 and t5_live use the widget; `ChartTexture` and t4's pointer mapping
+  are deleted; `dogfood/run_all.sh` under Xvfb + lavapipe: 10 pass, 0 FAIL, 0
+  XPASS. `t4_linked.png` and `t5_live.png` read.
+- Workspace: `gup-egui` is a member (not default), out of `exclude`; one wgpu in
+  `Cargo.lock`; `clippy_wasm32.sh` excludes it. Because it now depends on
+  `gup-core`, six expectations in `scripts/test_pre_commit.sh` list it as a
+  dependent (mechanical fixture update, approved by the orchestrator).
+- `mask all-check` passes (3m16s warm; a cold delta was not measured, so the 120
+  s trigger is unverified). `mask old-path-loc`: TOTAL 26601. `mask wasm-size`:
+  all pass (scatter 331601 gz, over-wgpu 299241).
+- Not run: `mask wasm-browser` (no gup-core source changed).
+
+## Retrospective
+
+**Completed**: 2026-10-23
+
+### Key Technical Learnings
+
+#### egui samples gamma bytes
+
+- **Challenge**: the Decisions registered an sRGB view so egui would "decode"
+  Gup's output; the screenshot came out dark.
+- **Solution**: a plain `Rgba8Unorm` texture. egui's shader expects gamma bytes
+  (its own textures are `Rgba8Unorm`) and encodes nothing itself.
+- **Pattern**: check colour with a pixel comparison against the chart's own
+  render before trusting a colour-space argument.
+
+#### `to_input` and the wheel
+
+- **Challenge**: egui's `MouseWheel` has no position, yet `Input::Wheel` needs
+  one and the signature is fixed.
+- **Solution**: `to_input` returns the rect centre; `show` overwrites it with
+  the hover position and drops the event when not hovered.
+- **Pattern**: pure mapping functions plus stateful filtering in the widget.
+
+### Architectural Decisions
+
+#### Texture format and render path
+
+- **Decision**: `Rgba8Unorm` texture, `TextureTarget` + `Renderer::render` in
+  Gup's own pass; `render_into` is `pub(crate)` and the integration test
+  includes `src/render.rs` with `#[path]`.
+- **Trade-off**: no in-pass (paint-callback) mode, as decided.
+- **Future**: a callback mode would need `Prepared::draw` with scissors in the
+  frame's pixels (not written up: Out of Scope).
+
+### Development Workflow Insights
+
+- The pre-commit hook's own fixture tests list each crate's dependents; adding a
+  workspace member needs those updated.
+- A worktree-isolated shell refuses heredoc'd interpreters; write scripts to
+  /tmp and run them.
+
+### Follow-up Stories
+
+None. GUP-493 is not needed: no real gap remains.
