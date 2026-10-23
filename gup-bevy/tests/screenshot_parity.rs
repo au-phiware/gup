@@ -57,8 +57,8 @@ fn screenshot_marks_match_the_charts_own_render() {
     // The 480 x 320 sprite is centred in the example's 640 x 480 window.
     let (ox, oy) = ((shot.width() - 480) / 2, (shot.height() - 320) / 2);
 
-    // Three mark centres (initial points 3, 10 and 17).
-    for i in [3usize, 10, 17] {
+    // Three mark centres (initial points 3, 11 and 17).
+    for i in [3usize, 11, 17] {
         let (dx, dy) = (i as f64 * 0.5, (i * 7 % 10) as f64 / 2.0);
         let (x, y) = (
             at(&layout.x_ticks, dx) as u32,
@@ -67,6 +67,7 @@ fn screenshot_marks_match_the_charts_own_render() {
         let (want, got) = (px(&reference, x, y), px(&shot, x + ox, y + oy));
         assert_eq!(want, Rgba8::from_hex(0x1f77b4), "reference mark {i}");
         let de = want.delta_e(got);
+        eprintln!("mark {i}: {want:?} vs {got:?}, ΔE {de}");
         assert!(
             de <= 2.0,
             "mark {i} at ({x},{y}): {want:?} vs {got:?}, ΔE {de}"

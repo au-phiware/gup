@@ -284,30 +284,25 @@ These crates are excluded from the workspace (`[workspace] exclude`), so
 
 | Crate                          | Re-wired at                     |
 | ------------------------------ | ------------------------------- |
-| `gup-bevy`                     | RFC-001 S13                     |
 | `gup-ios`                      | Strategic review T7 (after S13) |
 | `gup-android`                  | Strategic review T7 (after S13) |
 | `examples/gup-tauri/src-tauri` | Strategic review T7 (after S13) |
 
 They are parked, not deleted
 ([strategic review](docs/planning/STRATEGIC_REVIEW_2026-10.md#decisions),
-Decision 3). `gup-bevy` does compile against `main`, but it is built on
-`ComposedChart`, `DynChart` and the context types that
-[RFC-001](docs/planning/rfcs/RFC-001_Core_Architecture.md) replaces. Keeping
-them compiling through every RFC-001 step would be churn for code that S13
-rewrites anyway. The iOS and Android workflows run only on manual dispatch.
+Decision 3). The iOS and Android workflows run only on manual dispatch.
 
 To work on one of them, build it from its own manifest. It gets its own
 lockfile; sharing the root target directory avoids rebuilding everything:
 
 ```bash
-CARGO_TARGET_DIR=target cargo check --manifest-path gup-bevy/Cargo.toml
 CARGO_TARGET_DIR=target cargo check --manifest-path gup-ios/Cargo.toml
 CARGO_TARGET_DIR=target cargo check --manifest-path gup-android/Cargo.toml
 ```
 
-`gup-egui` is back in the workspace (not a default member):
-`cargo test -p gup-egui`.
+`gup-egui` and `gup-bevy` are workspace members (not default):
+`cargo test -p gup-egui`. `gup-bevy` is built by the `integrations` CI job, not
+by `mask all-check`: `cargo test -p gup-bevy -- --test-threads=1`.
 
 ## License
 

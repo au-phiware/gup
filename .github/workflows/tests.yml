@@ -80,7 +80,9 @@ jobs:
             tests-${{ runner.os }}-cargo-
 
       - name: Test every workspace member
-        run: xvfb-run -a cargo test --workspace -- --test-threads=1
+        run:
+          xvfb-run -a cargo test --workspace --exclude gup-bevy --
+          --test-threads=1
 
       # The `debug` feature gates the profiling modules, their lib unit tests
       # and the integration tests with `required-features = ["debug"]`, which
@@ -92,3 +94,46 @@ jobs:
       - name: Disk usage
         if: always()
         run: df -h /
+
+  # Host integrations kept out of the local gate (GUP-484): `gup-bevy`'s cold
+  # clippy took 98 s and Bevy's dependencies add 0.4 GB to the build
+  # directory, over the 90 s budget the story set. `mask all-check` and the
+  # `tests` job above exclude it.
+  integrations:
+    name: gup-bevy (clippy and tests, lavapipe)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      CARGO_INCREMENTAL: "0"
+      WGPU_BACKEND: vulkan
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain (rust-toolchain.toml)
+        run: rustup toolchain install
+
+      - name: Install software GPU and X server
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            mesa-vulkan-drivers libvulkan1 libegl1 libgl1 \
+            xvfb xauth libxkbcommon-x11-0 libx11-xcb1 libxcursor1 libxi6 libxrandr2
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key:
+            integrations-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock')
+            }}
+          restore-keys: |
+            integrations-${{ runner.os }}-cargo-
+
+      - name: Clippy gup-bevy
+        run: cargo clippy -p gup-bevy --all-targets -- -D warnings
+
+      - name: Test gup-bevy
+        run: xvfb-run -a cargo test -p gup-bevy -- --test-threads=1

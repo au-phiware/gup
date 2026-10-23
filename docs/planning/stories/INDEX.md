@@ -437,7 +437,7 @@ findings", GUP-396).
   S13a: `gup-egui` rewritten on `gup-core` (egui's device via `from_wgpu`, a
   sampled `TextureTarget`, input and repaint), back in the workspace, used by
   dogfood t4 and t5. Deps: GUP-480 ✅.
-- [GUP-484](GUP-484_RFC_001_S13b_Gup_Bevy_On_Gup_Core.md) 🚧 — RFC-001 step
+- [GUP-484](GUP-484_RFC_001_S13b_Gup_Bevy_On_Gup_Core.md) ✅ — RFC-001 step
   S13b: `gup-bevy` rewritten on `gup-core`, back in the workspace, with its CI
   placement decided by a measured compile-cost rule. Deps: GUP-480 ✅, GUP-483
   📋 (soft).

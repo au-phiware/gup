@@ -1,178 +1,86 @@
 # Bevy Integration Guide
 
-This guide shows how to embed GPU-accelerated Gup data visualizations inside a
-[Bevy](https://bevyengine.org/) application.
+Embed a Gup chart in a [Bevy](https://bevyengine.org/) app as a sprite texture,
+rendered on Bevy's own GPU device and updated as your data changes.
 
 ## Version Compatibility
 
 | gup-bevy | Bevy | wgpu |
 | -------- | ---- | ---- |
 | 0.1      | 0.18 | 27.x |
-| 0.1      | 0.17 | 26.x |
 
-> **Note**: Bevy's wgpu version must match the version used by the `gup` crate.
-> Bevy 0.18 ships with wgpu 27.0, which is compatible.
+Bevy's wgpu version must match `gup-core`'s; `Cargo.lock` holds one `wgpu`.
 
 ## Adding the Dependency
 
-Add `gup-bevy` to your project:
-
 ```toml
-# Cargo.toml
 [dependencies]
-gup = { git = "https://github.com/au-phiware/gup" }
+gup-core = { git = "https://github.com/au-phiware/gup" }
 gup-bevy = { git = "https://github.com/au-phiware/gup" }
 bevy = { version = "0.18", default-features = false, features = [
-    "bevy_render",
-    "bevy_asset",
-    "bevy_winit",
-    "bevy_sprite",
-    "png",
-    "x11",          # Linux/X11 — replace with your platform feature
+    "2d_bevy_render", "bevy_asset", "bevy_log", "bevy_window", "bevy_winit",
+    "x11", # replace with your platform feature
 ] }
-```
-
-`gup-bevy` re-exports the Bevy-specific items you need through a prelude:
-
-```rust
-use gup_bevy::prelude::*;
 ```
 
 ## Minimal Example
 
-```rust
+```rust,ignore
 use bevy::prelude::*;
-use gup::prelude::*;
-use gup::chart_builder::accessor::AccessorValue;
-use gup::chart_builder::builders::{scatter, AccessorFunction};
-use gup::chart_builder::ChartBuilder;
 use gup_bevy::prelude::*;
-use std::sync::Arc;
-
-#[derive(Debug, Clone)]
-struct DataPoint { x: f32, y: f32 }
 
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins)
-        .add_plugins(GupPlugin)            // 1. Add the Gup plugin
+        .add_plugins((DefaultPlugins, GupPlugin))
         .add_systems(Startup, setup)
         .run();
 }
 
 fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     commands.spawn(Camera2d);
-
-    // 2. Build a chart with the Gup chart-builder API
-    let context = Arc::new(
-        pollster::block_on(RenderContext::new()).unwrap(),
-    );
-    let data = vec![
-        DataPoint { x: 1.0, y: 2.0 },
-        DataPoint { x: 2.0, y: 4.0 },
-        DataPoint { x: 3.0, y: 1.0 },
-    ];
-    let chart = scatter()
-        .x(AccessorFunction::new(|d: &DataPoint| AccessorValue::Float(d.x)))
-        .y(AccessorFunction::new(|d: &DataPoint| AccessorValue::Float(d.y)))
-        .build_with_data(data, context)
-        .unwrap();
-
-    // 3. Wrap in GupChart and spawn with a Sprite
-    let placeholder = blank_chart_image(800, 600);
-    let image_handle = images.add(placeholder);
-
-    commands.spawn((
-        GupChart::new(chart).with_size(800, 600),
-        Sprite {
-            image: image_handle,
-            custom_size: Some(Vec2::new(800.0, 600.0)),
-            ..default()
-        },
-    ));
+    let size = UVec2::new(480, 320);
+    let image = images.add(chart_image(size, 1.0));
+    let chart = gup_core::scatter(vec![(1.0, 2.0), (2.0, 3.0)])
+        .x(|p| p.0)
+        .y(|p| p.1)
+        .title("Hello Bevy");
+    commands.spawn((GupChart::new(chart, size, image.clone()), Sprite::from_image(image)));
 }
 ```
 
-That's it — about **20 lines of user-written code** to get a GPU-accelerated
-scatter plot rendering inside a Bevy window.
+`examples/bevy_scatter.rs` extends a scatter every frame through an `Appender`;
+run it with `cargo run -p gup-bevy --example bevy_scatter`.
 
 ## How It Works
 
-### GupPlugin
+- **`GupPlugin`**: in `finish` it wraps Bevy's `RenderDevice` and queue with
+  `gup_core::Context::from_wgpu`, stored as the `GupContext` resource. No second
+  adapter is created.
+- **`GupChart`** (component): the chart (any `gup_core::Chart + Send + Sync`;
+  the builders and `Plot` are), its logical `size`, `dpr` and the `image`
+  handle. `chart.as_any_mut().downcast_mut::<ScatterChart<_>>()` reaches the
+  concrete type.
+- **`chart_image(size, dpr)`**: a blank `Rgba8UnormSrgb` image of `size * dpr`
+  pixels with no CPU data. The chart's texture is also `Rgba8UnormSrgb`, and Gup
+  draws through its `Rgba8Unorm` view, so colours match `ChartExt::render` byte
+  for byte.
+- **Per frame**: a `PostUpdate` system resolves and draws each chart (a chart
+  with no changes writes nothing new); extraction hands the texture to the
+  render world, where a system in `RenderSystems::Queue` copies it into the
+  image's `GpuImage` (`copy_texture_to_texture`).
 
-`GupPlugin` performs two actions:
+## Updating Chart Data
 
-1. **`build()`** — registers `gup_render_system` in the `PostUpdate` schedule.
-2. **`finish()`** — extracts Bevy's `RenderDevice`, `RenderQueue`,
-   `RenderAdapter`, and `RenderInstance` from the render sub-app and constructs
-   a `GupRenderContext` resource. No second GPU adapter is created; both Bevy
-   and Gup share the same device.
+Keep an `Appender` from the chart before spawning it (`chart.appender()`) and
+`push` rows from any system or thread. Rows pushed between frames are uploaded
+together at the next resolve.
 
-### GupChart Component
+## Known Limitations
 
-`GupChart` is a Bevy `Component` that wraps any chart built with the Gup
-chart-builder API. It uses an object-safe `DynChart` trait internally for type
-erasure, so you can store scatter plots, line charts, bar charts, etc.
-
-Key fields:
-
-| Field         | Type   | Description                                        |
-| ------------- | ------ | -------------------------------------------------- |
-| `auto_update` | `bool` | Re-render every frame when `true` (default: true). |
-| `width`       | `u32`  | Pixel width of the offscreen render target.        |
-| `height`      | `u32`  | Pixel height of the offscreen render target.       |
-
-### gup_render_system
-
-Each frame, `gup_render_system`:
-
-1. Queries all `(GupChart, Sprite)` entities.
-2. Skips charts that are not dirty (and not `auto_update`).
-3. Renders dirty charts to PNG via `GupChart::render_to_png`.
-4. Decodes the PNG into a Bevy `Image` asset.
-5. Replaces the `Sprite`'s image handle so the on-screen sprite updates.
-
-## Updating Chart Data at Runtime
-
-To animate or update data, rebuild the chart and replace the `GupChart`
-component:
-
-```rust
-fn animate_system(time: Res<Time>, mut charts: Query<&mut GupChart>) {
-    let t = time.elapsed_secs();
-    for mut chart in &mut charts {
-        let new_chart = build_my_chart(t);
-        *chart = GupChart::new(new_chart).with_size(800, 600);
-    }
-}
-```
-
-For one-shot updates (e.g. in response to user interaction), set
-`auto_update: false` and call `mark_dirty()` when the data changes:
-
-```rust
-let mut gup_chart = GupChart::with_auto_update(chart, false);
-// … later …
-gup_chart.mark_dirty(); // triggers a single re-render
-```
-
-## Known Limitations and Caveats
-
-1. **Bevy version lock** — `gup-bevy` targets Bevy 0.18 (wgpu 27). Upgrading to
-   a different Bevy version requires matching wgpu versions.
-
-2. **Render-to-PNG overhead** — The current implementation renders charts to PNG
-   bytes and then loads the PNG as a Bevy `Image`. This involves a GPU→CPU→GPU
-   round-trip. A future story will add direct texture sharing to eliminate this
-   overhead.
-
-3. **Single-threaded chart rendering** — Charts are rendered sequentially in the
-   render system. Parallel chart rendering is not yet supported.
-
-4. **Platform features** — The `bevy` dependency in `gup-bevy` enables `x11` by
-   default. On other platforms, adjust the feature flags accordingly (e.g.
-   `wayland` on Wayland Linux, no extra feature on macOS/Windows).
-
-5. **No 3-D support** — Charts are rendered to 2-D textures displayed as Bevy
-   sprites. 3-D scene integration (e.g. billboarded charts in a 3-D world) is
-   out of scope for this initial integration.
+- The copy runs in the render world while the main world draws the next frame
+  into the same texture: a frame may show the newer chart, never a torn one
+  (both are ordered on one queue).
+- Charts are not drawn into Bevy's own pass, and Bevy input is not forwarded to
+  `Chart::handle`; both are possible follow-ups.
+- Bevy is a heavy dependency, so CI lints and tests the crate in a separate
+  `integrations` job.

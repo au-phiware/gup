@@ -1,52 +1,27 @@
 # gup-bevy
 
 Bevy integration for the [Gup](https://github.com/au-phiware/gup)
-GPU-accelerated data visualization library.
+GPU-accelerated data visualization library, built on `gup-core`.
 
-> **Parked (GUP-390).** This crate is excluded from the Gup workspace and CI
-> until RFC-001 step S13 re-wires it onto `gup-core`. Build it with
-> `CARGO_TARGET_DIR=target cargo check --manifest-path gup-bevy/Cargo.toml` from
-> the repository root. See the root README, "Parked integration crates".
+```rust,ignore
+let image = images.add(chart_image(size, 1.0));
+commands.spawn((GupChart::new(chart, size, image.clone()), Sprite::from_image(image)));
+```
 
-## Version Compatibility
+`GupPlugin` makes a `GupContext` on Bevy's own wgpu device, draws every
+`GupChart` into a texture each frame and copies it into the Bevy image (GPU to
+GPU, no readback). Add rows to a live chart with an `Appender`.
 
 | gup-bevy | Bevy | wgpu |
 | -------- | ---- | ---- |
 | 0.1      | 0.18 | 27.x |
 
-## Architecture
+See [the integration guide](../docs/BEVY_INTEGRATION.md) and
+`cargo run -p gup-bevy --example bevy_scatter`. The crate is a workspace member
+but is left out of `mask all-check` and the `tests` CI job (its dependencies are
+heavy); the `integrations` job lints and tests it:
 
-`GupPlugin` shares Bevy's wgpu `Device`/`Queue` with Gup — no second GPU adapter
-is created. Charts render into offscreen textures which are GPU-copied directly
-into Bevy's `GpuImage` for sprites. The render path involves **zero CPU
-readback** and no PNG encoding.
-
-```text
-GupChart  ──render──▶  ChartTextureTarget  ──GPU copy──▶  GpuImage (Sprite)
-              (main world)                        (render world)
+```bash
+cargo clippy -p gup-bevy --all-targets -- -D warnings
+xvfb-run -a cargo test -p gup-bevy -- --test-threads=1
 ```
-
-## Quick Start
-
-```rust
-use bevy::prelude::*;
-use gup_bevy::prelude::*;
-
-fn main() {
-    App::new()
-        .add_plugins(DefaultPlugins)
-        .add_plugins(GupPlugin)
-        .add_systems(Startup, setup)
-        .run();
-}
-```
-
-See [`docs/BEVY_INTEGRATION.md`](../docs/BEVY_INTEGRATION.md) for the full
-integration guide.
-
-## License
-
-GPL-3.0-or-later
-
-GUP-466 deleted the old scatter, line, bar and composite builders that this
-crate's sources still name; S13 rewires it onto `gup-core`'s builders.

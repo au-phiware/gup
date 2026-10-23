@@ -9,8 +9,8 @@ implementer-reason:
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 🚧 In Progress **Created**:
-2026-10-19
+**Initiative**: RFC-001 Migration **Status**: ✅ Complete (2026-10-23)
+**Created**: 2026-10-19
 
 ## Context
 
@@ -52,40 +52,40 @@ measured here (AC1) with a decision rule, rather than guessed.
 
 ### AC1: Spike: what bevy costs the gate
 
-- [ ] Before changing CI, add `gup-bevy` as a workspace member and measure on
+- [x] Before changing CI, add `gup-bevy` as a workspace member and measure on
       the dev machine: cold `cargo clippy -p gup-bevy --all-targets` time and
       build-directory growth (`du -s` before and after). Record both.
-- [ ] Apply the decision rule in Decisions and record which branch was taken.
+- [x] Apply the decision rule in Decisions and record which branch was taken.
 
 ### AC2: The crate on gup-core
 
-- [ ] `gup-bevy/Cargo.toml` depends on `gup-core` (path), not `gup`. `DynChart`,
+- [x] `gup-bevy/Cargo.toml` depends on `gup-core` (path), not `gup`. `DynChart`,
       `GupRenderContext` and the old `ChartTextureTarget` are deleted.
-- [ ] The public API is Decisions' `GupPlugin`, `GupChart` and `GupContext`,
+- [x] The public API is Decisions' `GupPlugin`, `GupChart` and `GupContext`,
       with rustdoc and a `no_run` quick-start doctest.
-- [ ] A test renders a `gup_core::scatter` through the crate's render function
+- [x] A test renders a `gup_core::scatter` through the crate's render function
       (`render_into`, as GUP-483) into its texture, reads it back, and finds it
       byte-identical to `ChartExt::render` at dpr 1.
 
 ### AC3: The example
 
-- [ ] `gup-bevy/examples/bevy_scatter.rs` (at most 80 lines): a sprite showing a
+- [x] `gup-bevy/examples/bevy_scatter.rs` (at most 80 lines): a sprite showing a
       `gup_core::scatter` titled "Bevy scatter", whose rows an `Appender`
       extends every frame. With `GUP_SCREENSHOT_PATH` set it takes a Bevy
       screenshot after 30 frames, saves it and exits.
-- [ ] Run under `xvfb-run` and read the screenshot: the chart's title, tick
+- [x] Run under `xvfb-run` and read the screenshot: the chart's title, tick
       labels and points on the sprite.
-- [ ] Colour parity: three mark-centre pixels (from the chart's `Layout`, mapped
+- [x] Colour parity: three mark-centre pixels (from the chart's `Layout`, mapped
       to the sprite's screen position) are within ΔE 2 of `ChartExt::render` of
       the same chart.
 
 ### AC4: Workspace, CI and docs
 
-- [ ] `gup-bevy` is a workspace member (not default) and out of `exclude`, and
+- [x] `gup-bevy` is a workspace member (not default) and out of `exclude`, and
       is linted and tested in CI per the AC1 branch.
-- [ ] `scripts/clippy_wasm32.sh` lists it in `excluded` ("a native host
+- [x] `scripts/clippy_wasm32.sh` lists it in `excluded` ("a native host
       integration").
-- [ ] `gup-bevy/README.md` and `docs/BEVY_INTEGRATION.md` describe the new API;
+- [x] `gup-bevy/README.md` and `docs/BEVY_INTEGRATION.md` describe the new API;
       the root README's parked table drops `gup-bevy`. If both GUP-483 and this
       story are done, the table lists only the T7 crates.
 
@@ -161,11 +161,11 @@ measured here (AC1) with a decision rule, rather than guessed.
 
 ## Technical Tasks
 
-- [ ] AC1 spike and branch.
-- [ ] Delete old modules; `GupContext`, `GupChart`, systems on gup-core;
+- [x] AC1 spike and branch.
+- [x] Delete old modules; `GupContext`, `GupChart`, systems on gup-core;
       `render_into` and its test.
-- [ ] Example, screenshot, parity check.
-- [ ] Workspace and CI per the branch; READMEs and docs.
+- [x] Example, screenshot, parity check.
+- [x] Workspace and CI per the branch; READMEs and docs.
 
 ## Dependencies
 
@@ -187,8 +187,8 @@ measured here (AC1) with a decision rule, rather than guessed.
 
 ## Success Metrics
 
-- [ ] `gup-bevy` builds and is tested on every push.
-- [ ] No CPU readback in the Bevy path.
+- [x] `gup-bevy` builds and is tested on every push.
+- [x] No CPU readback in the Bevy path.
 
 ## Risk Assessment
 
@@ -202,21 +202,21 @@ measured here (AC1) with a decision rule, rather than guessed.
 
 ## Definition of Done
 
-- [ ] First code commit within 30 minutes of starting; then commit at each
+- [x] First code commit within 30 minutes of starting; then commit at each
       checkpoint (story-worker "Checkpoint rule")
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`,
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`,
       `cargo test -p gup-bevy -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples -p gup-bevy`
-- [ ] `mask wasm-browser` passes (CI and workspace changes must leave the
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples -p gup-bevy`
+- [x] `mask wasm-browser` passes (CI and workspace changes must leave the
       browser job green)
-- [ ] `mask wasm-size` run and the figures reported in the Implementation
+- [x] `mask wasm-size` run and the figures reported in the Implementation
       Summary (expected unchanged; the orchestrator re-records)
-- [ ] Rendered output verified by eye: the example screenshot
-- [ ] `mask old-path-loc` recorded (expected unchanged)
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] Rendered output verified by eye: the example screenshot
+- [x] `mask old-path-loc` recorded (expected unchanged)
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
 
 ## Resolved (2026-10-23)
 
@@ -227,3 +227,79 @@ scatter's `Op` and its `op` bound; line and bar already had it. A
 `builders_are_send_and_sync` test in `builder/mod.rs` asserts `Plot`,
 `ScatterChart`, `LineChart` and `BarChart` are `Send + Sync`. gup-core's tests,
 doctests and compile-fail suites pass unchanged.
+
+## Implementation Summary
+
+`gup-bevy` is rewritten on `gup-core` (`src/{lib,chart,plugin,copy,render}.rs`,
+about 330 lines; `DynChart`, `GupRenderContext` and `ChartTextureTarget`
+deleted) and is a workspace member (not default). `ScatterChart` is now
+`Send + Sync` (see Resolved). Tests: `render_parity` (2, byte-identical to
+`ChartExt::render` at dpr 1 and to `ImageTarget` at dpr 2), `screenshot_parity`
+(1), 2 doctests, and gup-core's `builders_are_send_and_sync`.
+
+**AC1 measurements** (private empty build directory, dev machine):
+
+| Measure                                           | Value                    |
+| ------------------------------------------------- | ------------------------ |
+| cold `clippy -p gup-bevy --all-targets`           | 98 s (over the 90 s cap) |
+| build-directory size after it                     | 0.42 GB (under 1.5 GB)   |
+| same after `clippy -p gup-core` first             | bevy part 83 s, +0.50 GB |
+| warm re-lint after touching `gup-bevy/src/lib.rs` | 1 s                      |
+
+**Branch taken: CI-only.** 98 s exceeds 90 s, so `--exclude gup-bevy` is on
+every `--workspace` cargo call in `maskfile.md` (`check`, `lint`, `lint-check`,
+`all-fix`'s clippy, `ci tests`) and in `tests.yml`, which gains an
+`integrations` job (clippy and `xvfb-run` tests). `scripts/test_pre_commit.sh`
+fixtures list `gup-bevy` among the dependents. `clippy_wasm32.sh` lists it as
+excluded.
+
+**Rendered output**: the example under `xvfb-run` shows the "Bevy scatter"
+title, tick labels, 20 static points and the appended sine curve on a sprite
+(read from `/tmp/bevy.png`). Colour parity: three mark centres (points 3,
+11, 17) measured ΔE 0, 0, 0 against `ChartExt::render` (limit 2). Needed Bevy
+features: `2d_bevy_render` (without it the window is black: no 2D pipeline).
+
+**Gates**: `mask all-check` passes; `mask old-path-loc` TOTAL 18504 (unchanged);
+`mask wasm-size` (via perf budgets) scatter 334149, over-wgpu 301789 gz bytes,
+all pass; dogfood suite 10 pass; one `wgpu` in `Cargo.lock`.
+
+## Retrospective
+
+**Completed**: 2026-10-23
+
+### Key Technical Learnings
+
+#### Bevy's feature set decides whether anything draws
+
+- **Challenge**: the first screenshot was black with no log output.
+- **Solution**: `bevy_log` showed nothing was wrong at run time; the real cause
+  was missing `bevy_core_pipeline` and `bevy_sprite_render`. `2d_bevy_render`
+  brings both.
+- **Pattern**: enable `bevy_log` in example crates; a silent black frame means a
+  missing render feature.
+
+#### Hosts need `Send + Sync` charts
+
+- **Challenge**: `ScatterChart`'s pending-op closures were `Send` only.
+- **Solution**: `+ Sync` on the bound and the alias; asserted by a test.
+- **Pattern**: assert thread-safety of public types in a test.
+
+### Architectural Decisions
+
+#### CI-only placement for gup-bevy
+
+- **Decision**: the literal rule (cold clippy of `-p gup-bevy`) gave 98 s.
+- **Reasoning**: follow the rule as written; the margin is small, and the disk
+  cost (0.42 GB) would have allowed the local gate.
+- **Trade-off**: bevy breakage shows up in CI, not in `mask all-check`.
+- **Future**: if the toolchain gets faster, remove the excludes.
+
+### Development Workflow Insights
+
+- Example mark choice: a point at y = 0 lies on the axis line; pick points clear
+  of guides.
+- Adding a member changes the `test_pre_commit.sh` fixtures (alphabetical).
+
+### Follow-up Stories
+
+None.

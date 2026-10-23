@@ -13,10 +13,11 @@ categories = ["graphics", "visualization", "game-engines"]
 [dependencies]
 gup-core = { path = "../crates/gup-core" }
 bevy = { version = "0.18", default-features = false, features = [
-    "bevy_render",
+    "2d_bevy_render",
     "bevy_asset",
+    "bevy_log",
+    "bevy_window",
     "bevy_winit",
-    "bevy_sprite",
     "x11",
     "png",
 ] }
