@@ -9,7 +9,8 @@ implementer-reason:
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 📋 Planned **Created**: 2026-10-19
+**Initiative**: RFC-001 Migration **Status**: ✅ Complete (2026-10-23)
+**Created**: 2026-10-19
 
 ## Context
 
@@ -152,3 +153,28 @@ This story lands before the flip so the flip only has to add the re-export.
 - [ ] `mask old-path-loc` recorded (expected unchanged)
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
+
+## Implementation Summary
+
+`crates/gup-core-macros/src/root.rs`: `crate_root()` over a pure
+`resolve(lookup)` (the five-row table, unit-tested). All seven sites use it, and
+the error-path impl resolves the root once. New test
+`crates/gup-core/tests/reexport.rs` checks a detached workspace
+(`tests/reexport/`) in which `reexport-user` depends only on a stand-in `gup`
+facade, renamed `charts`, and uses `#[wgsl_function]`. Trybuild snapshots
+unchanged; gup-core-macros 4 tests, dogfood suite pass. `mask old-path-loc`:
+26601 (unchanged). `mask wasm-size`: scatter 331601 B gz (+2% of baseline),
+over_wgpu 299241, per_row_type 1730; budgets pass.
+
+## Retrospective
+
+**Completed**: 2026-10-23
+
+- The `proc-macro-crate` lookup works under trybuild and in the nested detached
+  workspace with no extra setup.
+- Decision: the re-export test shells out to `cargo check --offline` on a
+  detached workspace (lockfile and target gitignored), reusing
+  `CARGO_TARGET_DIR/reexport` when set. It takes about 40 s cold.
+- `#[derive(Mark)]` shares `crate_root`; only `#[wgsl_function]` is exercised
+  through the facade, the derive path being the same call.
+- Follow-ups: none.

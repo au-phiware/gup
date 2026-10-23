@@ -30,3 +30,5 @@ docs/gallery/thumbs/*.png
 /gup-android/target
 /examples/gup-tauri/src-tauri/Cargo.lock
 /examples/gup-tauri/src-tauri/target
+/crates/gup-core/tests/reexport/target
+/crates/gup-core/tests/reexport/Cargo.lock
