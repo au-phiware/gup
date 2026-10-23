@@ -84,12 +84,7 @@ nor naga_oil is in a `gup-core` binary, and Gup never edits authored WGSL with
 find-and-replace. Authoring and the calling convention are documented on
 `gup::wgsl_function`.
 
-Findings:
-[S0b](./planning/rfcs/RFC-001_Core_Architecture.md#s0b-findings-2026-10-05-gup-396)
-(composition),
-[GUP-406](./planning/rfcs/RFC-001_Core_Architecture.md#gup-406-findings-2026-10-09)
-(build-time linking),
-[S5c](./planning/rfcs/RFC-001_Core_Architecture.md#s5c-findings-2026-10-11-gup-420)
+Findings: [S0b][rfc-s0b]; GUP-406 (build-time linking); S5c
 (`#[wgsl_function]`).
 
 ## Data: the GPU column store
@@ -142,21 +137,10 @@ std::thread::spawn(move || feed.extend((0..25_000).map(tick)).unwrap())
 let image = chart.render(&Context::shared()?, 640, 360)?;
 assert_eq!(image.dimensions(), (640, 360));
 
-// A layer over a million rows that the CPU never needs to read again.
-let mut plot = Plot::new();
-plot.circles((0..1000).map(|i| (f64::from(i), f64::from(i % 7))))
-    .x(|p| p.0)
-    .y(|p| p.1)
-    .retain(Retain::GpuOnly);
 # Ok::<(), gup::Error>(())
 ```
 
-Findings:
-[S0a](./planning/rfcs/RFC-001_Core_Architecture.md#s0a-findings-2026-10-05-gup-395),
-[S4b](./planning/rfcs/RFC-001_Core_Architecture.md#s4b-findings-2026-10-10-gup-415)
-(nulls),
-[S12](./planning/rfcs/RFC-001_Core_Architecture.md#s12-findings-gup-480482)
-(append, `Window`).
+Findings: [S0a][rfc-s0a]; S4b (nulls); [S12][rfc-s12] (append, `Window`).
 
 ## Marks and typed channels
 
@@ -183,74 +167,17 @@ crate compiles. A mark names its geometry (`Quad`, or polyline segments), its
 antialiasing and how it is hit-tested (`Disc`, box, segment, unpickable); the
 shader supplies the shape.
 
-```rust
-use gup::prelude::*;
-
-/// A filled square centred on `(x, y)`, `size` pixels across.
-#[derive(Debug, Mark)]
-#[mark(
-    wgsl = r#"
-    #import gup::view::{View, px_to_clip}
-    #import gup::coverage::{rect_quad, box_coverage}
-
-    struct SquareIn { x: f32, y: f32, size: f32, fill: vec4<f32> }
-
-    struct Varyings {
-        @builtin(position) clip: vec4<f32>,
-        @location(0) local: vec2<f32>,
-        @location(1) half: vec2<f32>,
-        @location(2) fill: vec4<f32>,
-        @location(3) @interpolate(flat) row: u32,
-    }
-
-    fn vertex(m: SquareIn, vertex_index: u32, row: u32, view: View) -> Varyings {
-        let centre = vec2<f32>(m.x, m.y);
-        let half = vec2<f32>(m.size * 0.5);
-        let q = rect_quad(centre - half, centre + half, vertex_index, view.dpr);
-        var out: Varyings;
-        out.clip = px_to_clip(q.position, view);
-        out.local = q.local;
-        out.half = q.half;
-        out.fill = m.fill;
-        out.row = row;
-        return out;
-    }
-
-    fn shade(v: Varyings) -> vec4<f32> {
-        let alpha = v.fill.a * box_coverage(v.local, v.half);
-        if (alpha <= 0.0) { discard; }
-        return vec4<f32>(v.fill.rgb * alpha, alpha);
-    }
-"#,
-    geometry = Quad
-)]
-struct Square {
-    #[channel(role = X)]
-    x: Px,
-    #[channel(role = Y)]
-    y: Px,
-    #[channel(role = Size, default = Px(10.0))]
-    size: Px,
-    #[channel(role = Color, default = Color::BLACK)]
-    fill: Color,
-}
-
-let names: Vec<_> = Square::CHANNELS.iter().map(|c| c.name).collect();
-assert_eq!(names, ["x", "y", "size", "fill"]);
-```
+A complete external mark (a square, about 60 lines of WGSL and a four-channel
+struct) is the compiled test
+[`derive_mark.rs`](../crates/gup-core/tests/derive_mark.rs); the built-in marks
+in `crates/gup-core/src/marks.rs` are the same derive.
 
 A layer's draw order is its `z` (`-99..=99`; equal `z` draws in the order
 added). Within a layer, rows draw in data order, or largest first when the size
 channel is a column, so no mark hides under a larger one. To raise some rows,
 give them a layer of their own over the same scales.
 
-Findings:
-[S3](./planning/rfcs/RFC-001_Core_Architecture.md#s3-findings-2026-10-06-gup-401)
-(typed channels),
-[GUP-431](./planning/rfcs/RFC-001_Core_Architecture.md#gup-431-findings-2026-10-17)
-(draw order),
-[S9a](./planning/rfcs/RFC-001_Core_Architecture.md#s9a-findings-2026-10-18-gup-452)
-(hit shapes).
+Findings: [S3][rfc-s3]; GUP-431 (draw order); S9a (hit shapes).
 
 ## Scales
 
@@ -278,17 +205,9 @@ let scale = Log::new().domain(1.0, 1000.0).range(Px(0.0), Px(300.0));
 assert_eq!(scale.eval(10.0), 100.0); // the f64 mirror of what the GPU computes
 let ticks = scale.ticks(4);
 assert_eq!(ticks.values.len(), ticks.labels.len());
-
-// The same scale drives a plot's axis; zooming rewrites only its uniforms.
-let mut plot = Plot::new();
-let y = plot.y(Log::new().domain(1.0, 1000.0));
-plot.circles([(1.0, 10.0), (2.0, 400.0)]).x(|p| p.0).y_with(y.encode(|p| p.1));
 ```
 
-Findings:
-[S4a](./planning/rfcs/RFC-001_Core_Architecture.md#s4a-findings-2026-10-10-gup-414),
-[S5a](./planning/rfcs/RFC-001_Core_Architecture.md#s5a-findings-2026-10-10-gup-418),
-[S5b](./planning/rfcs/RFC-001_Core_Architecture.md#s5b-findings-2026-10-11-gup-419).
+Findings: [S4a][rfc-s4a]; S5a and S5b (the family).
 
 ## Plot, layout, scene and targets
 
@@ -364,17 +283,8 @@ four samples on any target.
 **Errors.** GPU failures are `Err(Error::Gpu)` naming the pipeline, layer or
 target, never a panic or a blank image; a failed pipeline is not cached.
 
-Findings:
-[S0b](./planning/rfcs/RFC-001_Core_Architecture.md#s0b-findings-2026-10-05-gup-396),
-[S1](./planning/rfcs/RFC-001_Core_Architecture.md#s1-findings-2026-10-05-gup-399)
-(`Context`),
-[S2](./planning/rfcs/RFC-001_Core_Architecture.md#s2-findings-2026-10-06-gup-400),
-[GUP-410](./planning/rfcs/RFC-001_Core_Architecture.md#gup-410-findings-2026-10-10)
-(errors),
-[GUP-421](./planning/rfcs/RFC-001_Core_Architecture.md#gup-421-findings-2026-10-16)
-(antialiasing),
-[S10](./planning/rfcs/RFC-001_Core_Architecture.md#s10-findings-gup-460466)
-(SVG).
+Findings: [S1][rfc-s1], [S2][rfc-s2], [GUP-410][rfc-gup-410],
+[GUP-421][rfc-gup-421], [S10][rfc-s10].
 
 ### Context
 
@@ -396,9 +306,9 @@ pixels from the chart's top-left) to `Chart::handle`, which returns a
   them.
 - **Brush** selects the rows whose mark position lies inside a dragged
   rectangle. `Plot::brush` returns it in data units with the `RowId`s;
-  `on_brush` observes it. Brushed rows draw normally and the others dim
-  (`Theme::unbrushed`); the brush is applied on the GPU through bits, so it
-  costs no per-row CPU work.
+  `on_brush` observes it. Brushed rows draw normally and the others are greyed
+  (`Theme.unbrushed`); the brush is applied on the GPU through bits, so it costs
+  no per-row CPU work.
 - **Picking.** The CPU pick builds a uniform grid over the drawn marks from
   retained columns and hit-tests with each mark's signed distance, taking the
   topmost within a few pixels. The GPU pick (`Plot::request_pick`, `poll_picks`)
@@ -444,12 +354,7 @@ assert_eq!(response, Response { redraw: true });
 # Ok::<(), gup::Error>(())
 ```
 
-Findings:
-[S8b](./planning/rfcs/RFC-001_Core_Architecture.md#s8b-findings-2026-10-17-gup-445),
-[S9a to S9f](./planning/rfcs/RFC-001_Core_Architecture.md#s9a-findings-2026-10-18-gup-452)
-(picking, brush, culling),
-[S12](./planning/rfcs/RFC-001_Core_Architecture.md#s12-findings-gup-480482)
-(waker).
+Findings: [S8b][rfc-s8b]; S9a to S9f (picking, brush, culling); S12 (waker).
 
 ## Builders
 
@@ -483,9 +388,6 @@ plot.y_title("units");
 assert_eq!(plot.title_text(), Some("Sales"));
 ```
 
-More builders (area, box, violin, density, heatmap, choropleth) are
-[T5](./planning/STRATEGIC_REVIEW_2026-10.md) work, not yet on `main`.
-
 ## Hosts
 
 - **`gup::show(chart)`** opens a winit window (feature `window`) with hover,
@@ -494,62 +396,54 @@ More builders (area, box, violin, density, heatmap, choropleth) are
 - **`web::CanvasApp`** (feature `web`, wasm32) owns a chart, a `Context` and a
   `CanvasTarget`, translates DOM pointer and wheel events to `Input`, and
   redraws with one `requestAnimationFrame` per burst of input. WebGPU only, for
-  now. The reference page is `wasm-size/scatter`.
-- **`gup-egui`**: `GupWidget` shows any `Chart` in an egui panel. It makes a
-  `Context` over egui's device, renders into a texture egui samples (no CPU
-  readback) and forwards input. See [EGUI_INTEGRATION.md](./EGUI_INTEGRATION.md)
-  and the crate's [README](../gup-egui/README.md).
-- **`gup-bevy`**: `GupPlugin` renders each `GupChart` component into a texture
-  on Bevy's device and copies it GPU to GPU into a Bevy image shown as a sprite.
-  See [BEVY_INTEGRATION.md](./BEVY_INTEGRATION.md) and the crate's
-  [README](../gup-bevy/README.md).
+  now. The reference page is `crates/gup-core/wasm-size/scatter`.
+- **`gup-egui`** (`GupWidget`) and **`gup-bevy`** (`GupPlugin`, `GupChart`)
+  render a `Chart` into a texture on the host's own device (no CPU readback) and
+  forward input. See [EGUI_INTEGRATION.md](./EGUI_INTEGRATION.md) and
+  [BEVY_INTEGRATION.md](./BEVY_INTEGRATION.md). They depend on `gup-core`, the
+  same types as `gup`. The iOS, Android and Tauri shims are parked until they
+  are re-wired onto this path (T7).
 
-Both integrations depend on `gup-core` (the same types as `gup`, fewer crates)
-and are workspace members. The iOS, Android and Tauri shims are parked until
-they are re-wired onto this path (T7).
-
-```rust,no_run
-use gup::prelude::*;
-
-fn main() -> gup::Result<()> {
-    let points = (0..50).map(|i| f64::from(i) / 5.0).map(|x| (x, x.sin()));
-    let mut plot = Plot::new();
-    plot.circles(points)
-        .x(|p| p.0)
-        .y(|p| p.1)
-        .tooltip(|p| format!("sin({:.1}) = {:.2}", p.0, p.1));
-    gup::show(plot)
-}
-```
+`gup::show` is [`examples/hello_world.rs`](../examples/hello_world.rs) (five
+lines, run by `mask smoke-examples`).
 
 ## Gates
 
-Claims in this document are checked, not asserted:
+Claims here are checked, not asserted:
 
-- **Performance budgets** (`crates/gup-core/PERF_BUDGETS.md`,
-  `mask perf-budget`): GPU pass and CPU time per frame for a steady zoom of
-  100,000 points, upload counts per frame (exact), a culled four-million-row
-  zoom, and pipeline creation time. Timings hold on the machine the file names;
-  CI runs the deterministic proxies (uploads, draws, pipelines) because runners
-  render on a software rasteriser.
+- **Budgets** (`crates/gup-core/PERF_BUDGETS.md`, `mask perf-budget`): GPU pass
+  and CPU time for a steady 100,000-point zoom, exact upload counts per frame, a
+  culled four-million-row zoom, pipeline creation time. Timings hold on the
+  machine the file names; CI runs the deterministic proxies (uploads, draws,
+  pipelines), since runners render in software.
 - **WASM size** (`mask wasm-size`): the reference scatter is about 334 KB
-  gzipped, about 302 KB over bare wgpu, with a 400,000 B ceiling and +2%
-  tolerance. CI enforces it.
-- **Visual regression** (`mask visual-regression`,
-  `crates/gup-visual-regression`): per chart, checks for not blank, marks
-  present, text present, marks inside the plot rectangle, configured colours
-  present, and a golden image (`tests/golden`). Known-broken output is tracked
-  in `tests/visual_regression/expected_failures.toml`.
+  gzipped (about 302 KB over bare wgpu; ceiling 400,000 B, +2% tolerance).
+- **Visual regression** (`mask visual-regression`): per chart, not blank, marks
+  and text present, marks inside the plot rectangle, configured colours, and a
+  golden image (`tests/golden`). Known-broken output is tracked in
+  `tests/visual_regression/expected_failures.toml`.
 - **Browser smoke test** (`mask wasm-browser`): the reference scatter in
-  headless Chromium over WebGPU on SwiftShader; it fails on any console error or
-  WGSL diagnostic.
+  headless Chromium over WebGPU; any console error or WGSL diagnostic fails.
 - **Dogfood** (`mask dogfood`, [`dogfood/`](../dogfood/README.md)): a detached
-  crate that uses only the public `gup` API for six realistic tasks and checks
-  their pixels.
+  crate on the public `gup` API only, six realistic tasks with pixel checks.
 - **Examples** (`mask smoke-examples`): every headless example runs.
 
-Findings:
-[GUP-417](./planning/rfcs/RFC-001_Core_Architecture.md#gup-417-findings-2026-10-10)
-(budgets),
-[S14](./planning/rfcs/RFC-001_Core_Architecture.md#s14-findings-gup-485488) (the
-flip and what it deleted).
+Findings: [GUP-417][rfc-gup-417] (budgets); [S14][rfc-s14] (the flip).
+
+[rfc-s0b]:
+  ./planning/rfcs/RFC-001_Core_Architecture.md#s0b-findings-2026-10-05-gup-396
+[rfc-s0a]:
+  ./planning/rfcs/RFC-001_Core_Architecture.md#s0a-findings-2026-10-05-gup-395
+[rfc-s12]: ./planning/rfcs/RFC-001_Core_Architecture.md#s12-findings-gup-480482
+[rfc-s3]:
+  ./planning/rfcs/RFC-001_Core_Architecture.md#s3-findings-2026-10-06-gup-401
+[rfc-s4a]:
+  ./planning/rfcs/RFC-001_Core_Architecture.md#s4a-findings-2026-10-10-gup-414
+[rfc-s1]:
+  ./planning/rfcs/RFC-001_Core_Architecture.md#s1-findings-2026-10-05-gup-399
+[rfc-s10]: ./planning/rfcs/RFC-001_Core_Architecture.md#s10-findings-gup-460466
+[rfc-s8b]:
+  ./planning/rfcs/RFC-001_Core_Architecture.md#s8b-findings-2026-10-17-gup-445
+[rfc-gup-417]:
+  ./planning/rfcs/RFC-001_Core_Architecture.md#gup-417-findings-2026-10-10
+[rfc-s14]: ./planning/rfcs/RFC-001_Core_Architecture.md#s14-findings-gup-485488
