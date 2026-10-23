@@ -1906,6 +1906,86 @@ mod tests {
         sel
     }
 
+    /// GUP-482 AC4: 10,000,000 rows in batches of 10,000 through
+    /// `LastRows(100_000)`. The chunk count stays within
+    /// `ceil(1.25 × 100_000 / chunk_rows) + 2` and no `row_base` written to
+    /// the GPU reaches the rows held, however many rows went before.
+    #[test]
+    fn a_long_stream_stays_bounded() {
+        const N: usize = 100_000;
+        const BATCH: usize = 10_000;
+        let cx = Context::new_blocking().unwrap();
+        let start = std::time::Instant::now();
+        let mut sel = Selection::<Row, Circle>::new(Vec::new());
+        sel.attr(
+            Circle::X,
+            ScaleRef::new(Linear::new()).encode(|r: &Row| r.x),
+        )
+        .attr(
+            Circle::Y,
+            ScaleRef::new(Linear::new()).encode(|r: &Row| r.y),
+        )
+        .attr(Circle::RADIUS, Px(1.0))
+        .window(Window::LastRows(N));
+        sel.fit_domains(&cx).unwrap();
+        let theme = Theme::default();
+        let chunk_rows = sel.columns.as_ref().unwrap().chunk_rows();
+        assert_eq!(chunk_rows, 25_000, "max(1024, n / 4)");
+        let max_chunks = (1.25 * N as f64 / f64::from(chunk_rows)).ceil() as usize + 2;
+        let (mut most, mut bytes, mut uniforms_bytes) = (0, 0, 0);
+        let mut steady = std::time::Duration::ZERO;
+        for b in 0..1_000 {
+            let rows = (b * BATCH..(b + 1) * BATCH).map(|i| Row {
+                x: i as f64,
+                y: (i % 997) as f64,
+                v: 0.0,
+            });
+            let rows: Vec<Row> = rows.collect();
+            let before = cx.upload_stats();
+            let t = std::time::Instant::now();
+            sel.append(rows).unwrap();
+            sel.fit_domains(&cx).unwrap();
+            sel.prepare(&cx, &theme, false).unwrap();
+            sel.release();
+            if b >= 100 {
+                steady += t.elapsed();
+            }
+            let written = cx.upload_stats() - before;
+            bytes += written.columns.bytes;
+            uniforms_bytes += written.uniforms.bytes;
+            let store = sel.columns.as_ref().unwrap();
+            let held = store.rows();
+            assert_eq!(held as usize, sel.len());
+            assert!(held >= N.min((b + 1) * BATCH) as u64, "batch {b}: {held}");
+            most = most.max(store.chunks().len());
+            assert!(store.chunks().len() <= max_chunks, "batch {b}");
+            // The row bases the prepare wrote.
+            let glue = sel.glue();
+            let program = cx.program(&glue).unwrap();
+            let uniforms = sel
+                .chunk_uniform_bytes(&program.chunk, &glue.relative)
+                .unwrap();
+            for k in 0..store.chunks().len() {
+                let at = chunk_uniform_offset(k);
+                let row_base = u32::from_le_bytes(uniforms[at..at + 4].try_into().unwrap());
+                assert!(
+                    u64::from(row_base) < held,
+                    "batch {b}: {row_base} of {held}"
+                );
+            }
+        }
+        assert_eq!(sel.evicted as usize + sel.len(), 10_000_000);
+        assert_eq!(bytes, 10_000_000 * 8, "every row uploaded once");
+        eprintln!(
+            "10M rows through LastRows(100k): at most {most} chunks, {:?}; \
+             per 10k-row batch after the first 100: {:?} append + evict + prepare, \
+             {} B uniforms on average",
+            start.elapsed(),
+            steady / 900,
+            uniforms_bytes / 1_000
+        );
+    }
+
     /// AC2: one `Chunk` entry per chunk, 256 bytes apart, holding the
     /// chunk's first row and the x base from the chunk's own origin; one
     /// draw per chunk at that entry's dynamic offset.
