@@ -80,8 +80,8 @@ X) or `info` (printed, never fails).
 | `pipeline.link_create.cold_ms`     | 1.04      | <= 10     | `pipeline_timings`, its first run                   |
 | `pipeline.link_create.max_ms`      | 1.06      | info      | `pipeline_timings`                                  |
 | `wasm.wgpu.gz_bytes`               | 32,360    | info      | `scripts/wasm_size.sh`, bare wgpu                   |
-| `wasm.scatter.gz_bytes`            | 325,358   | +2%       | `scripts/wasm_size.sh`, the reference scatter       |
-| `wasm.over_wgpu.gz_bytes`          | 292,998   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10         |
+| `wasm.scatter.gz_bytes`            | 331,601   | +2%       | `scripts/wasm_size.sh`, the reference scatter       |
+| `wasm.over_wgpu.gz_bytes`          | 299,241   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10         |
 | `wasm.per_row_type.gz_bytes`       | 1,730     | <= 2600   | `scripts/wasm_size.sh`, one more Selection row type |
 
 A legitimate change that moves a number (a new guide, a bigger feature) records
@@ -473,3 +473,10 @@ seeded violation (GUP-417 retrospective).
   over bare wgpu from 286,725 to 292,998: 107 KB of headroom under the 400,000
   cap. GUP-480 is the largest single step (about +4,100: the feed receiver, the
   waker and appender plumbing).
+- **GUP-481 and 494 merged (2026-10-23, orchestrator)**: WASM scatter 325,358 to
+  331,601 B gz (+6,243), and over bare wgpu 292,998 to 299,241 (100,759 of
+  headroom). GUP-481 measured its own split by building with the old `web.rs`:
+  `web.rs` adds about 740 (the canvas waker registry, now a `Vec`), and the
+  harness's new append step links about 4,800 of gup-core's feed machinery. That
+  is the real cost any web app that appends will pay. GUP-494 (per-axis
+  overhang, fixed positions in domain fits) adds the rest.
