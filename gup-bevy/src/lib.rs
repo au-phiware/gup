@@ -1,54 +1,52 @@
 // Copyright (C) 2024 Corin Lawson
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Bevy integration for the Gup GPU-accelerated data visualization library.
+//! Gup charts as Bevy sprite textures.
 //!
-//! This crate provides a [`GupPlugin`] for [Bevy](https://bevyengine.org/)
-//! that shares a single wgpu `Device`/`Queue` between Bevy's renderer and
-//! Gup's chart rendering pipeline.  No second GPU adapter is created.
+//! [`GupPlugin`] makes a [`GupContext`] on Bevy's own wgpu device, renders
+//! every [`GupChart`] into a texture on that device each frame, and copies
+//! the texture into the Bevy image the chart names (GPU to GPU, no
+//! readback). Show the image with a [`Sprite`](bevy::sprite::Sprite).
 //!
-//! Charts render directly into GPU textures that are copied into Bevy's
-//! sprite `GpuImage` — zero CPU readback, no PNG encoding.
+//! # Quick start
 //!
-//! # Quick Start
-//!
-//! ```rust,no_run
+//! ```no_run
 //! use bevy::prelude::*;
 //! use gup_bevy::prelude::*;
+//! use gup_core::prelude::*;
 //!
 //! fn main() {
 //!     App::new()
-//!         .add_plugins(DefaultPlugins)
-//!         .add_plugins(GupPlugin)
+//!         .add_plugins((DefaultPlugins, GupPlugin))
 //!         .add_systems(Startup, setup)
 //!         .run();
 //! }
 //!
-//! fn setup(mut commands: Commands) {
+//! fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
 //!     commands.spawn(Camera2d);
+//!     let size = UVec2::new(480, 320);
+//!     let image = images.add(chart_image(size, 1.0));
+//!     let chart = gup_core::scatter(vec![(1.0, 2.0), (2.0, 3.0)])
+//!         .x(|p| p.0)
+//!         .y(|p| p.1)
+//!         .title("Hello Bevy");
+//!     commands.spawn((GupChart::new(chart, size, image.clone()), Sprite::from_image(image)));
 //! }
 //! ```
 //!
-//! See the `bevy_scatter` example for a full animated scatter-plot demo.
+//! To change a chart's data, keep an `Appender` from the chart before
+//! spawning it, or reach the chart with
+//! `chart.as_any_mut().downcast_mut::<ScatterChart<_>>()`.
 
 mod chart;
-mod context;
+mod copy;
 mod plugin;
-pub mod render_node;
-mod render_system;
-pub mod texture_target;
+pub(crate) mod render;
 
-/// Convenience re-exports for common usage.
-pub mod prelude {
-    pub use crate::chart::{DynChart, GupChart};
-    pub use crate::context::GupRenderContext;
-    pub use crate::plugin::GupPlugin;
-    pub use crate::render_system::blank_chart_image;
-    pub use crate::texture_target::ChartTextureTarget;
-}
-
-pub use chart::{DynChart, GupChart};
-pub use context::GupRenderContext;
+pub use chart::{GupChart, GupContext, chart_image};
 pub use plugin::GupPlugin;
-pub use render_system::{blank_chart_image, gup_render_system};
-pub use texture_target::ChartTextureTarget;
+
+/// Everything a Bevy app needs.
+pub mod prelude {
+    pub use crate::{GupChart, GupContext, GupPlugin, chart_image};
+}

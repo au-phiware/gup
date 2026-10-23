@@ -1,141 +1,78 @@
 // Copyright (C) 2024 Corin Lawson
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! # Bevy Scatter Plot Demo
-//!
-//! Demonstrates embedding a Gup scatter plot inside a Bevy application.
-//! The plot shows an animated sine wave that updates every frame.
-//!
-//! Run with: `cargo run --manifest-path gup-bevy/Cargo.toml --example bevy_scatter`
+//! A scatter on a sprite, extended by an `Appender` every frame.
+//! `GUP_SCREENSHOT_PATH=/tmp/x.png` saves a Bevy screenshot after 30 frames
+//! and exits; `tests/screenshot_parity.rs` rebuilds the chart.
 
 use bevy::prelude::*;
-use gup::chart_builder::ChartBuilder;
-use gup::chart_builder::accessor::AccessorValue;
-use gup::chart_builder::builders::AccessorFunction;
-use gup::chart_builder::builders::scatter;
-use gup::render::RenderContext;
+use bevy::render::view::screenshot::{Screenshot, save_to_disk};
 use gup_bevy::prelude::*;
-use std::sync::Arc;
+use gup_core::prelude::*;
+use gup_core::{Appender, ScatterChart};
 
-// ---------------------------------------------------------------------------
-// Data model
-// ---------------------------------------------------------------------------
+const SIZE: UVec2 = UVec2::new(480, 320);
 
-/// A simple 2-D point used as chart data.
-#[derive(Debug, Clone)]
-struct DataPoint {
-    x: f32,
-    y: f32,
+/// The chart before any rows are appended (also built by the parity test).
+fn scatter_chart() -> ScatterChart<(f64, f64)> {
+    let pts: Vec<(f64, f64)> = (0..20)
+        .map(|i| (i as f64 * 0.5, (i * 7 % 10) as f64 / 2.0))
+        .collect();
+    gup_core::scatter(pts)
+        .x(|p| p.0)
+        .x_scale(Linear::new().domain(0.0, 10.0))
+        .y(|p| p.1)
+        .y_scale(Linear::new().domain(0.0, 10.0))
+        .fill(Color::hex(0x1f77b4))
+        .radius(5.0)
+        .title("Bevy scatter")
 }
 
-// ---------------------------------------------------------------------------
-// Systems
-// ---------------------------------------------------------------------------
+#[derive(Resource)]
+struct Feed(Appender<(f64, f64)>, u32);
 
-/// Startup system: spawn a camera and a GupChart entity.
-///
-/// Uses the shared [`GupRenderContext`] so that chart GPU resources live on
-/// the same wgpu device as Bevy's renderer — required for zero-copy texture
-/// sharing.
-fn setup(
-    mut commands: Commands,
-    mut images: ResMut<Assets<Image>>,
-    gup_ctx: Option<Res<GupRenderContext>>,
-) {
-    // 2-D camera so the sprite is visible.
+fn setup(mut commands: Commands, mut images: ResMut<Assets<Image>>) {
     commands.spawn(Camera2d);
-
-    // Prefer the shared Bevy/Gup context when available.
-    let context: Arc<RenderContext> = match gup_ctx {
-        Some(ctx) => Arc::clone(ctx.render_context()),
-        None => {
-            Arc::new(pollster::block_on(RenderContext::new()).expect("Failed to create context"))
-        }
-    };
-
-    // Build the initial scatter plot.
-    let chart = build_scatter_chart(0.0, &context);
-
-    // Create a blank placeholder image for the sprite.
-    let placeholder = blank_chart_image(800, 600);
-    let image_handle = images.add(placeholder);
-
-    // Spawn the entity: GupChart + Sprite.
+    let image = images.add(chart_image(SIZE, 1.0));
+    let mut chart = scatter_chart();
+    commands.insert_resource(Feed(chart.appender(), 0));
     commands.spawn((
-        GupChart::new(chart).with_size(800, 600),
-        Sprite {
-            image: image_handle,
-            custom_size: Some(Vec2::new(800.0, 600.0)),
-            ..default()
-        },
+        GupChart::new(chart, SIZE, image.clone()),
+        Sprite::from_image(image),
     ));
 }
 
-/// Per-frame system: rebuild the scatter data with a time offset so the sine
-/// wave animates.
-fn animate_chart(
-    time: Res<Time>,
-    gup_ctx: Option<Res<GupRenderContext>>,
-    mut charts: Query<&mut GupChart>,
-) {
-    let Some(gup_ctx) = gup_ctx else {
-        return;
-    };
-    let context = Arc::clone(gup_ctx.render_context());
-    let t = time.elapsed_secs();
-
-    for mut gup_chart in &mut charts {
-        // Replace the inner chart with fresh data.
-        let new_chart = build_scatter_chart(t, &context);
-        *gup_chart = GupChart::new(new_chart).with_size(800, 600);
+fn append(mut feed: ResMut<Feed>, mut commands: Commands) {
+    feed.1 += 1;
+    let x = f64::from(feed.1 % 200) * 0.05;
+    feed.0.push((x, 9.0 + (x * 3.0).sin() * 0.5)).ok();
+    if feed.1 == 30
+        && let Ok(path) = std::env::var("GUP_SCREENSHOT_PATH")
+    {
+        commands
+            .spawn(Screenshot::primary_window())
+            .observe(save_to_disk(path));
+    }
+    if feed.1 == 60 && std::env::var("GUP_SCREENSHOT_PATH").is_ok() {
+        commands.write_message(AppExit::Success);
     }
 }
 
-// ---------------------------------------------------------------------------
-// Chart builder helper
-// ---------------------------------------------------------------------------
-
-/// Build a scatter chart whose data is a sine wave offset by `time`.
-fn build_scatter_chart(
-    time: f32,
-    context: &Arc<RenderContext>,
-) -> gup::chart_builder::ComposedChart<DataPoint, gup::mark::Circle> {
-    let data: Vec<DataPoint> = (0..60)
-        .map(|i| {
-            let x = i as f32 / 60.0 * 10.0;
-            let y = (x + time).sin() * 3.0 + 5.0;
-            DataPoint { x, y }
-        })
-        .collect();
-
-    let x_acc = AccessorFunction::new(|d: &DataPoint| AccessorValue::Float(d.x));
-    let y_acc = AccessorFunction::new(|d: &DataPoint| AccessorValue::Float(d.y));
-
-    scatter()
-        .x(x_acc)
-        .y(y_acc)
-        .point_size(6.0)
-        .fill_color([0.2, 0.5, 0.9, 1.0])
-        .build_with_data(data, Arc::clone(context))
-        .expect("Failed to build scatter chart")
-}
-
-// ---------------------------------------------------------------------------
-// Entry point
-// ---------------------------------------------------------------------------
-
 fn main() {
+    let window = Window {
+        resolution: (640, 480).into(),
+        title: "Gup in Bevy".into(),
+        ..default()
+    };
     App::new()
-        .add_plugins(DefaultPlugins.set(WindowPlugin {
-            primary_window: Some(Window {
-                title: "Gup × Bevy — Animated Scatter Plot".into(),
-                resolution: (900u32, 700u32).into(),
+        .add_plugins((
+            DefaultPlugins.set(WindowPlugin {
+                primary_window: Some(window),
                 ..default()
             }),
-            ..default()
-        }))
-        .add_plugins(GupPlugin)
+            GupPlugin,
+        ))
         .add_systems(Startup, setup)
-        .add_systems(Update, animate_chart)
+        .add_systems(Update, append)
         .run();
 }

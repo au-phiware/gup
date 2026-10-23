@@ -11,19 +11,21 @@ keywords = ["gpu", "visualization", "bevy", "gamedev", "data"]
 categories = ["graphics", "visualization", "game-engines"]
 
 [dependencies]
-gup = { path = ".." }
+gup-core = { path = "../crates/gup-core" }
 bevy = { version = "0.18", default-features = false, features = [
     "bevy_render",
     "bevy_asset",
     "bevy_winit",
     "bevy_sprite",
     "x11",
+    "png",
 ] }
 wgpu = { version = "27.0", features = ["wgsl"] }
 log = "0.4"
-pollster = "0.3"
 
 [dev-dependencies]
+image = { version = "0.24", default-features = false, features = ["png"] }
+gup-visual-regression = { path = "../crates/gup-visual-regression" }
 
 [[example]]
 name = "bevy_scatter"

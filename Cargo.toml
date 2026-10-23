@@ -8,7 +8,7 @@ members = ["gup-macros", "gup-egui", "crates/gup-visual-regression", "crates/gup
 default-members = ["."]
 # Parked integrations (strategic review 2026-10, Decision 3; GUP-390). They are
 # out of the workspace, `--workspace` builds and CI until they are re-wired onto
-# `gup-core`: egui and bevy at RFC-001 S13, the mobile shims and Tauri app in
+# `gup-core`: the mobile shims and Tauri app in
 # strategic review T7. Build one by hand with
 # `cargo check --manifest-path gup-egui/Cargo.toml` (see README.md).
 exclude = ["gup-bevy", "gup-ios", "gup-android", "examples/gup-tauri/src-tauri"]

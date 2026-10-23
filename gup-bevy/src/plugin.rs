@@ -3,13 +3,10 @@
 
 //! The [`GupPlugin`] that wires everything together.
 
-use crate::context::GupRenderContext;
-use crate::render_node::{
-    cleanup_extracted_gup_charts, copy_gup_textures_to_bevy, extract_gup_charts,
-};
-use crate::render_system::{ensure_chart_texture_targets, gup_render_system};
+use crate::chart::GupContext;
+use crate::copy::{copy_charts, extract_charts, render_charts};
 use bevy::prelude::*;
-use bevy::render::renderer::{RenderAdapter, RenderDevice, RenderInstance, RenderQueue};
+use bevy::render::renderer::{RenderDevice, RenderQueue};
 use bevy::render::{ExtractSchedule, Render, RenderApp, RenderSystems};
 
 /// Bevy [`Plugin`] that integrates Gup's chart rendering into a Bevy app.
@@ -18,7 +15,7 @@ use bevy::render::{ExtractSchedule, Render, RenderApp, RenderSystems};
 ///
 /// 1. Extract Bevy's `RenderDevice` / `RenderQueue` (the wgpu handles Bevy
 ///    already owns).
-/// 2. Construct a [`GupRenderContext`] that shares those same GPU resources —
+/// 2. Construct a [`GupContext`] that shares those same GPU resources —
 ///    no second adapter or device is created.
 /// 3. Register the main-world systems that render charts into offscreen
 ///    textures.
@@ -43,10 +40,7 @@ impl Plugin for GupPlugin {
         // Main-world systems:
         // 1. Ensure every GupChart has a ChartTextureTarget.
         // 2. Render dirty charts into their offscreen textures.
-        app.add_systems(
-            PostUpdate,
-            (ensure_chart_texture_targets, gup_render_system).chain(),
-        );
+        app.add_systems(PostUpdate, render_charts);
     }
 
     fn finish(&self, app: &mut App) {
@@ -63,35 +57,21 @@ impl Plugin for GupPlugin {
         // Extract the raw wgpu handles from Bevy's render resources.
         let render_device: &RenderDevice = render_app.world().resource();
         let render_queue: &RenderQueue = render_app.world().resource();
-        let render_adapter: &RenderAdapter = render_app.world().resource();
-        let render_instance: &RenderInstance = render_app.world().resource();
-
-        // Clone the underlying wgpu objects.  In wgpu 27 these types are
-        // internally reference-counted, so Clone is a cheap Arc bump.
         let device: wgpu::Device = render_device.wgpu_device().clone();
         let queue: wgpu::Queue = render_queue.0.as_ref().clone().into_inner();
-        let adapter: wgpu::Adapter = render_adapter.0.as_ref().clone().into_inner();
-        let instance: wgpu::Instance = render_instance.0.as_ref().clone().into_inner();
-
-        let gup_render_context = GupRenderContext::from_wgpu(instance, adapter, device, queue);
+        let context = GupContext(gup_core::Context::from_wgpu(device, queue));
 
         // Insert the shared context as a Resource in the **main** world so
         // that normal Bevy systems can access it.
-        app.insert_resource(gup_render_context);
+        app.insert_resource(context);
 
         // Render-world systems:
         // 1. Extract chart textures + image handles from the main world.
         // 2. Copy chart textures into GpuImage textures (GPU → GPU).
         if let Some(render_app) = app.get_sub_app_mut(RenderApp) {
             render_app
-                .add_systems(
-                    ExtractSchedule,
-                    (cleanup_extracted_gup_charts, extract_gup_charts).chain(),
-                )
-                .add_systems(
-                    Render,
-                    copy_gup_textures_to_bevy.in_set(RenderSystems::Queue),
-                );
+                .add_systems(ExtractSchedule, extract_charts)
+                .add_systems(Render, copy_charts.in_set(RenderSystems::Queue));
         }
     }
 }
