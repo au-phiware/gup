@@ -447,9 +447,10 @@ findings", GUP-396).
   S14c, the flip: `src/` becomes `pub use gup_core::*`, the old core,
   `gup-macros`, old examples, tests, benches and workflows go, culling/LOD is
   parked, old-path LOC 0. Deps: GUP-486 📋, GUP-487 📋, GUP-483 📋, GUP-484 📋.
-- [GUP-489](GUP-489_RFC_001_S14d_Revise_Architecture_Docs.md) 🚧 — RFC-001 step
-  S14d: TECHNICAL_APPROACH and IMPLEMENTATION_STRATEGY rewritten for `gup` as
-  built, with compiled snippets, and the README entry points. Deps: GUP-488 📋.
+- [GUP-489](GUP-489_RFC_001_S14d_Revise_Architecture_Docs.md) ✅ Complete —
+  RFC-001 step S14d: TECHNICAL_APPROACH and IMPLEMENTATION_STRATEGY rewritten
+  for `gup` as built, with compiled snippets, and the README entry points. Deps:
+  GUP-488 📋.
 - [GUP-492](GUP-492_Windowed_Size_Order_Draws.md) 💡 — bounded draw calls for a
   windowed layer sized by a column whose sizes do not follow data order
   (per-chunk sort runs draw about one instance per draw today). Deps: GUP-482

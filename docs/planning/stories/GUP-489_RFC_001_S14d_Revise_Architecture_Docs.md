@@ -9,8 +9,8 @@ implementer-reason:
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 🚧 In Progress **Created**:
-2026-10-19
+**Initiative**: RFC-001 Migration **Status**: ✅ Complete (2026-10-24)
+**Created**: 2026-10-19
 
 ## Context
 
@@ -53,32 +53,32 @@ compiled.
 
 ### AC1: TECHNICAL_APPROACH.md
 
-- [ ] Rewritten to the outline in Decisions, at most 450 lines, describing only
+- [x] Rewritten to the outline in Decisions, at most 450 lines, describing only
       what exists on `main`.
-- [ ] Every Rust snippet compiles: the file is included as doctests in
+- [x] Every Rust snippet compiles: the file is included as doctests in
       `src/lib.rs` under `#[cfg(doctest)]` (Decisions);
       `cargo test --doc -p     gup` passes. Snippets needing a window are
       `no_run`.
-- [ ] Each section links the RFC-001 findings it summarises.
+- [x] Each section links the RFC-001 findings it summarises.
 
 ### AC2: IMPLEMENTATION_STRATEGY.md
 
-- [ ] Rewritten to the outline in Decisions, at most 250 lines, with no
+- [x] Rewritten to the outline in Decisions, at most 250 lines, with no
       milestones, dates or story points.
-- [ ] Its snippets, if any, are doctests like AC1's.
+- [x] Its snippets, if any, are doctests like AC1's.
 
 ### AC3: Entry points
 
-- [ ] `README.md`: "Quick Start" is the north-star example (the same code as
+- [x] `README.md`: "Quick Start" is the north-star example (the same code as
       `src/lib.rs`'s doctest); "Architecture Highlights" summarises
       TECHNICAL_APPROACH in at most 10 bullets; "Development Status" says
       RFC-001 is implemented and what is next (T5, T6, T7); "Workspace Crates"
       lists the current members; the parked table lists only what is still
       parked.
-- [ ] `docs/README.md`'s descriptions of the two documents match their new
+- [x] `docs/README.md`'s descriptions of the two documents match their new
       content.
-- [ ] RFC-001's **Status** line adds "Implemented: S0–S14 (GUP-395 to GUP-489)".
-- [ ] This finds nothing:
+- [x] RFC-001's **Status** line adds "Implemented: S0–S14 (GUP-395 to GUP-489)".
+- [x] This finds nothing:
 
   ```bash
   git grep -n "transpil\|ShaderFunction\b\|ComposedChart\|RenderContext\|GupContext" \
@@ -138,9 +138,9 @@ compiled.
 
 ## Technical Tasks
 
-- [ ] Draft TECHNICAL_APPROACH to the outline; make the snippets compile.
-- [ ] Draft IMPLEMENTATION_STRATEGY.
-- [ ] README, `docs/README.md`, RFC status; the grep.
+- [x] Draft TECHNICAL_APPROACH to the outline; make the snippets compile.
+- [x] Draft IMPLEMENTATION_STRATEGY.
+- [x] README, `docs/README.md`, RFC status; the grep.
 
 ## Dependencies
 
@@ -161,7 +161,7 @@ compiled.
 
 ## Success Metrics
 
-- [ ] Both documents describe `main` and every snippet compiles.
+- [x] Both documents describe `main` and every snippet compiles.
 
 ## Risk Assessment
 
@@ -170,13 +170,71 @@ compiled.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes of starting; then commit at each checkpoint
+- [x] First commit within 30 minutes of starting; then commit at each checkpoint
       (story-worker "Checkpoint rule")
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] `cargo test --doc -p gup` passes
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] `mask wasm-browser`: not needed (docs and a `cfg(doctest)` module only; no
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] `cargo test --doc -p gup` passes
+- [x] Lint and format clean: `mask all-fix`
+- [x] `mask wasm-browser`: not needed (docs and a `cfg(doctest)` module only; no
       layout, input or wasm change); say so in the Implementation Summary
-- [ ] WASM size: no library code changes; record "unchanged"
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] WASM size: no library code changes; record "unchanged"
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `docs/TECHNICAL_APPROACH.md` (449 lines) and `docs/IMPLEMENTATION_STRATEGY.md`
+  (114 lines) rewritten to the Decisions outlines. Both are included as doctests
+  from `src/lib.rs` under `#[cfg(doctest)]`; `cargo test --doc -p gup` passes
+  (10 doc tests plus the two lib examples; one `compile_fail`).
+- `README.md` (Quick Start, Architecture Highlights, Development Status,
+  Examples, Workspace Crates; the stale `debug` feature section and the deleted
+  type-macro section removed), `docs/README.md`, `docs/INDEX.md`,
+  `CONVENTIONS.md` and RFC-001's Status line updated. CLAUDE.md and the maskfile
+  had no references to deleted tasks. The AC3 grep finds nothing.
+- Deviations: the `#[derive(Mark)]` example is a link to the compiled test
+  `crates/gup-core/tests/derive_mark.rs` (embedding it broke the 450-line
+  limit); the egui, Bevy and canvas hosts are described in prose with links
+  (their snippets need a window or wasm32).
+- `mask all-check` passes. `mask wasm-browser` not needed (docs and a
+  `cfg(doctest)` module only). WASM size unchanged (no library code change).
+
+## Retrospective
+
+**Completed**: 2026-10-24
+
+### Key Technical Learnings
+
+#### Doctests from Markdown
+
+- **Challenge**: A doctest in package `gup` is a crate named `gup`, so
+  `#[wgsl_function]` and `#[derive(Mark)]` need an explicit `path = "..."`.
+- **Solution**: `path = "arch_energy"` and `path = "arch_docs::square"`.
+- **Pattern**: Prettier re-wraps link targets; reference-style links keep the
+  line budget.
+
+### Architectural Decisions
+
+#### Line budget
+
+- **Decision**: Findings links are reference-style with one anchored link per
+  section, the rest named in text.
+- **Trade-off**: Some findings are named, not linked.
+
+### Development Workflow Insights
+
+- Doctests caught three wrong snippets on the first run (type inference, missing
+  `path`).
+
+### Follow-up Stories
+
+Docs under `docs/` that still describe deleted systems (not rewritten here, per
+Out of Scope): `GRID_SYSTEM.md`, `LOD_SYSTEM.md`, `CUSTOM_MARK_GUIDE.md`,
+`TYPE_CONSTRUCTION_GUIDE.md` (the macros are gone), `PERFORMANCE_GUIDE.md`,
+`SHADER_PERFORMANCE_BENCHMARKING.md`, `graphics-programming.md`,
+`text-rendering-architecture.md`, `mark-system/*`, `tutorials/*` (T6),
+`research/*` and `existing-solutions-analysis.md` (historical). Also the
+`gup-core` crate docs in `crates/gup-core/src/lib.rs` still say "one mark, one
+layer" and "not re-exported until S14", and name the old `RenderContext`. A
+docs-cleanup story (delete or archive the stale guides) is worth writing; none
+was created here since T6 owns the tutorials.
