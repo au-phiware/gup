@@ -8,97 +8,15 @@
 #
 # Fields:
 #   case     - exact case name, or a prefix ending in '*'
-#              (chart_builders/<builder>, examples/<example>)
+#              (examples/<example>)
 #   check    - render | not_blank | marks_present | text_present |
 #              marks_confined | color_present | golden
 #   reason   - what is broken, as observed (not as hoped)
 #   tracking - the story or RFC-001 step whose completion removes the entry
 
 # ---------------------------------------------------------------------------
-# Chart builders (old `gup` path, frozen per RFC-001; verified 2026-10-04)
+# Examples (old `gup` path, frozen per RFC-001; verified 2026-10-04)
 # ---------------------------------------------------------------------------
-
-[[expected]]
-case = "chart_builders/*"
-check = "text_present"
-reason = "render_to_rgba()/PNG output draws no text at all: no title, tick labels or colourbar labels (only the windowed path queues text)"
-tracking = "RFC-001 S0a (headless PNG with title and tick labels); old path deleted at S14"
-
-[[expected]]
-case = "chart_builders/area"
-check = "color_present"
-reason = "configured colour is sRGB-encoded twice: #9467bd renders as #c9aae0-ish blends"
-tracking = "RFC-001 S3 (sRGB-space colour policy)"
-
-[[expected]]
-case = "chart_builders/boxplot"
-check = "color_present"
-reason = "fill_color() is ignored: boxes render in the default lavender #e2e2ff"
-tracking = "RFC-001 S14 (old builder deleted) / T5 port"
-
-[[expected]]
-case = "chart_builders/violin"
-check = "color_present"
-reason = "color() is ignored (default lavender #e2e2ff), and the chart draws box plots with no violin (KDE) outline"
-tracking = "RFC-001 S14 (old builder deleted) / T5 port"
-
-[[expected]]
-case = "chart_builders/area"
-check = "marks_confined"
-reason = "area-chart fan explosion: stroke width bound in logical px to an NDC attribute, segments cover the whole canvas"
-tracking = "GUP-393 (parked, absorbs GUP-384) -> RFC-001 S14 / T5 port"
-
-[[expected]]
-case = "chart_builders/area_explicit_scales"
-check = "marks_confined"
-reason = "area-chart fan explosion (same as chart_builders/area) with explicit scales"
-tracking = "GUP-393 (parked, absorbs GUP-384) -> RFC-001 S14 / T5 port"
-
-[[expected]]
-case = "chart_builders/density"
-check = "not_blank"
-reason = "the whole image is one solid fill (#8ebddb): one full-canvas Rectangle per sample; the KDE result is computed and discarded"
-tracking = "RFC-001 S14 (old builder deleted) / T5 port"
-
-[[expected]]
-case = "chart_builders/density"
-check = "marks_confined"
-reason = "solid full-canvas fill (see not_blank)"
-tracking = "RFC-001 S14 (old builder deleted) / T5 port"
-
-[[expected]]
-case = "chart_builders/gpu_density"
-check = "not_blank"
-reason = "GPU KDE path: same solid full-canvas fill as chart_builders/density; the GPU KDE result is discarded"
-tracking = "RFC-001 S14 (old builder deleted) / T5 port"
-
-[[expected]]
-case = "chart_builders/gpu_density"
-check = "marks_confined"
-reason = "solid full-canvas fill (see not_blank)"
-tracking = "RFC-001 S14 (old builder deleted) / T5 port"
-
-[[expected]]
-case = "chart_builders/heatmap"
-check = "marks_present"
-reason = "plot area is blank: axes and an empty colourbar outline render, but no heatmap cells"
-tracking = "RFC-001 S14 (old builder deleted) / T5 port"
-
-[[expected]]
-case = "chart_builders/choropleth"
-check = "render"
-reason = "ChoroplethChart has no raster render path; build() resolves CPU geometry only"
-tracking = "GUP-366..369 (parked) -> RFC-001 T5"
-
-# ---------------------------------------------------------------------------
-# Examples (tests/examples_smoke.rs; verified 2026-10-04)
-# ---------------------------------------------------------------------------
-
-[[expected]]
-case = "examples/density_scatter_overlay"
-check = "not_blank"
-reason = "screenshot is one solid fill (#8ebddb): same full-canvas density Rectangle bug as chart_builders/density"
-tracking = "RFC-001 S14 (old builder deleted) / T5 port"
 
 [[expected]]
 case = "examples/gpu_debug_demo"

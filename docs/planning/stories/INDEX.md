@@ -105,17 +105,17 @@ survives into `gup-core`.
 
 ## RFC-001 Migration
 
-**Old-path LOC remaining: 26601 (re-measured 2026-10-19 after GUP-466: the old
-scatter, line, bar and composite builders deleted, 28910 to 26601, Δ -2309)**.
-Measured as the non-blank, non-comment-only, non-`#[cfg(test)]`-block line count
-of the old render path (`src/selection.rs`, `src/mark/`, `src/shader_function/`,
-`src/shader_pipeline.rs`, `src/chart_builder*`, `src/context.rs`,
-`src/render.rs`). Re-measure with `mask old-path-loc`
-(`scripts/old_path_loc.pl`) after each RFC-001 story. This metric exists per
-[RFC-001](../rfcs/RFC-001_Core_Architecture.md)'s Orchestrator review point 1
-("parallel-system risk"): it must trend to 0 as S14 (the flip and delete) lands,
-or the old and new paths will ossify side by side the way four scale systems and
-three composition systems did before.
+**Old-path LOC remaining: 18504 (re-measured 2026-10-23 after GUP-486: the old
+`chart_builder` deleted, 26601 to 18504, Δ -8097; before that 28910 to 26601
+after GUP-466)**. Measured as the non-blank, non-comment-only,
+non-`#[cfg(test)]`-block line count of the old render path (`src/selection.rs`,
+`src/mark/`, `src/shader_function/`, `src/shader_pipeline.rs`,
+`src/chart_builder*`, `src/context.rs`, `src/render.rs`). Re-measure with
+`mask old-path-loc` (`scripts/old_path_loc.pl`) after each RFC-001 story. This
+metric exists per [RFC-001](../rfcs/RFC-001_Core_Architecture.md)'s Orchestrator
+review point 1 ("parallel-system risk"): it must trend to 0 as S14 (the flip and
+delete) lands, or the old and new paths will ossify side by side the way four
+scale systems and three composition systems did before.
 
 Stories implementing
 [RFC-001: Core Architecture](../rfcs/RFC-001_Core_Architecture.md) (accepted
@@ -444,7 +444,7 @@ findings", GUP-396).
 - [GUP-485](GUP-485_RFC_001_S14a_Dogfood_Residue_On_Gup_Core.md) ✅ — RFC-001
   step S14a: `ref_export_png` and `t6_wgsl` on `gup-core`; the suite has no
   XFAIL and no `gup` dependency. Deps: GUP-465 ✅, GUP-480 ✅.
-- [GUP-486](GUP-486_RFC_001_S14b_Delete_Old_Chart_Builder.md) 🚧 — RFC-001 step
+- [GUP-486](GUP-486_RFC_001_S14b_Delete_Old_Chart_Builder.md) ✅ — RFC-001 step
   S14b: delete `chart_builder` (`ComposedChart` and the remaining old builders)
   and what stops compiling; old-path LOC ≤ 18,504. Deps: GUP-466 ✅, GUP-485 📋.
 - [GUP-487](GUP-487_Macros_Resolve_Crate_Path.md) ✅ — `#[derive(Mark)]` and

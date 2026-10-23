@@ -6,10 +6,9 @@ harness itself is the `gup-visual-regression` crate
 takes a plain `RgbaImage` plus `LayoutMetadata` (plot rect, text regions, guide
 regions, configured colours).
 
-| Directory         | Produced by                                                                                                      |
-| ----------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `chart_builders/` | `src/chart_builder/visual_regression/builder_cases.rs` (one case per builder, plus scale variants)               |
-| `gup_core/`       | `crates/gup-core/tests/scatter_png.rs` (RFC-001 core: headless scatter, layout metadata from `gup_core::Layout`) |
+| Directory   | Produced by                                                                                                      |
+| ----------- | ---------------------------------------------------------------------------------------------------------------- |
+| `gup_core/` | `crates/gup-core/tests/scatter_png.rs` (RFC-001 core: headless scatter, layout metadata from `gup_core::Layout`) |
 
 ## What a case checks
 
@@ -26,9 +25,8 @@ Each case runs every applicable check:
 | `golden`         | the render differs from the golden image beyond the perceptual tolerance                    |
 
 **Golden images are baselines of current output, not certified-correct images.**
-Correctness is asserted by the structural checks. Several current goldens show
-known-broken output (the area-chart fan, the solid-fill density plot, the blank
-heatmap). Each of those is tracked in
+Correctness is asserted by the structural checks. A golden that shows
+known-broken output is tracked in
 [`../visual_regression/expected_failures.toml`](../visual_regression/expected_failures.toml),
 so the golden catches any _change_ while the tracked entry records what is
 wrong. When a fix lands, the structural check starts passing (XPASS), which

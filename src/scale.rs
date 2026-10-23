@@ -14,38 +14,8 @@
 //! * **Axis System Coordination** - Seamless integration with tick generation and layout
 //! * **Performance Optimized** - <2ms complete axis rendering for typical charts
 //!
-//! # Examples
-//!
-//! ```rust,no_run
-//! use gup::scale::{DataAnalyzer, ScaleFactory, AccessorFunction};
-//!
-//! # fn example() -> gup::error::GupResult<()> {
-//! #[derive(Debug, Clone)]
-//! struct SalesData {
-//!     revenue: f64,
-//!     profit: f64,
-//!     date: i64,
-//! }
-//!
-//! let data = vec![
-//!     SalesData { revenue: 1000.0, profit: 200.0, date: 1640995200 },
-//!     SalesData { revenue: 1500.0, profit: 350.0, date: 1641081600 },
-//! ];
-//!
-//! // Automatic scale detection
-//! let analyzer = DataAnalyzer::new();
-//! let x_accessor = AccessorFunction::new(|d: &SalesData| d.revenue);
-//! let characteristics = analyzer.analyze_field(&data, &x_accessor)?;
-//!
-//! let scale_factory = ScaleFactory::new();
-//! let scale = scale_factory.create_scale_from_characteristics(&characteristics)?;
-//! # Ok(())
-//! # }
-//! ```
 
-use crate::error::{GupError, GupResult};
-// Note: Using simplified shader function interface for now
-use crate::chart_builder::accessor::AccessorValue;
+use crate::error::GupResult;
 use crate::label::{LabelFormatter, formatter::NumericFormatter};
 use crate::tick_generator::{
     LinearScale, LinearTickGenerator, LogarithmicScale, LogarithmicTickGenerator,
@@ -53,74 +23,6 @@ use crate::tick_generator::{
 };
 use crate::{MaybeSend, MaybeSync};
 use std::fmt::Debug;
-
-/// Generic accessor function for extracting data values.
-pub struct AccessorFunction<T> {
-    #[cfg(not(target_arch = "wasm32"))]
-    function: Box<dyn Fn(&T) -> AccessorValue + Send + Sync>,
-    #[cfg(target_arch = "wasm32")]
-    function: Box<dyn Fn(&T) -> AccessorValue>,
-    name: String,
-}
-
-impl<T> std::fmt::Debug for AccessorFunction<T> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("AccessorFunction")
-            .field("name", &self.name)
-            .field("function", &"<function>")
-            .finish()
-    }
-}
-
-impl<T> AccessorFunction<T> {
-    /// Create a new accessor function from a closure.
-    pub fn new<F>(f: F) -> Self
-    where
-        F: Fn(&T) -> f64 + MaybeSend + MaybeSync + 'static,
-    {
-        Self {
-            function: Box::new(move |data| AccessorValue::Numeric(f(data))),
-            name: "numeric".to_string(),
-        }
-    }
-
-    /// Create a categorical accessor function.
-    pub fn categorical<F>(f: F) -> Self
-    where
-        F: Fn(&T) -> String + MaybeSend + MaybeSync + 'static,
-    {
-        Self {
-            function: Box::new(move |data| AccessorValue::Categorical(f(data))),
-            name: "categorical".to_string(),
-        }
-    }
-
-    /// Create a temporal accessor function.
-    pub fn temporal<F>(f: F) -> Self
-    where
-        F: Fn(&T) -> i64 + MaybeSend + MaybeSync + 'static,
-    {
-        Self {
-            function: Box::new(move |data| {
-                let timestamp = f(data);
-                let datetime =
-                    chrono::DateTime::from_timestamp(timestamp, 0).unwrap_or_else(chrono::Utc::now);
-                AccessorValue::Temporal(datetime)
-            }),
-            name: "temporal".to_string(),
-        }
-    }
-
-    /// Call the accessor function.
-    pub fn call(&self, data: &T) -> AccessorValue {
-        (self.function)(data)
-    }
-
-    /// Get the name of this accessor.
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-}
 
 /// Identifier for different axes in a chart system.
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq)]
@@ -144,20 +46,6 @@ pub enum DataValue {
     Temporal(i64),
     /// A categorical (string) value.
     Categorical(String),
-}
-
-impl From<AccessorValue> for DataValue {
-    fn from(value: AccessorValue) -> Self {
-        match value {
-            AccessorValue::Numeric(n) => DataValue::Numeric(n),
-            AccessorValue::Temporal(t) => DataValue::Temporal(t.timestamp()),
-            AccessorValue::Categorical(c) => DataValue::Categorical(c),
-            // Convert other types to appropriate DataValue
-            AccessorValue::Float(f) => DataValue::Numeric(f as f64),
-            AccessorValue::String(s) => DataValue::Categorical(s),
-            other => DataValue::Numeric(other.as_f32() as f64),
-        }
-    }
 }
 
 /// Characteristics of a data field for scale selection.
@@ -425,215 +313,14 @@ fn linear_scale(value: f32) -> f32 {{
 
 // Note: Shader function structs removed in favor of direct WGSL generation
 
-/// Data analyzer for automatic scale type detection.
-#[derive(Debug)]
-pub struct DataAnalyzer {
-    #[allow(dead_code)]
-    numeric_threshold: f64,
-    #[allow(dead_code)]
-    temporal_threshold: i64,
-    logarithmic_threshold: f64,
-}
-
-impl DataAnalyzer {
-    /// Create a new data analyzer with default thresholds.
-    pub fn new() -> Self {
-        Self {
-            numeric_threshold: 1e-10,
-            temporal_threshold: 1_000_000_000, // Reasonable timestamp threshold
-            logarithmic_threshold: 3.0,        // 3+ orders of magnitude
-        }
-    }
-
-    /// Analyze a data field using an accessor function.
-    pub fn analyze_field<T>(
-        &self,
-        data: &[T],
-        accessor: &AccessorFunction<T>,
-    ) -> GupResult<DataCharacteristics> {
-        if data.is_empty() {
-            return Err(GupError::validation_error(
-                "Cannot analyze empty dataset".to_string(),
-            ));
-        }
-
-        let mut characteristics = DataCharacteristics {
-            data_type: DataType::Numeric,
-            min_value: None,
-            max_value: None,
-            distribution: Distribution {
-                is_logarithmic: false,
-                span_orders_of_magnitude: 0.0,
-                density_estimate: 1.0,
-            },
-            temporal_range: None,
-            categories: None,
-            recommended_scale: ScaleType::Linear { nice_domain: true },
-            sample_count: data.len(),
-            has_zero: false,
-            has_negative: false,
-        };
-
-        // Extract values using the accessor
-        let mut numeric_values = Vec::new();
-        let mut is_numeric = true;
-
-        for item in data {
-            match accessor.call(item) {
-                AccessorValue::Numeric(value) => {
-                    numeric_values.push(value);
-                    if value == 0.0 {
-                        characteristics.has_zero = true;
-                    }
-                    if value < 0.0 {
-                        characteristics.has_negative = true;
-                    }
-                }
-                AccessorValue::Temporal(timestamp) => {
-                    // Convert to numeric for analysis
-                    numeric_values.push(timestamp.timestamp() as f64);
-                    characteristics.data_type = DataType::Temporal;
-                    is_numeric = false;
-                }
-                AccessorValue::Categorical(category) => {
-                    characteristics.data_type = DataType::Categorical;
-                    is_numeric = false;
-
-                    // Collect unique categories
-                    if characteristics.categories.is_none() {
-                        characteristics.categories = Some(Vec::new());
-                    }
-                    if let Some(ref mut categories) = characteristics.categories
-                        && !categories.contains(&category)
-                    {
-                        categories.push(category);
-                    }
-                }
-                AccessorValue::Float(value) => {
-                    numeric_values.push(value as f64);
-                    if value == 0.0 {
-                        characteristics.has_zero = true;
-                    }
-                    if value < 0.0 {
-                        characteristics.has_negative = true;
-                    }
-                }
-                AccessorValue::String(s) => {
-                    characteristics.data_type = DataType::Categorical;
-                    is_numeric = false;
-
-                    // Collect unique categories
-                    if characteristics.categories.is_none() {
-                        characteristics.categories = Some(Vec::new());
-                    }
-                    if let Some(ref mut categories) = characteristics.categories
-                        && !categories.contains(&s)
-                    {
-                        categories.push(s);
-                    }
-                }
-                AccessorValue::Color(_)
-                | AccessorValue::Position(_)
-                | AccessorValue::Bool(_)
-                | AccessorValue::FloatArray(_) => {
-                    // Convert to numeric for analysis
-                    let value = accessor.call(item).as_f32() as f64;
-                    numeric_values.push(value);
-                }
-            }
-        }
-
-        if !numeric_values.is_empty() {
-            // Calculate basic statistics
-            let min_val = numeric_values.iter().fold(f64::INFINITY, |a, &b| a.min(b));
-            let max_val = numeric_values
-                .iter()
-                .fold(f64::NEG_INFINITY, |a, &b| a.max(b));
-
-            characteristics.min_value = Some(min_val);
-            characteristics.max_value = Some(max_val);
-
-            // Analyze distribution for logarithmic scale detection
-            if min_val > 0.0 && max_val > 0.0 {
-                let log_range = (max_val / min_val).log10();
-                characteristics.distribution.span_orders_of_magnitude = log_range;
-
-                if log_range >= self.logarithmic_threshold {
-                    characteristics.distribution.is_logarithmic = true;
-                }
-            }
-
-            // Determine recommended scale type
-            characteristics.recommended_scale = if characteristics.data_type == DataType::Temporal {
-                self.determine_temporal_scale(min_val as i64, max_val as i64)
-            } else if characteristics.distribution.is_logarithmic {
-                ScaleType::Logarithmic { base: 10.0 }
-            } else if is_numeric {
-                ScaleType::Linear { nice_domain: true }
-            } else {
-                ScaleType::Ordinal {
-                    categories: characteristics.categories.clone().unwrap_or_default(),
-                }
-            };
-
-            // Set temporal range if applicable
-            if characteristics.data_type == DataType::Temporal {
-                characteristics.temporal_range = Some(TemporalRange {
-                    start_timestamp: min_val as i64,
-                    end_timestamp: max_val as i64,
-                    duration_ms: (max_val - min_val) as i64,
-                });
-            }
-        }
-
-        Ok(characteristics)
-    }
-
-    /// Determine appropriate temporal scale based on time range.
-    fn determine_temporal_scale(&self, start_ms: i64, end_ms: i64) -> ScaleType {
-        let duration_ms = end_ms - start_ms;
-
-        let unit = if duration_ms < 1000 {
-            TimeUnit::Millisecond
-        } else if duration_ms < 60_000 {
-            TimeUnit::Second
-        } else if duration_ms < 3_600_000 {
-            TimeUnit::Minute
-        } else if duration_ms < 86_400_000 {
-            TimeUnit::Hour
-        } else if duration_ms < 604_800_000 {
-            TimeUnit::Day
-        } else if duration_ms < 2_592_000_000 {
-            TimeUnit::Week
-        } else if duration_ms < 31_536_000_000 {
-            TimeUnit::Month
-        } else {
-            TimeUnit::Year
-        };
-
-        ScaleType::Temporal { unit }
-    }
-}
-
-impl Default for DataAnalyzer {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 /// Factory for creating scales from data characteristics.
 #[derive(Debug)]
-pub struct ScaleFactory {
-    #[allow(dead_code)]
-    analyzer: DataAnalyzer,
-}
+pub struct ScaleFactory;
 
 impl ScaleFactory {
     /// Create a new scale factory.
     pub fn new() -> Self {
-        Self {
-            analyzer: DataAnalyzer::new(),
-        }
+        Self
     }
 
     /// Create a scale from data characteristics.
@@ -1058,76 +745,6 @@ fn ordinal_scale(value: f32) -> f32 {{
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[derive(Debug, Clone)]
-    struct TestData {
-        value: f64,
-        category: String,
-        #[allow(dead_code)]
-        timestamp: i64,
-    }
-
-    #[test]
-    fn test_data_analyzer_numeric() {
-        let analyzer = DataAnalyzer::new();
-        let data = vec![
-            TestData {
-                value: 1.0,
-                category: "A".to_string(),
-                timestamp: 0,
-            },
-            TestData {
-                value: 100.0,
-                category: "B".to_string(),
-                timestamp: 1000,
-            },
-            TestData {
-                value: 10000.0,
-                category: "C".to_string(),
-                timestamp: 2000,
-            },
-        ];
-
-        let accessor = AccessorFunction::new(|d: &TestData| d.value);
-        let characteristics = analyzer.analyze_field(&data, &accessor).unwrap();
-
-        assert_eq!(characteristics.data_type, DataType::Numeric);
-        assert_eq!(characteristics.min_value, Some(1.0));
-        assert_eq!(characteristics.max_value, Some(10000.0));
-        assert!(characteristics.distribution.is_logarithmic);
-    }
-
-    #[test]
-    fn test_data_analyzer_categorical() {
-        let analyzer = DataAnalyzer::new();
-        let data = vec![
-            TestData {
-                value: 1.0,
-                category: "A".to_string(),
-                timestamp: 0,
-            },
-            TestData {
-                value: 2.0,
-                category: "B".to_string(),
-                timestamp: 1000,
-            },
-            TestData {
-                value: 3.0,
-                category: "A".to_string(),
-                timestamp: 2000,
-            },
-        ];
-
-        let accessor = AccessorFunction::categorical(|d: &TestData| d.category.clone());
-        let characteristics = analyzer.analyze_field(&data, &accessor).unwrap();
-
-        assert_eq!(characteristics.data_type, DataType::Categorical);
-        assert!(characteristics.categories.is_some());
-        let categories = characteristics.categories.unwrap();
-        assert_eq!(categories.len(), 2);
-        assert!(categories.contains(&"A".to_string()));
-        assert!(categories.contains(&"B".to_string()));
-    }
 
     #[test]
     fn test_scale_factory_linear() {

@@ -76,20 +76,6 @@ skip = true
 skip_reason = "Windowed-only (requires EventLoop)"
 
 [[examples]]
-name = "boxplot_builder_demo"
-source = "examples/boxplot_builder_demo.rs"
-description = "Box plot chart builder API"
-category = "Charts & Marks"
-skip = false
-
-[[examples]]
-name = "multi_category_boxplot"
-source = "examples/multi_category_boxplot.rs"
-description = "Multi-category box plots"
-category = "Charts & Marks"
-skip = false
-
-[[examples]]
 name = "observable_plot_visual_showcase"
 source = "examples/observable_plot_visual_showcase.rs"
 description = "Visual showcase of chart builder API"
@@ -114,27 +100,6 @@ skip = true
 skip_reason = "Windowed-only (requires EventLoop)"
 
 [[examples]]
-name = "area_chart_demo"
-source = "examples/area_chart_demo.rs"
-description = "Area chart rendering"
-category = "Charts & Marks"
-skip = false
-
-[[examples]]
-name = "heatmap_chart"
-source = "examples/heatmap_chart.rs"
-description = "Heatmap chart rendering"
-category = "Charts & Marks"
-skip = false
-
-[[examples]]
-name = "violin_plot_demo"
-source = "examples/violin_plot_demo.rs"
-description = "Violin plot rendering"
-category = "Charts & Marks"
-skip = false
-
-[[examples]]
 name = "treemap"
 source = "examples/treemap.rs"
 description = "Treemap layout rendering"
@@ -151,40 +116,9 @@ skip = true
 skip_reason = "Windowed-only (requires EventLoop)"
 
 [[examples]]
-name = "choropleth_world_population"
-source = "examples/choropleth_world_population.rs"
-description = "Choropleth world population map"
-category = "Charts & Marks"
-skip = true
-skip_reason = "Console-only (chart data structure, no GPU rendering)"
-
-[[examples]]
-name = "choropleth_gpu_recolor"
-source = "examples/choropleth_gpu_recolor.rs"
-description = "GPU-side choropleth recolouring demo"
-category = "Charts & Marks"
-skip = true
-skip_reason = "Console-only (recolouring demo, no GPU rendering)"
-
-[[examples]]
-name = "color_scale_heatmap"
-source = "examples/color_scale_heatmap.rs"
-description = "Colour scale heatmap"
-category = "Charts & Marks"
-skip = true
-skip_reason = "Console-only (WGSL generation, no GPU rendering)"
-
-[[examples]]
 name = "composite_mixed_data"
 source = "examples/composite_mixed_data.rs"
 description = "One plot over two row types: circles and a line"
-category = "Charts & Marks"
-skip = false
-
-[[examples]]
-name = "density_scatter_overlay"
-source = "examples/density_scatter_overlay.rs"
-description = "Density scatter plot overlay"
 category = "Charts & Marks"
 skip = false
 
@@ -252,14 +186,6 @@ skip_reason = "Windowed-only (requires EventLoop)"
 name = "tick_generation_visual_demo"
 source = "examples/tick_generation_visual_demo.rs"
 description = "Automatic tick generation algorithm demo"
-category = "Axis & Grid"
-skip = true
-skip_reason = "Windowed-only (requires EventLoop)"
-
-[[examples]]
-name = "scale_axis_integration_demo"
-source = "examples/scale_axis_integration_demo.rs"
-description = "Scale-to-axis integration"
 category = "Axis & Grid"
 skip = true
 skip_reason = "Windowed-only (requires EventLoop)"
@@ -333,18 +259,6 @@ skip = true
 skip_reason = "Windowed-only (requires EventLoop)"
 
 [[examples]]
-name = "multi_font_chart_demo"
-source = "examples/multi_font_chart_demo.rs"
-description = "Charts using multiple font families"
-category = "Text Rendering"
-skip = true
-skip_reason = "Windowed-only (requires EventLoop)"
-
-# ---------------------------------------------------------------------------
-# Interaction & Selection
-# ---------------------------------------------------------------------------
-
-[[examples]]
 name = "gpu_selection_demo"
 source = "examples/gpu_selection_demo.rs"
 description = "GPU-side selection and hit testing"
@@ -364,14 +278,6 @@ skip_reason = "Windowed-only (requires EventLoop)"
 name = "hover_reveal_demo"
 source = "examples/hover_reveal_demo.rs"
 description = "Hover-reveal tooltip integration"
-category = "Interaction & Selection"
-skip = true
-skip_reason = "Windowed-only (requires EventLoop)"
-
-[[examples]]
-name = "chart_hover_reveal_demo"
-source = "examples/chart_hover_reveal_demo.rs"
-description = "Chart builder hover-reveal API"
 category = "Interaction & Selection"
 skip = true
 skip_reason = "Windowed-only (requires EventLoop)"
@@ -710,39 +616,6 @@ skip_reason = "Console-only (shader pipeline demo, no GPU rendering)"
 
 # ---------------------------------------------------------------------------
 # Export
-# ---------------------------------------------------------------------------
-
-[[examples]]
-name = "export_png"
-source = "examples/export_png.rs"
-description = "PNG export via GPU off-screen rendering"
-category = "Export"
-skip = false
-
-[[examples]]
-name = "svg_export"
-source = "examples/svg_export.rs"
-description = "SVG export demonstration"
-category = "Export"
-skip = false
-
-[[examples]]
-name = "html_export"
-source = "examples/html_export.rs"
-description = "HTML export demonstration"
-category = "Export"
-skip = false
-
-[[examples]]
-name = "pdf_export"
-source = "examples/pdf_export.rs"
-description = "PDF export demonstration"
-category = "Export"
-skip = true
-skip_reason = "Requires 'pdf' feature flag"
-
-# ---------------------------------------------------------------------------
-# Intermediate
 # ---------------------------------------------------------------------------
 
 [[examples]]

@@ -61,9 +61,6 @@ jobs:
       - name: Harness unit tests
         run: cargo test -p gup-visual-regression
 
-      - name: Chart-builder golden images
-        run: cargo test --lib visual_regression -- --test-threads=1
-
       # gup-culling-lod is quarantined (GUP-390): a workspace member but not a
       # default member, so nothing else builds it. Keep every target compiling
       # and its GPU tests passing so RFC-001 chunk culling can draw from it.

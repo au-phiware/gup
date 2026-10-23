@@ -25,15 +25,6 @@ Run tests (single-threaded to avoid GPU resource conflicts)
 cargo test -- --test-threads=1
 ```
 
-## visual-regression
-
-Run the chart-builder golden-image tests (set `GUP_BLESS=1` to re-bless; see
-`tests/golden/README.md`)
-
-```bash
-cargo test --lib visual_regression -- --test-threads=1
-```
-
 ## gup-core-window
 
 The gup-core checks that need a display (GUP-396): window/PNG ΔE parity, then
@@ -430,7 +421,6 @@ set -euo pipefail
 export VK_ICD_FILENAMES="${GUP_LAVAPIPE_ICD:-$LIBGL_DRIVERS_PATH/../../share/vulkan/icd.d/lvp_icd.x86_64.json}"
 export WGPU_BACKEND=vulkan
 cargo test -p gup-visual-regression
-cargo test --lib visual_regression -- --test-threads=1
 cargo check -p gup-culling-lod --all-targets --all-features
 cargo test -p gup-culling-lod -- --test-threads=1
 cargo test -p gup-text -- --test-threads=1

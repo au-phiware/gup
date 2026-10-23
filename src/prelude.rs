@@ -10,19 +10,6 @@
 pub use crate::RenderContext;
 pub use crate::error::{GupError, GupResult};
 
-// Chart builder API (Observable Plot style)
-pub use crate::chart_builder::{
-    AxisScale, ChartBuilder, ChartConfig,
-    accessor::{AccessorValue, ConstantAccessor},
-    builders::{
-        AccessorFunction, AreaChartBuilder, ConfigurableBuilder, GridCapableBuilder,
-        HeatmapBuilder, area,
-        area::{AreaSegment, StackMode},
-        heatmap,
-        heatmap::{AggregateFunc, HeatmapCell},
-    },
-};
-
 // Selection API (low-level)
 pub use crate::pipeline_cache::PipelineCache;
 pub use crate::selection::{Mark, Selection};
@@ -216,13 +203,3 @@ pub use crate::layout::{
     LayoutRect, LayoutResult, NodePosition, TreeNode, TreemapAlgorithm, TreemapCell,
     TreemapOptions, TreemapResult,
 };
-
-// SVG export
-pub use crate::export::svg::{SvgElement, SvgExportOptions, SvgRenderer};
-
-// HTML export
-pub use crate::export::html::{ChartSnapshot, HtmlExporter, SnapshotMargins, WasmStrategy};
-
-// PDF export (requires `pdf` feature)
-#[cfg(feature = "pdf")]
-pub use crate::export::pdf::{Orientation as PdfOrientation, PdfDocument, PdfOptions, PdfRenderer};

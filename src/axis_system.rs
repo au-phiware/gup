@@ -12,62 +12,17 @@
 //! * **Coordinated Rendering** - Integrates all axis components seamlessly
 //! * **Performance Optimized** - Complete axis rendering <2ms for typical charts
 //! * **Layout Management** - Calculates optimal margins and positioning
-//!
-//! # Examples
-//!
-//! ```rust,no_run
-//! use gup::axis_system::{AxisSystem, AxisMappings};
-//! use gup::scale::AccessorFunction;
-//! use gup::grid::ChartBounds;
-//! use gup::render::RenderContext;
-//!
-//! # async fn example() -> gup::error::GupResult<()> {
-//! #[derive(Debug, Clone)]
-//! struct DataPoint {
-//!     x: f64,
-//!     y: f64,
-//!     category: String,
-//! }
-//!
-//! let data = vec![
-//!     DataPoint { x: 1.0, y: 10.0, category: "A".to_string() },
-//!     DataPoint { x: 2.0, y: 20.0, category: "B".to_string() },
-//! ];
-//!
-//! // Create axis system
-//! let mut axis_system = AxisSystem::new();
-//!
-//! // Set up axis mappings
-//! let x_accessor = AccessorFunction::new(|d: &DataPoint| d.x);
-//! let y_accessor = AccessorFunction::new(|d: &DataPoint| d.y);
-//! let mut mappings = AxisMappings::new();
-//! mappings.set_x_accessor(x_accessor);
-//! mappings.set_y_accessor(y_accessor);
-//!
-//! // Auto-configure axes
-//! let config = axis_system.auto_configure(&data, &mappings)?;
-//!
-//! // Render complete axis system
-//! let mut context = RenderContext::new().await?;
-//! let chart_bounds = ChartBounds::new(50.0, 750.0, 50.0, 550.0);
-//! axis_system.render_complete_axis_system(&mut context, chart_bounds, &config)?;
-//! # Ok(())
-//! # }
-//! ```
 
-use crate::axis::{Axis, AxisBounds, AxisConfiguration as AxisConfig, AxisPosition, LinearAxis};
+use crate::axis::{Axis, AxisBounds, AxisPosition};
 use crate::axis_performance::{
     AxisPerformanceMonitor, AxisSystemRenderStats, OptimizationStrategy, PerformanceBudget,
 };
-use crate::error::{GupError, GupResult};
+use crate::error::GupResult;
 use crate::grid::{ChartBounds, GridConfiguration, GridSystem};
 use crate::label::{AxisInfo, LabelConstraints, LabelFormatter, LabelPositioner};
 use crate::render::RenderContext;
-use crate::scale::{
-    AccessorFunction, AxisId, DataAnalyzer, DataCharacteristics, Scale, ScaleFactory,
-};
+use crate::scale::{AxisId, Scale};
 use crate::shader_function::Vec2;
-use crate::{MaybeSend, MaybeSync};
 use std::collections::HashMap;
 
 /// Main axis system coordinator managing all axis components.
@@ -79,14 +34,8 @@ pub struct AxisSystem {
     axes: HashMap<AxisId, Box<dyn Axis>>,
     /// Label formatters for each axis
     formatters: HashMap<AxisId, Box<dyn LabelFormatter>>,
-    /// Layout coordinator
-    layout_manager: AxisLayoutManager,
     /// Enhanced performance monitor with rolling averages and adaptive strategy
     performance_monitor: AxisPerformanceMonitor,
-    /// Data analyzer for scale detection
-    data_analyzer: DataAnalyzer,
-    /// Scale factory for creating scales
-    scale_factory: ScaleFactory,
     /// Per-frame render statistics (updated on each render call)
     last_render_stats: Option<AxisSystemRenderStats>,
 }
@@ -98,10 +47,7 @@ impl AxisSystem {
             scales: HashMap::new(),
             axes: HashMap::new(),
             formatters: HashMap::new(),
-            layout_manager: AxisLayoutManager::new(),
             performance_monitor: AxisPerformanceMonitor::default(),
-            data_analyzer: DataAnalyzer::new(),
-            scale_factory: ScaleFactory::new(),
             last_render_stats: None,
         }
     }
@@ -127,52 +73,6 @@ impl AxisSystem {
     /// Get the recommended optimization strategy based on recent performance.
     pub fn recommended_strategy(&self) -> OptimizationStrategy {
         self.performance_monitor.recommended_strategy()
-    }
-
-    /// Automatically configure axes based on data analysis.
-    pub fn auto_configure<T>(
-        &mut self,
-        data: &[T],
-        mappings: &AxisMappings<T>,
-    ) -> GupResult<AxisConfiguration>
-    where
-        T: Clone + MaybeSend + MaybeSync + std::fmt::Debug + 'static,
-    {
-        if data.is_empty() {
-            return Err(GupError::validation_error(
-                "Cannot configure axes for empty dataset".to_string(),
-            ));
-        }
-
-        // 1. Analyze data to determine appropriate scale types
-        let scale_specs = self.analyze_data_for_scales(data, mappings)?;
-
-        // 2. Create scales with optimal domains/ranges
-        for (axis_id, spec) in scale_specs {
-            let scale = self
-                .scale_factory
-                .create_scale_from_characteristics(&spec)?;
-            let formatter = scale.default_formatter();
-
-            self.scales.insert(axis_id, scale);
-            self.formatters.insert(axis_id, formatter);
-        }
-
-        // 3. Configure axis components for each scale
-        self.configure_axis_components()?;
-
-        // 4. Calculate layout requirements and coordinate positioning
-        let layout = self
-            .layout_manager
-            .calculate_layout(&self.scales, &self.axes)?;
-
-        Ok(AxisConfiguration {
-            layout,
-            scales: self.get_scale_configurations(),
-            show_grid: true,
-            grid_config: GridConfiguration::default(),
-            performance_budget: self.performance_monitor.budget().target_render_time,
-        })
     }
 
     /// Render complete integrated axis system.
@@ -217,71 +117,6 @@ impl AxisSystem {
                 config.performance_budget,
                 self.performance_monitor.recommended_strategy(),
             );
-        }
-
-        Ok(())
-    }
-
-    /// Analyze data fields to determine scale specifications.
-    fn analyze_data_for_scales<T>(
-        &self,
-        data: &[T],
-        mappings: &AxisMappings<T>,
-    ) -> GupResult<HashMap<AxisId, DataCharacteristics>>
-    where
-        T: Clone + MaybeSend + MaybeSync + std::fmt::Debug + 'static,
-    {
-        let mut scale_specs = HashMap::new();
-
-        // Analyze X axis if mapped
-        if let Some(x_accessor) = &mappings.x_accessor {
-            let characteristics = self.data_analyzer.analyze_field(data, x_accessor)?;
-            scale_specs.insert(AxisId::XAxis, characteristics);
-        }
-
-        // Analyze Y axis if mapped
-        if let Some(y_accessor) = &mappings.y_accessor {
-            let characteristics = self.data_analyzer.analyze_field(data, y_accessor)?;
-            scale_specs.insert(AxisId::YAxis, characteristics);
-        }
-
-        // Analyze Color axis if mapped
-        if let Some(color_accessor) = &mappings.color_accessor {
-            let characteristics = self.data_analyzer.analyze_field(data, color_accessor)?;
-            scale_specs.insert(AxisId::ColorAxis, characteristics);
-        }
-
-        // Analyze Size axis if mapped
-        if let Some(size_accessor) = &mappings.size_accessor {
-            let characteristics = self.data_analyzer.analyze_field(data, size_accessor)?;
-            scale_specs.insert(AxisId::SizeAxis, characteristics);
-        }
-
-        Ok(scale_specs)
-    }
-
-    /// Configure axis components based on detected scales.
-    fn configure_axis_components(&mut self) -> GupResult<()> {
-        // Create axes based on available scales
-        for (&axis_id, scale) in &self.scales {
-            let position = match axis_id {
-                AxisId::XAxis => AxisPosition::Bottom,
-                AxisId::YAxis => AxisPosition::Left,
-                AxisId::ColorAxis => AxisPosition::Right,
-                AxisId::SizeAxis => AxisPosition::Top,
-            };
-
-            // Create appropriate axis configuration based on scale type
-            let axis_config = match scale.scale_type() {
-                "linear" => AxisConfig::default(),
-                "logarithmic" => AxisConfig::default().with_tick_count(4),
-                "temporal" => AxisConfig::default().with_tick_count(6),
-                "ordinal" => AxisConfig::default().without_minor_ticks(),
-                _ => AxisConfig::default(),
-            };
-
-            let axis = Box::new(LinearAxis::new(position, axis_config));
-            self.axes.insert(axis_id, axis);
         }
 
         Ok(())
@@ -479,75 +314,9 @@ impl AxisSystem {
 
         AxisInfo::from_bounds(&bounds, position)
     }
-
-    /// Get scale configurations for the final configuration.
-    fn get_scale_configurations(&self) -> HashMap<AxisId, ScaleConfiguration> {
-        self.scales
-            .iter()
-            .map(|(&axis_id, scale)| {
-                let config = ScaleConfiguration {
-                    scale_type: scale.scale_type().to_string(),
-                    domain: scale.domain(),
-                    range: scale.range(),
-                };
-                (axis_id, config)
-            })
-            .collect()
-    }
 }
 
 impl Default for AxisSystem {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-/// Axis mappings that define which data fields map to which axes.
-#[derive(Debug)]
-pub struct AxisMappings<T> {
-    /// Accessor function for the X axis.
-    pub x_accessor: Option<AccessorFunction<T>>,
-    /// Accessor function for the Y axis.
-    pub y_accessor: Option<AccessorFunction<T>>,
-    /// Accessor function for the color axis.
-    pub color_accessor: Option<AccessorFunction<T>>,
-    /// Accessor function for the size axis.
-    pub size_accessor: Option<AccessorFunction<T>>,
-}
-
-impl<T> AxisMappings<T> {
-    /// Create new empty axis mappings.
-    pub fn new() -> Self {
-        Self {
-            x_accessor: None,
-            y_accessor: None,
-            color_accessor: None,
-            size_accessor: None,
-        }
-    }
-
-    /// Set X axis accessor.
-    pub fn set_x_accessor(&mut self, accessor: AccessorFunction<T>) {
-        self.x_accessor = Some(accessor);
-    }
-
-    /// Set Y axis accessor.
-    pub fn set_y_accessor(&mut self, accessor: AccessorFunction<T>) {
-        self.y_accessor = Some(accessor);
-    }
-
-    /// Set color axis accessor.
-    pub fn set_color_accessor(&mut self, accessor: AccessorFunction<T>) {
-        self.color_accessor = Some(accessor);
-    }
-
-    /// Set size axis accessor.
-    pub fn set_size_accessor(&mut self, accessor: AccessorFunction<T>) {
-        self.size_accessor = Some(accessor);
-    }
-}
-
-impl<T> Default for AxisMappings<T> {
     fn default() -> Self {
         Self::new()
     }
@@ -671,129 +440,12 @@ impl TickPositions {
     }
 }
 
-/// Layout manager for calculating axis positioning and margins.
-#[derive(Debug)]
-struct AxisLayoutManager {
-    default_margins: AxisMargins,
-}
-
-impl AxisLayoutManager {
-    fn new() -> Self {
-        Self {
-            default_margins: AxisMargins {
-                top: 40.0,
-                right: 60.0,
-                bottom: 60.0,
-                left: 80.0,
-            },
-        }
-    }
-
-    fn calculate_layout(
-        &self,
-        scales: &HashMap<AxisId, Box<dyn Scale>>,
-        axes: &HashMap<AxisId, Box<dyn Axis>>,
-    ) -> GupResult<AxisLayout> {
-        let mut margins = self.default_margins.clone();
-
-        // Adjust margins based on axis requirements
-        for (&axis_id, axis) in axes {
-            let _scale = scales.get(&axis_id);
-            let required_margin = axis.calculate_margin(None); // Simplified for now
-
-            match axis_id {
-                AxisId::XAxis => margins.bottom = margins.bottom.max(required_margin),
-                AxisId::YAxis => margins.left = margins.left.max(required_margin),
-                AxisId::ColorAxis => margins.right = margins.right.max(required_margin),
-                AxisId::SizeAxis => margins.top = margins.top.max(required_margin),
-            }
-        }
-
-        // Calculate chart area (assuming 800x600 total size for now)
-        let total_width = 800.0;
-        let total_height = 600.0;
-        let chart_area = ChartArea {
-            x: margins.left,
-            y: margins.top,
-            width: total_width - margins.left - margins.right,
-            height: total_height - margins.top - margins.bottom,
-        };
-
-        // Calculate individual axis bounds
-        let mut axis_bounds = HashMap::new();
-        for &axis_id in axes.keys() {
-            let bounds = match axis_id {
-                AxisId::XAxis => AxisBounds::new(
-                    Vec2 {
-                        x: chart_area.x,
-                        y: chart_area.y + chart_area.height,
-                    },
-                    Vec2 {
-                        x: chart_area.x + chart_area.width,
-                        y: chart_area.y + chart_area.height,
-                    },
-                    margins.bottom,
-                ),
-                AxisId::YAxis => AxisBounds::new(
-                    Vec2 {
-                        x: chart_area.x,
-                        y: chart_area.y + chart_area.height,
-                    },
-                    Vec2 {
-                        x: chart_area.x,
-                        y: chart_area.y,
-                    },
-                    margins.left,
-                ),
-                AxisId::ColorAxis => AxisBounds::new(
-                    Vec2 {
-                        x: chart_area.x + chart_area.width,
-                        y: chart_area.y + chart_area.height,
-                    },
-                    Vec2 {
-                        x: chart_area.x + chart_area.width,
-                        y: chart_area.y,
-                    },
-                    margins.right,
-                ),
-                AxisId::SizeAxis => AxisBounds::new(
-                    Vec2 {
-                        x: chart_area.x,
-                        y: chart_area.y,
-                    },
-                    Vec2 {
-                        x: chart_area.x + chart_area.width,
-                        y: chart_area.y,
-                    },
-                    margins.top,
-                ),
-            };
-            axis_bounds.insert(axis_id, bounds);
-        }
-
-        Ok(AxisLayout {
-            margins,
-            chart_area,
-            axis_bounds,
-        })
-    }
-}
-
 // Note: Future enhancement could add scale integration directly to the Axis trait
 // Performance monitoring is now handled by AxisPerformanceMonitor from axis_performance module.
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::scale::AccessorFunction;
-
-    #[derive(Debug, Clone)]
-    struct TestDataPoint {
-        x: f64,
-        y: f64,
-        #[allow(dead_code)]
-        category: String,
-    }
 
     #[test]
     fn test_axis_system_creation() {
@@ -801,69 +453,6 @@ mod tests {
         assert!(axis_system.scales.is_empty());
         assert!(axis_system.axes.is_empty());
         assert!(axis_system.formatters.is_empty());
-    }
-
-    #[test]
-    fn test_axis_mappings() {
-        let mut mappings = AxisMappings::<TestDataPoint>::new();
-
-        let x_accessor = AccessorFunction::new(|d: &TestDataPoint| d.x);
-        let y_accessor = AccessorFunction::new(|d: &TestDataPoint| d.y);
-
-        mappings.set_x_accessor(x_accessor);
-        mappings.set_y_accessor(y_accessor);
-
-        assert!(mappings.x_accessor.is_some());
-        assert!(mappings.y_accessor.is_some());
-        assert!(mappings.color_accessor.is_none());
-        assert!(mappings.size_accessor.is_none());
-    }
-
-    #[test]
-    fn test_axis_system_auto_configure() {
-        let mut axis_system = AxisSystem::new();
-        let data = vec![
-            TestDataPoint {
-                x: 1.0,
-                y: 10.0,
-                category: "A".to_string(),
-            },
-            TestDataPoint {
-                x: 2.0,
-                y: 20.0,
-                category: "B".to_string(),
-            },
-            TestDataPoint {
-                x: 3.0,
-                y: 30.0,
-                category: "C".to_string(),
-            },
-        ];
-
-        let mut mappings = AxisMappings::new();
-        mappings.set_x_accessor(AccessorFunction::new(|d: &TestDataPoint| d.x));
-        mappings.set_y_accessor(AccessorFunction::new(|d: &TestDataPoint| d.y));
-
-        let config = axis_system.auto_configure(&data, &mappings).unwrap();
-
-        assert!(config.scales.contains_key(&AxisId::XAxis));
-        assert!(config.scales.contains_key(&AxisId::YAxis));
-        assert!(config.show_grid);
-        assert!(config.performance_budget.as_millis() >= 1);
-    }
-
-    #[test]
-    fn test_layout_manager() {
-        let layout_manager = AxisLayoutManager::new();
-        let scales: HashMap<AxisId, Box<dyn Scale>> = HashMap::new();
-        let axes: HashMap<AxisId, Box<dyn Axis>> = HashMap::new();
-
-        let layout = layout_manager.calculate_layout(&scales, &axes).unwrap();
-
-        assert!(layout.chart_area.width > 0.0);
-        assert!(layout.chart_area.height > 0.0);
-        assert!(layout.margins.left >= 80.0);
-        assert!(layout.margins.bottom >= 60.0);
     }
 
     #[test]

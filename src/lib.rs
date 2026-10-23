@@ -86,7 +86,6 @@
 //! | [`accessibility`] | Screen reader support, ARIA tree, focus management |
 //! | [`axis`] / [`axis_system`] | Axis rendering, tick generation, axis layout |
 //! | [`buffer`] | GPU buffer pool, upload/download helpers |
-//! | [`chart_builder`] | High-level chart construction API |
 //! | [`context`] | [`GupContext`] — device, queue, surface management |
 //! | [`error`] | [`GupError`] variants and the [`GupResult`] type alias |
 //! | [`grid`] | GPU-accelerated grid line rendering |
@@ -113,7 +112,6 @@ pub mod axis_system;
 pub mod brush;
 pub mod buffer;
 pub mod camera;
-pub mod chart_builder;
 pub mod color_descriptor;
 pub mod context;
 #[cfg(feature = "debug")]
@@ -240,9 +238,7 @@ pub use accessibility::{
     Trend,
 };
 pub use axis::*;
-pub use axis_system::{
-    AxisLayout, AxisMappings, AxisMargins, AxisSystem, ChartArea, ScaleConfiguration,
-};
+pub use axis_system::{AxisLayout, AxisMargins, AxisSystem, ChartArea, ScaleConfiguration};
 pub use buffer::*;
 pub use context::*;
 #[cfg(feature = "debug")]
@@ -344,47 +340,6 @@ pub use layout::{
     LayoutRect, LayoutResult, NodePosition, TreeNode, TreemapAlgorithm, TreemapCell,
     TreemapOptions, TreemapResult,
 };
-
-// Export chart builder system (Observable Plot-style API)
-// Re-export selectively to avoid conflicts with label::Margins
-pub use chart_builder::builders::area::{AreaSegment, StackMode};
-pub use chart_builder::builders::density::{
-    ContourBand, ContourLevel, DensityConfig, DensityLayer, DensityPlotBuilder, DensityRenderMode,
-};
-pub use chart_builder::builders::heatmap::{
-    AggregateFunc, BinGrid, BinSpec, GpuBinner, HeatmapCell, gpu_bin_data,
-};
-pub use chart_builder::builders::violin::{HalfSide, ViolinOrientation, ViolinPlotBuilder};
-pub use chart_builder::{
-    AreaChartBuilder, AxisLabelConfig, ChartBuilder, ChartConfig, ChoroplethChart,
-    ChoroplethChartBuilder, ComposedChart, HeatmapBuilder, HoverHighlight, LabelCapableBuilder,
-    LabeledChart, TitleAlignment, TitleConfig,
-};
-
-/// Create a new [`DensityPlotBuilder`] (convenience shorthand).
-///
-/// # Examples
-///
-/// ```rust,no_run
-/// use gup::prelude::*;
-/// use gup::chart_builder::builders::AccessorFunction;
-/// use gup::chart_builder::accessor::AccessorValue;
-///
-/// #[derive(Debug, Clone)]
-/// struct Point { x: f32, y: f32 }
-///
-/// let builder = gup::density_plot()
-///     .x(AccessorFunction::new(|d: &Point| AccessorValue::Float(d.x)))
-///     .y(AccessorFunction::new(|d: &Point| AccessorValue::Float(d.y)));
-/// ```
-pub fn density_plot<T>() -> DensityPlotBuilder<T> {
-    DensityPlotBuilder::new()
-}
-
-/// Create a new [`ChoroplethChartBuilder`] (convenience shorthand).
-pub fn choropleth() -> ChoroplethChartBuilder {
-    ChoroplethChartBuilder::new()
-}
 
 // Re-export procedural macros from gup_macros for convenience.
 //

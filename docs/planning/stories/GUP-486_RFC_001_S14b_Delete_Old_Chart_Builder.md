@@ -9,8 +9,8 @@ implementer-reason:
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 🚧 In Progress **Created**:
-2026-10-19
+**Initiative**: RFC-001 Migration **Status**: ✅ Complete (2026-10-23)
+**Created**: 2026-10-19
 
 ## Context
 
@@ -126,6 +126,15 @@ strategic review approved breaking changes with no deprecation (Decision 2).
   `export/svg/element.rs`, `export/gallery.rs` (if they still compile), and the
   whole old render core: GUP-488.
 
+- **Cascade into the old core (2026-10-23, orchestrator, option 1)**: the
+  deletions break two old-core modules, so items go early rather than being
+  ported: `AxisMappings` accessor fields and setters and
+  `analyze_data_for_scales` in `axis_system.rs`; `render_from_bundle`,
+  `parse_bundle_json` and their tests in `wasm_api.rs`;
+  `examples/scale_axis_integration_demo.rs` and the `axis_system` doctests that
+  use them. Both modules are deleted in GUP-488 anyway. "Not deleted here"
+  therefore means the files stay, minus these items.
+
 ## Escalation Triggers
 
 - Deleting something outside the `chart_builder` dependency closure becomes
@@ -202,7 +211,37 @@ strategic review approved breaking changes with no deprecation (Decision 2).
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
 
-## Blocked (2026-10-23)
+## Implementation Summary
+
+Deleted `src/chart_builder*` (23 files with `export/html`, `export/pdf`,
+`export/svg/renderer.rs`), the `pdf` feature and `printpdf`, and by the cascade
+decision: `scale::{AccessorFunction, DataAnalyzer}` and the
+`From<AccessorValue>` impl; in `axis_system.rs` `AxisMappings`,
+`auto_configure`, `analyze_data_for_scales`, `configure_axis_components`,
+`get_scale_configurations`, `AxisLayoutManager` and their tests/doctest; in
+`wasm_api.rs` `render_from_bundle`, `parse_bundle_json` and tests.
+
+- Examples deleted (16): area_chart_demo, boxplot_builder_demo,
+  chart_hover_reveal_demo, choropleth_gpu_recolor, choropleth_world_population,
+  color_scale_heatmap, density_scatter_overlay, export_png, heatmap_chart,
+  html_export, multi_category_boxplot, multi_font_chart_demo, pdf_export,
+  svg_export, violin_plot_demo, scale_axis_integration_demo.
+- Tests deleted (8): axis_integration_tests, color_scale_integration,
+  heatmap_integration, html_export_integration, multi_category_boxplot_tests,
+  pdf_export_integration, png_export_integration, svg_export_integration.
+- Benches deleted: 0. Goldens deleted: `tests/golden/chart_builders/` (7 PNGs).
+- CI step and `mask visual-regression` removed; `mask ci visual-regression`
+  keeps the harness unit tests.
+- `mask old-path-loc`: 26,601 to 18,504 (target met exactly).
+- Gates: `mask all-check` green; `cargo test --doc` 132 passed; smoke-examples
+  green; wasm32 lib build and `gup-culling-lod` tests pass. `mask wasm-size`
+  scatter 331,601 B gz (+2% info, pass), unchanged in kind.
+- Dogfood: 9 PASS, `t4_linked` and `t5_live` FAIL (windowed under Xvfb; they
+  depend only on `gup-core`, which this story did not touch). Not caused by this
+  change; reported to the orchestrator.
+- `mask wasm-browser` not run (no browser here).
+
+## Resolved (2026-10-23)
 
 **Question**: Deleting `chart_builder`, `export/html` and
 `scale::AccessorFunction` breaks two old-core modules outside the
@@ -238,3 +277,46 @@ reset, nothing is committed beyond the Start commit):
 
 **Recommendation**: option 1, with the owner confirming `AxisMappings` and
 `render_from_bundle` may lose those items (both die in GUP-488 anyway).
+
+## Retrospective
+
+**Completed**: 2026-10-23
+
+### Key Technical Learnings
+
+#### Deletion cascades through shared accessor types
+
+- **Challenge**: `AccessorValue` lived in `chart_builder` but `scale.rs`,
+  `axis_system.rs` and `wasm_api.rs` (old core) used it, so "delete what fails
+  to compile" reached three modules the story called not-deleted.
+- **Solution**: escalated; the orchestrator approved deleting the items early
+  (both modules die in GUP-488).
+- **Pattern**: when a story's closure analysis lists only importers by name,
+  also grep for the types that move with the module, not just the module path.
+
+#### Dead code after deletion
+
+- `-D warnings` forces removing newly dead private items (layout manager,
+  analyzer, scale-config helpers) in the same commit; budget for it.
+
+### Architectural Decisions
+
+#### Items deleted early from the old core
+
+- **Decision**: remove `AxisMappings`/`auto_configure`, `DataAnalyzer`,
+  `render_from_bundle` instead of porting.
+- **Trade-off**: `AxisSystem` can no longer auto-build scales; it is dead weight
+  until GUP-488 removes it.
+
+### Development Workflow Insights
+
+- zsh does not word-split unquoted variables; use `${=var}` in loops.
+- `cargo test` (whole) ran doc tests that failed with duplicate-wgpu type errors
+  while `cargo test --doc` alone passed; the 17 failures are in files this story
+  did not touch (streaming, brush, gpu_timer). Worth a look in GUP-488.
+- Dogfood `t4_linked` and `t5_live` fail under Xvfb here independent of this
+  change.
+
+### Follow-up Stories
+
+None.

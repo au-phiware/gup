@@ -12,7 +12,7 @@
 /// A lightweight representation of an SVG element.
 ///
 /// This enum describes the SVG primitives needed by Gup's built-in
-/// mark types.  Instances are produced by [`super::SvgRenderer`]
+/// mark types.  Instances are produced by the mark export helpers
 /// during chart export and serialised into the final SVG document.
 #[derive(Debug, Clone, PartialEq)]
 pub enum SvgElement {

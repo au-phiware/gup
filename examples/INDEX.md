@@ -28,21 +28,12 @@ Run any example with: `cargo run --example <name>`
 | `scatter_plot_demo`               | Scatter plot with selection and interaction       |
 | `boxplot`                         | Basic box plot rendering                          |
 | `boxplot_rendering_demo`          | Box plot rendering pipeline demo                  |
-| `boxplot_builder_demo`            | Box plot chart builder API                        |
-| `multi_category_boxplot`          | Multi-category box plots                          |
 | `observable_plot_visual_showcase` | Visual showcase of chart builder API              |
 | `custom_mark_demo`                | Implementing a custom mark type                   |
 | `multi_pass_mark_demo`            | Multi-pass mark rendering                         |
-| `area_chart_demo`                 | Area chart rendering                              |
-| `heatmap_chart`                   | Heatmap chart rendering                           |
-| `violin_plot_demo`                | Violin plot rendering                             |
-| `density_scatter_overlay`         | Density scatter plot overlay                      |
 | `treemap`                         | Treemap layout rendering                          |
 | `treemap_window`                  | Windowed treemap rendering with keyboard controls |
 | `ordinal_scale`                   | Ordinal scale demonstration                       |
-| `choropleth_world_population`     | Choropleth world population map                   |
-| `choropleth_gpu_recolor`          | GPU-side choropleth recolouring demo              |
-| `color_scale_heatmap`             | Colour scale heatmap                              |
 | `composite_mixed_data`            | One plot over two row types                       |
 | `geo_world_map`                   | World map geographic rendering                    |
 | `geographic_projection`           | Geographic projection demo                        |
@@ -59,7 +50,6 @@ Run any example with: `cargo run --example <name>`
 | `axis_showcase`                     | Axis rendering and configuration         |
 | `axis_tick_integration_visual_demo` | Axis tick rendering integration          |
 | `tick_generation_visual_demo`       | Automatic tick generation algorithm demo |
-| `scale_axis_integration_demo`       | Scale-to-axis integration                |
 | `grid_scatter_demo`                 | Grid with scatter plot overlay           |
 | `label_formatting_demo`             | Axis label formatting and positioning    |
 
@@ -75,7 +65,6 @@ Run any example with: `cargo run --example <name>`
 | `atlas_viewer`           | Font atlas inspection tool                |
 | `msdf_debug`             | MSDF glyph generation debug view          |
 | `multi_font_demo`        | Multi-font atlas rendering                |
-| `multi_font_chart_demo`  | Charts using multiple font families       |
 
 ---
 
@@ -86,7 +75,6 @@ Run any example with: `cargo run --example <name>`
 | `gpu_selection_demo`           | GPU-side selection and hit testing         |
 | `interactive_selection_demo`   | Interactive mark selection with mouse      |
 | `hover_reveal_demo`            | Hover-reveal tooltip integration           |
-| `chart_hover_reveal_demo`      | Chart builder hover-reveal API             |
 | `interaction_debug_visualizer` | Debug visualiser for interaction pipeline  |
 | `attr_binding_demo`            | Attribute binding pipeline demo            |
 | `brush_selection`              | Brush selection interaction                |
@@ -192,12 +180,8 @@ Run any example with: `cargo run --example <name>`
 
 ## Export
 
-| Example       | Description                             |
-| ------------- | --------------------------------------- |
-| `export_png`  | PNG export via GPU off-screen rendering |
-| `svg_export`  | SVG export demonstration                |
-| `html_export` | HTML export demonstration               |
-| `pdf_export`  | PDF export demonstration                |
+| Example | Description |
+| ------- | ----------- |
 
 ---
 

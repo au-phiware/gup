@@ -10,25 +10,11 @@
 //! # Available Exporters
 //!
 //! * [`svg`] — Produces well-formed SVG documents from chart data.
-//! * `pdf` — Converts the SVG intermediate to PDF (requires the `pdf` feature).
 //! * [`png`] — Renders to an off-screen GPU texture and encodes as PNG.
-//! * [`html`] — Packages a chart as a standalone HTML file with WASM, SVG
-//!   fallback, and Open Graph metadata.
 
-pub mod html;
 pub mod png;
 pub mod svg;
 
 pub mod gallery;
 
-#[cfg(feature = "pdf")]
-pub mod pdf;
-
-pub use html::{
-    ChartBundle, ChartSnapshot, HtmlExporter, SnapshotMargins, WasmStrategy, discover_wasm_artifact,
-};
-pub use svg::write_svg_to_file;
-pub use svg::{SvgElement, SvgExportOptions, SvgRenderer};
-
-#[cfg(feature = "pdf")]
-pub use pdf::{Orientation as PdfOrientation, PdfDocument, PdfOptions, PdfRenderer};
+pub use svg::SvgElement;

@@ -42,10 +42,6 @@ name = "brush_selection"
 reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
 
 [[skip]]
-name = "chart_hover_reveal_demo"
-reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
-
-[[skip]]
 name = "debug_text_positioning"
 reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
 
@@ -82,10 +78,6 @@ name = "msdf_debug"
 reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
 
 [[skip]]
-name = "multi_font_chart_demo"
-reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
-
-[[skip]]
 name = "multi_font_demo"
 reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
 
@@ -99,10 +91,6 @@ reason = "Opens several winit windows; no headless path"
 
 [[skip]]
 name = "observable_plot_visual_showcase"
-reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
-
-[[skip]]
-name = "scale_axis_integration_demo"
 reason = "Windowed-only (winit event loop); no GUP_SCREENSHOT_PATH path"
 
 [[skip]]
