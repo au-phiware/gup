@@ -45,6 +45,8 @@ fn scatter_chart(pts: &[S]) -> ScatterChart<S> {
         .fill(Color::hex(0x1f77b4))
         .opacity(0.2)
         .radius(1.5)
+        // A live chart keeps a bounded window; this run is too short to evict.
+        .window(Window::LastRows(100_000))
 }
 
 struct App {
