@@ -1,8 +1,11 @@
 # Tutorial 2: Data Binding
 
-**Out of date until T6:** this tutorial shows the old builders (deleted in
-GUP-466); T6's docs-as-tests rewrite replaces it.
-
+> **Out of date.** This tutorial was written for the API before the RFC-001 flip
+> and does not compile against `gup` today. It is being rewritten as tested
+> Markdown (strategic review 2026-11, track N1). Until then, start from the
+> [README](../../README.md) Quick Start and
+> [Technical Approach](../TECHNICAL_APPROACH.md).
+>
 > **Goal**: Bind a custom Rust struct to a `Selection<T, M>`, map its fields to
 > visual attributes, and update the data at runtime.
 
@@ -250,5 +253,3 @@ async fn main() -> GupResult<()> {
   move data transforms to the GPU for maximum performance.
 - **[`attr_binding_demo` example](../../examples/attr_binding_demo.rs)** — a
   complete windowed example of attribute binding.
-- **[Mark System docs](../mark-system/README.md)** — learn about built-in mark
-  types and their attributes.

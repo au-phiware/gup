@@ -92,11 +92,10 @@ See [`TECHNICAL_APPROACH.md`](./docs/TECHNICAL_APPROACH.md).
 
 ## Development Status
 
-RFC-001 (the core architecture) is implemented: steps S0 to S14, with `gup` a
-facade over `gup-core`. Next, from the
-[strategic review](./docs/planning/STRATEGIC_REVIEW_2026-10.md): T5, more
-builders on `gup`; T6, a flagship gallery and docs-as-tests; T7, the crate
-split, level of detail. See
+RFC-001 (the core architecture) is implemented: `gup` is a facade over
+`gup-core`. Next, from the
+[strategic review](./docs/planning/STRATEGIC_REVIEW_2026-11.md): N0, hygiene;
+N1, tested tutorials; N2, more chart types; then N3, release 0.1. See
 [`IMPLEMENTATION_STRATEGY.md`](./docs/IMPLEMENTATION_STRATEGY.md).
 
 ## Documentation

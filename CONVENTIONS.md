@@ -222,10 +222,8 @@ All public APIs must include:
 For detailed development patterns and examples, see:
 
 - **[CLAUDE.md](CLAUDE.md)** - Development environment and general patterns
-- **[docs/graphics-programming.md](docs/graphics-programming.md)** -
-  GPU-specific programming patterns
-- **[docs/patterns/](docs/patterns/)** - Story-specific learnings and
-  specialized patterns
+- **[.github/agents/story-worker.md](.github/agents/story-worker.md)** - Rust
+  design patterns and recurring GPU/WGSL learnings
 - **[README.md](README.md)** - Project overview and quick start
 
 ## Copyright and Licensing

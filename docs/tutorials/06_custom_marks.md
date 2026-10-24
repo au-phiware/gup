@@ -1,5 +1,11 @@
 # Tutorial 6: Custom Marks
 
+> **Out of date.** This tutorial was written for the API before the RFC-001 flip
+> and does not compile against `gup` today. It is being rewritten as tested
+> Markdown (strategic review 2026-11, track N1). Until then, start from the
+> [README](../../README.md) Quick Start and
+> [Technical Approach](../TECHNICAL_APPROACH.md).
+>
 > **Goal**: Implement a new mark type from scratch using both the
 > `#[derive(Mark)]` macro and a manual `Mark` trait implementation.
 
@@ -17,9 +23,8 @@ Complete [Tutorial 2](02_data_binding.md). Familiarity with `Selection<T, M>` is
 assumed. You should also be comfortable with basic GPU concepts (vertices,
 indices, shaders).
 
-For the full architectural overview, see the
-[Custom Mark Guide](../CUSTOM_MARK_GUIDE.md) and the
-[Mark System documentation](../mark-system/README.md).
+For a mark written with `#[derive(Mark)]` today, see
+[`crates/gup-core/tests/derive_mark.rs`](../../crates/gup-core/tests/derive_mark.rs).
 
 ## The Mark Trait
 
@@ -363,10 +368,6 @@ async fn main() -> GupResult<()> {
 
 ## Next Steps
 
-- **[Custom Mark Guide](../CUSTOM_MARK_GUIDE.md)** — the full architectural
-  reference for the mark system.
-- **[Mark System docs](../mark-system/README.md)** — detailed API reference for
-  `Mark` and `MarkRegistry`.
 - **[`tutorial06_custom_marks` example](../../examples/tutorials/tutorial06_custom_marks.rs)**
   — run exactly this tutorial's custom mark example.
 - **[`custom_mark_demo` example](../../examples/custom_mark_demo.rs)** —
