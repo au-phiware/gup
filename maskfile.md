@@ -369,8 +369,11 @@ windowed tasks.
 
 ## merge-check
 
-> Run after every merge of story branches, before pushing: the checks textual
-> merges cannot catch (GUP-502)
+> After merging story branches, before pushing: the checks textual merges miss
+
+Run it after every merge of story branches, before pushing. It needs a GPU or
+lavapipe, Chromium and `wasm-bindgen` like its parts, and takes as long as its
+parts (it adds no new checks).
 
 Runs gup-core's tests with all features, `mask wasm-size` and
 `mask wasm-browser` one after another, even when one fails, then prints one
