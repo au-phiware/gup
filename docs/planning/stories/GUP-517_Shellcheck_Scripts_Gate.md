@@ -9,7 +9,7 @@ touches: [maskfile.md, scripts/]
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N0 Hygiene) **Status**: 📋 Planned
+**Initiative**: Strategic Review 2026-11 (N0 Hygiene) **Status**: 🚧 In Progress
 **Created**: 2026-10-24
 
 ## Context
