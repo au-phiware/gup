@@ -44,7 +44,7 @@ file); GUP-504.
   crate wgpu" doctest error. Deps: GUP-496 📋 (soft). Done: `CpuMirror` only
   (`ColumnValue` attributes swap in an unrelated hint); doctest error not
   reproduced.
-- [GUP-511](GUP-511_Stable_Column_Value_Snapshot.md) 💡 — Stop a new
+- [GUP-511](GUP-511_Stable_Column_Value_Snapshot.md) ✅ — Stop a new
   `ColumnValue` type from changing `borrowing_accessor.stderr`.
 - [GUP-501](GUP-501_Headless_Environment_Script.md) ✅ —
   `scripts/headless_env.sh` (lavapipe ICD, no `WAYLAND_DISPLAY`, 1920x1080 Xvfb)

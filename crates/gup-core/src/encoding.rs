@@ -645,10 +645,12 @@ pub enum Resource {
 /// ±∞) are nulls: a null position or size is not drawn, and a null
 /// colour input draws in the null colour (RFC-001 S4b).
 ///
-// No `#[diagnostic::do_not_recommend]` on the library's impls (tried in
-// GUP-500): it replaces the second `borrowing_accessor` candidate list with
-// an unrelated `IntoEncoding` hint, so the list stays and that snapshot
-// changes with each new column type.
+// The library's impls carry `#[diagnostic::do_not_recommend]`, so a new
+// column type does not change the compile-fail snapshots (GUP-511). This
+// works only while the failing bound is reported once, in `encode` itself
+// (`tests/compile_fail/borrowing_accessor.rs`): when the encoding also
+// reaches `attr`, rustc swaps the second candidate list for an unrelated
+// `IntoEncoding` hint.
 #[diagnostic::on_unimplemented(
     message = "`{Self}` is not a column value; `encode` takes accessors returning numbers",
     label = "`encode`'s accessor returns `{Self}`",
@@ -661,6 +663,7 @@ pub trait ColumnValue: Copy + 'static {
     fn to_f64(self) -> f64;
 }
 
+#[diagnostic::do_not_recommend]
 impl ColumnValue for f64 {
     type Gpu = f32;
     fn to_f64(self) -> f64 {
@@ -668,6 +671,7 @@ impl ColumnValue for f64 {
     }
 }
 
+#[diagnostic::do_not_recommend]
 impl ColumnValue for f32 {
     type Gpu = f32;
     fn to_f64(self) -> f64 {
@@ -677,6 +681,7 @@ impl ColumnValue for f32 {
 
 /// `None` is a null: it holds NaN, and a row with a null position or size
 /// is not drawn.
+#[diagnostic::do_not_recommend]
 impl ColumnValue for Option<f64> {
     type Gpu = f32;
     fn to_f64(self) -> f64 {
@@ -685,6 +690,7 @@ impl ColumnValue for Option<f64> {
 }
 
 /// `None` is a null, as for `Option<f64>`.
+#[diagnostic::do_not_recommend]
 impl ColumnValue for Option<f32> {
     type Gpu = f32;
     fn to_f64(self) -> f64 {

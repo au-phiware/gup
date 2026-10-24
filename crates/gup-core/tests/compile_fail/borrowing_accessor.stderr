@@ -1,25 +1,11 @@
 error[E0277]: `&str` is not a column value; `encode` takes accessors returning numbers
-  --> tests/compile_fail/borrowing_accessor.rs:19:34
+  --> tests/compile_fail/borrowing_accessor.rs:17:38
    |
-19 |         Categorical::okabe_ito().encode(|r: &Row| r.continent.as_str()),
-   |                                  ^^^^^^ `encode`'s accessor returns `&str`
+17 |     let _ = Categorical::okabe_ito().encode(|r: &Row| r.continent.as_str());
+   |                                      ^^^^^^ `encode`'s accessor returns `&str`
    |
    = help: the trait `ColumnValue` is not implemented for `&str`
    = note: for string keys (categories), use `encode_key(|row| row.field.as_str())`, whose accessor may return a borrow of the row; for integer or enum keys, `encode_owned_key(|row| row.field)`; both on a dictionary function such as `Categorical`, `Band` or `Point`
-help: the following other types implement trait `ColumnValue`
-  --> src/encoding.rs
-   |
-   | impl ColumnValue for f64 {
-   | ^^^^^^^^^^^^^^^^^^^^^^^^ `f64`
-...
-   | impl ColumnValue for f32 {
-   | ^^^^^^^^^^^^^^^^^^^^^^^^ `f32`
-...
-   | impl ColumnValue for Option<f64> {
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Option<f64>`
-...
-   | impl ColumnValue for Option<f32> {
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Option<f32>`
 note: required by a bound in `encode`
   --> src/encoding.rs
    |
@@ -28,38 +14,3 @@ note: required by a bound in `encode`
 ...
    |         D: ColumnValue,
    |            ^^^^^^^^^^^ required by this bound in `EncodeFn::encode`
-
-error[E0277]: `&str` is not a column value; `encode` takes accessors returning numbers
-  --> tests/compile_fail/borrowing_accessor.rs:19:9
-   |
-17 |     sel.attr(
-   |         ---- required by a bound introduced by this call
-18 |         Circle::FILL,
-19 |         Categorical::okabe_ito().encode(|r: &Row| r.continent.as_str()),
-   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `encode`'s accessor returns `&str`
-   |
-   = help: the trait `ColumnValue` is not implemented for `&str`
-   = note: for string keys (categories), use `encode_key(|row| row.field.as_str())`, whose accessor may return a borrow of the row; for integer or enum keys, `encode_owned_key(|row| row.field)`; both on a dictionary function such as `Categorical`, `Band` or `Point`
-help: the following other types implement trait `ColumnValue`
-  --> src/encoding.rs
-   |
-   | impl ColumnValue for f64 {
-   | ^^^^^^^^^^^^^^^^^^^^^^^^ `f64`
-...
-   | impl ColumnValue for f32 {
-   | ^^^^^^^^^^^^^^^^^^^^^^^^ `f32`
-...
-   | impl ColumnValue for Option<f64> {
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Option<f64>`
-...
-   | impl ColumnValue for Option<f32> {
-   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `Option<f32>`
-   = note: required for `Encoded<{closure@$DIR/tests/compile_fail/borrowing_accessor.rs:19:41: 19:50}, gup_core::Categorical>` to implement `IntoEncoding<Row, gup_core::Color, ColumnMarker<&str>>`
-note: required by a bound in `gup_core::Selection::<T, M>::attr`
-  --> src/selection.rs
-   |
-   |     pub fn attr<V: Visual, E, K>(&mut self, channel: Channel<M, V>, encoding: E) -> &mut Self
-   |            ---- required by a bound in this associated function
-   |     where
-   |         E: IntoEncoding<T, V, K>,
-   |            ^^^^^^^^^^^^^^^^^^^^^ required by this bound in `Selection::<T, M>::attr`
