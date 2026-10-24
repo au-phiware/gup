@@ -123,6 +123,7 @@ impl ShaderFn for Linear {
     }
 }
 
+#[diagnostic::do_not_recommend]
 impl CpuMirror for Linear {
     fn eval(&self, x: f64) -> f64 {
         self.range.0 + (x - self.resolved_domain().0) * self.k()

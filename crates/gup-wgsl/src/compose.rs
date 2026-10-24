@@ -410,13 +410,10 @@ impl Library {
                     .iter()
                     .map(|m| m.import_path.as_str())
                     .collect();
-                let closest = known
-                    .iter()
-                    .map(|k| (edit_distance(import, k), *k))
-                    .min()
-                    .filter(|&(d, _)| d <= 3)
-                    .map(|(_, k)| format!(" (did you mean `{k}`?)"))
-                    .unwrap_or_default();
+                let hint = match closest(import, known.iter().copied()) {
+                    Some(k) => format!(" (did you mean `{k}`?)"),
+                    None => format!("; the library has: {}", known.join(", ")),
+                };
                 let line = src
                     .text
                     .lines()
@@ -425,10 +422,8 @@ impl Library {
                 return Err(Error::new(
                     &src.file,
                     format!(
-                        "{}:{line}: `{import}` is not a module this one can import{closest}; \
-                         the library has: {}",
-                        src.file,
-                        known.join(", ")
+                        "{}:{line}: `{import}` is not a module this one can import{hint}",
+                        src.file
                     ),
                 ));
             }
@@ -773,6 +768,17 @@ struct Parsed<'a> {
     /// Pad `Params` to a multiple of 16 bytes (user modules) rather than
     /// reject it (the library).
     pad_params: bool,
+}
+
+/// The known name closest to `name` by edit distance, if within 3 edits
+/// (ties go to the first by name), for "did you mean" suggestions.
+pub fn closest<'a>(name: &str, known: impl IntoIterator<Item = &'a str>) -> Option<&'a str> {
+    known
+        .into_iter()
+        .map(|k| (edit_distance(name, k), k))
+        .min()
+        .filter(|&(d, _)| d <= 3)
+        .map(|(_, k)| k)
 }
 
 /// Levenshtein distance, for "did you mean" suggestions.

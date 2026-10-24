@@ -113,6 +113,7 @@ impl ShaderFn for Log {
     }
 }
 
+#[diagnostic::do_not_recommend]
 impl CpuMirror for Log {
     fn eval(&self, x: f64) -> f64 {
         let (log_d0, inv) = self.log_parts();

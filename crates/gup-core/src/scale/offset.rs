@@ -76,6 +76,7 @@ impl ShaderFn for Offset {
     }
 }
 
+#[diagnostic::do_not_recommend]
 impl CpuMirror for Offset {
     fn eval(&self, v: f64) -> f64 {
         v + f64::from(self.get())

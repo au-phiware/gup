@@ -206,6 +206,7 @@ impl ShaderFn for Diverging {
     }
 }
 
+#[diagnostic::do_not_recommend]
 impl CpuMirror for Diverging {
     /// Mirrors the shader: each side's slope from the midpoint, clamp,
     /// then the LUT linearly interpolated between texel centres.

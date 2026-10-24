@@ -151,6 +151,7 @@ impl ShaderFn for Symlog {
     }
 }
 
+#[diagnostic::do_not_recommend]
 impl CpuMirror for Symlog {
     fn eval(&self, x: f64) -> f64 {
         let (lo, k) = self.parts();

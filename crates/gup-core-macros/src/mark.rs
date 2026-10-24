@@ -353,13 +353,7 @@ pub fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             match found {
                 Ok((flat, closure)) => (path.clone(), flat, closure, *span, None),
                 Err(marks) => {
-                    return Err(syn::Error::new(
-                        *span,
-                        format!(
-                            "`{path}` is not a module of Gup's library; its marks are: {}",
-                            marks.join(", ")
-                        ),
-                    ));
+                    return Err(syn::Error::new(*span, unknown_module_message(path, &marks)));
                 }
             }
         }
@@ -747,4 +741,47 @@ pub fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
             }
         };
     })
+}
+
+/// The error for a `module = "…"` that is not in Gup's library: the
+/// closest mark module when there is one, else every mark module.
+fn unknown_module_message(path: &str, marks: &[String]) -> String {
+    match gup_wgsl::compose::closest(path, marks.iter().map(String::as_str)) {
+        Some(k) => format!("`{path}` is not a module of Gup's library (did you mean `{k}`?)"),
+        None => format!(
+            "`{path}` is not a module of Gup's library; its marks are: {}",
+            marks.join(", ")
+        ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// With no close match the message lists every mark module; with one
+    /// it names only that module.
+    #[test]
+    fn unknown_module_message_lists_marks_only_without_a_close_match() {
+        let all = with_library(|lib| {
+            Ok(lib
+                .modules()
+                .iter()
+                .filter(|m| m.import_path.starts_with("gup::marks::"))
+                .map(|m| m.import_path.clone())
+                .collect::<Vec<_>>())
+        })
+        .unwrap();
+        assert!(!all.is_empty());
+        let far = unknown_module_message("gup::marks::completely_unrelated", &all);
+        for m in &all {
+            assert!(far.contains(m.as_str()), "{far}");
+        }
+        let near = unknown_module_message("gup::marks::circel", &all);
+        assert!(
+            near.contains("did you mean `gup::marks::circle`?"),
+            "{near}"
+        );
+        assert!(!near.contains("its marks are"), "{near}");
+    }
 }

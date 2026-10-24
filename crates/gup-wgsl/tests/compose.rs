@@ -350,3 +350,33 @@ fn the_library_composes() {
     let lib = Library::new(&sources).unwrap_or_else(|e| panic!("{e}"));
     assert_eq!(lib.modules().len(), sources.len());
 }
+
+/// An import with no close match lists every library module; one with a
+/// close match names only that module (GUP-500).
+#[test]
+fn unknown_import_lists_the_library_only_without_a_close_match() {
+    let mut lib = library();
+    let user = |import: &str| {
+        source(
+            "src/lib.rs",
+            &format!("#import {import} as n\nfn f() -> f32 {{\n    return n::x();\n}}\n"),
+        )
+    };
+    let far = lib
+        .add_module(&user("a::very::different::name"), "my::f")
+        .unwrap_err()
+        .report;
+    assert!(far.contains("the library has:"), "{far}");
+    for m in lib.modules() {
+        assert!(far.contains(m.import_path.as_str()), "{far}");
+    }
+    let near = lib
+        .add_module(&user("gup::scale::liner"), "my::f")
+        .unwrap_err()
+        .report;
+    assert!(
+        near.contains("(did you mean `gup::scale::linear`?)"),
+        "{near}"
+    );
+    assert!(!near.contains("the library has"), "{near}");
+}
