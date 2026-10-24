@@ -17,8 +17,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N0 Hygiene) **Status**: 🚧 In Progress
-**Created**: 2026-10-24
+**Initiative**: Strategic Review 2026-11 (N0 Hygiene) **Status**: ✅ Complete
+(2026-10-24) **Created**: 2026-10-24
 
 ## Context
 
@@ -59,7 +59,7 @@ November review's N0–N6.
 
 ### AC1: deleted
 
-- [ ] `git rm`: `docs/GRID_SYSTEM.md`, `docs/CUSTOM_MARK_GUIDE.md`,
+- [x] `git rm`: `docs/GRID_SYSTEM.md`, `docs/CUSTOM_MARK_GUIDE.md`,
       `docs/TYPE_CONSTRUCTION_GUIDE.md`, `docs/mark-system/` (4 files),
       `docs/CI_BENCHMARK_INTEGRATION.md`, `docs/CI_PERFORMANCE_ALERTS.md`,
       `docs/CROSS_PLATFORM_AXIS_PERFORMANCE.md`, `docs/EVENT_FORWARDING.md`,
@@ -71,41 +71,41 @@ November review's N0–N6.
 
 ### AC2: moved
 
-- [ ] `git mv` into `docs/archive/accessibility/` (flat):
+- [x] `git mv` into `docs/archive/accessibility/` (flat):
       `docs/ACCESSIBILITY_COMPATIBILITY.md`,
       `docs/ACCESSIBILITY_KNOWN_ISSUES.md`, `docs/FOCUS_ELEMENTS_GUIDE.md`,
       `docs/MACOS_VOICEOVER_GUIDE.md`, `docs/WINDOWS_UIAUTOMATION_GUIDE.md`,
       `docs/SCREEN_READER_TESTING.md`, `docs/SCREEN_READER_TESTING_README.md`,
       `docs/SCREEN_READER_CHECKLIST.md` and the four files of
       `docs/accessibility/`.
-- [ ] `git mv` into `docs/archive/research/`: the three files of
+- [x] `git mv` into `docs/archive/research/`: the three files of
       `docs/research/`, `docs/existing-solutions-analysis.md`,
       `docs/graphics-programming.md`.
-- [ ] `git mv docs/LOD_SYSTEM.md crates/gup-culling-lod/LOD_SYSTEM.md` (it
+- [x] `git mv docs/LOD_SYSTEM.md crates/gup-culling-lod/LOD_SYSTEM.md` (it
       describes that parked crate), and `crates/gup-culling-lod/README.md`'s
       "See also `docs/LOD_SYSTEM.md`" becomes a link to `LOD_SYSTEM.md`.
-- [ ] `docs/archive/README.md` exists with the text in Decisions.
-- [ ] `git diff --stat -M main` shows the moves as renames (similarity ≥ 90%),
+- [x] `docs/archive/README.md` exists with the text in Decisions.
+- [x] `git diff --stat -M main` shows the moves as renames (similarity ≥ 90%),
       not as delete plus add. Archived files' contents are not edited.
 
 ### AC3: rewritten
 
-- [ ] `docs/PERFORMANCE_GUIDE.md` is replaced by the pointer text in Decisions.
-- [ ] `docs/IMPLEMENTATION_STRATEGY.md`'s `## What is next` section is replaced
+- [x] `docs/PERFORMANCE_GUIDE.md` is replaced by the pointer text in Decisions.
+- [x] `docs/IMPLEMENTATION_STRATEGY.md`'s `## What is next` section is replaced
       by the text in Decisions; `cargo test --doc -p gup` passes (the file is a
       doctest).
-- [ ] `README.md` "Development Status" is the text in Decisions.
-- [ ] `examples/README.md`: "return with the T5 stories" becomes "return in
+- [x] `README.md` "Development Status" is the text in Decisions.
+- [x] `examples/README.md`: "return with the T5 stories" becomes "return in
       track N2 (strategic review 2026-11)".
-- [ ] `CONVENTIONS.md` "Documentation Structure": the `graphics-programming.md`
+- [x] `CONVENTIONS.md` "Documentation Structure": the `graphics-programming.md`
       and `docs/patterns/` items are replaced by one item:
       `**[.github/agents/story-worker.md](.github/agents/story-worker.md)** - Rust design patterns and recurring GPU/WGSL learnings`.
-- [ ] Every `docs/tutorials/*.md` file (01–06 and `README.md`) has the banner in
+- [x] Every `docs/tutorials/*.md` file (01–06 and `README.md`) has the banner in
       Decisions as the first paragraph after its H1, replacing any existing "Out
       of date until T6" paragraph: `grep -L 'track N1' docs/tutorials/*.md`
       prints nothing and `grep -l 'until T6' docs/tutorials/*.md` prints
       nothing.
-- [ ] Tutorial links to deleted documents are removed: each list item that links
+- [x] Tutorial links to deleted documents are removed: each list item that links
       to `GRID_SYSTEM.md`, `CUSTOM_MARK_GUIDE.md` or `mark-system/` is deleted
       (`docs/tutorials/README.md` lines 66–69, `01_getting_started.md` line 237,
       `02_data_binding.md` line 253, `06_custom_marks.md` lines 366–369), and
@@ -115,11 +115,11 @@ November review's N0–N6.
       No other tutorial text changes: the tutorials' links to deleted examples
       (12 today, e.g. `../../examples/zoom_pan.rs`) are left for N1's rewrite,
       which is why tutorials 01–06 are not in the AC4 link check.
-- [ ] `docs/README.md` and `docs/INDEX.md` follow the outlines in Decisions.
+- [x] `docs/README.md` and `docs/INDEX.md` follow the outlines in Decisions.
 
 ### AC4: links and listings are true
 
-- [ ] This prints nothing:
+- [x] This prints nothing:
 
       ```bash
       for f in README.md CONVENTIONS.md docs/README.md docs/INDEX.md \
@@ -133,7 +133,7 @@ November review's N0–N6.
       done
       ```
 
-- [ ] Every Markdown file directly in `docs/` is linked from `docs/INDEX.md`:
+- [x] Every Markdown file directly in `docs/` is linked from `docs/INDEX.md`:
 
       ```bash
       for f in docs/*.md; do b=${f#docs/}; [ "$b" = INDEX.md ] && continue
@@ -142,14 +142,14 @@ November review's N0–N6.
 
       prints nothing.
 
-- [ ] This prints nothing (no current doc links to a removed or archived one):
+- [x] This prints nothing (no current doc links to a removed or archived one):
 
       ```bash
       git grep -n -E 'GRID_SYSTEM|CUSTOM_MARK_GUIDE|TYPE_CONSTRUCTION_GUIDE|mark-system/|PATTERN_(BENCHMARK|PERFORMANCE)|SHADER_PERFORMANCE|WASM_PERFORMANCE|VISUAL_REGRESSION_TESTING|text-rendering-architecture|EVENT_FORWARDING|CI_BENCHMARK_INTEGRATION|CI_PERFORMANCE_ALERTS|CROSS_PLATFORM_AXIS|docs/LOD_SYSTEM' \
         -- . ':!docs/planning' ':!docs/archive'
       ```
 
-- [ ] `mask all-check` passes (prettier and mdl on the changed Markdown).
+- [x] `mask all-check` passes (prettier and mdl on the changed Markdown).
 
 ## Decisions
 
@@ -301,15 +301,15 @@ November review's N0–N6.
 
 ## Technical Tasks
 
-- [ ] Start commit within 30 minutes.
-- [ ] `git rm` the AC1 list; `git mv` the AC2 lists; commit (moves alone, so git
+- [x] Start commit within 30 minutes.
+- [x] `git rm` the AC1 list; `git mv` the AC2 lists; commit (moves alone, so git
       records renames).
-- [ ] Write `docs/archive/README.md`, `docs/PERFORMANCE_GUIDE.md`; edit the LOD
+- [x] Write `docs/archive/README.md`, `docs/PERFORMANCE_GUIDE.md`; edit the LOD
       link; checkpoint.
-- [ ] Edit `IMPLEMENTATION_STRATEGY.md`, `README.md`, `examples/README.md`,
+- [x] Edit `IMPLEMENTATION_STRATEGY.md`, `README.md`, `examples/README.md`,
       `CONVENTIONS.md`, the tutorial banners.
-- [ ] Rewrite `docs/README.md` and `docs/INDEX.md`.
-- [ ] Run the AC4 commands, `cargo test --doc -p gup`, `mask all-check`.
+- [x] Rewrite `docs/README.md` and `docs/INDEX.md`.
+- [x] Run the AC4 commands, `cargo test --doc -p gup`, `mask all-check`.
 
 ## Dependencies
 
@@ -333,8 +333,8 @@ November review's N0–N6.
 
 ## Success Metrics
 
-- [ ] About 9,600 lines leave the current docs (`git diff --stat -M main`).
-- [ ] `docs/INDEX.md` lists only files that exist, and every file in `docs/`.
+- [x] About 9,600 lines leave the current docs (`git diff --stat -M main`).
+- [x] `docs/INDEX.md` lists only files that exist, and every file in `docs/`.
 
 ## Risk Assessment
 
@@ -345,13 +345,92 @@ November review's N0–N6.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes of starting, then `scripts/checkpoint.sh`
+- [x] First commit within 30 minutes of starting, then `scripts/checkpoint.sh`
       every 20–30 minutes between commits (story-worker "Checkpoint rule")
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] `cargo test --doc -p gup` passes; `mask all-check` passes
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] `mask wasm-browser`: not needed (docs only); say so in the Implementation
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] `cargo test --doc -p gup` passes; `mask all-check` passes
+- [x] Lint and format clean: `mask all-fix`
+- [x] `mask wasm-browser`: not needed (docs only); say so in the Implementation
       Summary
-- [ ] WASM size: "unchanged: no library code change"
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] WASM size: "unchanged: no library code change"
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- **Deleted** (git rm, 17 files): the grid, custom-mark and type-construction
+  guides, `docs/mark-system/` (4), the CI, benchmark, cross-platform, event
+  forwarding, WASM performance and visual-regression reports, and
+  `text-rendering-architecture.md`.
+- **Moved** (git mv, 18 renames at 100% similarity): 12 accessibility files to
+  `docs/archive/accessibility/`; 5 research files to `docs/archive/research/`;
+  `LOD_SYSTEM.md` to `crates/gup-culling-lod/`.
+- **Written**: `docs/archive/README.md`; `docs/PERFORMANCE_GUIDE.md` is now the
+  pointer; `docs/README.md` and `docs/INDEX.md` rewritten to the outlines.
+- **Edited**: `IMPLEMENTATION_STRATEGY.md` (`## What is next`), `README.md`
+  (Development Status), `examples/README.md` (N2), `CONVENTIONS.md`
+  (Documentation Structure), the six tutorials (banner; links to deleted docs
+  removed), and the LOD README link.
+- **Files changed**: 53 in `git diff --stat -M main`, with 151 insertions and
+  6,404 deletions. The roughly 9,600-line figure in the story counts the moved
+  files as leaving the current docs.
+- **Tests**: `cargo test --doc -p gup` passes (10 library doctests and 1
+  compile-fail). `mask all-check` exits 0 across every section.
+- **Not run**: `mask wasm-browser` (docs only, no library change). WASM size:
+  unchanged, no library code change. No example or golden checks, since no code
+  changed.
+- **AC4 greps**: the three link and listing loops and the deleted-name grep all
+  print nothing.
+
+## Retrospective
+
+**Completed**: 2026-10-24
+
+### Key Technical Learnings
+
+#### Mechanical doc edits: banner placement and MD028
+
+- **Challenge**: The tutorial banner sits directly above the existing
+  `> **Goal**` blockquote, separated by a blank line. `mdl` flags that blank
+  line as MD028.
+- **Solution**: Put a bare `>` on the blank line, so the banner and the Goal
+  blockquote become one blockquote. No words change.
+- **Pattern**: When a new blockquote is inserted above an existing one, check
+  MD028 right away. The Goal text is now visually part of the banner; check this
+  by eye.
+
+#### Line numbers drift after insertions
+
+- **Challenge**: The story gave link-removal line numbers (`06_custom_marks.md`
+  lines 366–369). Inserting the banner first moved them by about 6 lines.
+- **Solution**: Delete each list item by its content, not by line number.
+- **Pattern**: Make content-based edits after any insertion, or use the story's
+  line numbers only before the first insert.
+
+### Architectural Decisions
+
+#### Deleted guides versus archived research
+
+- **Decision**: Delete guides for code that no longer exists (git keeps them).
+  Archive accessibility and research, because later tracks start from them.
+- **Reasoning**: The archive keeps material that later tracks will reuse, but
+  the guides describe APIs that are gone.
+- **Trade-off**: The archive is history, not reference. Its internal links are
+  stale, which is out of scope.
+- **Future**: N1 and N4 start from `docs/archive/`.
+
+### Development Workflow Insights
+
+- The worktree shell refuses some compound commands that combine git with a
+  computed variable or a `cd`. Plain, separate commands and the Edit tool worked
+  reliably.
+- Run the pinned `prettier --write` on new Markdown before committing; the hook
+  refuses otherwise.
+
+### Follow-up Stories
+
+None. Reserved IDs GUP-513 and GUP-514 were not used. Items noticed but left for
+other stories:
+
+- Archived documents still link to deleted files (out of scope here).
+- Tutorials 01–06 link to 12 deleted examples; N1 rewrites them.

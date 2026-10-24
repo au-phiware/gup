@@ -29,7 +29,7 @@ file); GUP-504.
   SVG marks) with two new running doctests, fix `SvgTarget`'s doc line and the
   Cargo description, and bring `CLAUDE.md` to wgpu 27 and the real wasm tasks.
   Deps: GUP-489 ✅, GUP-496 📋 (soft).
-- [GUP-499](GUP-499_Archive_Stale_Docs.md) 🚧 — Delete 18 guides of deleted
+- [GUP-499](GUP-499_Archive_Stale_Docs.md) ✅ — Delete 18 guides of deleted
   code, archive the accessibility and research docs to `docs/archive/`, make
   `PERFORMANCE_GUIDE.md` a pointer to `PERF_BUDGETS.md`, banner the tutorials
   for N1, and move "what is next" to tracks N0–N6. Deps: GUP-497 📋.
