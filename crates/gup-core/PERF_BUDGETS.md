@@ -68,7 +68,7 @@ X) or `info` (printed, never fails).
 | `zoom.validity.bytes`              | 0         | exact     | `zoom_bench`                                        |
 | `zoom.uniforms.bytes_per_frame`    | 136       | exact     | `zoom_bench`                                        |
 | `zoom.uniforms.writes_per_frame`   | 3         | exact     | `zoom_bench`                                        |
-| `zoom.instances.bytes`             | 5,631,168 | exact     | `zoom_bench`, over the 600 measured frames          |
+| `zoom.instances.bytes`             | 6,360,720 | exact     | `zoom_bench`, over the 600 measured frames          |
 | `zoom.instances.writes_per_frame`  | 3         | exact     | `zoom_bench`                                        |
 | `zoom.textures.bytes`              | 0         | exact     | `zoom_bench`                                        |
 | `zoom_culled.draws.median`         | 14        | exact     | `zoom_bench` on 4M sorted rows, 64 chunks (GUP-457) |
@@ -485,3 +485,10 @@ seeded violation (GUP-417 retrospective).
   `gup` is a facade over gup-core) leave the WASM scatter at 334,149 B gz and
   over bare wgpu at 301,789 (98 KB of headroom). Most of the +2,548 since
   GUP-481 is GUP-482's eviction and draw-order runs.
+- **GUP-392 merged (2026-10-24, orchestrator)**: digit grouping ("10,000") adds
+  a comma glyph to every tick label of 10,000 or more. `zoom.instances.bytes`
+  goes from 5,631,168 to 6,360,720 (+13%), measured back to back at the merge's
+  first parent and at the merge; nothing else changed (3 writes per frame, 4
+  draws). `tests/zoom_uploads.rs`'s guide budget goes from 1,400,736 to
+  1,503,048 B over its 300 frames. The WASM scatter reads 334,221 B gz (+72),
+  under the +2% tolerance, so it is not re-recorded.
