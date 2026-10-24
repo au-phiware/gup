@@ -24,7 +24,7 @@ file); GUP-504.
   `gup-android`, the Tauri example, `pkg/`, their two workflows, mask tasks and
   docs, keeping the hook's foreign-crate case tested with an on-the-fly fixture.
   Deps: GUP-496 📋 (soft).
-- [GUP-498](GUP-498_Current_Gup_Core_Crate_Docs.md) 🚧 — Rewrite `gup-core`'s
+- [GUP-498](GUP-498_Current_Gup_Core_Crate_Docs.md) ✅ — Rewrite `gup-core`'s
   crate docs to the crate as it is (four marks, layers, legends, `gup` facade,
   SVG marks) with two new running doctests, fix `SvgTarget`'s doc line and the
   Cargo description, and bring `CLAUDE.md` to wgpu 27 and the real wasm tasks.
