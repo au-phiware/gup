@@ -10,8 +10,8 @@ touches: [dogfood/, crates/gup-visual-regression/]
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N0 Hygiene) **Status**: 🚧 In Progress
-**Created**: 2026-10-04 **Revised**: 2026-10-24
+**Initiative**: Strategic Review 2026-11 (N0 Hygiene) **Status**: ✅ Complete
+(2026-10-24) **Created**: 2026-10-04 **Revised**: 2026-10-24
 
 ## Context
 
@@ -66,13 +66,13 @@ dogfood, as an external user, does not get from the public API.
 
 ### AC1: A public `measure` module
 
-- [ ] `crates/gup-visual-regression/src/measure.rs` exists, declared
+- [x] `crates/gup-visual-regression/src/measure.rs` exists, declared
       `pub mod measure;` in `lib.rs` (nothing from it is re-exported at the
       crate root). It has a copyright header and a module doc saying it holds
       counting functions over fractional regions, ported from dogfood (GUP-394,
       GUP-397), and how its "ink" (luma contrast, dark text) differs from
       `checks`' (ΔE from the background, any ink).
-- [ ] It provides every public item of `dogfood/src/pixels.rs` with the same
+- [x] It provides every public item of `dogfood/src/pixels.rs` with the same
       name, parameters and return type, except that images are
       `&gup_visual_regression::RgbaImage`: `Region` (with `ALL`, `new`),
       `background`, `non_background_fraction`, `count_near`, `blob_centroids`,
@@ -80,40 +80,40 @@ dogfood, as an external user, does not get from the public API.
       `count_runs`, `count_saturated`, `hue_of`. Private helpers (`rgb`,
       `max_channel_diff`, `mode`, `segment_distance`, `luma`, `hue_sat`,
       `hue_distance`, `Region::bounds`, `Region::pixels`) stay private.
-- [ ] Each function's body computes the same thing as before, line for line,
+- [x] Each function's body computes the same thing as before, line for line,
       with `img.pixel(x, y)` (an `Rgba8`) in place of `img.get_pixel(x, y).0`.
       No constant, threshold, rounding or iteration order changes.
-- [ ] `pixels.rs`'s 11 unit tests move into `measure.rs` on the harness's
+- [x] `pixels.rs`'s 11 unit tests move into `measure.rs` on the harness's
       `RgbaImage` (`RgbaImage::filled`, `set_pixel`, `fill_rect`) and pass:
       `scripts/with_cargo_env.sh cargo test -p gup-visual-regression`.
-- [ ] Every public item has a doc comment (copied from `pixels.rs`), and
+- [x] Every public item has a doc comment (copied from `pixels.rs`), and
       `measure` has one runnable doctest (for example `count_near` on a filled
       image).
 
 ### AC2: Dogfood uses it, and only it
 
-- [ ] `dogfood/Cargo.toml` adds
+- [x] `dogfood/Cargo.toml` adds
       `gup-visual-regression = { path = "../crates/gup-visual-regression" }` and
       drops `image`; `dogfood/Cargo.lock` is updated
       (`cargo update -p     gup-visual-regression --manifest-path dogfood/Cargo.toml`
       or a build).
-- [ ] `dogfood/src/pixels.rs` is deleted; `lib.rs` drops `pub mod pixels;` and
+- [x] `dogfood/src/pixels.rs` is deleted; `lib.rs` drops `pub mod pixels;` and
       its doc names `gup_visual_regression::measure` instead.
-- [ ] `suite.rs` imports `gup_visual_regression::measure::{self, Region}` and
+- [x] `suite.rs` imports `gup_visual_regression::measure::{self, Region}` and
       `gup_visual_regression::RgbaImage`; `evaluate_file` loads PNGs with
       `RgbaImage::load_png`, and `evaluate` takes `&RgbaImage`.
-- [ ] `save_screenshot` writes with
+- [x] `save_screenshot` writes with
       `RgbaImage::new(w, h, bytes).and_then(|i| i.save_png(path)).unwrap()` (it
       panics on error today too).
-- [ ] `measures_work_on_a_synthetic_image` builds its image with
+- [x] `measures_work_on_a_synthetic_image` builds its image with
       `RgbaImage::filled` and `fill_rect`, and passes.
-- [ ] `git grep -n "image::" dogfood/src` prints nothing, and
+- [x] `git grep -n "image::" dogfood/src` prints nothing, and
       `git grep -n "pixels" dogfood/README.md` points at the new module (update
       the sentence at line 59).
 
 ### AC3: Proof that no measurement changed
 
-- [ ] Before deleting `pixels.rs`: run `mask dogfood` on the unchanged suite and
+- [x] Before deleting `pixels.rs`: run `mask dogfood` on the unchanged suite and
       save its stdout as `/tmp/gup397-before.txt`. Then, with both modules
       present, add a temporary dogfood test, `measure_matches_pixels`, that
       loads every `*.png` in `/tmp/gup-dogfood/` twice (`image::open` for
@@ -122,7 +122,7 @@ dogfood, as an external user, does not get from the public API.
       `Region` in the manifest's checks on that file, and `Region::ALL`). Run
       it, record the number of files and comparisons in the retrospective, then
       delete the test along with `pixels.rs`.
-- [ ] After the port: `mask dogfood` again, stdout saved as
+- [x] After the port: `mask dogfood` again, stdout saved as
       `/tmp/gup397-after.txt`; `diff` of the two, ignoring timing lines, shows
       no change to any check's status or `[detail]`. Paste the summary line
       (`dogfood: OK`, counts) in the retrospective.
@@ -167,12 +167,12 @@ dogfood, as an external user, does not get from the public API.
 
 ## Technical Tasks
 
-- [ ] Run `mask dogfood`; save `/tmp/gup397-before.txt`.
-- [ ] Write `measure.rs`; move and convert the unit tests; add the doctest.
-- [ ] Add the dependency; write and run `measure_matches_pixels`.
-- [ ] Switch `suite.rs` and `lib.rs`; delete `pixels.rs` and the temporary test;
+- [x] Run `mask dogfood`; save `/tmp/gup397-before.txt`.
+- [x] Write `measure.rs`; move and convert the unit tests; add the doctest.
+- [x] Add the dependency; write and run `measure_matches_pixels`.
+- [x] Switch `suite.rs` and `lib.rs`; delete `pixels.rs` and the temporary test;
       drop `image`; update `README.md`.
-- [ ] Run `mask dogfood`; diff with the before-run.
+- [x] Run `mask dogfood`; diff with the before-run.
 
 ## Dependencies
 
@@ -196,8 +196,8 @@ dogfood, as an external user, does not get from the public API.
 
 ## Success Metrics
 
-- [ ] `dogfood/src/pixels.rs` is gone, and dogfood has no `image` dependency.
-- [ ] Every dogfood check reports the same status and detail as before.
+- [x] `dogfood/src/pixels.rs` is gone, and dogfood has no `image` dependency.
+- [x] Every dogfood check reports the same status and detail as before.
 
 ## Risk Assessment
 
@@ -210,15 +210,83 @@ dogfood, as an external user, does not get from the public API.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix` (it lints and formats `dogfood/`)
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye: not applicable (no rendering change; AC3
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix` (it lints and formats `dogfood/`)
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye: not applicable (no rendering change; AC3
       proves identical measurements)
-- [ ] `mask wasm-browser`: not needed (no layout, input or wasm code changes)
-- [ ] WASM size: unchanged: no library code change
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] `mask wasm-browser`: not needed (no layout, input or wasm code changes)
+- [x] WASM size: unchanged: no library code change
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `crates/gup-visual-regression/src/measure.rs` (new, `pub mod measure`): a
+  verbatim port of `dogfood/src/pixels.rs` onto the harness's `RgbaImage`, with
+  the 11 unit tests moved and one doctest.
+- Dogfood depends on the crate by path, drops `image`, deletes `pixels.rs`;
+  `suite.rs`, `lib.rs` (`save_screenshot`) and `README.md` updated. Manifest
+  unchanged.
+- Tests: `gup-visual-regression` 50 unit + 2 doctests pass; dogfood lib tests
+  pass; `mask merge-check --dogfood` PASS (table below).
+
+```text
+step          result  seconds
+story-ids     PASS          0
+gup-core      PASS        348
+wasm-size     PASS         78
+wasm-browser  PASS         20
+dogfood       PASS         21
+```
+
+## Retrospective
+
+**Completed**: 2026-10-24
+
+### Key Technical Learnings
+
+#### Equivalence proof
+
+- **Challenge**: prove a port changed no measurement without the old and new
+  `Region` types being interchangeable.
+- **Solution**: a temporary dogfood test kept a copy of the old `evaluate` (with
+  a `Region` converter), decoded each PNG with both `image::open` and
+  `RgbaImage::load_png`, asserted equal pixels, equal results for ten direct
+  function pairs over `Region::ALL`, and equal `Measured` (status and detail
+  string) for every manifest check on the file. Result: 15 PNGs, 213
+  comparisons, all equal. The test and `pixels.rs` were then deleted.
+- **Pattern**: compare at the `Measured` level, not only the function level; it
+  covers the manifest's own regions and thresholds.
+
+#### Before/after `mask dogfood`
+
+- Summary after:
+  `Tasks: 10 pass, 0 pass with tracked gaps (XFAIL), 0 FAIL, 0 XPASS, 0 skipped`
+  / `dogfood: OK`. Every status is identical to the before-run. Two `[detail]`
+  counts differ, both in `t5_live.png` (appended line points 144 -> 540 px,
+  scatter 101265 -> 101771 px): that task appends points on a 100 ms timer, so
+  each run renders a different frame. The old and new evaluators agreed on the
+  same fixed file in the equivalence test, so the difference is the renders, not
+  the measurements.
+
+### Architectural Decisions
+
+#### Port verbatim
+
+- **Decision**: no ΔE thresholds, no `checks` rebuild, no `LayoutMetadata`
+  regions (owner confirmed).
+- **Trade-off**: two "ink" definitions coexist; documented in `measure`'s module
+  doc.
+
+### Development Workflow Insights
+
+- The worktree sandbox refuses compound commands that mention `git` inside pipes
+  or subshells; split them.
+
+### Follow-up Stories
+
+None.
