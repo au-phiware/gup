@@ -79,7 +79,7 @@ may run together; GUP-397 touches only `dogfood/` and the harness crate. Run
   dogfood's `pixels.rs` verbatim into `gup_visual_regression::measure`, drop
   dogfood's `image` dependency, and prove every check's status and detail
   unchanged on real outputs. Deps: GUP-394 ✅, GUP-388 ✅, GUP-501 ✅.
-- [GUP-523](GUP-523_Attr_Path_Column_Value_Message.md) 🚧 — Make `f64` the one
+- [GUP-523](GUP-523_Attr_Path_Column_Value_Message.md) ✅ — Make `f64` the one
   recommended `ColumnValue` impl, so a string accessor passed to `attr` gets
   "implemented for `f64`" in both errors instead of an `IntoEncoding` hint, and
   restore the `attr` form of `borrowing_accessor` with a seeded-stable snapshot.

@@ -16,8 +16,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N0 Hygiene) **Status**: 🚧 In Progress
-**Created**: 2026-10-24
+**Initiative**: Strategic Review 2026-11 (N0 Hygiene) **Status**: ✅ Complete
+(2026-10-24) **Created**: 2026-10-24
 
 ## Context
 
@@ -68,9 +68,9 @@ snapshot unchanged as long as its impl carries the attribute.
 
 ### AC1: `f64` is the recommended column value
 
-- [ ] `impl ColumnValue for f64` has no `#[diagnostic::do_not_recommend]`; the
+- [x] `impl ColumnValue for f64` has no `#[diagnostic::do_not_recommend]`; the
       `f32`, `Option<f64>` and `Option<f32>` impls keep theirs.
-- [ ] The comment above `ColumnValue` (lines 648–653 today) says: the library's
+- [x] The comment above `ColumnValue` (lines 648–653 today) says: the library's
       impls carry `#[diagnostic::do_not_recommend]` except `f64`'s, which rustc
       then names in every "not a column value" error, in `encode` and in `attr`;
       a new column type's impl carries the attribute, so the snapshots do not
@@ -78,7 +78,7 @@ snapshot unchanged as long as its impl carries the attribute.
 
 ### AC2: The `attr` path has a snapshot
 
-- [ ] `crates/gup-core/tests/compile_fail/borrowing_accessor.rs` is exactly:
+- [x] `crates/gup-core/tests/compile_fail/borrowing_accessor.rs` is exactly:
 
 ```rust
 // Copyright (C) 2024 Corin Lawson
@@ -107,7 +107,7 @@ fn main() {
 }
 ```
 
-- [ ] After
+- [x] After
       `TRYBUILD=overwrite scripts/with_cargo_env.sh cargo test -p gup-core --test compile_fail channel_mistakes`,
       `borrowing_accessor.stderr` is exactly:
 
@@ -161,12 +161,12 @@ note: required by a bound in `gup_core::Selection::<T, M>::attr`
    |            ^^^^^^^^^^^^^^^^^^^^^ required by this bound in `Selection::<T, M>::attr`
 ```
 
-- [ ] `git diff --stat crates/gup-core/tests/` lists only
+- [x] `git diff --stat crates/gup-core/tests/` lists only
       `borrowing_accessor.rs`, `borrowing_accessor.stderr` and
       `compile_fail.rs`, and
       `git grep -n "implemented for .Encoded"     crates/gup-core/tests` prints
       nothing.
-- [ ] `scripts/with_cargo_env.sh cargo test -p gup-core --test compile_fail`
+- [x] `scripts/with_cargo_env.sh cargo test -p gup-core --test compile_fail`
       passes (all three tests) with `TRYBUILD` unset.
 
 ### AC3: Seeded proof of stability
@@ -175,10 +175,10 @@ Each seed is temporary: add it to `encoding.rs`, run
 `scripts/with_cargo_env.sh cargo test -p gup-core --test compile_fail` without
 `TRYBUILD`, remove it, and record the result in the retrospective.
 
-- [ ] Seed 1: `#[derive(Clone, Copy)] pub struct SeedCol(f64);` with
+- [x] Seed 1: `#[derive(Clone, Copy)] pub struct SeedCol(f64);` with
       `#[diagnostic::do_not_recommend] impl ColumnValue for SeedCol`
       (`type Gpu = f32;`, `to_f64` returns `self.0`). Every snapshot passes.
-- [ ] Seed 2: `pub struct SeedEnc;` and `pub enum SeedMarker {}` with
+- [x] Seed 2: `pub struct SeedEnc;` and `pub enum SeedMarker {}` with
       `impl<T, V: Visual> IntoEncoding<T, V, SeedMarker> for SeedEnc`
       (`into_encoding` is `unimplemented!()`). `borrowing_accessor` passes;
       record whether `bare_number` changed (it may: `compile_fail.rs`'s header
@@ -186,7 +186,7 @@ Each seed is temporary: add it to `encoding.rs`, run
 
 ### AC4: Header updated
 
-- [ ] The "What changes a snapshot" paragraph of `compile_fail.rs`'s header
+- [x] The "What changes a snapshot" paragraph of `compile_fail.rs`'s header
       says: a new `ColumnValue` type changes none if its impl carries
       `#[diagnostic::do_not_recommend]` (only `f64`'s does not, so rustc names
       it), and `borrowing_accessor` covers both the `encode` and the `attr`
@@ -217,11 +217,11 @@ Each seed is temporary: add it to `encoding.rs`, run
 
 ## Technical Tasks
 
-- [ ] Remove the attribute from the `f64` impl; rewrite the comment.
-- [ ] Restore `borrowing_accessor.rs`; overwrite the snapshot and compare it
+- [x] Remove the attribute from the `f64` impl; rewrite the comment.
+- [x] Restore `borrowing_accessor.rs`; overwrite the snapshot and compare it
       with AC2.
-- [ ] Run seeds 1 and 2; remove them.
-- [ ] Update `compile_fail.rs`'s header.
+- [x] Run seeds 1 and 2; remove them.
+- [x] Update `compile_fail.rs`'s header.
 
 ## Dependencies
 
@@ -240,9 +240,9 @@ Each seed is temporary: add it to `encoding.rs`, run
 
 ## Success Metrics
 
-- [ ] Neither error for a string accessor passed to `attr` says "`IntoEncoding`
+- [x] Neither error for a string accessor passed to `attr` says "`IntoEncoding`
       … is implemented for".
-- [ ] A new `ColumnValue` type leaves every snapshot unchanged.
+- [x] A new `ColumnValue` type leaves every snapshot unchanged.
 
 ## Risk Assessment
 
@@ -251,14 +251,102 @@ Each seed is temporary: add it to `encoding.rs`, run
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye: not applicable (compile errors only)
-- [ ] `mask wasm-browser`: not needed (no layout, input or wasm code changes)
-- [ ] WASM size: unchanged: a diagnostic attribute only
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye: not applicable (compile errors only)
+- [x] `mask wasm-browser`: not needed (no layout, input or wasm code changes)
+- [x] WASM size: unchanged: a diagnostic attribute only
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `crates/gup-core/src/encoding.rs`: removed `#[diagnostic::do_not_recommend]`
+  from `impl ColumnValue for f64` only; rewrote the comment above `ColumnValue`.
+  No other code change.
+- `crates/gup-core/tests/compile_fail/borrowing_accessor.rs`: restored to the
+  `attr` form (AC2 text, verbatim).
+- `crates/gup-core/tests/compile_fail/borrowing_accessor.stderr`: re-blessed
+  with `TRYBUILD=overwrite`; compared with AC2's text by `diff`: identical (47
+  lines). No other `.stderr` changed.
+- `crates/gup-core/tests/compile_fail.rs`: header's "What changes a snapshot"
+  paragraph updated (AC4).
+
+Test evidence:
+
+- `cargo test -p gup-core --test compile_fail` with `TRYBUILD` unset: 3 passed.
+- `cargo test -p gup-core -- --test-threads=1`: all suites pass (195 lib unit
+  tests; the 3 ignored ones were already ignored before this story).
+- `cargo check --examples`: passes.
+- The stale-hint grep over `crates/gup-core/tests` for "implemented for
+  .Encoded" prints nothing.
+
+Seeds (AC3, temporary, reverted; `encoding.rs` is back to the committed state):
+
+- Seed 1 (`SeedCol` with `do_not_recommend`): every snapshot passes.
+- Seed 2 (`SeedEnc` with a new `IntoEncoding` impl): `borrowing_accessor`
+  passes; `bare_number` changes, as the header predicted. Its "the following
+  other types implement trait `IntoEncoding`" list gains the new impl. This is
+  not an escalation trigger, which covers only `ColumnValue` seeds.
+
+Commits: `c6137e0b` (start), `6b21f67c` (change).
+
+WASM size was not measured: the change removes a diagnostic attribute and adds
+no generated code.
+
+## Retrospective
+
+**Completed**: 2026-10-24
+
+### Key Technical Learnings
+
+#### Hiding one impl changes the second error, not only the first
+
+- **Challenge**: GUP-511 put `do_not_recommend` on all four `ColumnValue` impls.
+  That removed the candidate list from the `encode` error, but the `attr` error
+  then fell back to the root `IntoEncoding` impl and printed a seven-line
+  header.
+- **Solution**: Leave one impl without the attribute. Rustc then names that impl
+  in every "not a column value" error. `f64` is the choice because most
+  accessors return it, and integers convert with `as f64`.
+- **Pattern**: When a diagnostic falls back to a candidate list, the attribute
+  decides which impl gets suggested. Pick the one users should see.
+
+#### The snapshot should use the form users write
+
+- **Challenge**: GUP-511 narrowed the case to `let _ = ...encode(..)`, which has
+  one error, so the `attr` message had no snapshot at all.
+- **Solution**: Return `borrowing_accessor.rs` to the `attr` form. One snapshot
+  now covers both errors.
+- **Pattern**: Snapshot the call form a user writes, not the smallest form that
+  reproduces the bound failure.
+
+### Architectural Decisions
+
+#### One recommended `ColumnValue` impl
+
+- **Decision**: `f64` is the only impl without `do_not_recommend`.
+- **Reasoning**: Rustc needs exactly one impl to name, and `f64` is the type
+  accessors most often return.
+- **Trade-off**: A column type that should be suggested must be the unmarked
+  one.
+- **Future**: A new `ColumnValue` type leaves every snapshot unchanged, as seed
+  1 showed.
+
+### Development Workflow Insights
+
+- Blessing with `TRYBUILD=overwrite` rewrote only the failing case; the other
+  `.stderr` files stayed untouched.
+- Comparing the blessed file with the AC2 block by `diff` (after extracting the
+  block with `awk`) is a quick exact check.
+- Seed 2's full `bare_number` output is in the seed run's log only; the story
+  records the outcome.
+
+### Follow-up Stories
+
+None. The `bare_number` list growing with each `IntoEncoding` impl is already
+the known behaviour in `compile_fail.rs`'s header (GUP-500).
