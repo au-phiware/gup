@@ -4,7 +4,7 @@
 //! Tracked expected failures.
 //!
 //! Known-broken output is recorded in a TOML file instead of being hidden by
-//! loosened thresholds or `#[ignore]`. Every case still runs every check;
+//! loosened thresholds or ignored tests. Every case still runs every check;
 //! the expected-failure list only changes how a failure is *reported*:
 //!
 //! - a failure with a matching entry is an **expected failure** (reported,

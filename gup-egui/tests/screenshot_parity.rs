@@ -4,10 +4,11 @@
 //! Colour parity of the example's egui screenshot with the chart's own
 //! render: egui's shader must not re-encode what Gup wrote.
 //!
-//! Run the example with `GUP_SCREENSHOT_PATH=/tmp/x.png` (under `xvfb-run`),
-//! then `GUP_EGUI_SCREENSHOT=/tmp/x.png cargo test -p gup-egui --test
-//! screenshot_parity`. Without the variable the test has nothing to compare
-//! and passes trivially.
+//! The test is ignored: it needs the example's screenshot. Run
+//! `mask egui-screenshot`, which runs the example headless with
+//! `GUP_SCREENSHOT_PATH` and then this test with `GUP_EGUI_SCREENSHOT` set
+//! (`cargo test -p gup-egui --test screenshot_parity -- --ignored`). Run
+//! without the variable, the test panics rather than pass without comparing.
 
 use gup_core::prelude::*;
 use gup_core::{ChartExt, Context};
@@ -44,11 +45,10 @@ fn at(ticks: &[(f64, f32)], v: f64) -> f32 {
 }
 
 #[test]
+#[ignore = "needs the example's screenshot: run mask egui-screenshot"]
 fn screenshot_marks_match_the_charts_own_render() {
-    let Ok(path) = std::env::var("GUP_EGUI_SCREENSHOT") else {
-        eprintln!("GUP_EGUI_SCREENSHOT not set: nothing to compare");
-        return;
-    };
+    let path = std::env::var("GUP_EGUI_SCREENSHOT")
+        .expect("GUP_EGUI_SCREENSHOT is not set: run mask egui-screenshot");
     let shot = image::open(path).unwrap().to_rgba8();
     let cx = Context::new_blocking().unwrap();
     let (reference, layout) = chart().render_resolved(&cx, 420, 320).unwrap();

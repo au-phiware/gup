@@ -125,6 +125,31 @@ harness's `Cargo.lock` version. See `scripts/wasm_browser.sh` and
 ./scripts/wasm_browser.sh
 ```
 
+## env-doctor
+
+Report the headless environment `scripts/headless_env.sh` resolves (lavapipe
+ICD, `xvfb-run`, backend, screen); exits 1 if the ICD or `xvfb-run` is missing
+
+```bash
+./scripts/headless_env.sh --check
+```
+
+## egui-screenshot
+
+Run the `gup-egui` example headless, save its screenshot, and compare it with
+the chart's own render (`screenshot_parity`, ignored by default: it needs the
+screenshot)
+
+```bash
+set -euo pipefail
+shot="${CARGO_TARGET_DIR:-target}/visual-regression/gup_egui/egui_chart.png"
+mkdir -p "$(dirname "$shot")"
+GUP_SCREENSHOT_PATH="$shot" timeout 300 ./scripts/headless_env.sh --run \
+  cargo run -p gup-egui --example egui_chart
+GUP_EGUI_SCREENSHOT="$shot" ./scripts/headless_env.sh --run \
+  cargo test -p gup-egui --test screenshot_parity -- --ignored --test-threads=1
+```
+
 ## subset-inter
 
 Regenerate `gup-text`'s bundled font (GUP-407): subset the full Inter Regular
@@ -176,10 +201,8 @@ smoke=(cargo test --all-features --test examples_smoke -- --include-ignored --te
 # `gup::show` examples capture a frame in a real (Xvfb) window, so they
 # need a display. Windowed runs (GUP_SMOKE_WINDOWED=1) use the real one.
 if [ "${GUP_SMOKE_WINDOWED:-}" != 1 ] && command -v xvfb-run >/dev/null; then
-  unset WAYLAND_DISPLAY
-  # Xvfb has no GPU: use lavapipe, as on CI.
-  export VK_ICD_FILENAMES="${GUP_LAVAPIPE_ICD:-$LIBGL_DRIVERS_PATH/../../share/vulkan/icd.d/lvp_icd.x86_64.json}"
-  export WGPU_BACKEND=vulkan
+  # Xvfb has no GPU: lavapipe, no WAYLAND_DISPLAY, as on CI.
+  eval "$(./scripts/headless_env.sh)"
   xvfb-run -a "${smoke[@]}"
 else
   "${smoke[@]}"
@@ -283,8 +306,10 @@ checkout's artifacts (GUP-427), and `test_checkpoint.sh` that
 `scripts/checkpoint.sh` snapshots, restores and drops work-in-progress in a
 throwaway repository, without hooks or remote refs (GUP-496).
 
-The whitespace check passes only when `git grep` finds nothing (exit 1): a
-`git grep` error must fail it, not pass it.
+The whitespace and `ignore` checks pass only when `git grep` finds nothing (exit
+1): a `git grep` error must fail them, not pass them. The `ignore` check
+(GUP-501) rejects a bare `#[ignore]`: every ignored test says why, as
+`#[ignore = "reason"]` (`crates/gup-culling-lod` is frozen and exempt).
 
 This task checks the tree it runs in: run by hand, your working tree, including
 unstaged edits and untracked files; in CI, the pushed commit. The pre-commit
@@ -294,8 +319,9 @@ the index. CI runs its own full checks on every push regardless.
 
 ```bash
 shopt -qs globstar
-concurrently --group --names '\s,rs,nix,md,gha,gallery,hook' \
+concurrently --group --names '\s,ignore,rs,nix,md,gha,gallery,hook' \
    'git --no-pager grep --untracked --name-only --full-name "[[:space:]]\+$" -- "*.rs"; test $? -eq 1' \
+   'git --no-pager grep -n -E "#\[ignore\]" -- "*.rs" ":!crates/gup-culling-lod"; test $? -eq 1' \
    'cargo fmt --all -- --check && cargo fmt --manifest-path dogfood/Cargo.toml -- --check && cargo clippy --workspace --exclude gup-bevy --all-targets -- -D warnings && cargo clippy --workspace --exclude gup-bevy --all-targets --all-features -- -D warnings && cargo clippy --manifest-path dogfood/Cargo.toml --all-targets -- -D warnings && cargo clippy -p gup-core --lib --no-default-features -- -D warnings && ./scripts/clippy_wasm32.sh' \
    'nixfmt --check flake.nix && statix check flake.nix' \
    'prettier --cache --log-level warn --check "**/*.md" && mdl --git-recurse .' \
@@ -332,9 +358,10 @@ pass a broken one. Running `mask pre-commit` by hand does the same.
 ## dogfood
 
 Build the detached `dogfood/` crate against this checkout and run its
-realistic-usage tasks with pixel checks (see `dogfood/README.md`). Windowed
-tasks need a display: use `xvfb-run -a mask dogfood` when headless, or set
-`DOGFOOD_SKIP_WINDOWED=1`.
+realistic-usage tasks with pixel checks (see `dogfood/README.md`). Headless by
+default (`scripts/headless_env.sh --run`: lavapipe and Xvfb);
+`DOGFOOD_DISPLAY=1` uses the real display, `DOGFOOD_SKIP_WINDOWED=1` skips the
+windowed tasks.
 
 ```bash
 ./dogfood/run_all.sh
@@ -369,8 +396,7 @@ echo "mask ci: all workflows passed locally"
 
 ```bash
 set -euo pipefail
-export VK_ICD_FILENAMES="${GUP_LAVAPIPE_ICD:-$LIBGL_DRIVERS_PATH/../../share/vulkan/icd.d/lvp_icd.x86_64.json}"
-export WGPU_BACKEND=vulkan
+eval "$(./scripts/headless_env.sh)"
 mask all-check
 ```
 
@@ -380,8 +406,7 @@ mask all-check
 
 ```bash
 set -euo pipefail
-export VK_ICD_FILENAMES="${GUP_LAVAPIPE_ICD:-$LIBGL_DRIVERS_PATH/../../share/vulkan/icd.d/lvp_icd.x86_64.json}"
-export WGPU_BACKEND=vulkan
+eval "$(./scripts/headless_env.sh)"
 export CARGO_PROFILE_RELEASE_STRIP=true
 ./scripts/check_gallery_sync.sh
 cargo build --release --examples
@@ -405,8 +430,7 @@ cargo build --target wasm32-unknown-unknown --lib
 
 ```bash
 set -euo pipefail
-export VK_ICD_FILENAMES="${GUP_LAVAPIPE_ICD:-$LIBGL_DRIVERS_PATH/../../share/vulkan/icd.d/lvp_icd.x86_64.json}"
-export WGPU_BACKEND=vulkan
+eval "$(./scripts/headless_env.sh)"
 cargo test -p gup-visual-regression
 cargo test -p gup-text -- --test-threads=1
 cargo test -p gup-core --lib --test scatter_png --test targets \
@@ -430,11 +454,15 @@ the build directory (`CARGO_BUILD_BUILD_DIR`, else `CARGO_TARGET_DIR`) has about
 
 ```bash
 set -euo pipefail
-export VK_ICD_FILENAMES="${GUP_LAVAPIPE_ICD:-$LIBGL_DRIVERS_PATH/../../share/vulkan/icd.d/lvp_icd.x86_64.json}"
-export WGPU_BACKEND=vulkan
+eval "$(./scripts/headless_env.sh)"
 export CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_DEV_STRIP=debuginfo CARGO_INCREMENTAL=0
-unset WAYLAND_DISPLAY
 xvfb-run -a cargo test --workspace --exclude gup-bevy -- --test-threads=1
+# The egui screenshot comparison (GUP-501), as the workflow's next step
+shot="$(mktemp -d)/egui_chart.png"
+GUP_SCREENSHOT_PATH="$shot" timeout 300 ./scripts/headless_env.sh --run \
+  cargo run -p gup-egui --example egui_chart
+GUP_EGUI_SCREENSHOT="$shot" ./scripts/headless_env.sh --run \
+  cargo test -p gup-egui --test screenshot_parity -- --ignored --test-threads=1
 ```
 
 ### ci dogfood
@@ -447,9 +475,8 @@ Xvfb (no window manager), like the workflow.
 
 ```bash
 set -euo pipefail
-export VK_ICD_FILENAMES="${GUP_LAVAPIPE_ICD:-$LIBGL_DRIVERS_PATH/../../share/vulkan/icd.d/lvp_icd.x86_64.json}"
-export WGPU_BACKEND=vulkan
-unset WAYLAND_DISPLAY
+eval "$(./scripts/headless_env.sh)"
+export GUP_HEADLESS=1 # the xvfb-run below is the headless wrapper
 (cd dogfood && cargo fmt -- --check && cargo test --release --lib --bin dogfood_check)
 xvfb-run -a -s "-screen 0 1920x1080x24" ./dogfood/run_all.sh
 ```
