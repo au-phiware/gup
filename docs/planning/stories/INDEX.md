@@ -15,7 +15,7 @@ together. Suggested order: GUP-496 first; then GUP-497 with GUP-498; GUP-500
 with GUP-499 (docs only); GUP-501; GUP-502; GUP-503 alone (it rewrites this
 file); GUP-504.
 
-- [GUP-496](GUP-496_Checkpoint_Script.md) 🚧 — `scripts/checkpoint.sh` snapshots
+- [GUP-496](GUP-496_Checkpoint_Script.md) ✅ — `scripts/checkpoint.sh` snapshots
   the working tree (untracked files included) to `refs/checkpoints/<branch>`
   with no hook and no branch move, with restore, `mask checkpoint` tasks, a
   seeded test, the worker's 20–30 minute rule, and `touches:` plus the standing
