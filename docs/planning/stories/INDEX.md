@@ -43,7 +43,7 @@ file); GUP-504.
   used by `run_all.sh` and the mask tasks, the egui screenshot test run for real
   in CI via `mask egui-screenshot`, and a lint against reasonless `#[ignore]`.
   Deps: GUP-438 ✅, GUP-483 ✅, GUP-496 📋 (soft).
-- [GUP-502](GUP-502_Merge_Check_Task.md) 🚧 — `mask merge-check`: gup-core
+- [GUP-502](GUP-502_Merge_Check_Task.md) ✅ — `mask merge-check`: gup-core
   tests, `wasm-size` and `wasm-browser` (and dogfood with `--dogfood`), each run
   regardless of failures, with one summary table. Deps: GUP-501 📋.
 - [GUP-503](GUP-503_Archive_Story_Index_History.md) 📋 — Move this file's
@@ -54,6 +54,9 @@ file); GUP-504.
   above the legacy baseline (GUP-315) unique across files and both index files,
   run by the hook, `all-check` and `merge-check`, with a seeded test. Deps:
   GUP-503 📋, GUP-502 📋.
+- [GUP-517](GUP-517_Shellcheck_Scripts_Gate.md) 📋 — `mask all-check` runs
+  shellcheck over `scripts/*.sh` and `dogfood/run_all.sh` (only workflow `run:`
+  blocks are linted today). Deps: GUP-502 ✅.
 
 Backlog triage for later tracks (notes only; their stories are not written):
 
