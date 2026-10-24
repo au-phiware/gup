@@ -78,7 +78,14 @@ expect 'clippy=[gup-egui] wasm32=[] dogfood=0 actionlint=1' \
   .github/workflows/lint.yml gup-egui/src/lib.rs
 expect 'mode=full' .github/workflows/lint.yml maskfile.md
 expect 'fmt=[gup-egui] clippy=[gup-egui] wasm32=[] ' gup-egui/src/lib.rs
-expect 'mode=full' examples/gup-tauri/src-tauri/src/main.rs
+# A crate outside the workspace inside the root package's directories
+# (none exists today) is checked in full, not scoped to `gup`.
+foreign=$(mktemp -d examples/foreign-crate.XXXXXX)
+trap 'rm -rf "$foreign"' EXIT
+printf '[package]\nname = "foreign"\nversion = "0.0.0"\n' >"$foreign/Cargo.toml"
+expect 'mode=full' "$foreign/src/main.rs"
+rm -rf "$foreign"
+trap - EXIT
 expect 'mode=full' crates/gup-core/src/lib.rs Cargo.lock
 expect 'mode=full' README.md some/new/file.rs
 

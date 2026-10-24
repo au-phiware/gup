@@ -96,7 +96,7 @@ RFC-001 (the core architecture) is implemented: steps S0 to S14, with `gup` a
 facade over `gup-core`. Next, from the
 [strategic review](./docs/planning/STRATEGIC_REVIEW_2026-10.md): T5, more
 builders on `gup`; T6, a flagship gallery and docs-as-tests; T7, the crate
-split, level of detail and the mobile integrations. See
+split, level of detail. See
 [`IMPLEMENTATION_STRATEGY.md`](./docs/IMPLEMENTATION_STRATEGY.md).
 
 ## Documentation
@@ -149,29 +149,6 @@ workspace members are built with `-p`:
 rewritten. It is parked: out of the workspace and CI, until the LOD work in
 strategic review T7 ports what it needs. See its
 [README](crates/gup-culling-lod/README.md).
-
-### Parked integration crates
-
-These crates are excluded from the workspace (`[workspace] exclude`), so
-`cargo build --workspace`, `cargo test --workspace` and CI skip them:
-
-| Crate                          | Re-wired at                     |
-| ------------------------------ | ------------------------------- |
-| `gup-ios`                      | Strategic review T7 (after S13) |
-| `gup-android`                  | Strategic review T7 (after S13) |
-| `examples/gup-tauri/src-tauri` | Strategic review T7 (after S13) |
-
-They are parked, not deleted
-([strategic review](docs/planning/STRATEGIC_REVIEW_2026-10.md#decisions),
-Decision 3). The iOS and Android workflows run only on manual dispatch.
-
-To work on one of them, build it from its own manifest. It gets its own
-lockfile; sharing the root target directory avoids rebuilding everything:
-
-```bash
-CARGO_TARGET_DIR=target cargo check --manifest-path gup-ios/Cargo.toml
-CARGO_TARGET_DIR=target cargo check --manifest-path gup-android/Cargo.toml
-```
 
 `cargo test -p gup-egui` tests the egui integration. `gup-bevy` is built by the
 `integrations` CI job, not by `mask all-check`:

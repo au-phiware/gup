@@ -350,7 +350,7 @@ backend, off a hardware GL adapter). Each subcommand mirrors one file in
 `.github/workflows/`; change both together. Run this before pushing: the hook
 (`mask pre-commit`) is scoped to the change and does not render. Expect 30-60
 minutes from cold; `mask ci <workflow>` runs one. Not covered: the Gallery
-deploy and the manual-dispatch mobile workflows.
+deploy.
 
 ```bash
 set -euo pipefail
@@ -623,30 +623,4 @@ Show dependency tree
 
 ```bash
 cargo tree
-```
-
-## tauri-example
-
-Build the Gup WASM package and launch the Tauri example application
-
-```bash
-echo "Building Gup WASM package..."
-wasm-pack build --target web --out-dir examples/gup-tauri/ui/pkg
-
-echo "Installing npm dependencies..."
-(cd examples/gup-tauri && npm install)
-
-echo "Launching Tauri dev server..."
-(cd examples/gup-tauri && cargo tauri dev)
-```
-
-## ios-build
-
-Build the gup-ios static library for the iOS Simulator (requires macOS with
-Xcode).
-
-```bash
-echo "Building gup-ios for aarch64-apple-ios-sim..."
-CARGO_TARGET_DIR=target cargo build --manifest-path gup-ios/Cargo.toml --target aarch64-apple-ios-sim --release
-echo "Library at target/aarch64-apple-ios-sim/release/libgup_ios.a"
 ```

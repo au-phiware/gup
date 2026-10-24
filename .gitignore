@@ -24,11 +24,5 @@ docs/gallery/thumbs/*.png
 /gup-egui/target
 /gup-bevy/Cargo.lock
 /gup-bevy/target
-/gup-ios/Cargo.lock
-/gup-ios/target
-/gup-android/Cargo.lock
-/gup-android/target
-/examples/gup-tauri/src-tauri/Cargo.lock
-/examples/gup-tauri/src-tauri/target
 /crates/gup-core/tests/reexport/target
 /crates/gup-core/tests/reexport/Cargo.lock

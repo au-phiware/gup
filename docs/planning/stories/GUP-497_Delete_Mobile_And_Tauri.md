@@ -18,8 +18,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N0 Hygiene) **Status**: 🚧 In Progress
-**Created**: 2026-10-24
+**Initiative**: Strategic Review 2026-11 (N0 Hygiene) **Status**: ✅ Complete
+(2026-10-24) **Created**: 2026-10-24
 
 ## Context
 
@@ -58,62 +58,62 @@ pre-commit-hook test case. This story removes all of them with every gate green.
 
 ### AC1: the code and workflows are gone
 
-- [ ] Deleted: `gup-ios/`, `gup-android/`, `examples/gup-tauri/`,
+- [x] Deleted: `gup-ios/`, `gup-android/`, `examples/gup-tauri/`,
       `examples/android/`, `examples/ios_scatter/`, `pkg/` (it holds only the
       Swift and Kotlin packages and a `.gitignore`),
       `docs/TAURI_INTEGRATION.md`, `.github/workflows/ios-ci.yml`,
       `.github/workflows/android-ci.yml`.
-- [ ] Root `Cargo.toml`: `exclude = ["crates/gup-culling-lod"]`, and its comment
+- [x] Root `Cargo.toml`: `exclude = ["crates/gup-culling-lod"]`, and its comment
       names only `gup-culling-lod` (parked, strategic review 2026-10 Decision 3)
       and says the mobile and Tauri crates were deleted in GUP-497.
-- [ ] `.gitignore` loses the six `/gup-ios/…`, `/gup-android/…` and
+- [x] `.gitignore` loses the six `/gup-ios/…`, `/gup-android/…` and
       `/examples/gup-tauri/…` lines.
-- [ ] `maskfile.md` loses `## tauri-example` and `## ios-build`; `## ci`'s "Not
+- [x] `maskfile.md` loses `## tauri-example` and `## ios-build`; `## ci`'s "Not
       covered" sentence names only the Gallery deploy.
-- [ ] `cargo metadata --format-version 1 --no-deps | jq -r '.workspace_members | length'`
+- [x] `cargo metadata --format-version 1 --no-deps | jq -r '.workspace_members | length'`
       prints the same number before and after, and `git diff --stat Cargo.lock`
       is empty.
 
 ### AC2: no references remain
 
-- [ ] This command prints nothing:
+- [x] This command prints nothing:
 
       ```bash
       git grep -n -i -E 'gup-ios|gup-android|gup_ios|gup_android|gup-tauri|ios-shim|android-shim|ios_scatter|examples/android|pkg/(ios|android)|TAURI_INTEGRATION|ios-ci|android-ci' \
         -- . ':!docs/planning' ':!crates/gup-culling-lod'
       ```
 
-- [ ] `README.md`: the "Parked integration crates" section is removed (the
+- [x] `README.md`: the "Parked integration crates" section is removed (the
       `gup-egui`/`gup-bevy` sentence at its end moves up to the preceding
       section); "Development Status" no longer mentions "the mobile
       integrations".
-- [ ] `docs/README.md`: the "Mobile Platforms" section is removed.
-- [ ] `docs/TECHNICAL_APPROACH.md` (around line 404) and
+- [x] `docs/README.md`: the "Mobile Platforms" section is removed.
+- [x] `docs/TECHNICAL_APPROACH.md` (around line 404) and
       `docs/IMPLEMENTATION_STRATEGY.md` (around line 111): the sentence about
       the iOS, Android and Tauri shims says they were deleted (strategic review
       2026-11, Decision 3) and that a mobile or Tauri host would be built on
       `gup-core` on demand (track N6). `cargo test --doc -p gup` passes (both
       files are doctests).
-- [ ] `examples/README.md`: the parked-directories sentence is removed.
-- [ ] `docs/MISSION_AND_GOALS.md` and everything under `docs/planning/` are not
+- [x] `examples/README.md`: the parked-directories sentence is removed.
+- [x] `docs/MISSION_AND_GOALS.md` and everything under `docs/planning/` are not
       edited (vision and history).
 
 ### AC3: the hook's foreign-crate case keeps a test
 
-- [ ] `scripts/test_pre_commit.sh` line 81 (`examples/gup-tauri/...`) is
+- [x] `scripts/test_pre_commit.sh` line 81 (`examples/gup-tauri/...`) is
       replaced by the fixture in Decisions, and the comment in
       `scripts/pre_commit.sh` (around line 306) no longer mentions Tauri.
-- [ ] `./scripts/test_pre_commit.sh` passes, and no other `expect` line in it
+- [x] `./scripts/test_pre_commit.sh` passes, and no other `expect` line in it
       changes.
-- [ ] Seeded proof, recorded in the Implementation Summary: with the
+- [x] Seeded proof, recorded in the Implementation Summary: with the
       `foreign_manifest_dir` branch in a scratch copy of `pre_commit.sh` made to
       always take the `else` path, the new case fails. Not committed.
 
 ### AC4: all gates green
 
-- [ ] `mask all-check` passes (it includes `actionlint` on the remaining
+- [x] `mask all-check` passes (it includes `actionlint` on the remaining
       workflows and `test_pre_commit.sh`).
-- [ ] `cargo test --doc -p gup` passes.
+- [x] `cargo test --doc -p gup` passes.
 
 ## Decisions
 
@@ -166,14 +166,14 @@ pre-commit-hook test case. This story removes all of them with every gate green.
 
 ## Technical Tasks
 
-- [ ] Start commit within 30 minutes.
-- [ ] `git rm -r` the AC1 paths; edit `Cargo.toml`, `.gitignore`, `maskfile.md`;
+- [x] Start commit within 30 minutes.
+- [x] `git rm -r` the AC1 paths; edit `Cargo.toml`, `.gitignore`, `maskfile.md`;
       checkpoint.
-- [ ] Edit `README.md`, `docs/README.md`, `docs/TECHNICAL_APPROACH.md`,
+- [x] Edit `README.md`, `docs/README.md`, `docs/TECHNICAL_APPROACH.md`,
       `docs/IMPLEMENTATION_STRATEGY.md`, `examples/README.md`.
-- [ ] Replace the `test_pre_commit.sh` case; edit the `pre_commit.sh` comment;
+- [x] Replace the `test_pre_commit.sh` case; edit the `pre_commit.sh` comment;
       run the seed by hand.
-- [ ] Run the AC2 grep, `cargo test --doc -p gup`, `mask all-check`.
+- [x] Run the AC2 grep, `cargo test --doc -p gup`, `mask all-check`.
 
 ## Dependencies
 
@@ -197,10 +197,10 @@ pre-commit-hook test case. This story removes all of them with every gate green.
 
 ## Success Metrics
 
-- [ ] 40 tracked files deleted (37 under the crate, example and `pkg/`
+- [x] 40 tracked files deleted (37 under the crate, example and `pkg/`
       directories, plus `docs/TAURI_INTEGRATION.md` and the two workflows).
-- [ ] The AC2 grep prints nothing.
-- [ ] `mask all-check` passes.
+- [x] The AC2 grep prints nothing.
+- [x] `mask all-check` passes.
 
 ## Risk Assessment
 
@@ -213,13 +213,65 @@ pre-commit-hook test case. This story removes all of them with every gate green.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes of starting, then `scripts/checkpoint.sh`
+- [x] First commit within 30 minutes of starting, then `scripts/checkpoint.sh`
       every 20–30 minutes between commits (story-worker "Checkpoint rule")
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] `mask all-check` passes; `cargo test --doc -p gup` passes
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] `mask wasm-browser`: not needed (no layout, input or wasm change); say so
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] `mask all-check` passes; `cargo test --doc -p gup` passes
+- [x] Lint and format clean: `mask all-fix`
+- [x] `mask wasm-browser`: not needed (no layout, input or wasm change); say so
       in the Implementation Summary
-- [ ] WASM size: "unchanged: no library code change"
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] WASM size: "unchanged: no library code change"
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+Deleted 40 tracked files (`gup-ios/`, `gup-android/`, `examples/gup-tauri/`,
+`examples/android/`, `examples/ios_scatter/`, `pkg/`,
+`docs/TAURI_INTEGRATION.md` and the two mobile workflows). Edited `Cargo.toml`
+(`exclude` and comment), the ignore file, `maskfile.md` (two tasks and the "Not
+covered" sentence), `README.md`, `docs/README.md`, `docs/TECHNICAL_APPROACH.md`,
+`docs/IMPLEMENTATION_STRATEGY.md`, `examples/README.md`, the comment in
+`scripts/pre_commit.sh`, and replaced the `test_pre_commit.sh` case with the
+on-the-fly foreign-crate fixture.
+
+- Workspace members: 8 before and after; `Cargo.lock` unchanged.
+- The AC2 grep prints nothing. `cargo test --doc -p gup` and `mask all-check`
+  pass.
+- Seeded proof: with the `foreign_manifest_dir` test in a scratch edit of
+  `pre_commit.sh` replaced by `if false`, the new case failed
+  (`expected 'mode=full'`, got `mode=scoped`); the edit was reverted and not
+  committed.
+- `mask wasm-browser`: not needed (no layout, input or wasm change). WASM size:
+  unchanged, no library code change.
+
+## Retrospective
+
+**Completed**: 2026-10-24
+
+### Key Technical Learnings
+
+#### Hook test fixtures
+
+- **Challenge**: the hook's foreign-crate branch lost its only real example.
+- **Solution**: a temporary crate made under `examples/` with an `EXIT` trap.
+- **Pattern**: test a classifier branch with a synthetic input, and prove it
+  with a seeded break.
+
+### Architectural Decisions
+
+#### Delete rather than park
+
+- **Decision**: remove the mobile and Tauri code.
+- **Reasoning**: it named deleted APIs, so re-wiring would be a rewrite.
+- **Trade-off**: none for users; version control keeps the code.
+- **Future**: N6 builds a host from scratch on `gup-core`.
+
+### Development Workflow Insights
+
+- The worktree sandbox refused some compound commands; keep commands plain and
+  separate.
+
+### Follow-up Stories
+
+None.
