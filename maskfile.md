@@ -367,6 +367,31 @@ windowed tasks.
 ./dogfood/run_all.sh
 ```
 
+## merge-check
+
+> After merging story branches, before pushing: the checks textual merges miss
+
+Run it after every merge of story branches, before pushing. It needs a GPU or
+lavapipe, Chromium and `wasm-bindgen` like its parts, and takes as long as its
+parts (it adds no new checks).
+
+Runs gup-core's tests with all features, `mask wasm-size` and
+`mask wasm-browser` one after another, even when one fails, then prints one
+table with a PASS, FAIL or SKIP per step. `--dogfood` adds the dogfood suite,
+which is off by default. Needs a GPU or lavapipe, Chromium and `wasm-bindgen`
+like its parts, and takes as long as its parts (it adds no new checks). Logs go
+to `$CARGO_TARGET_DIR/merge-check/`. See `scripts/merge_check.sh`.
+
+OPTIONS
+
+- dogfood
+  - flags: --dogfood
+  - desc: Also run the dogfood suite (`./dogfood/run_all.sh`)
+
+```bash
+./scripts/merge_check.sh ${dogfood:+--dogfood}
+```
+
 ## ci
 
 > Run the push-to-main CI workflows locally, on software Vulkan (GUP-403)
