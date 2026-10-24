@@ -240,3 +240,22 @@ labels. Two gaps remain, and this story fixes only those:
 - [ ] WASM size: `mask wasm-size` scatter gz bytes
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
+
+## Blocked (2026-10-24)
+
+**Question**: grouped labels ("10,000", ...) add comma glyphs, so the guide
+instance upload in `crates/gup-core/tests/zoom_uploads.rs` grows from the
+recorded 1,400,736 B to 1,503,048 B over 300 frames (+102,312 B, +7.3%). Two
+tests fail on it. The test says to record the new total there and in
+`PERF_BUDGETS.md`; both are outside this story's `touches:` list.
+
+**Options**: (1) the orchestrator re-records `instance_bytes`
+(`zoom_uploads.rs:51,66`) and `PERF_BUDGETS.md` to 1_503_048 (measured, a direct
+result of AC3); (2) drop grouping (contradicts AC3).
+
+**Recommendation**: option 1.
+
+Done and committed (WIP): palette, marks, grouping, tests, 13 goldens re-blessed
+and read. `mask wasm-browser` fails here with "adapter none (no WebGPU)", an
+environment limit, so the `index.html` colour is untested in a browser. Other
+gup-core tests and dogfood pass.
