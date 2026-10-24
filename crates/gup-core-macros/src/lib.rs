@@ -18,6 +18,8 @@
 //! generate a mark's channels and `Mark` impl and to check its WGSL input
 //! struct against them.
 
+#![warn(missing_docs)]
+
 mod convention;
 mod mark;
 mod root;

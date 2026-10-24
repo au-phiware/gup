@@ -21,6 +21,8 @@
 //! Library modules may use only `#define_import_path` and `#import` (no
 //! `#ifdef`), so flattening them once is exact.
 
+#![warn(missing_docs)]
+
 mod lex;
 
 #[cfg(feature = "compose")]

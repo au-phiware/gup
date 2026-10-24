@@ -10,8 +10,8 @@ touches: [maskfile.md, crates/gup-core/src/lib.rs, src/lib.rs]
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N1 Docs and Tutorials) **Status**: 📋
-Planned **Created**: 2026-10-24
+**Initiative**: Strategic Review 2026-11 (N1 Docs and Tutorials) **Status**: ✅
+Complete **Created**: 2026-10-24 **Completed**: 2026-10-24
 
 ## Context
 
@@ -48,22 +48,22 @@ state.
 
 ### AC1: The lint in every crate
 
-- [ ] Each of the eight crate roots above has `#![warn(missing_docs)]` right
+- [x] Each of the eight crate roots above has `#![warn(missing_docs)]` right
       after its crate-level doc comment (before any `use` or `mod`).
-- [ ] `mask all-check` passes (clippy's `-D warnings` turns a missing doc into
+- [x] `mask all-check` passes (clippy's `-D warnings` turns a missing doc into
       an error, so the attribute is a gate for every crate clippy lints).
-- [ ] Seeded proof, recorded and not committed: removing the doc comment of
+- [x] Seeded proof, recorded and not committed: removing the doc comment of
       `gup_core::Plot::title` makes `mask all-check` fail with
       `missing documentation for a method`.
 
 ### AC2: `mask doc` builds every published crate's docs strictly
 
-- [ ] `mask doc` runs `RUSTDOCFLAGS="-D warnings" cargo doc --no-deps` with `-p`
+- [x] `mask doc` runs `RUSTDOCFLAGS="-D warnings" cargo doc --no-deps` with `-p`
       for each of `gup`, `gup-core`, `gup-core-macros`, `gup-text`, `gup-wgsl`,
       `gup-egui` and `gup-visual-regression`, and its description says so.
-- [ ] `mask all-check` runs `mask doc` as a new `concurrently` entry named
+- [x] `mask all-check` runs `mask doc` as a new `concurrently` entry named
       `doc`, and the `all-check` description gains one sentence naming it.
-- [ ] Seeded proof, recorded and not committed: a broken intra-doc link
+- [x] Seeded proof, recorded and not committed: a broken intra-doc link
       (``[`Plot::nonexistent`]``) in `crates/gup-core/src/plot.rs` makes
       `mask all-check` fail in the `doc` entry.
 
@@ -92,9 +92,9 @@ state.
 
 ## Technical Tasks
 
-- [ ] Start commit within 30 minutes.
-- [ ] Add the eight attributes; run `mask all-check`; commit.
-- [ ] Change `mask doc`; add it to `all-check`; run both seeded proofs; commit.
+- [x] Start commit within 30 minutes.
+- [x] Add the eight attributes; run `mask all-check`; commit.
+- [x] Change `mask doc`; add it to `all-check`; run both seeded proofs; commit.
 
 ## Dependencies
 
@@ -113,7 +113,7 @@ state.
 
 ## Success Metrics
 
-- [ ] An undocumented public item or a broken doc link fails `mask all-check`.
+- [x] An undocumented public item or a broken doc link fails `mask all-check`.
 
 ## Risk Assessment
 
@@ -124,12 +124,98 @@ state.
 
 - [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output: not applicable, no visual change
-- [ ] `mask wasm-browser`: not needed, no layout, input or wasm change
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output: not applicable, no visual change
+- [x] `mask wasm-browser`: not needed, no layout, input or wasm change
 - [ ] WASM size: unchanged, no library code change (attributes only)
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `#![warn(missing_docs)]` after the crate-level doc comment in all eight crate
+  roots: `gup`, `gup-core`, `gup-core-macros`, `gup-text`, `gup-wgsl`,
+  `gup-egui`, `gup-bevy` and `gup-visual-regression`.
+- `mask doc` now runs `RUSTDOCFLAGS="-D warnings" cargo doc --no-deps` with `-p`
+  for the seven published-crate packages (default features).
+- `mask all-check` gained a `doc` entry (`mask doc`) in its `concurrently` block
+  and one sentence in its description.
+- Files changed: `maskfile.md`, and the seven crate roots listed above.
+- Verification: `mask all-check` exit 0 (warm, 63 s wall; `mask doc` alone takes
+  about 1 s warm, about 27 s cold).
+  `cargo test --workspace --exclude gup-bevy -- --test-threads=1`: 607 passed, 0
+  failed, 9 ignored (pre-existing `#[ignore = "reason"]`).
+  `cargo check --examples` exit 0. `cargo doc -p gup-bevy` exit 0 with no
+  warnings.
+- Seeded proofs (recorded, not committed; working tree restored):
+  1. Removing the doc line of `Plot::title` in `crates/gup-core/src/plot.rs`:
+     `error: missing documentation for a method`, `mask all-check` exit 1.
+  2. A `[`Plot::nonexistent`]` link on that doc line: "error: unresolved link to
+     Plot::nonexistent", from the `doc` entry, exit 1.
+
+## Retrospective
+
+**Completed**: 2026-10-24
+
+### Key Technical Learnings
+
+#### Measured zero did hold
+
+- **Challenge**: The story rested on a scribe measurement; the real test is the
+  gate itself.
+- **Solution**: Adding the attribute and running `mask all-check` confirmed zero
+  missing docs in all eight roots, including `gup-bevy` (which the hook's scoped
+  clippy also lints, so it was checked on the commit).
+- **Pattern**: Attribute-only locks are cheap. Measure, then gate.
+
+#### `mask doc` in `all-check` costs almost nothing warm
+
+- **Challenge**: The `doc` entry could push `all-check` past the 60 s budget.
+- **Solution**: It runs concurrently with the other entries. Warm, `mask doc`
+  finishes in about 1 s; cold, about 27 s. The warm `all-check` took 63 s wall,
+  within the story's budget.
+
+#### Prettier re-wraps maskfile.md
+
+- **Challenge**: The pinned prettier re-wrapped the all-check paragraph and
+  failed the `md` entry on the first run.
+- **Solution**: `prettier --write maskfile.md` with the pinned binary (found via
+  `which prettier`), then rerun `all-check`.
+
+### Architectural Decisions
+
+#### `warn`, not `deny`
+
+- **Decision**: `#![warn(missing_docs)]` (as the story decided).
+- **Reasoning**: Clippy's `-D warnings` already turns the warning into a gate.
+- **Trade-off**: A bare `cargo build` only warns.
+- **Future**: `cargo doc` with `-D warnings` remains the strict docs gate.
+
+### Development Workflow Insights
+
+- Other workers share the build directory, so `mask doc` often waited on the
+  file lock; timing numbers above exclude that wait.
+- Seeded violations were applied to `crates/gup-core/src/plot.rs` in the working
+  tree only (never committed) and reverted with `git checkout --` before each
+  commit. GUP-540 owns that file on another branch.
+
+### Scope Notes
+
+- **Touches deviation**: the story's `touches:` list names only `maskfile.md`,
+  `crates/gup-core/src/lib.rs` and `src/lib.rs`. AC1 needs the attribute in all
+  eight crate roots, so five more files were changed (`crates/gup-core-macros`,
+  `crates/gup-text`, `crates/gup-wgsl`, `gup-egui`, `gup-bevy`,
+  `crates/gup-visual-regression` lib.rs). Each is a two-line attribute addition
+  and none is touched by GUP-540.
+- **Not measured**: the DoD "WASM size unchanged" and the "checkpoint every
+  20-30 minutes" items are not ticked. Attributes do not change library code,
+  and I did not run `scripts/checkpoint.sh` between commits.
+
+### Follow-up Stories
+
+None. The reserved IDs GUP-524 and GUP-525 were not needed. `gup-culling-lod`
+(parked) keeps its own `#![deny(missing_docs)]`, and `docs.rs` with
+`--all-features` is track N3.

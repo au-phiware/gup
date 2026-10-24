@@ -287,15 +287,16 @@ The full, unscoped local gate (GUP-398). It never modifies files, and each of
 its checks has been seen to fail on a seeded violation (GUP-398 retrospective).
 Clippy covers every workspace member and target, with default features and with
 all features, under `-D warnings`; it type-checks too, so there is no separate
-`cargo check`. `scripts/clippy_wasm32.sh` then lints the libs of the members
-that build for wasm32 on that target, where `#[cfg(target_arch = "wasm32")]`
-code compiles and wgpu's handles are not `Send`/`Sync` (GUP-412; the script says
-which members and why). The gallery sync check keeps
-`scripts/gallery_config.toml` and `examples/INDEX.md` in step with the Cargo
-examples (the Gallery workflow fails on drift). `actionlint` checks every
-workflow file in `.github/workflows/`, including shellcheck on their `run:`
-scripts: GitHub does not report a workflow it cannot parse, it just never starts
-it (GUP-409). The files are named explicitly because, with no arguments,
+`cargo check`. The `doc` entry runs `mask doc`, which builds every published
+crate's docs under `-D warnings` (GUP-533). `scripts/clippy_wasm32.sh` then
+lints the libs of the members that build for wasm32 on that target, where
+`#[cfg(target_arch = "wasm32")]` code compiles and wgpu's handles are not
+`Send`/`Sync` (GUP-412; the script says which members and why). The gallery sync
+check keeps `scripts/gallery_config.toml` and `examples/INDEX.md` in step with
+the Cargo examples (the Gallery workflow fails on drift). `actionlint` checks
+every workflow file in `.github/workflows/`, including shellcheck on their
+`run:` scripts: GitHub does not report a workflow it cannot parse, it just never
+starts it (GUP-409). The files are named explicitly because, with no arguments,
 actionlint looks for the workflows next to the nearest `.git` above it, which
 from the hook's snapshot is the real checkout. `test_pre_commit.sh` tests the
 pre-commit hook's scoping rules and its staged snapshot,
@@ -327,7 +328,7 @@ the index. CI runs its own full checks on every push regardless.
 
 ```bash
 shopt -qs globstar
-concurrently --group --names '\s,ignore,rs,nix,md,gha,sh,gallery,hook' \
+concurrently --group --names '\s,ignore,rs,nix,md,gha,sh,gallery,hook,doc' \
    'git --no-pager grep --untracked --name-only --full-name "[[:space:]]\+$" -- "*.rs"; test $? -eq 1' \
    'git --no-pager grep -n -E "#\[ignore\]" -- "*.rs" ":!crates/gup-culling-lod"; test $? -eq 1' \
    'cargo fmt --all -- --check && cargo fmt --manifest-path dogfood/Cargo.toml -- --check && cargo clippy --workspace --exclude gup-bevy --all-targets -- -D warnings && cargo clippy --workspace --exclude gup-bevy --all-targets --all-features -- -D warnings && cargo clippy --manifest-path dogfood/Cargo.toml --all-targets -- -D warnings && cargo clippy -p gup-core --lib --no-default-features -- -D warnings && ./scripts/clippy_wasm32.sh' \
@@ -336,7 +337,8 @@ concurrently --group --names '\s,ignore,rs,nix,md,gha,sh,gallery,hook' \
    'actionlint .github/workflows/*.y*ml' \
    'shellcheck scripts/*.sh dogfood/run_all.sh' \
    './scripts/check_gallery_sync.sh && ./scripts/check_story_ids.sh' \
-   './scripts/test_pre_commit.sh && ./scripts/test_shared_build_dir.sh && ./scripts/test_prune_build_dir.sh && ./scripts/test_checkpoint.sh && ./scripts/test_check_story_ids.sh'
+   './scripts/test_pre_commit.sh && ./scripts/test_shared_build_dir.sh && ./scripts/test_prune_build_dir.sh && ./scripts/test_checkpoint.sh && ./scripts/test_check_story_ids.sh' \
+   'mask doc'
 ```
 
 ## pre-commit
@@ -600,10 +602,11 @@ OPTIONS
 
 ## doc
 
-Build API reference and fail on any doc warnings
+Build the API reference of every published crate (default features) and fail on
+any doc warning, including broken intra-doc links
 
 ```bash
-RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features
+RUSTDOCFLAGS="-D warnings" cargo doc --no-deps -p gup -p gup-core -p gup-core-macros -p gup-text -p gup-wgsl -p gup-egui -p gup-visual-regression
 ```
 
 ## watch

@@ -74,6 +74,8 @@
 //! # Ok::<(), gup::Error>(())
 //! ```
 
+#![warn(missing_docs)]
+
 pub use gup_core::*;
 
 /// The architecture documents' snippets, compiled as doctests.
