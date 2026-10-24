@@ -10,16 +10,22 @@ help: the trait `CpuMirror` is not implemented for `Gamma`
  8 | struct Gamma;
    | ^^^^^^^^^^^^
    = note: a function needs a CPU mirror to start a chain (`a.then(b)` fits `b` to the image of the data through `a`), to be `monotonic`, or to place axes and legends: implement `CpuMirror` with `fn eval(&self, x: f64) -> f64` (or `-> Color`), the f64 twin of its WGSL
-   = help: the following other types implement trait `CpuMirror`:
-             Band
-             Categorical
-             Diverging
-             Offset
-             ScaleRef<S>
-             Symlog
-             Then<A, B>
-             Time
-           and $N others
+help: the following other types implement trait `CpuMirror`
+  --> src/scale/mod.rs
+   |
+   | / impl<S> CpuMirror for ScaleRef<S>
+   | | where
+   | |     S: ShaderFn + CpuMirror<Output = <S as ShaderFn>::Out>,
+   | |___________________________________________________________^ `ScaleRef<S>`
+   |
+  ::: src/encoding.rs
+   |
+   | / impl<A, B> CpuMirror for Then<A, B>
+   | | where
+   | |     A: CpuMirror,
+   | |     A::Output: Feeds<B::Input>,
+   | |     B: CpuMirror,
+   | |_________________^ `Then<A, B>`
 note: required by a bound in `then`
   --> src/encoding.rs
    |

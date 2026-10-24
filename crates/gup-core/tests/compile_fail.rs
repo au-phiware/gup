@@ -8,6 +8,16 @@
 //! only the toolchain pinned in `rust-toolchain.toml` (used by the dev
 //! shell and CI). Regenerate them with `TRYBUILD=overwrite` when that pin
 //! moves.
+//!
+//! What changes a snapshot (GUP-500): a toolchain bump changes many; a new
+//! `IntoEncoding` impl changes `bare_number`; a new `ColumnValue` type
+//! changes `borrowing_accessor` (`#[diagnostic::do_not_recommend]` on those
+//! impls swaps its candidate list for an unrelated hint, so they do not
+//! carry it). A new scale or WGSL module changes none: the library's
+//! concrete `CpuMirror` impls carry `#[diagnostic::do_not_recommend]` (add
+//! it to a new one), which keeps them out of rustc's "other types
+//! implement" lists, and the unknown-import and unknown-module errors name
+//! only the closest module.
 
 #[test]
 fn channel_mistakes_do_not_compile() {

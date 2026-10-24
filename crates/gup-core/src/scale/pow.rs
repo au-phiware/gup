@@ -151,6 +151,7 @@ impl ShaderFn for Pow {
     }
 }
 
+#[diagnostic::do_not_recommend]
 impl CpuMirror for Pow {
     fn eval(&self, x: f64) -> f64 {
         let (lo, k) = self.parts();

@@ -481,6 +481,10 @@ impl<S: ShaderFn> EncodeFn for S {
 /// The exact f64 CPU twin of an [`EncodeFn`], used for axes, ticks,
 /// legends, picking and vector output. A chain's mirror evaluates its
 /// links' mirrors in order.
+///
+// The library's concrete impls carry `#[diagnostic::do_not_recommend]`: it
+// keeps them out of rustc's "other types implement trait" list, so adding
+// a public scale does not change compile-fail snapshots (GUP-500).
 #[diagnostic::on_unimplemented(
     message = "`{Self}` has no CPU mirror",
     label = "`{Self}` needs `impl CpuMirror for {Self}`",
@@ -640,6 +644,11 @@ pub enum Resource {
 /// A value an accessor may return for a column. Non-finite values (NaN,
 /// ±∞) are nulls: a null position or size is not drawn, and a null
 /// colour input draws in the null colour (RFC-001 S4b).
+///
+// No `#[diagnostic::do_not_recommend]` on the library's impls (tried in
+// GUP-500): it replaces the second `borrowing_accessor` candidate list with
+// an unrelated `IntoEncoding` hint, so the list stays and that snapshot
+// changes with each new column type.
 #[diagnostic::on_unimplemented(
     message = "`{Self}` is not a column value; `encode` takes accessors returning numbers",
     label = "`encode`'s accessor returns `{Self}`",

@@ -385,6 +385,7 @@ macro_rules! ordinal_scale {
             }
         }
 
+        #[diagnostic::do_not_recommend]
         impl CpuMirror for $scale {
             /// The centre of `code`'s slot; NaN for a null code (whose row
             /// the GPU does not draw).

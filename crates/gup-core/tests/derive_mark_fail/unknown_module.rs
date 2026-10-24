@@ -5,7 +5,7 @@
 use gup_core::prelude::*;
 
 #[derive(Debug, Mark)]
-#[mark(module = "gup::marks::nope", geometry = Quad)]
+#[mark(module = "gup::marks::circel", geometry = Quad)]
 struct Circle {
     x: Px,
     y: Px,

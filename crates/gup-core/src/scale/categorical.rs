@@ -299,6 +299,7 @@ impl ShaderFn for Categorical {
     }
 }
 
+#[diagnostic::do_not_recommend]
 impl CpuMirror for Categorical {
     /// The colour of dictionary code `code`, as the shader picks it:
     /// [`NULL_COLOR`] for NaN, [`NULL_CODE`] or a code outside the domain.

@@ -88,6 +88,7 @@ impl ShaderFn for Time {
     }
 }
 
+#[diagnostic::do_not_recommend]
 impl CpuMirror for Time {
     fn eval(&self, x: f64) -> f64 {
         self.linear.eval(x)

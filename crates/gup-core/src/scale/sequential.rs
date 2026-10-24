@@ -135,6 +135,7 @@ impl ShaderFn for Sequential {
     }
 }
 
+#[diagnostic::do_not_recommend]
 impl CpuMirror for Sequential {
     /// Mirrors the shader: normalise, clamp, then linearly interpolate the
     /// 8-bit LUT between texel centres, as hardware filtering does.
