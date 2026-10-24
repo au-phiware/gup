@@ -127,8 +127,8 @@ GUP-535 in turn (they share `src/lib.rs`); GUP-536 after N2's builders.
   (tooltips, `on_row`, zoom, pan, brush, tested by sending `Input`) and 5
   (appenders, `Window::LastRows`) as doctests; the last banner and stale assets
   removed. Deps: GUP-530 📋.
-- [GUP-533](GUP-533_Documentation_Lint_Gates.md) 🚧 — `#![warn(missing_docs)]`
-  in every crate (all pass today) and `mask doc` with
+- [GUP-533](GUP-533_Documentation_Lint_Gates.md) ✅ Complete —
+  `#![warn(missing_docs)]` in every crate (all pass today) and `mask doc` with
   `RUSTDOCFLAGS="-D warnings"` over seven crates in `mask all-check`.
 - [GUP-534](GUP-534_Honest_README_And_Tested_Quick_Start.md) 📋 — README tagline
   and "Why Gup" cut to `PERF_BUDGETS.md` figures, a "Not yet" list, a
