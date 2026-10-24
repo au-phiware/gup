@@ -131,7 +131,8 @@ fn forty_keys_on_a_short_band_y_keep_apart() {
 }
 
 /// An automatic domain grows to cover the overhang, so the first and last
-/// tick lie within a step of the axis line's ends; a fixed one does not.
+/// tick lie within a step of the axis line's ends; a fixed one does not grow,
+/// so its ticks stay on 0 and 100 and the range is inset instead.
 #[test]
 fn an_automatic_domain_widens_and_a_fixed_one_does_not() {
     let cx = Context::new_blocking().unwrap();
@@ -193,11 +194,11 @@ fn an_automatic_domain_widens_and_a_fixed_one_does_not() {
             (ya - y0).abs() <= ys && (yb - y1).abs() <= ys,
             "fixed {fixed}: y"
         );
-        // Data 0 sits a mark's overhang inside the widened axis, and on the
-        // end of the fixed one's line.
+        // Data 0 sits a mark's overhang inside the widened axis, and the same
+        // overhang inside the fixed one's line (GUP-540).
         let lead = xt[0].1 - x0;
         if fixed {
-            assert!(lead.abs() < 1.0, "fixed: lead {lead}");
+            assert!((lead - 30.0).abs() < 1.0, "fixed: lead {lead}");
         } else {
             assert!(lead >= 30.0, "automatic: lead {lead}");
         }

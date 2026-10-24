@@ -1831,15 +1831,17 @@ impl Plot {
         let mark_overhang = over.into_iter().fold(0.0, f32::max);
         let inset = over.map(|o| o + th.plot_padding.0);
         // A widened axis already holds the inset in its domain, so its
-        // range is the whole plot rect. Any other axis insets only its far
-        // end (right, top), so the axes meet at the corner and a baseline
-        // sits on its axis.
+        // range is the whole plot rect. Any other axis insets its far end
+        // (right, top) by overhang and padding, and its near end (left,
+        // bottom) by the overhang alone, so a circle at the domain's corner
+        // is whole while a baseline, which has no overhang, sits on its axis.
         let set_ranges = |plot: Rect, widened: [bool; 3]| {
             let far = |i: usize| if widened[i] { 0.0 } else { inset[i] };
-            x.set_range(Px(plot.left()), Px(plot.right() - far(0)));
-            y.set_range(Px(plot.bottom()), Px(plot.top() + far(1)));
+            let near = |i: usize| if widened[i] { 0.0 } else { over[i] };
+            x.set_range(Px(plot.left() + near(0)), Px(plot.right() - far(0)));
+            y.set_range(Px(plot.bottom() - near(1)), Px(plot.top() + far(1)));
             if let Some(r) = right {
-                r.set_range(Px(plot.bottom()), Px(plot.top() + far(2)));
+                r.set_range(Px(plot.bottom() - near(2)), Px(plot.top() + far(2)));
             }
         };
         let y_count = ((height / th.y_tick_spacing.0) as usize).max(2);
