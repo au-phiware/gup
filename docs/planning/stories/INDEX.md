@@ -164,7 +164,7 @@ facets.
   `DictionaryKey`, compared by label, with a "not a category key" diagnostic and
   a snapshot of the borrowed-key lifetime error; Plot-layer `encode_key`
   unchanged. Deps: GUP-419 ✅, GUP-464 ✅.
-- [GUP-540](GUP-540_Explicit_Domain_Edge_Inset.md) 📋 — An explicit domain's
+- [GUP-540](GUP-540_Explicit_Domain_Edge_Inset.md) ✅ — An explicit domain's
   near end is inset by the marks' overhang, so a point at `(0, 0)` or the first
   constant-width bar is drawn whole; bars still sit on the axis.
 - [GUP-541](GUP-541_Builder_Tick_Formats.md) 📋 — `x_tick_format`/

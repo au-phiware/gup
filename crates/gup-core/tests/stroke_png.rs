@@ -158,7 +158,8 @@ fn bubbles_with_translucent_fills_and_outlines() {
         .assert_ok();
 
     // GUP-435: the domains are fixed, so the axis lines cover only the
-    // range and the first and last tick sit on their ends.
+    // range and the last tick sits on its end. GUP-540: the first tick sits
+    // the largest radius (60 px) in from the corner, where the axes meet.
     let axes: Vec<&Rule> = resolved
         .scene
         .items
@@ -176,9 +177,10 @@ fn bubbles_with_translucent_fills_and_outlines() {
     let (x_lo, x_hi) = (x_axis.p0.x.min(x_axis.p1.x), x_axis.p0.x.max(x_axis.p1.x));
     let (y_lo, y_hi) = (y_axis.p0.y.min(y_axis.p1.y), y_axis.p0.y.max(y_axis.p1.y));
     let (xs, ys) = (step(xt), step(yt));
-    assert!((xt[0].1 - x_lo).abs() <= xs && (xt[xt.len() - 1].1 - x_hi).abs() <= xs);
+    assert!((xt[0].1 - x_lo - 60.0).abs() <= 1.0 && (xt[xt.len() - 1].1 - x_hi).abs() <= xs);
     let (y_first, y_last) = (yt[0].1, yt[yt.len() - 1].1);
-    assert!((y_first.min(y_last) - y_lo).abs() <= ys && (y_first.max(y_last) - y_hi).abs() <= ys);
+    assert!((y_hi - y_first.max(y_last) - 60.0).abs() <= 1.0);
+    assert!((y_first.min(y_last) - y_lo).abs() <= ys);
 }
 
 /// The `i`-th element of the base-`b` Halton sequence, in `[0, 1)`.
