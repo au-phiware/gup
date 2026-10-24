@@ -26,3 +26,6 @@ docs/gallery/thumbs/*.png
 /gup-bevy/target
 /crates/gup-core/tests/reexport/target
 /crates/gup-core/tests/reexport/Cargo.lock
+
+# wasm-pack output (`mask pack`)
+pkg/
