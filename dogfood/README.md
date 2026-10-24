@@ -56,10 +56,10 @@ Never "fix" a gap by loosening its check. Fix Gup instead, watch the check
 - `src/suite.rs` is the **manifest**. It holds each task's intent, the files it
   must write, the pixel checks on those files, and the known gaps. It contains
   no Gup API calls.
-- `src/pixels.rs` holds Gup-independent measurements on decoded RGBA images
-  (background, coverage, ink, hue, exact colour, grey, horizontal runs). It is
-  deliberately small and should migrate to the shared visual-assertion module
-  (GUP-388) once that lands.
+- The pixel measurements (background, coverage, ink, hue, exact colour, grey,
+  horizontal runs, tooltip panels) live in the shared
+  `gup_visual_regression::measure` module (`crates/gup-visual-regression`,
+  GUP-397); the suite depends on it by path and reads PNGs with its `RgbaImage`.
 - `src/bin/*.rs` are the tasks. `t0` to `t5_stream` are written against `gup`
   (GUP-465, GUP-480, GUP-485). The manifest stays put, so the bar the task has
   to clear does not move. RFC-001 step S10's exit criterion is "dogfood tasks

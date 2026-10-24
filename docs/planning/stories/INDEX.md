@@ -75,7 +75,7 @@ may run together; GUP-397 touches only `dogfood/` and the harness crate. Run
   so yellow (1.32:1 on white) comes seventh, the marks' default blue taken from
   the palette, and linear-family tick and ramp labels grouped (`10,000`) when a
   tick set reaches 10,000. Deps: GUP-388 ✅, GUP-474 ✅.
-- [GUP-397](GUP-397_Dogfood_Checks_On_Shared_Visual_Assertions.md) 📋 — Move
+- [GUP-397](GUP-397_Dogfood_Checks_On_Shared_Visual_Assertions.md) ✅ — Move
   dogfood's `pixels.rs` verbatim into `gup_visual_regression::measure`, drop
   dogfood's `image` dependency, and prove every check's status and detail
   unchanged on real outputs. Deps: GUP-394 ✅, GUP-388 ✅, GUP-501 ✅.

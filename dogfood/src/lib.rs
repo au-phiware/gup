@@ -5,10 +5,9 @@
 //! code a user had to write because gup does not (publicly) provide it.
 //!
 //! The suite itself (task intents, expected outputs, known gaps) lives in
-//! [`suite`] and uses only the gup-independent [`pixels`] measurements, so
+//! [`suite`] and uses only the gup-independent [`gup_visual_regression::measure`] measurements, so
 //! the task binaries can be re-pointed at a new API without touching it.
 
-pub mod pixels;
 pub mod suite;
 
 #[derive(Debug, Clone)]
@@ -50,7 +49,9 @@ pub fn save_screenshot(ctx: &eframe::egui::Context, path: &str) -> bool {
     if let Some(img) = shot {
         let [w, h] = img.size;
         let bytes: Vec<u8> = img.pixels.iter().flat_map(|c| c.to_array()).collect();
-        image::save_buffer(path, &bytes, w as u32, h as u32, image::ColorType::Rgba8).unwrap();
+        gup_visual_regression::RgbaImage::new(w as u32, h as u32, bytes)
+            .and_then(|i| i.save_png(path))
+            .unwrap();
         println!("saved {path} ({w}x{h})");
         return true;
     }

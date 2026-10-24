@@ -19,7 +19,8 @@
 //! (margins, title band, x-axis label band). If a layout change moves the
 //! plot rect, re-derive the regions from a fresh render.
 
-use crate::pixels::{self, Region};
+use gup_visual_regression::RgbaImage;
+use gup_visual_regression::measure::{self, Region};
 
 /// Directory every task writes its fixtures and outputs to.
 pub const OUT_DIR: &str = "/tmp/gup-dogfood";
@@ -167,14 +168,14 @@ impl Measure {
                 Err(e) => fail(e.to_string()),
             };
         }
-        match image::open(path) {
-            Ok(img) => self.evaluate(&img.to_rgba8()),
+        match RgbaImage::load_png(path) {
+            Ok(img) => self.evaluate(&img),
             Err(e) => fail(e.to_string()),
         }
     }
 
     /// Evaluate against a decoded image.
-    pub fn evaluate(&self, img: &image::RgbaImage) -> Measured {
+    pub fn evaluate(&self, img: &RgbaImage) -> Measured {
         let at_least = |n: usize, min: usize, unit: &str| Measured {
             passed: n >= min,
             detail: format!("{n} {unit} (need >= {min})"),
@@ -182,28 +183,28 @@ impl Measure {
         let pct = |f: f32| format!("{:.2}%", f * 100.0);
         match *self {
             Measure::NotBlank { min_fraction } => {
-                let f = pixels::non_background_fraction(img, Region::ALL, 8);
+                let f = measure::non_background_fraction(img, Region::ALL, 8);
                 Measured {
                     passed: f >= min_fraction,
                     detail: format!("{} non-background (need >= {})", pct(f), pct(min_fraction)),
                 }
             }
             Measure::Coverage { region, min, max } => {
-                let f = pixels::non_background_fraction(img, region, 8);
+                let f = measure::non_background_fraction(img, region, 8);
                 Measured {
                     passed: (min..=max).contains(&f),
                     detail: format!("{} covered (need {}..={})", pct(f), pct(min), pct(max)),
                 }
             }
             Measure::Ink { region, min_px } => {
-                at_least(pixels::count_ink(img, region, 90.0), min_px, "ink px")
+                at_least(measure::count_ink(img, region, 90.0), min_px, "ink px")
             }
             Measure::Hue {
                 region,
                 rgb,
                 min_px,
             } => {
-                let n = pixels::count_hue(img, region, pixels::hue_of(rgb), 15.0, 0.15);
+                let n = measure::count_hue(img, region, measure::hue_of(rgb), 15.0, 0.15);
                 at_least(n, min_px, "px of that hue")
             }
             Measure::Colour {
@@ -214,18 +215,18 @@ impl Measure {
             } => {
                 let target = rgb.map(|c| (c * 255.0).round() as u8);
                 at_least(
-                    pixels::count_near(img, region, target, tol),
+                    measure::count_near(img, region, target, tol),
                     min_px,
                     &format!("px within {tol} of {target:?}"),
                 )
             }
             Measure::Grey { region, min_px } => at_least(
-                pixels::count_grey(img, region, 0.08, 120.0),
+                measure::count_grey(img, region, 0.08, 120.0),
                 min_px,
                 "grey px",
             ),
             Measure::NoColour { region, max_px } => {
-                let n = pixels::count_saturated(img, region, 0.25);
+                let n = measure::count_saturated(img, region, 0.25);
                 Measured {
                     passed: n <= max_px,
                     detail: format!("{n} saturated px (allow <= {max_px})"),
@@ -238,14 +239,14 @@ impl Measure {
                 min,
                 max,
             } => {
-                let n = pixels::count_runs(img, y, x0, x1, 3);
+                let n = measure::count_runs(img, y, x0, x1, 3);
                 Measured {
                     passed: (min..=max).contains(&n),
                     detail: format!("{n} runs (need {min}..={max})"),
                 }
             }
             Measure::Tooltip { region, lines } => {
-                let p = pixels::tooltip_panel(img, region);
+                let p = measure::tooltip_panel(img, region);
                 let hex = |c: [u8; 3]| format!("#{:02x}{:02x}{:02x}", c[0], c[1], c[2]);
                 Measured {
                     passed: p.panel_fraction >= 0.95 && p.lines >= lines,
@@ -266,7 +267,7 @@ impl Measure {
                 at,
             } => {
                 let target = rgb.map(|c| (c * 255.0).round() as u8);
-                let found = pixels::blob_centroids(img, region, target, tol);
+                let found = measure::blob_centroids(img, region, target, tol);
                 // Each expected point must have exactly one blob within 1 px.
                 let matched = (0..count)
                     .filter(|&i| {
@@ -1056,6 +1057,7 @@ fn t5_live() -> Task {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use gup_visual_regression::{PxRect, Rgba8};
     use std::collections::HashSet;
     use std::path::Path;
 
@@ -1095,12 +1097,11 @@ mod tests {
 
     #[test]
     fn measures_work_on_a_synthetic_image() {
-        let mut img = image::RgbaImage::from_pixel(100, 100, image::Rgba([255, 255, 255, 255]));
-        for y in 40..60 {
-            for x in 40..60 {
-                img.put_pixel(x, y, image::Rgba([31, 119, 180, 255]));
-            }
-        }
+        let mut img = RgbaImage::filled(100, 100, Rgba8::WHITE);
+        img.fill_rect(
+            PxRect::new(40.0, 40.0, 20.0, 20.0),
+            Rgba8::rgb(31, 119, 180),
+        );
         assert!(
             Measure::NotBlank { min_fraction: 0.03 }
                 .evaluate(&img)
