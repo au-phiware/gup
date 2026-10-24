@@ -119,6 +119,42 @@ GUP-535 in turn (they share `src/lib.rs`); GUP-536 after N2's builders.
   guides compiled as `no_run` doctests of `gup-egui` and `gup-bevy`. Deps:
   GUP-483 ✅, GUP-484 ✅.
 
+## Track N2: Chart Vocabulary
+
+Track N2 from the [November 2026 review](../STRATEGIC_REVIEW_2026-11.md): the
+chart types and text a real user expects, for release 0.1 (owner decision 2).
+Minimal accessibility is track N3, not here (owner decision 4). Most stories
+edit `crates/gup-core/src/lib.rs`, `plot.rs`, `selection.rs` or
+`builder/mod.rs`, so they run one at a time; the story frontmatter's `touches:`
+says which.
+
+- [GUP-540](GUP-540_Explicit_Domain_Edge_Inset.md) 📋 — An explicit domain's
+  near end is inset by the marks' overhang, so a point at `(0, 0)` or the first
+  constant-width bar is drawn whole; bars still sit on the axis.
+- [GUP-541](GUP-541_Builder_Tick_Formats.md) 📋 — `x_tick_format`/
+  `y_tick_format` on `Plot` and every builder, surviving a scale change, and the
+  dogfood `%Y-%m` and `$Nk` formats restored with SVG text checks. Deps: GUP-474
+  ✅.
+- [GUP-542](GUP-542_Text_Layer_For_Annotations.md) 📋 — `Plot::text(rows)`: a
+  CPU-laid-out `TextLayer` at data or band positions with anchors, offsets and
+  `within` spans, clipped, in every target and SVG. Deps: GUP-540 📋, GUP-541 📋
+  (soft, `plot.rs`).
+- [GUP-543](GUP-543_Horizontal_Bars_And_Group_Padding.md) 📋 — `gup::barh`
+  (`BarChart<T, Horizontal>`, categories top to bottom) and
+  `BarChart::group_padding`.
+- [GUP-544](GUP-544_Bar_Value_Labels.md) 📋 — `value_labels()` and
+  `value_labels_with(f)` on every bar variant: above or beside bar ends with
+  headroom, centred and contrast-coloured in stacks, hidden where they do not
+  fit. Deps: GUP-542 📋, GUP-543 📋, GUP-541 📋 (soft).
+- [GUP-545](GUP-545_Area_Mark.md) 📋 — The `Area` mark (`Plot::area`): MSAA
+  trapezoids on the `Polyline` geometry, split where the top crosses the
+  baseline, seam-free when translucent, written to SVG as paths.
+- [GUP-546](GUP-546_Area_Picking.md) 📋 — `HitShape::Area` on the CPU and GPU,
+  so areas get hover, tooltips and brushing. Deps: GUP-545 📋.
+- [GUP-547](GUP-547_Area_Builder_And_Stacked_Areas.md) 📋 — `gup::area` with
+  overlapping series, stacking aligned on the union of x values, `outline` and
+  tooltips. Deps: GUP-545 📋, GUP-546 📋.
+
 ## Open Backlog
 
 Stories still worth doing that no active initiative owns, with the track that
