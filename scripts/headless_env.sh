@@ -25,6 +25,11 @@ candidates+=(
   /run/opengl-driver/share/vulkan/icd.d/lvp_icd.x86_64.json
   /usr/share/vulkan/icd.d/lvp_icd.x86_64.json
 )
+# Newer Mesa packages (Ubuntu's among them) drop the architecture from the
+# file name: lvp_icd.json.
+for c in /usr/share/vulkan/icd.d/lvp_icd*.json /etc/vulkan/icd.d/lvp_icd*.json; do
+  [[ -f $c ]] && candidates+=("$c")
+done
 
 icd=
 for c in "${candidates[@]}"; do
@@ -42,7 +47,8 @@ case ${1:-} in
     exit 2
   }
   if [[ -z $icd ]]; then
-    echo "headless_env: no lavapipe ICD" >&2
+    echo "headless_env: no lavapipe ICD; tried: ${candidates[*]}" >&2
+    ls /usr/share/vulkan/icd.d /etc/vulkan/icd.d >&2 2>/dev/null || true
     exit 1
   fi
   command -v xvfb-run >/dev/null || {
