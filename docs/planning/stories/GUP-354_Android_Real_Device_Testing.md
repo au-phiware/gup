@@ -2,7 +2,8 @@
 
 ## Story Overview
 
-**Initiative**: Mobile **Status**: 📋 Planned **Created**: 2025-07-25
+**Initiative**: Mobile **Status**: 🚫 Closed (2026-10-24): obsolete: the mobile
+and Tauri integrations were deleted (GUP-497) **Created**: 2025-07-25
 
 ## Context
 

@@ -2,8 +2,9 @@
 
 ## Story Overview
 
-**Initiative**: Project Maintenance **Status**: 📋 Planned **Created**:
-2025-07-22 **Revised**: 2026-10-04
+**Initiative**: Project Maintenance **Status**: 🚫 Closed (2026-10-24):
+superseded by GUP-504 (a guard with a frozen legacy baseline; legacy duplicates
+are not renumbered) **Created**: 2025-07-22 **Revised**: 2026-10-04
 
 ## Context
 

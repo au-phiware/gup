@@ -2,7 +2,8 @@
 
 ## Story Overview
 
-**Initiative**: Advanced Scale **Status**: 💡 New **Created**: 2025-07-27
+**Initiative**: Advanced Scale **Status**: 🚫 Closed (2026-10-24): obsolete:
+targets code deleted in GUP-486/488; may seed N5 **Created**: 2025-07-27
 
 ## Context
 

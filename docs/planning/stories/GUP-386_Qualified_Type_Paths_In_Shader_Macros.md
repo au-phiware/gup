@@ -2,8 +2,8 @@
 
 ## Story Overview
 
-**Initiative**: Developer Experience **Status**: 📋 Planned **Created**:
-2026-10-04
+**Initiative**: Developer Experience **Status**: 🚫 Closed (2026-10-24):
+obsolete: targets code deleted in GUP-486/488 **Created**: 2026-10-04
 
 ## Context
 

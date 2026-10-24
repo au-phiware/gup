@@ -2,8 +2,9 @@
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-10 **Status**: 📋 Planned **Created**:
-2026-10-06
+**Initiative**: Strategic Review 2026-10 **Status**: 🚫 Closed (2026-10-24):
+superseded: all 8 remaining `#[ignore]`s carry reasons (2026-10-24); the reason
+lint is GUP-501 **Created**: 2026-10-06
 
 ## Context
 

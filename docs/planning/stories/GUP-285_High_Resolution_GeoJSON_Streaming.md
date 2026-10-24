@@ -2,7 +2,8 @@
 
 ## Story Overview
 
-**Initiative**: Mark System **Status**: 📋 Planned **Created**: 2025-07-17
+**Initiative**: Mark System **Status**: 🚫 Closed (2026-10-24): obsolete:
+targets code deleted in GUP-486/488 **Created**: 2025-07-17
 
 ## Context
 
