@@ -2,14 +2,14 @@
 implementer: haiku
 implementer-reason:
   add one shellcheck invocation to an existing mask task and fix what it finds
-touches: [maskfile.md, scripts/]
+touches: [maskfile.md, flake.nix, scripts/]
 ---
 
 # GUP-517: Shellcheck the Scripts in the Gate
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N0 Hygiene) **Status**: 🚧 In Progress
+**Initiative**: Strategic Review 2026-11 (N0 Hygiene) **Status**: ✅ Complete
 **Created**: 2026-10-24
 
 ## Context
@@ -33,7 +33,7 @@ hook's bash scripts (`pre_commit.sh`, `checkpoint.sh`, `prune_build_dir.sh`,
       `dogfood/run_all.sh`, and fails on any finding.
 - [x] Each finding is fixed, or suppressed with a `# shellcheck disable=` line
       that gives the reason on the same line. No file-wide disables.
-- [ ] The shellcheck version is the one pinned by the flake (run it from the dev
+- [x] The shellcheck version is the one pinned by the flake (run it from the dev
       shell, not from the host).
 
 ### AC2: Proof
@@ -91,40 +91,73 @@ hook's bash scripts (`pre_commit.sh`, `checkpoint.sh`, `prune_build_dir.sh`,
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
 
-## Blocked (2026-10-24)
+## Resolved (2026-10-24)
 
-**Question**: May `flake.nix` gain one line, `shellcheck` in `buildInputs`
-beside `actionlint` (line 104)? AC1's third bullet ("the version pinned by the
-flake, from the dev shell") cannot be met inside `touches:` (`maskfile.md`,
-`scripts/`).
+Orchestrator approved the flake.nix pin: `shellcheck` added to the dev shell
+beside `actionlint` (one line; `touches:` extended to `flake.nix`). The dev
+shell now resolves it to
+`/nix/store/i5kmqg3q40a7n5v0ax06rh22l9qp3xhm-shellcheck-0.11.0-bin/bin/shellcheck`,
+version 0.11.0. `mask all-check` inside `nix develop` exits 0, which covers CI's
+Lint workflow.
 
-**Evidence**:
+## Implementation Summary
 
-- `nix develop -c sh -c 'command -v shellcheck'` prints
-  `/run/current-system/sw/bin/shellcheck`, the host's copy. The dev shell adds
-  no shellcheck of its own; it only has actionlint, whose wrapper uses
-  shellcheck 0.11.0 from the flake-locked nixpkgs, reached by path, not by PATH.
-- Host shellcheck is 0.11.0, so the version matches today. CI would need the
-  flake to supply it, or the Lint job fails with "shellcheck: not found".
+- `maskfile.md`: new `sh` branch in `all-check` running
+  `shellcheck scripts/*.sh dogfood/run_all.sh`, plus a paragraph describing it.
+- `flake.nix`: `shellcheck` in the dev shell.
+- Nine findings fixed in four scripts (see retrospective); two targeted disables
+  with reasons.
+- AC2 proof: a seeded `echo $GUP517_SEED` in `scripts/check_story_ids.sh` made
+  `mask all-check` exit 1 (`sh` branch, SC2086/SC2317). Reverted.
+- Tests: `scripts/test_checkpoint.sh` passes after the quoting change; the other
+  gate tests pass in `mask all-check`.
 
-**Options**:
+## Retrospective
 
-1. Add `shellcheck` to `flake.nix` `buildInputs` (recommended; one line, same
-   pin as actionlint's). Then tick AC1's third box.
-2. Leave the host copy and accept the AC as unmet. Not recommended.
+**Completed**: 2026-10-24
 
-**Done and verified** (commit `0f50aa82`):
+### Key Technical Learnings
 
-- `mask all-check` has a `sh` branch running
-  `shellcheck scripts/*.sh dogfood/run_all.sh`. It passes on the clean tree.
-- AC2: a seeded `echo $GUP517_SEED` in `scripts/check_story_ids.sh` made
-  `mask all-check` exit 1 (`sh` branch, SC2086 and SC2317). Reverted, tree
-  clean.
-- Nine findings, all in the four scripts: SC2001 in `check_gallery_links.sh`
-  (`${link##*blob/main/}`, checked equal to the `sed` on four sample inputs),
-  SC2016 in `check_gallery_sync.sh` and `test_checkpoint.sh` (double quotes with
-  escaped `$` and backticks, same string to the child shell), SC2001 in
-  `check_gallery_sync.sh` and SC2207 in `generate_gallery.sh` (targeted
-  disables, reasons on the same line).
-- `scripts/test_checkpoint.sh` passes ("all cases passed") after the quoting
-  change.
+#### Shellcheck in the dev shell
+
+- **Challenge**: nixpkgs' actionlint wraps shellcheck by store path, so the dev
+  shell had no `shellcheck` on PATH and `command -v shellcheck` found the host's
+  copy.
+- **Solution**: list `shellcheck` in the dev shell's `buildInputs` beside
+  `actionlint`.
+- **Pattern**: check `command -v` inside `nix develop`, not the host, before
+  claiming a tool is pinned.
+
+#### Fixing findings without changing behaviour
+
+- **Fixed by rewrite**: SC2001 `sed 's|.*blob/main/||'` became
+  `${link##*blob/main/}` (greedy, same match; checked on four sample inputs).
+  SC2016 single-quoted `bash -c` strings became double-quoted with escaped `$`
+  and backticks, passing the same string to the child shell.
+- **Suppressed**: SC2207 (`IFS=$'\n' arr=($(sort ...))`). A `mapfile` rewrite
+  would turn an empty list into one empty entry. SC2001 on a per-line
+  `sed 's/^/  - /'`, which `${var//}` cannot express.
+- **Pattern**: a rewrite is allowed only when a sample test shows identical
+  output, including the empty case.
+
+### Architectural Decisions
+
+#### Targeted disables over rewrites when the rewrite changes edge cases
+
+- **Decision**: two `# shellcheck disable=` lines, each with its reason on the
+  same line.
+- **Reasoning**: rewrites changed the empty-list case or per-line anchoring.
+- **Trade-off**: two suppressions remain in the scripts.
+- **Future**: revisit SC2207 if the gallery's example list ever needs empty
+  handling.
+
+### Development Workflow Insights
+
+- A `Blocked` escalation for a one-line scope question worked: the orchestrator
+  approved it, and the approval was recorded in the story.
+- The seeded violation proved the gate fails on a real finding before the
+  revert.
+
+### Follow-up Stories
+
+None. GUP-521 and GUP-522 were reserved but not needed.
