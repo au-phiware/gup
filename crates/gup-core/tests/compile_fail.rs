@@ -11,9 +11,10 @@
 //!
 //! What changes a snapshot (GUP-500): a toolchain bump changes many; a new
 //! `IntoEncoding` impl changes `bare_number`; a new `ColumnValue` type
-//! changes `borrowing_accessor` (`#[diagnostic::do_not_recommend]` on those
-//! impls swaps its candidate list for an unrelated hint, so they do not
-//! carry it). A new scale or WGSL module changes none: the library's
+//! changes none (its impls carry `#[diagnostic::do_not_recommend]`, add it to
+//! a new one; `borrowing_accessor` fails the bound once, in `encode`, because
+//! a second error through `attr` would print an unrelated `IntoEncoding`
+//! hint). A new scale or WGSL module changes none: the library's
 //! concrete `CpuMirror` impls carry `#[diagnostic::do_not_recommend]` (add
 //! it to a new one), which keeps them out of rustc's "other types
 //! implement" lists, and the unknown-import and unknown-module errors name
