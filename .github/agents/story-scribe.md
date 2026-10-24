@@ -88,6 +88,7 @@ words).
 ---
 implementer: sonnet # or haiku or opus; see "Choosing the implementer"
 implementer-reason: one line, e.g. "design settled in Decisions; follows Band"
+touches: [crates/gup-core/src/plot.rs] # hot files and directories this story edits; see "Choosing the implementer"
 ---
 
 # GUP-NNN: Full Story Title
@@ -194,11 +195,17 @@ Describe how the work will be tested:
 
 ## Definition of Done
 
+- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+      minutes between commits
 - [ ] All Acceptance Criteria are satisfied and checked
 - [ ] All tests pass: `cargo test -- --test-threads=1`
 - [ ] Lint and format clean: `mask all-fix`
 - [ ] All examples compile: `cargo check --examples`
 - [ ] Rendered output verified by eye (golden image or PNG read), if visual
+- [ ] `mask wasm-browser` if the story changes layout, input or wasm code,
+      otherwise say why not
+- [ ] WASM size: `mask wasm-size` scatter gz bytes, or "unchanged: no library
+      code change"
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
 ```
@@ -283,6 +290,15 @@ place it lives, and a copy would drift.
   core trait or abstraction, cross-crate architecture, GPU numerical work with
   no precedent in the codebase. Give the reason. Prefer splitting the design
   part out over marking a whole large story `opus`.
+
+Set `touches` to a YAML list of the hot files and directories the story edits
+(an empty list if none). Hot files are the ones many stories edit, where two
+parallel workers produce merge conflicts: `crates/gup-core/src/plot.rs`,
+`selection.rs`, `encoding.rs`, `lib.rs` and the prelude,
+`crates/gup-core/PERF_BUDGETS.md`, `maskfile.md`, the WASM scenes under
+`crates/gup-core/wasm-size/`, and `docs/planning/stories/INDEX.md` beyond status
+lines. Two stories that share a hot file never run in parallel; the orchestrator
+reads the lists with `grep -H "^touches:" docs/planning/stories/GUP-*.md`.
 
 ---
 

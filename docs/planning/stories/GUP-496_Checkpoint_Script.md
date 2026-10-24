@@ -16,8 +16,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N0 Hygiene) **Status**: 📋 Planned
-**Created**: 2026-10-24
+**Initiative**: Strategic Review 2026-11 (N0 Hygiene) **Status**: ✅ Complete
+(2026-10-24) **Created**: 2026-10-24
 
 ## Context
 
@@ -66,57 +66,57 @@ as a `touches:` frontmatter line (review §2 "Recommended process changes", item
 
 ### AC1: `scripts/checkpoint.sh save` snapshots the working tree
 
-- [ ] `scripts/checkpoint.sh` (default subcommand `save`) writes a commit whose
+- [x] `scripts/checkpoint.sh` (default subcommand `save`) writes a commit whose
       tree is the working tree as `git add -A` sees it: tracked edits, staged
       changes, deletions and untracked files not ignored by `.gitignore`.
       Ignored files are not in it.
-- [ ] It points `refs/checkpoints/<branch>` at that commit and prints one line:
+- [x] It points `refs/checkpoints/<branch>` at that commit and prints one line:
       `checkpoint <short sha> -> refs/checkpoints/<branch>`.
-- [ ] HEAD, `refs/heads/<branch>`, the real index file (byte for byte) and
+- [x] HEAD, `refs/heads/<branch>`, the real index file (byte for byte) and
       `git stash list` are unchanged afterwards, and no hook runs.
-- [ ] A second `save` with no change in between prints
+- [x] A second `save` with no change in between prints
       `unchanged: refs/checkpoints/<branch> <short sha>` and leaves the ref
       where it was. A `save` on a clean tree (tree equals HEAD's) with no
       existing checkpoint prints `clean: nothing to checkpoint` and creates no
       ref.
-- [ ] On a detached HEAD it exits 1 with
+- [x] On a detached HEAD it exits 1 with
       `checkpoint: needs a branch (git switch -c <name>)`.
-- [ ] `grep -n push scripts/checkpoint.sh` finds nothing, and the test (AC4)
+- [x] `grep -n push scripts/checkpoint.sh` finds nothing, and the test (AC4)
       shows a configured remote receives no `refs/checkpoints/*`.
 
 ### AC2: `restore`, `list` and `drop`
 
-- [ ] `scripts/checkpoint.sh restore [--force] [BRANCH]` makes the working tree
+- [x] `scripts/checkpoint.sh restore [--force] [BRANCH]` makes the working tree
       match `refs/checkpoints/<BRANCH>` (default: the current branch): every
       file in the checkpoint is written, and every tracked or untracked
       non-ignored file not in the checkpoint is deleted. Ignored files, HEAD,
       the branch and the real index are untouched.
-- [ ] Without `--force`, `restore` refuses (exit 1, message naming both commits)
+- [x] Without `--force`, `restore` refuses (exit 1, message naming both commits)
       when the checkpoint's first parent is not HEAD, and refuses (exit 1) when
       the working tree has changes that differ from the checkpoint. With
       `--force` it first saves the current state to
       `refs/checkpoints-backup/<branch>` (same commit form as `save`), prints
       that ref, then restores.
-- [ ] After a restore the script re-snapshots the working tree into a temporary
+- [x] After a restore the script re-snapshots the working tree into a temporary
       index and exits 1 if that tree differs from the checkpoint's tree.
-- [ ] `scripts/checkpoint.sh list` prints one line per ref under
+- [x] `scripts/checkpoint.sh list` prints one line per ref under
       `refs/checkpoints/`: name, short sha, committer date, base (first parent,
       short sha).
-- [ ] `scripts/checkpoint.sh drop [BRANCH]` deletes `refs/checkpoints/<BRANCH>`
+- [x] `scripts/checkpoint.sh drop [BRANCH]` deletes `refs/checkpoints/<BRANCH>`
       and `refs/checkpoints-backup/<BRANCH>` if present.
 
 ### AC3: mask tasks
 
-- [ ] `mask checkpoint` runs `scripts/checkpoint.sh save`, with option
+- [x] `mask checkpoint` runs `scripts/checkpoint.sh save`, with option
       `-m/--message` appended to the commit message.
-- [ ] `mask checkpoint-restore` runs `scripts/checkpoint.sh restore`, with
+- [x] `mask checkpoint-restore` runs `scripts/checkpoint.sh restore`, with
       options `--force` and `--branch BRANCH`.
-- [ ] Each task's description says what is and is not snapshotted and that it
+- [x] Each task's description says what is and is not snapshotted and that it
       never replaces a real commit.
 
 ### AC4: seeded test
 
-- [ ] `scripts/test_checkpoint.sh` builds a throwaway repository under
+- [x] `scripts/test_checkpoint.sh` builds a throwaway repository under
       `mktemp -d` (removed on exit), copies `scripts/checkpoint.sh` into it, and
       checks, with a message per failure and a non-zero exit on any:
   - a modified tracked file, a staged new file, a deleted tracked file and an
@@ -137,28 +137,28 @@ as a `touches:` frontmatter line (review §2 "Recommended process changes", item
     it commits its initial state before installing the marker hooks, and never
     uses `--no-verify`);
   - the detached-HEAD refusal.
-- [ ] Seeded proof, recorded in the Implementation Summary: replacing `add -A`
+- [x] Seeded proof, recorded in the Implementation Summary: replacing `add -A`
       with `add -u` in the copied script makes the test fail on the untracked
       file, and removing the deletion step from `restore` makes it fail on the
       file added after the checkpoint. Neither seed is committed.
-- [ ] `mask all-check`'s `hook` group runs `./scripts/test_checkpoint.sh` after
+- [x] `mask all-check`'s `hook` group runs `./scripts/test_checkpoint.sh` after
       `test_prune_build_dir.sh`, and the `all-check` description names it.
 
 ### AC5: the worker loop uses it
 
-- [ ] `.github/agents/story-worker.md` "Checkpoint rule" says: run
+- [x] `.github/agents/story-worker.md` "Checkpoint rule" says: run
       `scripts/checkpoint.sh` every 20–30 minutes (check `date`) and before any
       command that may run for more than 5 minutes, whether or not the code
       builds; it never replaces a commit, so commit whenever the code builds as
       before.
-- [ ] "Phase 1" gains a step: if `scripts/checkpoint.sh list` shows a checkpoint
+- [x] "Phase 1" gains a step: if `scripts/checkpoint.sh list` shows a checkpoint
       for your branch whose tree differs from your working tree, you are
       resuming after an interruption: inspect it
       (`git diff --stat refs/checkpoints/<branch>`) and restore it with
       `scripts/checkpoint.sh restore` (with `--force` only if the working tree
       is behind it).
-- [ ] "How to stop" step 1 starts with `scripts/checkpoint.sh`.
-- [ ] `.github/agents/story-scribe.md`'s template: the frontmatter gains a
+- [x] "How to stop" step 1 starts with `scripts/checkpoint.sh`.
+- [x] `.github/agents/story-scribe.md`'s template: the frontmatter gains a
       `touches:` line (a YAML list of hot files and directories the story
       edits), with a paragraph under "Choosing the implementer" defining hot
       files (`crates/gup-core/src/plot.rs`, `selection.rs`, `encoding.rs`,
@@ -239,16 +239,16 @@ as a `touches:` frontmatter line (review §2 "Recommended process changes", item
 
 ## Technical Tasks
 
-- [ ] Commit the story's start ("Start GUP-496: ...") within 30 minutes.
-- [ ] Write `scripts/checkpoint.sh` (save, list, drop first; commit; then
+- [x] Commit the story's start ("Start GUP-496: ...") within 30 minutes.
+- [x] Write `scripts/checkpoint.sh` (save, list, drop first; commit; then
       restore).
-- [ ] Write `scripts/test_checkpoint.sh`; run the two seeds by hand in a scratch
+- [x] Write `scripts/test_checkpoint.sh`; run the two seeds by hand in a scratch
       copy and record the failures.
-- [ ] Add `mask checkpoint` and `mask checkpoint-restore`; add the test to
+- [x] Add `mask checkpoint` and `mask checkpoint-restore`; add the test to
       `all-check`'s `hook` group and description.
-- [ ] Edit `story-worker.md` (Checkpoint rule, Phase 1 resume step, How to stop)
+- [x] Edit `story-worker.md` (Checkpoint rule, Phase 1 resume step, How to stop)
       and `story-scribe.md` (`touches:`, hot files, standing DoD lines).
-- [ ] Run `mask all-check`; run the script for real in this checkout once
+- [x] Run `mask all-check`; run the script for real in this checkout once
       (`scripts/checkpoint.sh`, `list`, `drop`) and paste the output in the
       Implementation Summary.
 
@@ -272,9 +272,9 @@ None.
 
 ## Success Metrics
 
-- [ ] `scripts/test_checkpoint.sh` passes in under 10 s.
-- [ ] Both seeds make it fail.
-- [ ] `git log -1 --oneline` on the branch and `git status --porcelain` are
+- [x] `scripts/test_checkpoint.sh` passes in under 10 s.
+- [x] Both seeds make it fail.
+- [x] `git log -1 --oneline` on the branch and `git status --porcelain` are
       identical before and after a real `save` in the worker's checkout.
 
 ## Risk Assessment
@@ -290,13 +290,83 @@ None.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes of starting; then commit at each checkpoint
+- [x] First commit within 30 minutes of starting; then commit at each checkpoint
       (story-worker "Checkpoint rule")
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] `scripts/test_checkpoint.sh` passes; `mask all-check` passes
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] `mask wasm-browser`: not needed (scripts and agent docs only; no layout,
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] `scripts/test_checkpoint.sh` passes; `mask all-check` passes
+- [x] Lint and format clean: `mask all-fix`
+- [x] `mask wasm-browser`: not needed (scripts and agent docs only; no layout,
       input or wasm change); say so in the Implementation Summary
-- [ ] WASM size: "unchanged: no library code change"
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] WASM size: "unchanged: no library code change"
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+Delivered `scripts/checkpoint.sh` (save, restore, list, drop; plumbing only),
+`scripts/test_checkpoint.sh` (throwaway repository, about 0.6 s, run by
+`all-check`'s `hook` group after `test_prune_build_dir.sh`), the
+`mask checkpoint` and `mask checkpoint-restore` tasks, and the worker and scribe
+documentation changes (checkpoint rule, Phase 1 resume step, How to stop,
+`touches:` frontmatter, hot files, standing Definition-of-Done lines).
+
+Seeded proof (by hand, not committed):
+
+- `add -A` replaced with `add -u` in the copied script: 7 cases fail, including
+  "untracked file content" and "untracked file brought back".
+- The deletion step of `restore` replaced with a no-op: `restore` exits 1 on its
+  own verification and 7 cases fail, including "file added after the checkpoint
+  deleted".
+
+Real run in this checkout (`mask checkpoint -m "real run"`, again, then `list`):
+
+```text
+checkpoint 35f7cd0d -> refs/checkpoints/worktree-agent-aa77f0fd1f0482fcb
+unchanged: refs/checkpoints/worktree-agent-aa77f0fd1f0482fcb 35f7cd0d
+worktree-agent-aa77f0fd1f0482fcb  35f7cd0d  2026-10-24T11:36:32+11:00  edb83e7e
+```
+
+The branch's last commit and `git status --porcelain` were identical before and
+after; the ref was then dropped. `mask all-check` passes. `mask wasm-browser`:
+not needed (scripts and agent docs only). WASM size: unchanged: no library code
+change.
+
+## Retrospective
+
+**Completed**: 2026-10-24
+
+### Key Technical Learnings
+
+#### Deleted files in `ls-files -co`
+
+- **Challenge**: `ls-files -c` lists a tracked file deleted from the working
+  tree, so `sha256sum` over the list fails.
+- **Solution**: the test skips missing files; `restore` uses `rm -f`.
+- **Pattern**: verify a working tree by comparing trees through a temporary
+  index, not file lists.
+
+#### Silent `set -e` aborts hide which check failed
+
+- **Challenge**: with the deletion seed, `out=$(restore --force)` aborted the
+  test with no FAIL line.
+- **Solution**: the call now records a FAIL and continues.
+
+### Architectural Decisions
+
+#### "Dirty" means differing from HEAD
+
+- **Decision**: plain `restore` refuses only when the working tree differs from
+  both HEAD and the checkpoint; a clean tree restores without `--force`.
+  `--force` skips the backup when the tree equals HEAD.
+- **Reasoning**: the resume-after-interruption case starts from a clean
+  checkout, and the Phase 1 text reserves `--force` for a tree that is behind
+  the checkpoint.
+
+### Development Workflow Insights
+
+- The worktree sandbox refuses compound commands that mention git; plain,
+  separate commands were needed.
+
+### Follow-up Stories
+
+None.
