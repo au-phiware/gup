@@ -71,8 +71,8 @@ check "modified file content" eq "$(show mod.txt)" "one changed"
 check "staged new file content" eq "$(show staged.txt)" "staged"
 check "untracked file content" eq "$(show sub/untracked.txt)" "untracked"
 check "unchanged file content" eq "$(show sub/keep.txt)" "three"
-check "deleted file absent" bash -c '! git cat-file -e "$0:gone.txt"' "$ref"
-check "ignored file absent" bash -c '! git cat-file -e "$0:ignored.log"' "$ref"
+check "deleted file absent" bash -c "! git cat-file -e \"\$0:gone.txt\"" "$ref"
+check "ignored file absent" bash -c "! git cat-file -e \"\$0:ignored.log\"" "$ref"
 check "HEAD unchanged" eq "$(git rev-parse HEAD)" "$head0"
 check "branch unchanged" eq "$(git rev-parse refs/heads/main)" "$head0"
 check "index unchanged" eq "$(sha_index)" "$index0"
@@ -101,9 +101,9 @@ check "restore without --force refuses a dirty tree" bash -c '! scripts/checkpoi
 check "refused restore left the late file" test -e late.txt
 bref=refs/checkpoints-backup/main
 out=$(scripts/checkpoint.sh restore --force) || { echo "FAIL: restore --force failed" >&2; fails=$((fails + 1)); }
-check "restore --force prints the backup ref" bash -c '[[ $1 = *"$2"* ]]' _ "$out" "$bref"
+check "restore --force prints the backup ref" bash -c "[[ \$1 = *\"\$2\"* ]]" _ "$out" "$bref"
 check "backup ref written" git rev-parse --verify --quiet "$bref"
-check "backup holds the late file" bash -c 'git cat-file -e "$0:late.txt"' "$bref"
+check "backup holds the late file" bash -c "git cat-file -e \"\$0:late.txt\"" "$bref"
 check "file list restored" eq "$(git ls-files -co --exclude-standard | sort)" "$expected_files"
 check "contents restored" eq "$(sums)" "$expected_sums"
 check "file added after the checkpoint deleted" test ! -e late.txt
@@ -132,7 +132,7 @@ rc=0
 msg=$(scripts/checkpoint.sh restore 2>&1) || rc=$?
 check "restore refuses when HEAD moved" eq "$rc" 1
 check "refusal names both commits" bash -c \
-  '[[ $1 = *"$2"* && $1 = *"$3"* ]]' _ "$msg" "$(git rev-parse --short "$head0")" "$(git rev-parse --short "$newhead")"
+  "[[ \$1 = *\"\$2\"* && \$1 = *\"\$3\"* ]]" _ "$msg" "$(git rev-parse --short "$head0")" "$(git rev-parse --short "$newhead")"
 check "refused restore wrote nothing" eq "$(git status --porcelain)" ""
 
 # Clean tree, no checkpoint: new branch.

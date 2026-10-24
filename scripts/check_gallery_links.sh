@@ -30,7 +30,7 @@ TOTAL=0
 
 while IFS= read -r link; do
   # Strip the GitHub prefix to get a repo-relative path.
-  REL_PATH=$(echo "$link" | sed 's|.*blob/main/||')
+  REL_PATH=${link##*blob/main/}
   TOTAL=$((TOTAL + 1))
 
   if [[ ! -f "$REPO_ROOT/$REL_PATH" ]]; then

@@ -310,6 +310,10 @@ entries share an ID above GUP-315, every entry links a file, and every story's
 heading and file name agree. `test_check_story_ids.sh` seeds each violation in a
 throwaway directory.
 
+`shellcheck` lints every `scripts/*.sh` and `dogfood/run_all.sh` (GUP-517). A
+finding fails the gate; a `# shellcheck disable=` line must give its reason on
+the same line.
+
 The whitespace and `ignore` checks pass only when `git grep` finds nothing (exit
 1): a `git grep` error must fail them, not pass them. The `ignore` check
 (GUP-501) rejects a bare `#[ignore]`: every ignored test says why, as
@@ -323,13 +327,14 @@ the index. CI runs its own full checks on every push regardless.
 
 ```bash
 shopt -qs globstar
-concurrently --group --names '\s,ignore,rs,nix,md,gha,gallery,hook' \
+concurrently --group --names '\s,ignore,rs,nix,md,gha,sh,gallery,hook' \
    'git --no-pager grep --untracked --name-only --full-name "[[:space:]]\+$" -- "*.rs"; test $? -eq 1' \
    'git --no-pager grep -n -E "#\[ignore\]" -- "*.rs" ":!crates/gup-culling-lod"; test $? -eq 1' \
    'cargo fmt --all -- --check && cargo fmt --manifest-path dogfood/Cargo.toml -- --check && cargo clippy --workspace --exclude gup-bevy --all-targets -- -D warnings && cargo clippy --workspace --exclude gup-bevy --all-targets --all-features -- -D warnings && cargo clippy --manifest-path dogfood/Cargo.toml --all-targets -- -D warnings && cargo clippy -p gup-core --lib --no-default-features -- -D warnings && ./scripts/clippy_wasm32.sh' \
    'nixfmt --check flake.nix && statix check flake.nix' \
    'prettier --cache --log-level warn --check "**/*.md" && mdl --git-recurse .' \
    'actionlint .github/workflows/*.y*ml' \
+   'shellcheck scripts/*.sh dogfood/run_all.sh' \
    './scripts/check_gallery_sync.sh && ./scripts/check_story_ids.sh' \
    './scripts/test_pre_commit.sh && ./scripts/test_shared_build_dir.sh && ./scripts/test_prune_build_dir.sh && ./scripts/test_checkpoint.sh && ./scripts/test_check_story_ids.sh'
 ```

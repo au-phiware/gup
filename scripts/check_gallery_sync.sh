@@ -51,7 +51,7 @@ grep '^name *= *"' "$CONFIG" \
 # ── 3. examples/INDEX.md names ──────────────────────────────────────
 # Names appear in the first column of markdown tables as `name`.
 INDEX_EXAMPLES=$(mktemp)
-grep -oP '(?<=\| `)[^`]+(?=` )' "$INDEX" \
+grep -oP "(?<=\| \`)[^\`]+(?=\` )" "$INDEX" \
   | to_sorted_file "$INDEX_EXAMPLES"
 
 # ── compare ──────────────────────────────────────────────────────────
@@ -63,6 +63,7 @@ report_diff() {
   diff_items=$(comm -23 "$file_a" "$file_b")
   if [[ -n "$diff_items" ]]; then
     echo "$label"
+    # shellcheck disable=SC2001 # sed anchors ^ on every line; ${var//} cannot
     echo "$diff_items" | sed 's/^/  - /'
     echo ""
     DRIFT=$((DRIFT + $(echo "$diff_items" | wc -l)))
