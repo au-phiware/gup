@@ -94,22 +94,26 @@ what the flip deleted and kept.
 
 ## What is next
 
-The tracks below are defined in the strategic review ("Strategy: tracks and
-sequencing"); the stories index holds their stories and status.
+The tracks below are defined in the
+[November 2026 strategic review](./planning/STRATEGIC_REVIEW_2026-11.md)
+("Proposed next tracks" and "Owner decisions"); the stories index holds their
+stories and status.
 
-- **T5, builders onto `gup`.** Add what the builders do not yet have (area, box,
-  violin, density, heatmap and choropleth builders) on the channels, scales and
-  scene that exist, keeping the user's row type in the output types, and deliver
-  the real-world features the dogfood audit found missing.
-- **T6, flagship gallery and docs-as-tests.** Eight to ten polished charts
-  rendered in CI, including one that shows the GPU advantage, a README hero
-  image, and tutorials whose every snippet compiles and renders under test. The
-  doctest include used by these two documents is the pattern.
-- **T7, crate split, and LOD.** Split the workspace into focused crates,
-  feature-gate platform dependencies, and wire GPU culling and level of detail
-  into the core (`crates/gup-culling-lod` is parked until then). The iOS,
-  Android and Tauri shims were deleted (strategic review 2026-11, Decision 3); a
-  mobile or Tauri host would be built on `gup-core` when a user asks (track N6).
+- **N0, hygiene.** Current crate docs, stale docs archived, the mobile and Tauri
+  crates deleted, honest gates and a checkpoint script for work in progress.
+- **N1, docs and tutorials.** The six tutorials rewritten as tested Markdown, a
+  `#[derive(Mark)]` guide and documented public items.
+- **N2, chart vocabulary.** A text mark, area and stacked area, horizontal bars,
+  histograms, a heatmap builder, line curves, a subtitle and a dark theme.
+- **N3, release 0.1.** Publishable crates, CI on Windows, a gallery, a changelog
+  and minimal accessibility: `Plot::describe()`, an SVG title and description
+  and a canvas `aria-label`.
+- **N4, accessibility.** Keyboard navigation, a hidden data table on the web and
+  a high-contrast theme.
+- **N5, performance at scale.** Columnar input, level of detail from
+  `crates/gup-culling-lod`, and measured 100M- and 1B-row demonstrations.
+- **N6, export and platforms.** PDF through SVG, and mobile or Tauri hosts when
+  a user asks.
 
-Parked items stay parked until the strategic review's decisions say otherwise; a
+Parked items stay parked until a strategic review's decisions say otherwise; a
 story that extends one needs a decision first.

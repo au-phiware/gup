@@ -14,4 +14,4 @@ single frame to a PNG instead of opening a window.
 
 The examples that used the pre-flip render core were deleted in GUP-488; git
 history keeps them. More builders (area, boxplot, violin, density, heatmap,
-choropleth) return with the T5 stories.
+choropleth) return in track N2 (strategic review 2026-11).

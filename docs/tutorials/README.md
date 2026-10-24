@@ -1,5 +1,11 @@
 # Gup Tutorials
 
+> **Out of date.** This tutorial was written for the API before the RFC-001 flip
+> and does not compile against `gup` today. It is being rewritten as tested
+> Markdown (strategic review 2026-11, track N1). Until then, start from the
+> [README](../../README.md) Quick Start and
+> [Technical Approach](../TECHNICAL_APPROACH.md).
+
 Welcome to the Gup tutorial series! These tutorials take you from your first
 chart to advanced topics like custom GPU shaders and streaming data, one step at
 a time.
@@ -63,8 +69,4 @@ the window:
 
 - [API Reference](../TECHNICAL_APPROACH.md) — <!-- TODO(GUP-280): link to
   generated API docs --> deep dive into the unified shader function architecture
-- [Custom Mark Guide](../CUSTOM_MARK_GUIDE.md) — architectural overview of the
-  mark system
-- [Grid System](../GRID_SYSTEM.md) — configuring grid lines and axes
-- [Mark System](../mark-system/README.md) — mark architecture and built-in marks
 - [Performance Guide](../PERFORMANCE_GUIDE.md) — profiling and optimisation tips

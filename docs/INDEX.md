@@ -18,69 +18,29 @@ Quick access to all documents in `docs/`. For stories and planning, see
 
 ---
 
-## Architecture & Design
+## Integrations
 
-- [mark-system/README.md](mark-system/README.md) — Mark system overview
-- [mark-system/architecture.md](mark-system/architecture.md) — Mark system
-  architecture details
-- [mark-system/api-reference.md](mark-system/api-reference.md) — Mark system API
-  reference
-- [mark-system/performance.md](mark-system/performance.md) — Mark system
-  performance guide
-- [GRID_SYSTEM.md](GRID_SYSTEM.md) — Axis and grid system architecture
-- [text-rendering-architecture.md](text-rendering-architecture.md) — SDF text
-  rendering pipeline design
+- [EGUI_INTEGRATION.md](EGUI_INTEGRATION.md) — Gup charts in egui panels
+  (`gup-egui`)
+- [BEVY_INTEGRATION.md](BEVY_INTEGRATION.md) — Gup charts in Bevy apps
+  (`gup-bevy`)
 
 ---
 
-## Developer Guides
+## Performance
 
-- [CUSTOM_MARK_GUIDE.md](CUSTOM_MARK_GUIDE.md) — How to create custom mark types
-- [TYPE_CONSTRUCTION_GUIDE.md](TYPE_CONSTRUCTION_GUIDE.md) — Using the type
-  construction macros
-- [EVENT_FORWARDING.md](EVENT_FORWARDING.md) — Interaction and event forwarding
-  system
+- [PERFORMANCE_GUIDE.md](PERFORMANCE_GUIDE.md) — Pointer to the performance
+  budgets and the mask tasks that measure them
 
 ---
 
-## Accessibility
+## Tutorials
 
-- [ACCESSIBILITY_COMPATIBILITY.md](ACCESSIBILITY_COMPATIBILITY.md) —
-  Cross-platform accessibility compatibility matrix
-- [ACCESSIBILITY_KNOWN_ISSUES.md](ACCESSIBILITY_KNOWN_ISSUES.md) — Known
-  accessibility issues and workarounds
-- [FOCUS_ELEMENTS_GUIDE.md](FOCUS_ELEMENTS_GUIDE.md) — Focus element system for
-  keyboard navigation
-- [MACOS_VOICEOVER_GUIDE.md](MACOS_VOICEOVER_GUIDE.md) — macOS VoiceOver
-  integration guide
-- [WINDOWS_UIAUTOMATION_GUIDE.md](WINDOWS_UIAUTOMATION_GUIDE.md) — Windows UI
-  Automation integration guide
-- [SCREEN_READER_TESTING.md](SCREEN_READER_TESTING.md) — Screen reader testing
-  procedures
-- [SCREEN_READER_TESTING_README.md](SCREEN_READER_TESTING_README.md) — Screen
-  reader testing setup
-- [SCREEN_READER_CHECKLIST.md](SCREEN_READER_CHECKLIST.md) — Manual screen
-  reader test checklist
+The tutorials are out of date until track N1 (strategic review 2026-11): they
+were written for the API before the RFC-001 flip.
 
----
-
-## Performance & Profiling
-
-- [SHADER_PERFORMANCE_BENCHMARKING.md](SHADER_PERFORMANCE_BENCHMARKING.md) —
-  Shader performance benchmarking methodology
-- [PATTERN_PERFORMANCE_BENCHMARKING.md](PATTERN_PERFORMANCE_BENCHMARKING.md) —
-  Pattern rendering performance benchmarking
-- [PATTERN_BENCHMARK_RESULTS.md](PATTERN_BENCHMARK_RESULTS.md) — Pattern
-  benchmark results and analysis
-- [CI_PERFORMANCE_ALERTS.md](CI_PERFORMANCE_ALERTS.md) — CI performance alert
-  configuration
-- [CI_BENCHMARK_INTEGRATION.md](CI_BENCHMARK_INTEGRATION.md) — CI benchmark
-  integration guide
-- [CROSS_PLATFORM_AXIS_PERFORMANCE.md](CROSS_PLATFORM_AXIS_PERFORMANCE.md) —
-  Axis performance across platforms
-- [WASM_PERFORMANCE.md](WASM_PERFORMANCE.md) — WebAssembly performance guide
-- [VISUAL_REGRESSION_TESTING.md](VISUAL_REGRESSION_TESTING.md) — Visual
-  regression testing setup
+- [tutorials/README.md](tutorials/README.md) — Tutorial series index (six
+  tutorials, out of date until track N1)
 
 ---
 
@@ -92,18 +52,15 @@ Quick access to all documents in `docs/`. For stories and planning, see
 - [03_RUST_VISUALIZATION_LANDSCAPE.md](03_RUST_VISUALIZATION_LANDSCAPE.md) —
   Rust visualization ecosystem survey
 - [MARKET_ANALYSIS.md](MARKET_ANALYSIS.md) — Market analysis and positioning
-- [existing-solutions-analysis.md](existing-solutions-analysis.md) — Existing
-  solutions deep-dive
-- [graphics-programming.md](graphics-programming.md) — Graphics programming
-  reference notes
-- [research/rust_to_wgsl_research.md](research/rust_to_wgsl_research.md) —
-  Rust-to-WGSL transpilation research
-- [research/technical_feasibility_assessment.md](research/technical_feasibility_assessment.md)
-  — Technical feasibility assessment
-- [research/transpilation_architecture.md](research/transpilation_architecture.md)
-  — Transpilation architecture design
 - [references/msdfgen.txt](references/msdfgen.txt) — MSDF glyph generation
   reference
+
+---
+
+## Archive
+
+- [archive/README.md](archive/README.md) — Accessibility and research documents
+  from before the RFC-001 core (history only)
 
 ---
 

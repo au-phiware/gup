@@ -1,8 +1,11 @@
 # Tutorial 1: Getting Started
 
-**Out of date until T6:** this tutorial shows the old builders (deleted in
-GUP-466); T6's docs-as-tests rewrite replaces it.
-
+> **Out of date.** This tutorial was written for the API before the RFC-001 flip
+> and does not compile against `gup` today. It is being rewritten as tested
+> Markdown (strategic review 2026-11, track N1). Until then, start from the
+> [README](../../README.md) Quick Start and
+> [Technical Approach](../TECHNICAL_APPROACH.md).
+>
 > **Goal**: Create a GPU-accelerated scatter chart, render it, and run the
 > program — all in under 50 lines of Rust.
 
@@ -234,5 +237,3 @@ let builder = plot()
   — run exactly this tutorial's chart in a window.
 - **[`02_scatter_window` example](../../examples/basic/02_scatter_window.rs)** —
   display a scatter chart in an interactive window.
-- **[Grid System guide](../GRID_SYSTEM.md)** — add grid lines and axes to your
-  charts.

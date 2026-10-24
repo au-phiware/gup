@@ -1,5 +1,11 @@
 # Tutorial 5: Streaming Data
 
+> **Out of date.** This tutorial was written for the API before the RFC-001 flip
+> and does not compile against `gup` today. It is being rewritten as tested
+> Markdown (strategic review 2026-11, track N1). Until then, start from the
+> [README](../../README.md) Quick Start and
+> [Technical Approach](../TECHNICAL_APPROACH.md).
+>
 > **Goal**: Feed live data into a Gup chart using the GPU-backed `DataStream`.
 
 ## What You Will Learn
