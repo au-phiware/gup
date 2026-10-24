@@ -38,7 +38,7 @@ file); GUP-504.
   `ColumnValue` impls (a spike with a rule) and "did you mean" instead of module
   lists; plus a fixed-recipe spike on the shared-build-dir "multiple versions of
   crate wgpu" doctest error. Deps: GUP-496 📋 (soft).
-- [GUP-501](GUP-501_Headless_Environment_Script.md) 📋 —
+- [GUP-501](GUP-501_Headless_Environment_Script.md) 🚧 —
   `scripts/headless_env.sh` (lavapipe ICD, no `WAYLAND_DISPLAY`, 1920x1080 Xvfb)
   used by `run_all.sh` and the mask tasks, the egui screenshot test run for real
   in CI via `mask egui-screenshot`, and a lint against reasonless `#[ignore]`.
