@@ -3,7 +3,11 @@
 
 //! # gup-core
 //!
-//! Gup's new core, built to [RFC-001](https://github.com/au-phiware/gup/blob/main/docs/planning/rfcs/RFC-001_Core_Architecture.md):
+//! The engine behind the `gup` crate, which re-exports all of it.
+//! Applications depend on `gup`; host integrations (`gup-egui`, `gup-bevy`)
+//! depend on `gup-core`. It never depends on `gup`.
+//!
+//! ## What is in it
 //!
 //! - one cloneable [`Context`] that owns or wraps a wgpu device;
 //! - a GPU [column store](mod@column) — accessors run once, columns live on
@@ -15,23 +19,24 @@
 //!   to keep after upload;
 //! - typed [channels](channel): `Circle::RADIUS: Channel<Circle, Px>`, so
 //!   wrong value types, unknown channels and wrong marks don't compile;
-//! - one [scale] family, each a [`ShaderFn`] with an f64
-//!   [`CpuMirror`] — zooming changes uniforms only;
+//! - [scale]s: [`Linear`], [`Pow`], [`Log`], [`Symlog`] and [`Time`] for
+//!   numbers; [`Band`] and [`Point`] for keys; [`Sequential`], [`Diverging`]
+//!   and [`Categorical`] for colour. Each is a [`ShaderFn`] with an f64
+//!   [`CpuMirror`] — zooming changes uniforms only — and has a [`Legend`];
+//! - marks [`Circle`], [`Rect`], [`Segment`] and [`Line`], and your own with
+//!   `#[derive(Mark)]` and [`wgsl_function`];
+//! - [`Plot`]: any number of layers over shared x and y scales (and a
+//!   secondary [`Plot::y_right`]), with axes, grid, legends and title laid
+//!   out for you, styled by [`Theme`];
+//! - the [`scatter`], [`line()`] and [`bar`] builders ([`ChartExt`]);
+//! - interaction ([`Input`], [`Response`]: picking, tooltips, pan, zoom and
+//!   brush) and streaming ([`Appender`]);
+//! - targets: [`ImageTarget`], [`TextureTarget`], [`WindowTarget`], the web
+//!   canvas and [`SvgTarget`];
 //! - shader composition at build time: naga_oil flattens the WGSL library
 //!   once, in `build.rs`, and a typed glue emitter's output is linked to it
 //!   at run time, so neither naga nor naga_oil is in the binary on any
-//!   target — no find-and-replace on authored WGSL;
-//! - a resolved [`Scene`] drawn by a [`Renderer`] into any
-//!   [`RenderTarget`] ([`ImageTarget`], [`TextureTarget`], a window, or a
-//!   host's own pass), or written as SVG by [`SvgTarget`] (guides only).
-//!
-//! The scale family is complete (RFC-001 S5a, S5b): [`Linear`], [`Pow`],
-//! [`Log`], [`Symlog`] and [`Time`] for numbers; [`Band`] and [`Point`]
-//! for keys; [`Sequential`], [`Diverging`] and [`Categorical`] for colour,
-//! each with a [`Legend`]. There is still one mark ([`Circle`]) and one
-//! layer per plot, and guides are axes only (legends are placed by hand
-//! until RFC-001 S7). It is not re-exported by the `gup` crate until the
-//! RFC-001 S14 flip, and it never depends on `gup`.
+//!   target — no find-and-replace on authored WGSL.
 //!
 //! ## Hello, world
 //!
@@ -49,11 +54,50 @@
 //! }
 //! ```
 //!
+//! ## Without a window
+//!
+//! ```
+//! use gup_core::prelude::*;
+//!
+//! let mut chart = gup_core::line((0..20).map(|i| (f64::from(i), f64::from(i).sqrt())))
+//!     .x(|p| p.0)
+//!     .y(|p| p.1);
+//! let image = chart.render(&Context::shared()?, 640, 400)?;
+//! assert_eq!(image.dimensions(), (640, 400));
+//! # Ok::<(), gup_core::Error>(())
+//! ```
+//!
+//! ## SVG
+//!
+//! ```
+//! use gup_core::prelude::*;
+//! use gup_core::{SvgTarget, VectorTarget};
+//!
+//! let cx = Context::shared()?;
+//! let mut plot = Plot::new();
+//! plot.circles((0..5).map(|i| (f64::from(i), f64::from(i * i))))
+//!     .x(|p| p.0)
+//!     .y(|p| p.1);
+//! let resolved = plot.resolve(&cx, 320.0, 200.0)?;
+//! let mut svg = SvgTarget::new();
+//! svg.render(&resolved.scene)?;
+//! assert!(svg.svg().contains("<circle"));
+//! # Ok::<(), gup_core::Error>(())
+//! ```
+//!
+//! ## Features
+//!
+//! | Feature | Default | Adds |
+//! | --- | --- | --- |
+//! | `window` | yes | [`WindowTarget`], `show`, `GupApp` |
+//! | `svg` | yes | data marks in [`SvgTarget`] (without it, guides and text only) |
+//! | `web` | no | `web::CanvasApp` (wasm32 only) |
+//!
 //! ## Contracts
 //!
 //! - **One device per process by default.** [`Context::shared`] is the
-//!   process-wide context; the old `gup` crate's `RenderContext` and
-//!   `GupContext` take their device from it too (RFC-001 S1).
+//!   process-wide context; host integrations wrap their host's device with
+//!   [`Context::from_wgpu`] instead.
 //! - **Every GPU write is counted.** All buffer and texture writes go
 //!   through [`Context`], counted by [`Upload`] kind in
 //!   [`Context::upload_stats`]. The `every_gpu_write_is_counted` test fails

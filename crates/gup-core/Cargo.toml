@@ -3,13 +3,13 @@ name = "gup-core"
 version = "0.1.0"
 authors = ["Corin Lawson <corin@phiware.com.au>"]
 edition = "2024"
-description = "Gup's new core (RFC-001): one Context, a GPU column store, typed channels, scales with CPU mirrors, build-time shader composition and a resolved Scene"
+description = "The engine behind gup: a GPU column store, typed channels, scales with CPU mirrors, marks, layout and render targets"
 license = "GPL-3.0-or-later"
 repository = "https://github.com/au-phiware/gup"
 publish = false
 
-# RFC-001 §11: `gup-core` is a new crate that the old `gup` crate does not
-# re-export, and it must never depend on `gup` or reach into its modules.
+# `gup` re-exports `gup-core`, and `gup-core` never depends on `gup` or
+# reaches into its modules.
 # Versions match those already resolved in Cargo.lock (RFC-001 appendix).
 #
 # Shader composition runs at build time on every target (RFC-001 "Decisions
