@@ -65,4 +65,4 @@ The stories that built this code are GUP-076 (occlusion culling), GUP-077
 (compute instance filtering), GUP-184 and GUP-235 (radix sort), GUP-222 and
 GUP-223 (unified pipeline, Hi-Z early reject), GUP-234 (adaptive coverage
 budget), GUP-256 (LOD pyramid) and GUP-257 (adaptive viewport renderer). See
-also `docs/LOD_SYSTEM.md`.
+also [`LOD_SYSTEM.md`](./LOD_SYSTEM.md).
