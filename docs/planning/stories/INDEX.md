@@ -118,6 +118,10 @@ GUP-535 in turn (they share `src/lib.rs`); GUP-536 after N2's builders.
 - [GUP-535](GUP-535_Compiled_Integration_Guides.md) 📋 — The egui and Bevy
   guides compiled as `no_run` doctests of `gup-egui` and `gup-bevy`. Deps:
   GUP-483 ✅, GUP-484 ✅.
+- [GUP-536](GUP-536_Tutorial_Tour_Of_Chart_Types.md) 📋 — Tutorial 7: every
+  chart type with a tested block of at most 20 lines and a golden image. Deps:
+  GUP-530 📋, GUP-542 📋, GUP-544 📋, GUP-547 📋, GUP-548 📋, GUP-549 📋;
+  GUP-550–554 📋 (soft).
 
 ## Track N2: Chart Vocabulary
 
@@ -125,8 +129,16 @@ Track N2 from the [November 2026 review](../STRATEGIC_REVIEW_2026-11.md): the
 chart types and text a real user expects, for release 0.1 (owner decision 2).
 Minimal accessibility is track N3, not here (owner decision 4). Most stories
 edit `crates/gup-core/src/lib.rs`, `plot.rs`, `selection.rs` or
-`builder/mod.rs`, so they run one at a time; the story frontmatter's `touches:`
-says which.
+`builder/mod.rs`, so N2 runs mostly one story at a time, with an N1 or a
+non-conflicting N2 story beside it (two build-heavy agents at most; check
+`touches:`). Suggested pairs, in order: GUP-540 with GUP-533; GUP-541 with
+GUP-530; GUP-542 (Opus) with GUP-531; GUP-543 with GUP-532; GUP-544 with
+GUP-553; GUP-545 with GUP-534; GUP-546 with GUP-405; GUP-547 with GUP-535;
+GUP-548; GUP-549; GUP-550 (Opus) with GUP-552; GUP-551 (Opus) with GUP-416;
+GUP-439 (Opus) with GUP-554; then GUP-536. Deferred from N2: owned or numeric
+category keys in builders (an owner decision: closure inference cannot accept
+both `|r| r.name.as_str()` and `|r| r.year` in one method), curved and
+horizontal areas, heatmap cell labels, error bars, pie charts and facets.
 
 - [GUP-540](GUP-540_Explicit_Domain_Edge_Inset.md) 📋 — An explicit domain's
   near end is inset by the marks' overhang, so a point at `(0, 0)` or the first
@@ -154,6 +166,38 @@ says which.
 - [GUP-547](GUP-547_Area_Builder_And_Stacked_Areas.md) 📋 — `gup::area` with
   overlapping series, stacking aligned on the union of x values, `outline` and
   tooltips. Deps: GUP-545 📋, GUP-546 📋.
+- [GUP-548](GUP-548_Histogram_Builder_And_Bin_Transform.md) 📋 —
+  `transform::bin` (Sturges or a count on a 1–2–5 step, a width, or edges) and
+  `gup::histogram` with edges on round numbers, 1 px gaps, stacking by key and a
+  "Count" axis title. Deps: GUP-540 📋 (soft).
+- [GUP-549](GUP-549_Heatmap_Builder.md) 📋 — `gup::heatmap` on two band axes
+  with `color_value`, a ramp legend and gapped cells; `color_value_scale` takes
+  `Sequential` or `Diverging` on the scatter too.
+- [GUP-550](GUP-550_Line_Curves_And_Steps.md) 📋 — `Curve` and
+  `.curve(Curve::StepAfter)` on lines: step pieces drawn exactly in the shader
+  through a per-layer vertex count and glue constant, straight lines unchanged.
+- [GUP-551](GUP-551_Monotone_Line_Curves.md) 📋 — `Curve::MonotoneX`: Steffen
+  tangents on the CPU as Bezier control columns, tessellated per segment, never
+  overshooting. Deps: GUP-550 📋.
+- [GUP-552](GUP-552_Chart_Subtitle.md) 📋 — `subtitle` on `Plot` and the
+  builders, laid out under the title with its own theme size and colour. Deps:
+  GUP-541 📋 (soft).
+- [GUP-553](GUP-553_Dark_Theme.md) 📋 — `Theme::dark()` with contrast-checked
+  colours and a theme palette (`OKABE_ITO_DARK`, black replaced) that
+  `Categorical::okabe_ito()` follows. Deps: GUP-552 📋 (soft).
+- [GUP-554](GUP-554_Box_Plot_Builder.md) 📋 — `transform::box_stats` (type-7
+  quartiles, 1.5 IQR whiskers) and `gup::boxplot` with outliers and tooltips.
+  Deps: GUP-548 📋.
+- [GUP-405](GUP-405_Gup_Text_OpenType_Shaping.md) 📋 — Shape `gup-text` runs
+  with rustybuzz: Inter's GPOS kerning and `tnum` tabular figures for tick
+  labels, with a 25 KB gz WASM stop rule. Deps: GUP-400 ✅, GUP-542 📋 (soft).
+- [GUP-416](GUP-416_Gup_Text_Font_Fallback.md) 📋 — A user-supplied fallback
+  chain (`Context::add_fallback_font`), so characters outside the bundled subset
+  draw from another font instead of as boxes; fallbacks parse lazily and
+  `SvgTarget` embeds the fonts it uses. Deps: GUP-407 ✅, GUP-405 📋.
+- [GUP-439](GUP-439_Line_Translucent_Joins.md) 📋 — Translucent lines with even
+  opacity at rows, curve pieces and self-crossings (a per-layer coverage pass),
+  opaque lines unchanged. Deps: GUP-432 ✅, GUP-550 📋, GUP-551 📋.
 
 ## Open Backlog
 
@@ -180,18 +224,6 @@ will pick each up.
   deleted targets, pre-GUP-427 checkouts), which GUP-427's owner-based prune
   never touches. Deps: GUP-427 ✅. Parked until the next toolchain or
   `Cargo.lock` bump, or a disk alert.
-- [GUP-405](GUP-405_Gup_Text_OpenType_Shaping.md) 📋 — Shape `gup-text` runs
-  with rustybuzz: Inter's GPOS kerning and `tnum` tabular figures for tick
-  labels. Deps: GUP-400 ✅. Track: N2 (text quality).
-- [GUP-416](GUP-416_Gup_Text_Font_Fallback.md) 💡 — A user-supplied fallback
-  chain in `TextSystem`, so characters outside the bundled subset (Cyrillic,
-  CJK, emoji) draw from another font instead of as boxes. Fallbacks parse
-  lazily, nothing new is bundled, and `SvgTarget` lists and embeds the fonts it
-  uses. Deps: GUP-407 ✅, GUP-405 📋 (soft). Track: N2 (text quality).
-- [GUP-439](GUP-439_Line_Translucent_Joins.md) 💡 — translucent `Line`s with
-  even opacity: joins and self-crossings blended once (a per-layer coverage
-  pass), opaque lines unchanged. Deps: GUP-432 ✅. Track: N2, with line curves
-  and area outlines (same polyline geometry).
 - [GUP-492](GUP-492_Windowed_Size_Order_Draws.md) 💡 — bounded draw calls for a
   windowed layer sized by a column whose sizes do not follow data order
   (per-chunk sort runs draw about one instance per draw today). Deps: GUP-482
