@@ -41,6 +41,7 @@ pub mod golden;
 mod harness;
 pub mod image;
 pub mod layout;
+pub mod measure;
 
 pub use checks::{Check, CheckFailure, Tolerances};
 pub use color::Rgba8;
