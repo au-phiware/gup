@@ -1,6 +1,7 @@
 # Gup Documentation
 
-This directory contains comprehensive documentation for the Gup project.
+This directory contains the documentation for the Gup project; the
+[index](./INDEX.md) lists every file.
 
 ## Core Documentation
 
@@ -22,9 +23,8 @@ compares to existing solutions and its market opportunity.
 
 ### [🚀 Implementation Strategy](./IMPLEMENTATION_STRATEGY.md)
 
-How work is done (stories, gates, dogfood), what RFC-001 built, and what is next
-(T5 builders, T6 gallery and docs-as-tests, T7 crate split and LOD). No
-milestones or dates.
+How work is done (stories, gates, dogfood), what RFC-001 built, and the tracks
+N0–N6 that come next.
 
 ## Research Documents
 
@@ -46,18 +46,32 @@ approaches, highlighting fundamental paradigm differences.
 Analysis of existing Rust visualization libraries, their strengths/limitations,
 and opportunities for Gup.
 
-## Archive
+## Integrations
 
-The [`archive/`](./archive/) directory contains earlier versions of documents
-that have been superseded by the core documentation above. These provide
-historical context and show the evolution of Gup's design.
+### [🖼️ egui Integration](./EGUI_INTEGRATION.md)
+
+`gup-egui`: put a Gup chart in an egui panel, rendered on egui's own GPU device
+and sampled directly by egui.
+
+### [🐦 Bevy Integration](./BEVY_INTEGRATION.md)
+
+`gup-bevy`: embed a Gup chart in a Bevy app as a sprite texture, updated as your
+data changes.
+
+## Performance
+
+### [📈 Performance Guide](./PERFORMANCE_GUIDE.md)
+
+A pointer to the performance budgets in
+[`crates/gup-core/PERF_BUDGETS.md`](../crates/gup-core/PERF_BUDGETS.md), and the
+mask tasks that measure them.
 
 ## Tutorials
 
-> The tutorials and feature guides below were written for the crate that `gup`
-> was before the RFC-001 flip (GUP-488). Where they disagree with
-> [Technical Approach](./TECHNICAL_APPROACH.md), it wins. The tutorials are
-> rewritten as tested docs in the strategic review's T6 track.
+> The tutorials below are out of date: they were written for the API before the
+> RFC-001 flip and do not compile against `gup` today. They are rewritten as
+> tested Markdown in track N1 of the strategic review. Where they disagree with
+> [Technical Approach](./TECHNICAL_APPROACH.md), it wins.
 
 ### [📖 Tutorial Series](./tutorials/README.md)
 
@@ -77,68 +91,12 @@ are new to Gup.
    `Appender`
 6. [Custom Marks](./tutorials/06_custom_marks.md) — implement new mark types
 
-## Feature Guides
+## Archive
 
-### [📐 Grid System](./GRID_SYSTEM.md)
+### [🗄️ Archived documents](./archive/README.md)
 
-Comprehensive documentation for the GPU-accelerated grid line rendering system.
-Covers quick start, API reference, configuration guide with theme presets,
-tutorials, performance guide, and troubleshooting.
-
-### [📊 Mark System](./mark-system/README.md)
-
-Comprehensive documentation for the mark system: architecture overview,
-component relationships, API reference for the Mark trait, and a performance
-optimization guide.
-
-### [🔲 Custom Mark Guide](./CUSTOM_MARK_GUIDE.md)
-
-Guide for building custom mark types and extending the mark system.
-
-### [🔍 Existing Solutions Analysis](./existing-solutions-analysis.md)
-
-Comprehensive analysis of existing Rust-to-GPU compilation solutions: rust-gpu
-ecosystem, naga/WebGPU assessment, academic and industry research review,
-alternative approaches (eDSLs, runtime compilation, hybrid), weighted comparison
-matrix, and a research-era recommendation that was not adopted.
-
-### [🔤 Text Rendering Architecture](./text-rendering-architecture.md)
-
-Technical details of the SDF-based GPU text rendering pipeline.
-
-### [⚡ WASM Performance Benchmarks](./WASM_PERFORMANCE.md)
-
-Cross-platform performance benchmarking infrastructure: WASM vs native
-comparison tooling, browser compatibility matrix, and platform-specific
-performance characteristics.
-
-### [📈 Performance Guide](./PERFORMANCE_GUIDE.md)
-
-Performance targets, profiling infrastructure, benchmarking workflow,
-optimization tips, and cross-platform considerations.
-
-## Accessibility
-
-### [♿ WCAG 2.1 AA Conformance Statement](./accessibility/WCAG_2_1_AA_CONFORMANCE.md)
-
-Gup's WCAG 2.1 AA conformance declaration, including technologies relied upon,
-non-applicable criteria, and known limitations.
-
-### [📋 WCAG 2.1 AA Audit](./accessibility/WCAG_2_1_AA_AUDIT.md)
-
-Criterion-by-criterion evaluation of all 50 WCAG 2.1 Level A and AA success
-criteria with Pass/Fail/N-A verdicts and evidence.
-
-### [🔧 CI Accessibility Checks](./accessibility/CI_ACCESSIBILITY.md)
-
-How automated accessibility validation works in CI: test commands, failure
-interpretation, and severity levels.
-
-### [🧪 Accessibility Testing Guide](./accessibility/TESTING_GUIDE.md)
-
-Consumer-facing guide for validating WCAG compliance in applications built on
-Gup: axe-core scanning, screen reader testing, keyboard navigation, and colour
-contrast checking.
+Accessibility and research documents from before the RFC-001 core: history only,
+not a description of the current code.
 
 ## Quick Navigation
 
