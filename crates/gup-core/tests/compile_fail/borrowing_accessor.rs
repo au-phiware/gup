@@ -4,9 +4,9 @@
 // RFC-001 §12 risk 4: `encode`'s accessor is `Fn(&T) -> D`, whose `D`
 // cannot borrow from the row, and a string is not a column value. The same
 // closure compiles through `encode_key` (tests/compile_pass/key_accessor.rs).
-// The encoding is not passed to `attr`, so the bound fails once, in `encode`:
-// a second error there would carry an `IntoEncoding` hint that changes with
-// every new `IntoEncoding` impl (GUP-511).
+// Both errors, in `encode` and in `attr`, say so and point at `f64`, the one
+// `ColumnValue` impl without `#[diagnostic::do_not_recommend]` (GUP-523), so
+// a new column type or `IntoEncoding` impl leaves this snapshot unchanged.
 use gup_core::prelude::*;
 
 struct Row {
@@ -14,5 +14,11 @@ struct Row {
 }
 
 fn main() {
-    let _ = Categorical::okabe_ito().encode(|r: &Row| r.continent.as_str());
+    let mut sel = Selection::<Row, Circle>::new(vec![Row {
+        continent: "Asia".into(),
+    }]);
+    sel.attr(
+        Circle::FILL,
+        Categorical::okabe_ito().encode(|r: &Row| r.continent.as_str()),
+    );
 }

@@ -11,14 +11,13 @@
 //!
 //! What changes a snapshot (GUP-500): a toolchain bump changes many; a new
 //! `IntoEncoding` impl changes `bare_number`; a new `ColumnValue` type
-//! changes none (its impls carry `#[diagnostic::do_not_recommend]`, add it to
-//! a new one; `borrowing_accessor` fails the bound once, in `encode`, because
-//! a second error through `attr` would print an unrelated `IntoEncoding`
-//! hint). A new scale or WGSL module changes none: the library's
-//! concrete `CpuMirror` impls carry `#[diagnostic::do_not_recommend]` (add
-//! it to a new one), which keeps them out of rustc's "other types
-//! implement" lists, and the unknown-import and unknown-module errors name
-//! only the closest module.
+//! changes none if its impl carries `#[diagnostic::do_not_recommend]` (only
+//! `f64`'s does not, so rustc names it). `borrowing_accessor` covers both the
+//! `encode` and the `attr` error (GUP-523). A new scale or WGSL module changes
+//! none: the library's concrete `CpuMirror` impls carry
+//! `#[diagnostic::do_not_recommend]` (add it to a new one), which keeps them
+//! out of rustc's "other types implement" lists, and the unknown-import and
+//! unknown-module errors name only the closest module.
 
 #[test]
 fn channel_mistakes_do_not_compile() {
