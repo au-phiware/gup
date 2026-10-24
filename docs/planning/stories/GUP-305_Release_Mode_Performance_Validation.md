@@ -3,7 +3,8 @@
 ## Story Overview
 
 **Title**: Release-Mode Performance Validation CI Job **Priority**: Medium
-**Story Points**: 3 **Status**: 💡 New
+**Story Points**: 3 **Status**: 🚫 Closed (2026-10-24): obsolete: targets code
+deleted in GUP-486/488
 
 ## Context
 

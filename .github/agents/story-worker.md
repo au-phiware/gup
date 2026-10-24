@@ -32,9 +32,11 @@ story, and big documents crowd out the code.
    docs, the strategic review wins. Find the parts of RFC-001 and other large
    documents you need with `grep -n`, and read those parts with an offset and
    limit.
-3. Never read `docs/planning/stories/INDEX.md` or
-   `docs/planning/rfcs/RFC-001_Core_Architecture.md` whole. They are about 90 KB
-   and 190 KB. Use `grep -n` for the lines you need.
+3. `docs/planning/stories/INDEX.md` is small (the current initiative and the
+   Open Backlog) and may be read. Never read
+   `docs/planning/stories/INDEX_ARCHIVE.md` (the history before 2026-11, about
+   100 KB) or `docs/planning/rfcs/RFC-001_Core_Architecture.md` (about 190 KB)
+   whole. Use `grep -n` for the lines you need.
 
 ---
 
@@ -317,10 +319,10 @@ If during implementation you discovered areas that need dedicated stories:
 
 For any follow-up stories identified:
 
-0. **Check before writing.** Search `INDEX.md` and the code for existing
-   coverage, and check the strategic review's parked list. Do not write
-   follow-ups that extend parked areas; note them in the retro instead. If the
-   fix is under ~30 minutes, do it in this story rather than writing a
+0. **Check before writing.** Search `INDEX.md`, `INDEX_ARCHIVE.md` and the code
+   for existing coverage, and check the strategic review's parked list. Do not
+   write follow-ups that extend parked areas; note them in the retro instead. If
+   the fix is under ~30 minutes, do it in this story rather than writing a
    follow-up. Allocate IDs from the highest existing number (re-check right
    before writing; other agents may be working concurrently).
 1. Create full story files in `docs/planning/stories/` following the existing

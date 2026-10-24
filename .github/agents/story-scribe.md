@@ -34,10 +34,10 @@ Before writing anything, build context:
 2. Read `docs/planning/STRATEGIC_REVIEW_2026-10.md` (or its successor) for the
    current direction and the list of parked work. Do not write stories that
    extend parked areas unless explicitly asked.
-3. Read the active sections of `docs/planning/stories/INDEX.md` ("Strategic
-   Review 2026-10", "RFC-001 Migration") to see what is planned and what depends
-   on what. The file is about 90 KB, mostly history, so search the rest with
-   `grep` instead of reading it.
+3. Read `docs/planning/stories/INDEX.md` whole (the current initiative and the
+   Open Backlog) to see what is planned and what depends on what. Grep
+   `docs/planning/stories/INDEX_ARCHIVE.md` (the history before 2026-11, about
+   100 KB) for history and existing coverage; never read it whole.
 4. Identify the **next available GUP number**:
    - Find the highest existing GUP-NNN in `docs/planning/stories/` using:
      ```bash
@@ -45,9 +45,9 @@ Before writing anything, build context:
      ```
    - The new story gets the next sequential number. Re-check immediately before
      creating the file; other agents may be allocating IDs concurrently.
-5. **Check for existing coverage.** Search the index and the code for stories or
-   implementations that already deliver this intent. If covered, report that
-   instead of writing a duplicate.
+5. **Check for existing coverage.** Search `INDEX.md`, `INDEX_ARCHIVE.md` and
+   the code for stories or implementations that already deliver this intent. If
+   covered, report that instead of writing a duplicate.
 6. Search for related stories that might be prerequisites or that this story
    enables. Read their summaries or Acceptance Criteria if needed.
 
@@ -310,7 +310,8 @@ Find the appropriate place in the file:
 
 - If this story belongs to a named initiative, add it under that initiative's
   heading in numeric order.
-- Otherwise, add it to the "Stories" section in numeric order.
+- Otherwise, add it to the "Open Backlog" section in numeric order.
+- Never add entries to `docs/planning/stories/INDEX_ARCHIVE.md`; it is history.
 
 Entry format:
 

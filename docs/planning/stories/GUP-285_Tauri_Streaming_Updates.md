@@ -2,7 +2,8 @@
 
 ## Story Overview
 
-**Initiative**: Ecosystem Integration **Status**: 📋 Planned **Created**:
+**Initiative**: Ecosystem Integration **Status**: 🚫 Closed (2026-10-24):
+obsolete: the mobile and Tauri integrations were deleted (GUP-497) **Created**:
 2025-07-18
 
 ## Context

@@ -2,7 +2,8 @@
 
 ## Story Overview
 
-**Initiative**: Documentation **Status**: 📋 Planned **Created**: 2025-07-26
+**Initiative**: Documentation **Status**: 🚫 Closed (2026-10-24): obsolete: the
+tutorials are rewritten in track N1 **Created**: 2025-07-26
 
 ## Context
 

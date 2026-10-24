@@ -17,8 +17,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N0 Hygiene) **Status**: 📋 Planned
-**Created**: 2026-10-24
+**Initiative**: Strategic Review 2026-11 (N0 Hygiene) **Status**: ✅ Complete
+(2026-10-24) **Created**: 2026-10-24
 
 ## Context
 
@@ -55,23 +55,23 @@ other story in flight.
 
 ### AC1: the split
 
-- [ ] Before any edit, record
+- [x] Before any edit, record
       `grep -c '^- \[GUP-' docs/planning/stories/INDEX.md` (N₀) in the
       Implementation Summary.
-- [ ] `docs/planning/stories/INDEX_ARCHIVE.md` holds every section of the old
+- [x] `docs/planning/stories/INDEX_ARCHIVE.md` holds every section of the old
       `INDEX.md` except "Strategic Review 2026-11", in the same order, with the
       same headings and intro paragraphs, minus the nine Open Backlog entries.
       Its title is `# Stories Archive` and its first paragraph says it is the
       history before 2026-11, to be grepped, not read whole, and that new
       entries never go here.
-- [ ] `docs/planning/stories/INDEX.md` holds, in order: `# Stories`; the status
+- [x] `docs/planning/stories/INDEX.md` holds, in order: `# Stories`; the status
       legend with `🚫 Closed` added; one line linking `INDEX_ARCHIVE.md`; the
       "Strategic Review 2026-11" section unchanged; and `## Open Backlog` with
       the nine entries in Decisions, moved verbatim and each followed by its
       track note.
-- [ ] `grep -c '^- \[GUP-' INDEX.md INDEX_ARCHIVE.md` sums to N₀, and
+- [x] `grep -c '^- \[GUP-' INDEX.md INDEX_ARCHIVE.md` sums to N₀, and
       `wc -l < docs/planning/stories/INDEX.md` is at most 200.
-- [ ] Every entry link in both files resolves:
+- [x] Every entry link in both files resolves:
 
       ```bash
       cd docs/planning/stories && cat INDEX.md INDEX_ARCHIVE.md |
@@ -83,27 +83,27 @@ other story in flight.
 
 ### AC2: 27 stories closed
 
-- [ ] Each entry in the closure list (Decisions) has its status emoji replaced
+- [x] Each entry in the closure list (Decisions) has its status emoji replaced
       by `🚫` and `Closed 2026-MM-DD (<reason>).` inserted after its em dash,
       using the reason given for its group and today's `date -I`.
-- [ ] Each of those story files' `**Status**:` value becomes
+- [x] Each of those story files' `**Status**:` value becomes
       `🚫 Closed (YYYY-MM-DD): <reason>`. No other text in them changes.
-- [ ] `grep -c '^- \[GUP-[^]]*\]([^)]*) \(📋\|💡\)' INDEX_ARCHIVE.md` prints 0
+- [x] `grep -c '^- \[GUP-[^]]*\]([^)]*) \(📋\|💡\)' INDEX_ARCHIVE.md` prints 0
       (every open entry left in the archive was closed or moved).
 
 ### AC3: agent docs and links
 
-- [ ] `.github/agents/story-worker.md` Phase 0 item 3: `INDEX.md` is small and
+- [x] `.github/agents/story-worker.md` Phase 0 item 3: `INDEX.md` is small and
       may be read; `INDEX_ARCHIVE.md` and RFC-001 are never read whole (grep
       them). Phase 4's INDEX step is unchanged.
-- [ ] `.github/agents/story-scribe.md` Step 1 item 3: read `INDEX.md` whole;
+- [x] `.github/agents/story-scribe.md` Step 1 item 3: read `INDEX.md` whole;
       grep `INDEX_ARCHIVE.md` for history and existing coverage. Step 1 item 5
       names both files. Step 4: new entries go under the active initiative's
       section in `INDEX.md` (or "Open Backlog" if standalone), never in the
       archive.
-- [ ] `docs/planning/INDEX.md` lists `stories/INDEX_ARCHIVE.md` next to
+- [x] `docs/planning/INDEX.md` lists `stories/INDEX_ARCHIVE.md` next to
       `stories/INDEX.md`.
-- [ ] `mask all-check` passes.
+- [x] `mask all-check` passes.
 
 ## Decisions
 
@@ -184,12 +184,12 @@ other story in flight.
 
 ## Technical Tasks
 
-- [ ] Start commit within 30 minutes; record N₀.
-- [ ] Create `INDEX_ARCHIVE.md` from the old sections; trim `INDEX.md`; move the
+- [x] Start commit within 30 minutes; record N₀.
+- [x] Create `INDEX_ARCHIVE.md` from the old sections; trim `INDEX.md`; move the
       nine entries; commit.
-- [ ] Apply the 27 closures to the archive entries and the story files; commit.
-- [ ] Edit the agent docs and `docs/planning/INDEX.md`.
-- [ ] Run the AC checks and `mask all-check`.
+- [x] Apply the 27 closures to the archive entries and the story files; commit.
+- [x] Edit the agent docs and `docs/planning/INDEX.md`.
+- [x] Run the AC checks and `mask all-check`.
 
 ## Dependencies
 
@@ -210,8 +210,8 @@ other story in flight.
 
 ## Success Metrics
 
-- [ ] `wc -c docs/planning/stories/INDEX.md` under 20 KB (105 KB before).
-- [ ] 27 stories closed; 9 in Open Backlog; N0 section unchanged.
+- [x] `wc -c docs/planning/stories/INDEX.md` under 20 KB (105 KB before).
+- [x] 27 stories closed; 9 in Open Backlog; N0 section unchanged.
 
 ## Risk Assessment
 
@@ -222,12 +222,75 @@ other story in flight.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes of starting, then `scripts/checkpoint.sh`
+- [x] First commit within 30 minutes of starting, then `scripts/checkpoint.sh`
       every 20–30 minutes between commits (story-worker "Checkpoint rule")
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] `mask all-check` passes
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] `mask wasm-browser`: not needed (planning docs only); say so
-- [ ] WASM size: "unchanged: no library code change"
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] `mask all-check` passes
+- [x] Lint and format clean: `mask all-fix`
+- [x] `mask wasm-browser`: not needed (planning docs only); say so
+- [x] WASM size: "unchanged: no library code change"
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- N₀ (`grep -c '^- \[GUP-' INDEX.md` before any edit) was **505**, not the 493
+  the story's Context implies: GUP-496 to GUP-502 completed and GUP-511 and
+  GUP-517 were added since it was written. After the split `INDEX.md` has 20
+  entries (the 11 N0 entries, unchanged, plus the nine Open Backlog) and
+  `INDEX_ARCHIVE.md` 485: 505 in total. Because GUP-511 and GUP-517 are N0
+  entries they stay in the N0 section, so the story's "N0 section unchanged"
+  holds.
+- `INDEX.md` is 132 lines, about 8 KB (from 1,772 lines, 109 KB). No entry link
+  is broken. The archive has 0 open (📋/💡) entries; 27 entries carry 🚫.
+- The split was done by a script (`/tmp`, not committed) that parses entries,
+  asserts all 27 closures and nine moves were found, and reports leftover open
+  entries (none). Prettier re-wrapped some archive lines and the legend; a `>`
+  line joins the archive's intro and legend into one blockquote (MD028).
+- The 27 story files' `**Status**:` values became
+  `🚫 Closed (2026-10-24): <reason>`; nothing else in them changed apart from
+  prettier's re-wrap of that line.
+- Agent docs: `story-worker.md` Phase 0 item 3 and the Phase "Check before
+  writing" item; `story-scribe.md` Step 1 items 3 and 5, Step 4;
+  `docs/planning/INDEX.md` lists the archive.
+- `mask wasm-browser`: not needed (planning docs only). WASM size: unchanged, no
+  library code change.
+
+## Retrospective
+
+**Completed**: 2026-10-24
+
+### Key Technical Learnings
+
+#### Parsing a hand-written index
+
+- **Challenge**: Entries are multi-line bullets with irregular shapes: an em
+  dash at a line end (GUP-402), a link wrapped onto the next line (GUP-105), and
+  prettier re-wraps after the move, so a status or "Closed" marker can sit
+  across lines.
+- **Solution**: Treat an entry as its first line plus following indented lines;
+  assert every closure and move was found; verify with counts (`🚫` at entry
+  start: 27) rather than by `grep -c 'Closed 2026'` on lines, which undercounts
+  wrapped entries.
+- **Pattern**: Script the move with assertions, then check by entry count, not
+  by line count.
+
+### Architectural Decisions
+
+#### Archive keeps the 2026-10 section
+
+- **Decision**: "Strategic Review 2026-10" went to the archive with the rest.
+- **Reasoning**: The story says every section except 2026-11 moves.
+- **Trade-off**: INDEX.md no longer shows the 2026-10 initiative's stories.
+- **Future**: GUP-504's guard reads both files.
+
+### Development Workflow Insights
+
+- Worktree-isolated agents cannot run `git` through `with_cargo_env.sh` or with
+  a `cd`; a plain `git commit` runs the hook, which sets its own environment.
+- Counts in the story had drifted (493 vs 505) because other stories landed
+  first; the AC checks hold by the sum, not by the literal number.
+
+### Follow-up Stories
+
+None.
