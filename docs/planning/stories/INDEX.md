@@ -118,7 +118,7 @@ GUP-535 in turn (they share `src/lib.rs`); GUP-536 after N2's builders.
 - [GUP-530](GUP-530_Tested_Tutorials_Getting_Started.md) 📋 — Tutorials 1
   (getting started with the builders) and 2 (plots and selections) rewritten as
   doctests of `gup`, with their images as goldens in `tests/tutorials.rs`, and
-  the conventions the other tutorial stories follow.
+  the conventions the other tutorial stories follow. Deps: GUP-537 📋.
 - [GUP-531](GUP-531_Tutorials_Shader_Functions_And_Custom_Marks.md) 📋 —
   Tutorials 3 (`#[wgsl_function]`, `then`) and 6 (`#[derive(Mark)]`, the custom
   mark guide) as doctests, and a "Deriving" reference on the `Mark` trait. Deps:
@@ -133,14 +133,14 @@ GUP-535 in turn (they share `src/lib.rs`); GUP-536 after N2's builders.
 - [GUP-534](GUP-534_Honest_README_And_Tested_Quick_Start.md) 📋 — README tagline
   and "Why Gup" cut to `PERF_BUDGETS.md` figures, a "Not yet" list, a
   git-dependency Quick Start, and the README compiled as a doctest. Deps:
-  GUP-530 📋 (soft).
+  GUP-530 📋 (soft), GUP-537 📋 (soft).
 - [GUP-535](GUP-535_Compiled_Integration_Guides.md) 📋 — The egui and Bevy
   guides compiled as `no_run` doctests of `gup-egui` and `gup-bevy`. Deps:
   GUP-483 ✅, GUP-484 ✅.
 - [GUP-536](GUP-536_Tutorial_Tour_Of_Chart_Types.md) 📋 — Tutorial 7: every
   chart type with a tested block of at most 20 lines and a golden image. Deps:
-  GUP-530 📋, GUP-542 📋, GUP-544 📋, GUP-547 📋, GUP-548 📋, GUP-549 📋;
-  GUP-550–554 📋 (soft).
+  GUP-530 📋, GUP-537 📋, GUP-542 📋, GUP-544 📋, GUP-547 📋, GUP-548 📋,
+  GUP-549 📋; GUP-550–554 📋 (soft).
 
 ## Track N2: Chart Vocabulary
 
@@ -150,15 +150,20 @@ Minimal accessibility is track N3, not here (owner decision 4). Most stories
 edit `crates/gup-core/src/lib.rs`, `plot.rs`, `selection.rs` or
 `builder/mod.rs`, so N2 runs mostly one story at a time, with an N1 or a
 non-conflicting N2 story beside it (two build-heavy agents at most; check
-`touches:`). Suggested pairs, in order: GUP-540 with GUP-533; GUP-541 with
-GUP-530; GUP-542 (Opus) with GUP-531; GUP-543 with GUP-532; GUP-544 with
-GUP-553; GUP-545 with GUP-534; GUP-546 with GUP-405; GUP-547 with GUP-535;
-GUP-548; GUP-549; GUP-550 (Opus) with GUP-552; GUP-551 (Opus) with GUP-416;
-GUP-439 (Opus) with GUP-554; then GUP-536. Deferred from N2: owned or numeric
-category keys in builders (an owner decision: closure inference cannot accept
-both `|r| r.name.as_str()` and `|r| r.year` in one method), curved and
-horizontal areas, heatmap cell labels, error bars, pie charts and facets.
+`touches:`). Suggested pairs, in order: GUP-540 with GUP-533; GUP-537 with
+GUP-535 (before GUP-541 and GUP-530: it edits `builder/`, `dogfood/` and
+`src/lib.rs`); GUP-541 with GUP-530; GUP-542 (Opus) with GUP-531; GUP-543 with
+GUP-532; GUP-544 with GUP-553; GUP-545 with GUP-534; GUP-546 with GUP-405;
+GUP-547 with GUP-535; GUP-548; GUP-549; GUP-550 (Opus) with GUP-552; GUP-551
+(Opus) with GUP-416; GUP-439 (Opus) with GUP-554; then GUP-536. Deferred from
+N2: curved and horizontal areas, heatmap cell labels, error bars, pie charts and
+facets.
 
+- [GUP-537](GUP-537_Owned_Category_Keys_In_Builders.md) 📋 — Builders' key
+  setters take owned keys (`|r| r.year`, an enum, `r.name.clone()`) through
+  `DictionaryKey`, compared by label, with a "not a category key" diagnostic and
+  a snapshot of the borrowed-key lifetime error; Plot-layer `encode_key`
+  unchanged. Deps: GUP-419 ✅, GUP-464 ✅.
 - [GUP-540](GUP-540_Explicit_Domain_Edge_Inset.md) 📋 — An explicit domain's
   near end is inset by the marks' overhang, so a point at `(0, 0)` or the first
   constant-width bar is drawn whole; bars still sit on the axis.
@@ -169,14 +174,14 @@ horizontal areas, heatmap cell labels, error bars, pie charts and facets.
 - [GUP-542](GUP-542_Text_Layer_For_Annotations.md) 📋 — `Plot::text(rows)`: a
   CPU-laid-out `TextLayer` at data or band positions with anchors, offsets and
   `within` spans, clipped, in every target and SVG. Deps: GUP-540 📋, GUP-541 📋
-  (soft, `plot.rs`).
+  (soft, `plot.rs`), GUP-537 📋 (soft).
 - [GUP-543](GUP-543_Horizontal_Bars_And_Group_Padding.md) 📋 — `gup::barh`
   (`BarChart<T, Horizontal>`, categories top to bottom) and
-  `BarChart::group_padding`.
+  `BarChart::group_padding`. Deps: GUP-537 📋.
 - [GUP-544](GUP-544_Bar_Value_Labels.md) 📋 — `value_labels()` and
   `value_labels_with(f)` on every bar variant: above or beside bar ends with
   headroom, centred and contrast-coloured in stacks, hidden where they do not
-  fit. Deps: GUP-542 📋, GUP-543 📋, GUP-541 📋 (soft).
+  fit. Deps: GUP-542 📋, GUP-543 📋, GUP-541 📋 (soft), GUP-537 📋 (soft).
 - [GUP-545](GUP-545_Area_Mark.md) 📋 — The `Area` mark (`Plot::area`): MSAA
   trapezoids on the `Polyline` geometry, split where the top crosses the
   baseline, seam-free when translucent, written to SVG as paths.
@@ -184,14 +189,14 @@ horizontal areas, heatmap cell labels, error bars, pie charts and facets.
   so areas get hover, tooltips and brushing. Deps: GUP-545 📋.
 - [GUP-547](GUP-547_Area_Builder_And_Stacked_Areas.md) 📋 — `gup::area` with
   overlapping series, stacking aligned on the union of x values, `outline` and
-  tooltips. Deps: GUP-545 📋, GUP-546 📋.
+  tooltips. Deps: GUP-545 📋, GUP-546 📋, GUP-537 📋.
 - [GUP-548](GUP-548_Histogram_Builder_And_Bin_Transform.md) 📋 —
   `transform::bin` (Sturges or a count on a 1–2–5 step, a width, or edges) and
   `gup::histogram` with edges on round numbers, 1 px gaps, stacking by key and a
-  "Count" axis title. Deps: GUP-540 📋 (soft).
+  "Count" axis title. Deps: GUP-537 📋, GUP-540 📋 (soft).
 - [GUP-549](GUP-549_Heatmap_Builder.md) 📋 — `gup::heatmap` on two band axes
   with `color_value`, a ramp legend and gapped cells; `color_value_scale` takes
-  `Sequential` or `Diverging` on the scatter too.
+  `Sequential` or `Diverging` on the scatter too. Deps: GUP-537 📋.
 - [GUP-550](GUP-550_Line_Curves_And_Steps.md) 📋 — `Curve` and
   `.curve(Curve::StepAfter)` on lines: step pieces drawn exactly in the shader
   through a per-layer vertex count and glue constant, straight lines unchanged.
@@ -206,7 +211,7 @@ horizontal areas, heatmap cell labels, error bars, pie charts and facets.
   `Categorical::okabe_ito()` follows. Deps: GUP-552 📋 (soft).
 - [GUP-554](GUP-554_Box_Plot_Builder.md) 📋 — `transform::box_stats` (type-7
   quartiles, 1.5 IQR whiskers) and `gup::boxplot` with outliers and tooltips.
-  Deps: GUP-548 📋.
+  Deps: GUP-537 📋, GUP-548 📋.
 - [GUP-405](GUP-405_Gup_Text_OpenType_Shaping.md) 📋 — Shape `gup-text` runs
   with rustybuzz: Inter's GPOS kerning and `tnum` tabular figures for tick
   labels, with a 25 KB gz WASM stop rule. Deps: GUP-400 ✅, GUP-542 📋 (soft).

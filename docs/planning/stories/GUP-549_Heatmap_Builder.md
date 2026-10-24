@@ -95,8 +95,8 @@ accept today; this story widens it for both builders.
 
   impl<T: Send + Sync + 'static> HeatmapChart<T> {
       // plot_setters!()
-      pub fn x(self, key: impl for<'a> Fn(&'a T) -> &'a str + Send + Sync + 'static) -> Self;
-      pub fn y(self, key: impl for<'a> Fn(&'a T) -> &'a str + Send + Sync + 'static) -> Self;
+      pub fn x<K: DictionaryKey>(self, key: impl Fn(&T) -> K + Send + Sync + 'static) -> Self;
+      pub fn y<K: DictionaryKey>(self, key: impl Fn(&T) -> K + Send + Sync + 'static) -> Self;
       pub fn color_value<D: ColumnValue>(self, f: impl Fn(&T) -> D + Send + Sync + 'static) -> Self;
       pub fn color_value_scale(self, scale: impl Into<ColorValueScale>) -> Self;
       pub fn legend_title(self, title: impl Into<String>) -> Self;
@@ -121,16 +121,17 @@ accept today; this story widens it for both builders.
 
   Why: `x`/`y` take category keys exactly as `bar`'s `x` does; `color_value` is
   the scatter's name for colouring by a number, so a user who knows one builder
-  guesses the other. Keys are `&str`, as in every builder (owned or numeric keys
-  are an open owner decision, not this story's).
+  guesses the other. Keys are owned, as in every builder (GUP-537): `|v| v.hour`
+  for a `u8` hour works.
 
 - **Scales**: x `Band::new().padding(0.0)`, y the same with its domain reversed
   (first-seen at the top). Default colour scale `Sequential::viridis()`.
   `ColorValueScale` lives in `scale/mod.rs` and is exported from the crate root
   (not the prelude).
-- **Cells**: one `Rect` layer; `x`/`y` through the bands' `encode_key` with the
-  first-seen domains; `width`/`height` are `Derived` from `band_width` minus 1
-  px when `|band_width| >= 8`, else `band_width`.
+- **Cells**: one `Rect` layer; `x`/`y` through `builder::erase_key` and the
+  bands' `encode_owned_key` with the first-seen domains; `width`/`height` are
+  `Derived` from `band_width` minus 1 px when `|band_width| >= 8`, else
+  `band_width`.
 - **No row aggregation**: one cell per row; duplicate (x, y) pairs draw on top
   of each other in row order (documented: aggregate first).
 
@@ -145,8 +146,7 @@ accept today; this story widens it for both builders.
 
 ## Out of Scope
 
-- Numeric (binned) 2D heatmaps, cell value labels, clustering or reordering,
-  numeric or owned category keys.
+- Numeric (binned) 2D heatmaps, cell value labels, clustering or reordering.
 
 ## Technical Tasks
 
@@ -160,6 +160,8 @@ accept today; this story widens it for both builders.
 ### Prerequisite Stories
 
 - GUP-464: the bar builder ✅ (band axes and key domains).
+- GUP-537: owned category keys 📋 — `x`/`y` take owned keys through
+  `builder::erase_key`.
 - GUP-543: horizontal bars 📋 (soft): the reversed y band pattern, shared if it
   landed first.
 

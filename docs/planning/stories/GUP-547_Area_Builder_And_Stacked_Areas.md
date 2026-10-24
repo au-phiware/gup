@@ -106,8 +106,8 @@ rows directly.
       pub fn y_end<D: ColumnValue>(self, f: impl Fn(&T) -> D + Send + Sync + 'static) -> Self;
       pub fn x_scale<S: PositionScale>(self, scale: S) -> Self;
       pub fn y_scale<S: PositionScale>(self, scale: S) -> Self;
-      pub fn color(self, key: impl for<'a> Fn(&'a T) -> &'a str + Send + Sync + 'static) -> Self;
-      pub fn stack(self, key: impl for<'a> Fn(&'a T) -> &'a str + Send + Sync + 'static) -> Self;
+      pub fn color<K: DictionaryKey>(self, key: impl Fn(&T) -> K + Send + Sync + 'static) -> Self;
+      pub fn stack<K: DictionaryKey>(self, key: impl Fn(&T) -> K + Send + Sync + 'static) -> Self;
       pub fn color_scale(self, scale: Categorical) -> Self;
       pub fn fill(self, color: Color) -> Self;
       pub fn opacity(self, opacity: f32) -> Self;
@@ -128,7 +128,7 @@ rows directly.
   let chart = gup::area(visits)
       .x(|v| v.day)
       .y(|v| v.count)
-      .stack(|v| v.source.as_str())
+      .stack(|v| v.source.clone())
       .outline(1.0);
   ```
 
@@ -178,6 +178,8 @@ rows directly.
 ### Prerequisite Stories
 
 - GUP-545: The `Area` mark 📋; GUP-546: area picking 📋.
+- GUP-537: owned category keys 📋 — `color` and `stack` take owned keys through
+  `builder::erase_key`.
 - GUP-541: Builder tick formats 📋 (soft) — `plot_setters!` gains the format
   setters there.
 

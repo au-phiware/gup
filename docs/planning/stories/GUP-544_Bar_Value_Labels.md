@@ -173,6 +173,8 @@ segment too thin to hold it. The Decisions fix both.
 
 - GUP-542: Text layer 📋 — `Plot::text`, `TextLayer`, anchors.
 - GUP-543: Horizontal bars 📋 — the orientation parameter.
+- GUP-537: owned category keys 📋 (soft, via GUP-543) — bar keys are labels
+  (`Arc<str>`), which `BarLabel::key` reuses.
 - GUP-541: Builder tick formats 📋 (soft) — the stored value-axis format for the
   default text.
 

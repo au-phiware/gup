@@ -125,8 +125,8 @@ for millions of labels is out of scope.
   impl<T: Send + Sync + 'static> TextLayer<T> {
       pub fn x<D: ColumnValue>(&mut self, f: impl Fn(&T) -> D + Send + Sync + 'static) -> &mut Self;
       pub fn y<D: ColumnValue>(&mut self, f: impl Fn(&T) -> D + Send + Sync + 'static) -> &mut Self;
-      pub fn x_key(&mut self, key: impl for<'a> Fn(&'a T) -> &'a str + Send + Sync + 'static) -> &mut Self;
-      pub fn y_key(&mut self, key: impl for<'a> Fn(&'a T) -> &'a str + Send + Sync + 'static) -> &mut Self;
+      pub fn x_key<K: DictionaryKey>(&mut self, key: impl Fn(&T) -> K + Send + Sync + 'static) -> &mut Self;
+      pub fn y_key<K: DictionaryKey>(&mut self, key: impl Fn(&T) -> K + Send + Sync + 'static) -> &mut Self;
       pub fn text<S: std::fmt::Display>(&mut self, f: impl Fn(&T) -> S + Send + Sync + 'static) -> &mut Self;
       pub fn anchor(&mut self, anchor: Anchor) -> &mut Self;
       pub fn dx(&mut self, px: f32) -> &mut Self;
@@ -244,6 +244,9 @@ for millions of labels is out of scope.
 
 - GUP-467: SVG writes marks ✅ — text runs in SVG.
 - GUP-540 📋 and GUP-541 📋 (soft): both edit `plot.rs`; run after them.
+- GUP-537 📋 (soft): `x_key`/`y_key` take owned keys like the builders' key
+  setters, looked up by label (`key_position(&label)`, the key's `Display`), and
+  share `DictionaryKey`'s diagnostic.
 
 ### Enables Stories
 

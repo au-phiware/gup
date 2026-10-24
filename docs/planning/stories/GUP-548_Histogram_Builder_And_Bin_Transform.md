@@ -115,7 +115,7 @@ bin edges. `scale::tick_step` already computes such a step for ticks.
       pub fn x<D: ColumnValue>(self, f: impl Fn(&T) -> D + Send + Sync + 'static) -> Self;
       pub fn bins(self, bins: Bins) -> Self;
       pub fn x_domain(self, lo: f64, hi: f64) -> Self;
-      pub fn color(self, key: impl for<'a> Fn(&'a T) -> &'a str + Send + Sync + 'static) -> Self;
+      pub fn color<K: DictionaryKey>(self, key: impl Fn(&T) -> K + Send + Sync + 'static) -> Self;
       pub fn color_scale(self, scale: Categorical) -> Self;
       pub fn fill(self, color: Color) -> Self;
       pub fn opacity(self, opacity: f32) -> Self;
@@ -182,6 +182,8 @@ bin edges. `scale::tick_step` already computes such a step for ticks.
 ### Prerequisite Stories
 
 - GUP-494: numeric-axis bars ✅.
+- GUP-537: owned category keys 📋 — `color` takes an owned key through
+  `builder::erase_key`; `HistogramBin::key` is its label.
 - GUP-540: explicit-domain edge inset 📋 (soft): bars on the explicit x domain
   have no x overhang, so nothing changes, but run after it (both affect
   explicit-domain layouts).

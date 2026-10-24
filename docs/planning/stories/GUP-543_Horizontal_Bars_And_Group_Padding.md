@@ -100,7 +100,7 @@ does across an x band.
   pub fn barh<T: Send + Sync + 'static>(rows: impl IntoIterator<Item = T>) -> BarChart<T, Horizontal>;
 
   impl<T: Send + Sync + 'static> BarChart<T, Horizontal> {
-      pub fn y(self, key: impl for<'a> Fn(&'a T) -> &'a str + Send + Sync + 'static) -> Self;
+      pub fn y<K: DictionaryKey>(self, key: impl Fn(&T) -> K + Send + Sync + 'static) -> Self;
       pub fn x<D: ColumnValue>(self, f: impl Fn(&T) -> D + Send + Sync + 'static) -> Self;
       pub fn x_scale<S: PositionScale>(self, scale: S) -> Self;
   }
@@ -112,9 +112,9 @@ does across an x band.
 
   ```rust
   let chart = gup::barh(survey)
-      .y(|r| r.answer.as_str())
+      .y(|r| r.answer.clone())
       .x(|r| r.share)
-      .group(|r| r.year.as_str());
+      .group(|r| r.year);
   ```
 
   Why: every builder names its accessors by the axis they land on
@@ -167,6 +167,8 @@ does across an x band.
 ### Prerequisite Stories
 
 - GUP-464: bar builder ✅; GUP-461: offsets and sub-bands ✅.
+- GUP-537: owned category keys 📋 — `y` and the moved setters take owned keys
+  (`K: DictionaryKey`, through `builder::erase_key`), as `bar`'s do.
 
 ### Enables Stories
 
