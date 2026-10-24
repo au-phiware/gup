@@ -177,6 +177,8 @@ The tutorials keep their file names so existing links stay valid.
 
 - GUP-489: Revise architecture docs ✅ — the doctest-include pattern.
 - GUP-498: Current `gup-core` crate docs ✅ — the API descriptions to match.
+- GUP-537: owned category keys 📋 — the tutorial's colour-by-key, group and
+  stack calls use owned keys (`|r| r.region`, `r.name.clone()`).
 
 ### Enables Stories
 

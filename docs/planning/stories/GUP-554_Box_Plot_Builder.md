@@ -99,11 +99,11 @@ data within 1.5 IQR of the box, and points beyond drawn individually.
 
   impl<T: Send + Sync + 'static> BoxPlotChart<T> {
       // plot_setters!()
-      pub fn x(self, key: impl for<'a> Fn(&'a T) -> &'a str + Send + Sync + 'static) -> Self;
+      pub fn x<K: DictionaryKey>(self, key: impl Fn(&T) -> K + Send + Sync + 'static) -> Self;
       pub fn y<D: ColumnValue>(self, f: impl Fn(&T) -> D + Send + Sync + 'static) -> Self;
       pub fn y_scale<S: PositionScale>(self, scale: S) -> Self;
       pub fn padding(self, p: f64) -> Self;
-      pub fn color(self, key: impl for<'a> Fn(&'a T) -> &'a str + Send + Sync + 'static) -> Self;
+      pub fn color<K: DictionaryKey>(self, key: impl Fn(&T) -> K + Send + Sync + 'static) -> Self;
       pub fn color_scale(self, scale: Categorical) -> Self;
       pub fn fill(self, color: Color) -> Self;
       pub fn legend_title(self, title: impl Into<String>) -> Self;
@@ -116,7 +116,7 @@ data within 1.5 IQR of the box, and points beyond drawn individually.
   ```
 
   ```rust
-  let chart = gup::boxplot(requests).x(|r| r.service.as_str()).y(|r| r.ms);
+  let chart = gup::boxplot(requests).x(|r| r.service.clone()).y(|r| r.ms);
   ```
 
   Why: the same `x`/`y` as `bar` (category, value); the summary type is what a
@@ -154,6 +154,8 @@ data within 1.5 IQR of the box, and points beyond drawn individually.
 ### Prerequisite Stories
 
 - GUP-548: histogram and bin transform 📋 — the `transform` module.
+- GUP-537: owned category keys 📋 — `x` and `color` take owned keys through
+  `builder::erase_key`; `BoxSummary::key` is the label.
 
 ### Enables Stories
 

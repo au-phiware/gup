@@ -89,6 +89,7 @@ promised this page.
 ### Prerequisite Stories
 
 - GUP-530: Tested tutorials part 1 📋.
+- GUP-537: owned category keys 📋 — every key closure on the page is owned.
 - GUP-542 📋, GUP-544 📋, GUP-547 📋, GUP-548 📋, GUP-549 📋 — the chart types
   the page must show.
 - GUP-550 📋, GUP-551 📋, GUP-552 📋, GUP-553 📋, GUP-554 📋 (soft) — shown if

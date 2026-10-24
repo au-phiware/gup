@@ -134,6 +134,8 @@ This story rewrites the README's top half around measured numbers and an honest
 ### Prerequisite Stories
 
 - GUP-530: Tested tutorials part 1 📋 (soft) — the links to tutorial 1.
+- GUP-537: owned category keys 📋 (soft) — the Quick Start's `.color(..)` call
+  is owned (`d.continent.clone()`); both edit `src/lib.rs`.
 
 ### Enables Stories
 
