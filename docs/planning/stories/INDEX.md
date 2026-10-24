@@ -58,7 +58,7 @@ file); GUP-504.
   history to `INDEX_ARCHIVE.md`, keep this section and a nine-story Open Backlog
   here, close 27 obsolete or superseded stories with a new 🚫 status, and point
   the agent docs at the small index. Deps: GUP-496 📋 (soft).
-- [GUP-504](GUP-504_Story_ID_Guard.md) 📋 — `scripts/check_story_ids.sh`: IDs
+- [GUP-504](GUP-504_Story_ID_Guard.md) 🚧 — `scripts/check_story_ids.sh`: IDs
   above the legacy baseline (GUP-315) unique across files and both index files,
   run by the hook, `all-check` and `merge-check`, with a seeded test. Deps:
   GUP-503 ✅, GUP-502 ✅.
