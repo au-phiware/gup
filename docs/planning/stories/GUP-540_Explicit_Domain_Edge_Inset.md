@@ -56,18 +56,18 @@ charts unchanged and gives circles room.
 
 ### AC1: The near end is inset by the overhang
 
-- [ ] For an axis that is not widened (an explicit domain, and not a zoomed axis
+- [x] For an axis that is not widened (an explicit domain, and not a zoomed axis
       that kept the widened policy), the near end of its range is inset by that
       axis's overhang (`over[i]`, without `plot_padding`): x maps from
       `plot.left() + over[0]`, y and the right y from `plot.bottom() - over[i]`.
       The far end is unchanged (`over[i] + plot_padding`). Widened axes are
       unchanged (range = the plot rect).
-- [ ] New test in `crates/gup-core/tests/scatter_png.rs`: a scatter with `x` and
+- [x] New test in `crates/gup-core/tests/scatter_png.rs`: a scatter with `x` and
       `y` domains `0..10`, radius 5, points at `(0, 0)`, `(10, 10)` and
       `(0, 10)`: every disc's full circle lies inside `Layout::plot` (checked by
       sampling the disc's colour 4 px inside its edge in the four directions),
       and `Layout::x_ticks[0]` is at `plot.left() + 5.0` (±0.5).
-- [ ] New test in `crates/gup-core/tests/rect_png.rs`: bars on a numeric x axis
+- [x] New test in `crates/gup-core/tests/rect_png.rs`: bars on a numeric x axis
       with constant `Rect::WIDTH` 20 px and an explicit x domain whose minimum
       equals the first bar's x: the first bar's left edge is inside the plot
       rect (pixel check), and the bars' bottoms still sit on the x axis (y has
@@ -76,28 +76,28 @@ charts unchanged and gives circles room.
 
 ### AC2: Bar charts and lines are unchanged
 
-- [ ] `gup_core/builder_bars`, `gup_core/grouped_bars`, `gup_core/rect_bars`,
+- [x] `gup_core/builder_bars`, `gup_core/grouped_bars`, `gup_core/rect_bars`,
       `gup_core/line_series` and `gup_core/builder_line` goldens pass without
       re-blessing.
 
 ### AC3: Every moved golden is listed and read
 
-- [ ] Every golden that changes is re-blessed (`GUP_BLESS=1`) and listed in the
+- [x] Every golden that changes is re-blessed (`GUP_BLESS=1`) and listed in the
       Implementation Summary with its reason (circles on an explicit domain are
       expected, e.g. `msaa_1x`, `msaa_4x`); the worker reads each re-blessed PNG
       and confirms the edge marks are whole and the axes still meet at the
       corner.
-- [ ] Tests that compute pixels from a domain by hand (not from `Layout` ticks
+- [x] Tests that compute pixels from a domain by hand (not from `Layout` ticks
       or a `ScaleRef::eval` after resolve) and break are fixed to read `Layout`;
       each is listed.
 
 ### AC4: Every host agrees
 
-- [ ] `mask wasm-browser` passes. Scene code in `crates/gup-core/wasm-size/`
+- [x] `mask wasm-browser` passes. Scene code in `crates/gup-core/wasm-size/`
       that computes expected pixels by hand is updated, listed.
-- [ ] `mask egui-screenshot` passes, and the worker reads its PNG: the egui
+- [x] `mask egui-screenshot` passes, and the worker reads its PNG: the egui
       scatter's `(0, 0)` point is a whole disc.
-- [ ] `./dogfood/run_all.sh` reports 10 PASS.
+- [x] `./dogfood/run_all.sh` reports 10 PASS.
 
 ## Decisions
 
@@ -168,15 +168,74 @@ charts unchanged and gives circles room.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1` and
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1` and
       `cargo test -p gup-core -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (re-blessed goldens, egui screenshot)
-- [ ] `mask wasm-browser` passes (layout change)
-- [ ] WASM size: `mask wasm-size` scatter gz bytes reported
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye (re-blessed goldens, egui screenshot)
+- [x] `mask wasm-browser` passes (layout change)
+- [x] WASM size: `mask wasm-size` scatter gz bytes reported
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+`set_ranges` in `crates/gup-core/src/plot.rs` gains `near(i)`: a non-widened
+axis starts `over[i]` in from the plot's near edge (no padding). Bars, lines and
+areas have no overhang on their baseline axis, so they are unchanged (AC2: no
+bar or line golden moved).
+
+- New tests: `scatter_png::points_on_an_explicit_domain_edge_are_whole`,
+  `rect_png::the_first_bar_on_an_explicit_x_domain_is_whole_and_on_the_axis`
+  (both fail without the change).
+- Hand-computed tests fixed:
+  `tick_labels::an_automatic_domain_widens_and_a_fixed_one_does_not` (fixed lead
+  is now the 30 px radius),
+  `stroke_png::bubbles_with_translucent_fills_and_outlines` (first ticks sit the
+  60 px max radius in), `fixtures/msaa_guides.svg` (first ticks moved in by the
+  radius).
+- Re-blessed goldens (8, all read; edge marks whole, axes meet at the corner):
+  `msaa_1x`, `msaa_4x` (point at (0,0) whole), `bubble_stroke` (ticks inset by
+  the 60 px max radius), `categorical_nulls` and `wgsl_function_highlight`
+  (explicit x domain: first x tick moves in), `band_months` (explicit y domain),
+  `tick_format_currency`, `tick_format_percent` (first points whole).
+- `mask wasm-browser` passes (not under `headless_env.sh`, where Chromium has no
+  WebGPU: environmental). `wasm-size/` needed no change. `mask egui-screenshot`
+  passes; the egui scatter's (0, 0) point is whole. Dogfood: 10 pass.
+  `mask wasm-size`: scatter 334403 gz bytes (recorded 334149, +0.08%).
+- `pick_100k_circles` is a timing test that fails under lavapipe
+  (`headless_env.sh`) and passes natively; unrelated.
+
+## Retrospective
+
+**Completed**: 2026-10-24
+
+### Key Technical Learnings
+
+#### Insetting by overhang alone
+
+- **Challenge**: a near-end inset must not lift baselines off the axis.
+- **Solution**: inset by the per-axis overhang only; bar baselines have none.
+- **Pattern**: tests that assumed "fixed domain: tick on the axis end" encoded
+  the old rule; read `Layout` ticks instead.
+
+### Architectural Decisions
+
+#### No padding at the near end
+
+- **Decision**: as the story states.
+- **Trade-off**: a chart with huge bubbles on an explicit domain shows a large
+  gap before the first tick (`bubble_stroke`), which is the radius.
+
+### Development Workflow Insights
+
+- `cargo test` stops at the first failing test binary; use `--no-fail-fast` to
+  list every failure.
+- Mutating the fix away confirmed the new tests bite.
+
+### Follow-up Stories
+
+None.

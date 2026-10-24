@@ -159,7 +159,7 @@ category keys in builders (an owner decision: closure inference cannot accept
 both `|r| r.name.as_str()` and `|r| r.year` in one method), curved and
 horizontal areas, heatmap cell labels, error bars, pie charts and facets.
 
-- [GUP-540](GUP-540_Explicit_Domain_Edge_Inset.md) 🚧 — An explicit domain's
+- [GUP-540](GUP-540_Explicit_Domain_Edge_Inset.md) ✅ — An explicit domain's
   near end is inset by the marks' overhang, so a point at `(0, 0)` or the first
   constant-width bar is drawn whole; bars still sit on the axis.
 - [GUP-541](GUP-541_Builder_Tick_Formats.md) 📋 — `x_tick_format`/
