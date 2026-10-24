@@ -1,8 +1,17 @@
+---
+implementer: sonnet
+implementer-reason:
+  a font chain in gup-text with lazy parsing and per-font atlas keys, on
+  GUP-405's shaped layout; the public entry point and test face are fixed
+touches: [crates/gup-core/src/svg.rs, crates/gup-core/src/lib.rs]
+---
+
 # GUP-416: gup-text Font Fallback for Characters Outside the Face
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 💡 New **Created**: 2026-10-10
+**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: 📋
+Planned **Created**: 2026-10-10
 
 ## Context
 
@@ -59,6 +68,46 @@ chain the user supplies keeps that size and still draws their text.
 - [ ] A golden image of a scatter with a mixed-script title (for example "Київ
       — 東京 — Zürich") using a test-only fallback face, checked by eye: no
       boxes, a consistent baseline.
+
+## N2 Notes (2026-10-24)
+
+Absorbed into track N2 (text quality) and promoted from 💡 to 📋 with these
+decisions. They replace the AC1 example: `TextSystem::with_fonts` already exists
+(it takes the regular and SemiBold faces).
+
+### Decisions
+
+- **Entry points**: `TextSystem::add_fallback(&mut self, font: Font)` appends to
+  the chain (first added is tried first); `gup-core` exposes it as
+  `Context::add_fallback_font(&self, font: gup_core::Font)` (taking the text
+  system's lock), so it works on `Context::shared()`. `gup_core::Font`
+  re-exports `gup_text::Font`. A newcomer's guess: "add a fallback font to my
+  context", then draw.
+
+  ```rust
+  let cx = Context::shared()?;
+  cx.add_fallback_font(Font::from_bytes(std::fs::read("NotoSansJP.ttf")?)?);
+  ```
+
+- **Line metrics** come from the primary font; a fallback glyph sits on the
+  primary's baseline.
+- **Test face**: a subset of Noto Sans JP (OFL) to the characters of the
+  golden's title plus Cyrillic coverage from the full Inter
+  (`Font::inter_full`), committed under `crates/gup-text/tests/fonts/` with its
+  `OFL.txt`, under 60 KB, made with `mask subset-inter`'s `pyftsubset` recipe.
+- **Weights**: fallbacks serve both weights (SemiBold falls back to the same
+  chain).
+
+### Escalation Triggers
+
+- The default `TextSystem` (no fallbacks) changes `mask wasm-size` scatter by
+  more than 2 KB gz.
+- A fallback face's glyphs need a different atlas size or format.
+
+### Additional Dependencies
+
+- GUP-405 📋 is now a hard dependency (segmenting runs by font is built on its
+  shaping).
 
 ## Technical Tasks
 

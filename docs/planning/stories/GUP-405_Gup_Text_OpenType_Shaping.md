@@ -1,8 +1,17 @@
+---
+implementer: sonnet
+implementer-reason:
+  a shaping library swapped in under an existing layout API, with the atlas key,
+  feature list and SVG rule given; the wasm-size rule decides the risk
+touches: [crates/gup-core/src/plot.rs]
+---
+
 # GUP-405: gup-text OpenType Shaping (Kerning and Tabular Figures)
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 📋 Planned **Created**: 2026-10-06
+**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: 📋
+Planned **Created**: 2026-10-06
 
 ## Context
 
@@ -57,6 +66,31 @@ bitmap atlas and the draw path stay as they are.
 - [ ] `tests/golden/gup_core/scatter.png` is re-blessed and checked by eye. The
       y labels align digit-for-digit and the title is kerned. The retrospective
       describes what changed.
+
+## N2 Notes (2026-10-24)
+
+Absorbed into track N2 (text quality) by the November review's triage.
+
+### Decisions
+
+- `Run` gains `features: &'a [Feature]` with `Feature::Tnum` the only variant
+  for now (`#[non_exhaustive]`); `gup-core` sets it on tick-label runs only
+  (`TextRole::TickLabel`), never on titles, legends, tooltips or annotations.
+- The atlas key becomes `(face, glyph index, size bits)`, so GUP-416's fallback
+  faces need no second change to it.
+
+### Escalation Triggers
+
+- `mask wasm-size` scatter grows by more than 25 KB gz (rustybuzz on every
+  target): stop and report `mask wasm-attrib` output before going further.
+- Shaping changes any golden other than by kerning and tabular digits (for
+  example a baseline shift): report the diff.
+- GUP-542's `Anchor` constants or text layer conflict with the new layout path
+  (both edit `crates/gup-text/src/layout.rs`): run after GUP-542.
+
+### Additional Dependencies
+
+- GUP-542: Text layer 📋 (soft) — both edit `gup-text`'s layout.
 
 ## Technical Tasks
 

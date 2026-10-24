@@ -1,8 +1,17 @@
+---
+implementer: opus
+implementer-reason:
+  a per-layer coverage pass against the single-pass render model, with design
+  alternatives to measure; design work by nature
+touches: [crates/gup-core/src/selection.rs, crates/gup-core/src/render.rs]
+---
+
 # GUP-439: Translucent Lines Without Double-Blended Joins
 
 ## Story Overview
 
-**Initiative**: RFC-001 Migration **Status**: 💡 New **Created**: 2026-10-17
+**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: 📋
+Planned **Created**: 2026-10-17
 
 ## Context
 
@@ -46,6 +55,35 @@ stencil pass), then composite it with the line's colour and alpha.
 - [ ] The extra pass or target's cost (GPU time at 100K points, memory, draws)
       is measured and recorded in RFC-001, along with the design chosen and the
       designs rejected.
+
+## N2 Notes (2026-10-24)
+
+Absorbed into track N2 by the November review's triage ("same polyline geometry
+as line curves and area outlines; do them together") and promoted from 💡 to 📋.
+It runs after GUP-550 and GUP-551.
+
+### Decisions
+
+- **Scope includes curve pieces**: after GUP-550/551 a translucent step or
+  monotone line overlaps at every piece joint as well as at rows; AC1's even
+  opacity applies to those joints too (add 3 piece joints of a `MonotoneX` line
+  and the corners of a `StepAfter` line to the AC1 measurements).
+- **Areas are not in scope**: `Area` trapezoids share edges and do not
+  double-blend (GUP-545).
+- **Decision rule for the prototype**: choose the offscreen coverage target
+  (`R8`, `Max` blend, composited) unless it costs more than 2× the layer's
+  direct draw at 100K points or cannot run on the browser smoke test's adapter;
+  then the stencil approach. Record both measurements.
+
+### Escalation Triggers
+
+- Neither approach keeps opaque lines byte-identical with no extra pass (AC2).
+- Draw-in-pass hosts (`Prepared::draw`, egui, Bevy) would need an API change to
+  get the extra pass: report the smallest change before making it.
+
+### Additional Dependencies
+
+- GUP-550: Line curves part 1 📋; GUP-551: monotone curves 📋.
 
 ## Technical Tasks
 
