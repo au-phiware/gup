@@ -25,20 +25,18 @@ over `gup-core`. As a result it:
 ## Running it
 
 ```sh
-./dogfood/run_all.sh                       # needs a display for 3 tasks
-# Under Xvfb on a Wayland desktop, unset WAYLAND_DISPLAY (else winit opens a
-# real window), and give wgpu a presentable adapter, e.g. lavapipe:
-#   VK_ICD_FILENAMES=.../lvp_icd.x86_64.json
-xvfb-run -a ./dogfood/run_all.sh           # headless, with Xvfb
+./dogfood/run_all.sh                       # headless: lavapipe + Xvfb 1920x1080
+DOGFOOD_DISPLAY=1 ./dogfood/run_all.sh     # the real display (windowed tasks)
 DOGFOOD_SKIP_WINDOWED=1 ./dogfood/run_all.sh
 DOGFOOD_ONLY=t1_timeseries,t2_bars ./dogfood/run_all.sh
 mask dogfood                               # same as the first line
 ```
 
 The script builds every binary in release mode and runs
-`target/release/dogfood_check`. Outputs, CSV fixtures and per-task stdout/stderr
-logs go to `/tmp/gup-dogfood/`. `DOGFOOD_TIMEOUT_SECS` sets the per-task timeout
-(default 300).
+`target/release/dogfood_check` under `scripts/headless_env.sh --run` (a
+forgotten ICD or `WAYLAND_DISPLAY` can no longer produce a false FAIL). Outputs,
+CSV fixtures and per-task stdout/stderr logs go to `/tmp/gup-dogfood/`.
+`DOGFOOD_TIMEOUT_SECS` sets the per-task timeout (default 300).
 
 ## How results are classified
 

@@ -84,6 +84,19 @@ jobs:
           xvfb-run -a cargo test --workspace --exclude gup-bevy --
           --test-threads=1
 
+      # screenshot_parity is ignored without the example's screenshot, so the
+      # job above never ran it (GUP-501). Same two commands as
+      # `mask egui-screenshot`; the script resolves lavapipe's ICD and Xvfb.
+      - name: egui screenshot parity
+        run: |
+          GUP_SCREENSHOT_PATH="$RUNNER_TEMP/egui_chart.png" timeout 300 \
+            ./scripts/headless_env.sh --run \
+            cargo run -p gup-egui --example egui_chart
+          GUP_EGUI_SCREENSHOT="$RUNNER_TEMP/egui_chart.png" \
+            ./scripts/headless_env.sh --run \
+            cargo test -p gup-egui --test screenshot_parity -- --ignored \
+            --test-threads=1
+
       - name: Disk usage
         if: always()
         run: df -h /
