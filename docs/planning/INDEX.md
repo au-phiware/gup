@@ -7,8 +7,10 @@ Quick access to planning documents. For individual stories, see
 
 ## Process
 
-- [stories/INDEX.md](stories/INDEX.md) — All stories: flat TODO list with
-  status, descriptions, and dependencies
+- [stories/INDEX.md](stories/INDEX.md) — Current stories: the active initiative
+  and the Open Backlog, with status, descriptions, and dependencies
+- [stories/INDEX_ARCHIVE.md](stories/INDEX_ARCHIVE.md) — Story history before
+  2026-11 (completed, parked, closed); grep it, do not read it whole
 - [.github/agents/story-scribe.md](../../.github/agents/story-scribe.md) — How
   to write a new story (agent instructions + human guidelines)
 - [.github/agents/story-worker.md](../../.github/agents/story-worker.md) — How
