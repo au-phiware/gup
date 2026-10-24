@@ -142,6 +142,9 @@ bin edges. `scale::tick_step` already computes such a step for ticks.
   and fixes the axis, the only scale control a histogram needs. Tooltips speak
   in bins because a bar is a bin, not a row.
 
+- **Exports**: `histogram`, `HistogramChart` and `HistogramBin` from the crate
+  root; `Bins` from the crate root and the prelude (so the example above needs
+  no extra import); `Bin` and `bin` from `gup_core::transform` only.
 - **Axes**: x is `Linear` with the explicit domain `[first edge, last edge]` (so
   `x_domain` and the edges agree); there is no `x_scale` setter (log-binned
   histograms are out of scope). y is `Linear`, automatic, baseline 0.
