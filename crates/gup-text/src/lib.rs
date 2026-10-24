@@ -56,6 +56,8 @@
 //! # }
 //! ```
 
+#![warn(missing_docs)]
+
 mod atlas;
 mod error;
 mod font;

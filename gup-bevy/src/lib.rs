@@ -38,6 +38,8 @@
 //! spawning it, or reach the chart with
 //! `chart.as_any_mut().downcast_mut::<ScatterChart<_>>()`.
 
+#![warn(missing_docs)]
+
 mod chart;
 mod copy;
 mod plugin;
