@@ -111,7 +111,7 @@ pub trait ShaderFn: Clone + Send + Sync + 'static {
     /// The legend a plot draws for a colour encoding through this
     /// function, if it has one: the colour scales override it, and so can
     /// a `#[wgsl_function]` colour function. A chain takes its last link's
-    /// and puts the ticks in the data's units ([`EncodeFn::legend`]).
+    /// and puts the ticks in the data's units ([`ShaderFn::legend`]).
     fn legend(&self) -> Option<crate::Legend> {
         None
     }
@@ -1062,7 +1062,7 @@ pub trait DynColumnEncoding<T>: Send + Sync {
     #[cfg(feature = "svg")]
     #[doc(hidden)]
     fn mirror(&self) -> Arc<dyn ColumnMirror>;
-    /// The legend of the encoding as fitted (see [`EncodeFn::legend`]).
+    /// The legend of the encoding as fitted (see [`ShaderFn::legend`]).
     fn legend(&self) -> Option<crate::Legend>;
     /// See [`EncodeFn::apply_theme`].
     fn apply_theme(&mut self, theme: &Theme);

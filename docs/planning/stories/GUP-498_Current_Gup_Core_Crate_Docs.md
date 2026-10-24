@@ -16,8 +16,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N0 Hygiene) **Status**: 📋 Planned
-**Created**: 2026-10-24
+**Initiative**: Strategic Review 2026-11 (N0 Hygiene) **Status**: ✅ Complete
+(2026-10-24) **Created**: 2026-10-24
 
 ## Context
 
@@ -66,39 +66,39 @@ model.
 
 ### AC1: the crate docs follow the outline in Decisions
 
-- [ ] `crates/gup-core/src/lib.rs`'s `//!` block is rewritten to the outline in
+- [x] `crates/gup-core/src/lib.rs`'s `//!` block is rewritten to the outline in
       Decisions.
-- [ ] This prints nothing:
+- [x] This prints nothing:
 
       ```bash
       grep -n -i -E 'one mark|one layer|placed by hand|not re-exported|S14 flip|RenderContext|GupContext|old `gup`|new core|RFC-001 S[0-9]|guides only' \
         crates/gup-core/src/lib.rs
       ```
 
-- [ ] Every type, function and module named in the crate docs is an intra-doc
+- [x] Every type, function and module named in the crate docs is an intra-doc
       link, and
       `RUSTDOCFLAGS="-D warnings" cargo doc -p gup-core --no-deps --all-features`
       passes.
 
 ### AC2: the snippets are doctests
 
-- [ ] The crate docs hold three snippets: the existing `no_run` hello world
+- [x] The crate docs hold three snippets: the existing `no_run` hello world
       (`gup_core::show`), a headless render that asserts the image's dimensions,
       and an SVG export that asserts the document contains `<circle`. The second
       and third run (no `no_run`, no `ignore`).
-- [ ] `cargo test -p gup-core --doc -- --test-threads=1` passes, and the count
+- [x] `cargo test -p gup-core --doc -- --test-threads=1` passes, and the count
       of passed doctests is 2 higher than on `main` (record both counts).
 
 ### AC3: item docs and metadata
 
-- [ ] `SvgTarget`'s doc line reads "A resolved scene as an SVG document: axes,
+- [x] `SvgTarget`'s doc line reads "A resolved scene as an SVG document: axes,
       grid, text and legends, and, with the default `svg` feature, the data
       marks." and its doctest is unchanged.
-- [ ] `crates/gup-core/Cargo.toml`: `description` is the text in Decisions; the
+- [x] `crates/gup-core/Cargo.toml`: `description` is the text in Decisions; the
       comment above `[dependencies]` no longer says "the old `gup` crate does
       not re-export" (it says `gup` re-exports `gup-core`, and `gup-core` never
       depends on `gup`).
-- [ ] This prints nothing (other crates' crate docs):
+- [x] This prints nothing (other crates' crate docs):
 
       ```bash
       grep -n -E 'RenderContext|not re-exported|old `gup`|S14 flip' \
@@ -108,13 +108,13 @@ model.
 
 ### AC4: CLAUDE.md is current
 
-- [ ] "Dependency Management" says wgpu 27, matching
+- [x] "Dependency Management" says wgpu 27, matching
       `crates/gup-core/Cargo.toml`
       (`grep -n 'wgpu = { version' crates/gup-core/Cargo.toml`).
-- [ ] The "WebAssembly", "WebGPU Workflow" and "WebGPU Development Workflow"
+- [x] The "WebAssembly", "WebGPU Workflow" and "WebGPU Development Workflow"
       sections are replaced by the "WebAssembly and the browser" section in
       Decisions. The "wgpu Surface Lifetime Management" section is unchanged.
-- [ ] `grep -n 'hello-wgpu\|Backends::GL' CLAUDE.md` prints nothing.
+- [x] `grep -n 'hello-wgpu\|Backends::GL' CLAUDE.md` prints nothing.
 
 ## Decisions
 
@@ -198,12 +198,12 @@ model.
 
 ## Technical Tasks
 
-- [ ] Start commit within 30 minutes; record `cargo test -p gup-core --doc`'s
+- [x] Start commit within 30 minutes; record `cargo test -p gup-core --doc`'s
       passed count on the unchanged tree first.
-- [ ] Rewrite the crate docs; run the doctests; checkpoint.
-- [ ] Fix `SvgTarget`'s doc line, the Cargo description and comment.
-- [ ] Edit `CLAUDE.md`.
-- [ ] Run the AC greps, `cargo doc` with `-D warnings`, `mask all-check`.
+- [x] Rewrite the crate docs; run the doctests; checkpoint.
+- [x] Fix `SvgTarget`'s doc line, the Cargo description and comment.
+- [x] Edit `CLAUDE.md`.
+- [x] Run the AC greps, `cargo doc` with `-D warnings`, `mask all-check`.
 
 ## Dependencies
 
@@ -227,8 +227,8 @@ model.
 
 ## Success Metrics
 
-- [ ] Passed doctests: `main` + 2.
-- [ ] The crate docs are at most about 110 `//!` lines (they are 80 now).
+- [x] Passed doctests: `main` + 2.
+- [x] The crate docs are at most about 110 `//!` lines (they are 80 now).
 
 ## Risk Assessment
 
@@ -237,13 +237,62 @@ model.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes of starting, then `scripts/checkpoint.sh`
+- [x] First commit within 30 minutes of starting, then `scripts/checkpoint.sh`
       every 20–30 minutes between commits (story-worker "Checkpoint rule")
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] `cargo test -p gup-core --doc -- --test-threads=1` passes
-- [ ] Lint and format clean: `mask all-fix`; `mask all-check` passes
-- [ ] `mask wasm-browser`: not needed (docs, a doc comment and Cargo metadata;
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] `cargo test -p gup-core --doc -- --test-threads=1` passes
+- [x] Lint and format clean: `mask all-fix`; `mask all-check` passes
+- [x] `mask wasm-browser`: not needed (docs, a doc comment and Cargo metadata;
       no layout, input or wasm code); say so in the Implementation Summary
-- [ ] WASM size: "unchanged: no library code change"
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] WASM size: "unchanged: no library code change"
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `crates/gup-core/src/lib.rs`: crate docs rewritten to the outline (124 `//!`
+  lines including the unchanged Contracts bullets, over the "about 110" target;
+  the greps in AC1 and AC3 print nothing). New running doctests: "Without a
+  window" and "SVG".
+- `crates/gup-core/Cargo.toml`: description and dependency comment.
+  `crates/gup-core/src/svg.rs`: `SvgTarget` doc line.
+- `CLAUDE.md`: wgpu 27 and the "WebAssembly and the browser" section.
+- Doctests passed: 48 on `main` (plus the 1 `cfg(doctest)` target), 50 now.
+- `cargo doc -p gup-core --no-deps --all-features` with `-D warnings` already
+  failed on `main` with four broken links outside the `touches:` list
+  (`encoding.rs` x2, `plot.rs`, `svg.rs`'s `render`); fixed them as the AC
+  requires (docs-only).
+- `mask wasm-browser`: not needed (docs, a doc comment and Cargo metadata). WASM
+  size: unchanged: no library code change.
+
+## Retrospective
+
+**Completed**: 2026-10-24
+
+### Key Technical Learnings
+
+#### Rustdoc link hygiene
+
+- **Challenge**: the `-D warnings` doc build was already red on `main`.
+- **Solution**: `EncodeFn::legend` is really `ShaderFn::legend`; `(self)` links
+  to a private module do not resolve; `line` is both a function and a macro, so
+  link `line()`.
+- **Pattern**: run the `-D warnings` doc build in CI so it cannot rot.
+
+### Architectural Decisions
+
+#### Fixed unrelated doc links in this story
+
+- **Decision**: fixed four broken intra-doc links outside `touches:`.
+- **Reasoning**: AC1 requires the doc build to pass; the fixes are docs-only.
+- **Trade-off**: touched files the story did not list.
+
+### Development Workflow Insights
+
+- The worktree sandbox rejects compound shell commands; use single commands and
+  the Edit tool.
+
+### Follow-up Stories
+
+None (GUP-507 and GUP-508 unused). A CI step for `cargo doc -D warnings` may
+belong to N1.

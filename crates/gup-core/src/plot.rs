@@ -6,7 +6,7 @@
 //!
 //! Any number of layers share the x/y scales, whose automatic domains
 //! union across layers and channels. Left and bottom axes with tick
-//! labels, an optional title, axis titles, a [`Theme`](crate::Theme) and
+//! labels, an optional title, axis titles, a [`Theme`] and
 //! colour legends at the right (found through
 //! [`ShaderFn::legend`](crate::ShaderFn::legend)) and optional grid
 //! lines at the ticks ([`Plot::grid`]); the object-safe `Chart` trait is a

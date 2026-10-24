@@ -65,7 +65,8 @@ pub trait VectorTarget {
 /// within a fraction of a ΔE of it for smooth palettes.
 const GRADIENT_STOPS: usize = 64;
 
-/// A scene's guides as an SVG document.
+/// A resolved scene as an SVG document: axes, grid, text and legends, and, with
+/// the default `svg` feature, the data marks.
 ///
 /// ```
 /// use gup_core::scene::{Item, ItemKind, Rule};
@@ -384,8 +385,8 @@ impl SvgTarget {
 }
 
 impl VectorTarget for SvgTarget {
-    /// Write `scene`: its guides and its data marks (see the
-    /// [module docs](self) for the layers that are skipped).
+    /// Write `scene`: its guides and its data marks. A layer that cannot be
+    /// evaluated on the CPU is skipped with an XML comment, never an error.
     fn render(&mut self, scene: &Scene) -> Result<()> {
         #[cfg(not(feature = "svg"))]
         {
