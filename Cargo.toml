@@ -5,12 +5,10 @@ members = ["gup-egui", "gup-bevy", "crates/gup-visual-regression", "crates/gup-c
 # A plain `cargo build` / `cargo test` at the root builds only `gup`. The other
 # members are built with `-p`.
 default-members = ["."]
-# Parked integrations (strategic review 2026-10, Decision 3; GUP-390). They are
-# out of the workspace, `--workspace` builds and CI until they are re-wired onto
-# `gup-core`: the mobile shims and Tauri app in
-# strategic review T7. Build one by hand with
-# `cargo check --manifest-path gup-egui/Cargo.toml` (see README.md).
-exclude = ["crates/gup-culling-lod", "gup-ios", "gup-android", "examples/gup-tauri/src-tauri"]
+# `crates/gup-culling-lod` is parked (strategic review 2026-10, Decision 3): out
+# of the workspace and CI. The iOS, Android and Tauri integrations were deleted
+# in GUP-497.
+exclude = ["crates/gup-culling-lod"]
 
 [package]
 name = "gup"

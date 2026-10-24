@@ -105,10 +105,11 @@ sequencing"); the stories index holds their stories and status.
   rendered in CI, including one that shows the GPU advantage, a README hero
   image, and tutorials whose every snippet compiles and renders under test. The
   doctest include used by these two documents is the pattern.
-- **T7, crate split, LOD and mobile.** Split the workspace into focused crates,
-  feature-gate platform dependencies, wire GPU culling and level of detail into
-  the core (`crates/gup-culling-lod` is parked until then), and re-wire the iOS,
-  Android and Tauri integrations onto the single render path.
+- **T7, crate split, and LOD.** Split the workspace into focused crates,
+  feature-gate platform dependencies, and wire GPU culling and level of detail
+  into the core (`crates/gup-culling-lod` is parked until then). The iOS,
+  Android and Tauri shims were deleted (strategic review 2026-11, Decision 3); a
+  mobile or Tauri host would be built on `gup-core` when a user asks (track N6).
 
 Parked items stay parked until the strategic review's decisions say otherwise; a
 story that extends one needs a decision first.

@@ -401,8 +401,9 @@ assert_eq!(plot.title_text(), Some("Sales"));
   render a `Chart` into a texture on the host's own device (no CPU readback) and
   forward input. See [EGUI_INTEGRATION.md](./EGUI_INTEGRATION.md) and
   [BEVY_INTEGRATION.md](./BEVY_INTEGRATION.md). They depend on `gup-core`, the
-  same types as `gup`. The iOS, Android and Tauri shims are parked until they
-  are re-wired onto this path (T7).
+  same types as `gup`. The iOS, Android and Tauri shims were deleted (strategic
+  review 2026-11, Decision 3); a mobile or Tauri host would be built on
+  `gup-core` when a user asks (track N6).
 
 `gup::show` is [`examples/hello_world.rs`](../examples/hello_world.rs) (five
 lines, run by `mask smoke-examples`).

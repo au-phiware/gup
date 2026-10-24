@@ -303,7 +303,7 @@ for p in "${paths[@]}"; do
     case $p in
     src/* | tests/* | examples/* | benches/* | assets/* | build.rs)
       # A crate outside the workspace can live inside these directories
-      # (the parked Tauri app is under examples/).
+      # (for example an example app with its own manifest).
       if [[ -n $(foreign_manifest_dir "$(dirname "$p")") ]]; then
         full_reasons+=("$p is in a crate outside the workspace")
       else

@@ -15,6 +15,3 @@ single frame to a PNG instead of opening a window.
 The examples that used the pre-flip render core were deleted in GUP-488; git
 history keeps them. More builders (area, boxplot, violin, density, heatmap,
 choropleth) return with the T5 stories.
-
-The `gup-tauri`, `android` and `ios_scatter` directories belong to parked
-integrations (strategic review T7) and are not built.
