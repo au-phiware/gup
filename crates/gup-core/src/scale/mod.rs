@@ -535,23 +535,57 @@ pub(crate) fn typographic(label: String) -> String {
     }
 }
 
+/// Whether a tick set is labelled with thousands separators: its largest
+/// absolute value is at least 10,000 (so years stay `2019`).
+pub(crate) fn groups_thousands(values: &[f64]) -> bool {
+    values.iter().any(|v| v.abs() >= 10_000.0)
+}
+
+/// `digits` (ASCII, no sign) with `,` between groups of three integer
+/// digits; any fraction is left alone.
+fn group_digits(digits: &str) -> String {
+    let (int, frac) = digits
+        .split_once('.')
+        .map_or((digits, None), |(i, f)| (i, Some(f)));
+    let mut out = String::with_capacity(digits.len() + int.len() / 3);
+    for (n, c) in int.chars().enumerate() {
+        if n > 0 && (int.len() - n) % 3 == 0 {
+            out.push(',');
+        }
+        out.push(c);
+    }
+    if let Some(f) = frac {
+        out.push('.');
+        out.push_str(f);
+    }
+    out
+}
+
 /// Format `v` with as many decimals as `step` needs (no `−0`), with a
-/// typographic minus sign.
-pub(crate) fn format_with_step(v: f64, step: f64) -> String {
+/// typographic minus sign, and `,` between groups of three integer digits
+/// when `grouped` (see [`groups_thousands`]).
+pub(crate) fn format_with_step(v: f64, step: f64, grouped: bool) -> String {
     let decimals = if step >= 1.0 {
         0
     } else {
         (-step.log10().floor()) as usize
     };
     let s = format!("{v:.decimals$}");
-    if s.trim_start_matches('-')
-        .chars()
-        .all(|c| c == '0' || c == '.')
-    {
-        s.trim_start_matches('-').to_string()
-    } else {
-        typographic(s)
+    let unsigned = s.trim_start_matches('-');
+    if unsigned.chars().all(|c| c == '0' || c == '.') {
+        return unsigned.to_string();
     }
+    let body = if grouped {
+        let g = group_digits(unsigned);
+        if s.starts_with('-') {
+            format!("-{g}")
+        } else {
+            g
+        }
+    } else {
+        s
+    };
+    typographic(body)
 }
 
 #[cfg(test)]
@@ -629,9 +663,22 @@ mod tests {
     #[test]
     fn fractional_steps_do_not_accumulate_error() {
         assert_eq!(step_value(3.0, 0.1), 0.3);
-        assert_eq!(format_with_step(0.30000000000000004, 0.1), "0.3");
-        assert_eq!(format_with_step(-0.0, 0.5), "0.0");
-        assert_eq!(format_with_step(2500.0, 500.0), "2500");
+        assert_eq!(format_with_step(0.30000000000000004, 0.1, false), "0.3");
+        assert_eq!(format_with_step(-0.0, 0.5, false), "0.0");
+        assert_eq!(format_with_step(2500.0, 500.0, false), "2500");
+    }
+
+    #[test]
+    fn thousands_group_from_ten_thousand() {
+        assert_eq!(format_with_step(12345.0, 5.0, true), "12,345");
+        assert_eq!(format_with_step(-1234567.0, 1.0, true), "\u{2212}1,234,567");
+        assert_eq!(format_with_step(2500.0, 500.0, true), "2,500");
+        assert_eq!(format_with_step(10000.5, 0.5, true), "10,000.5");
+        assert_eq!(format_with_step(0.0, 5000.0, true), "0");
+        assert_eq!(format_with_step(2019.0, 1.0, false), "2019");
+        assert!(groups_thousands(&[0.0, 10_000.0]));
+        assert!(groups_thousands(&[-20_000.0, 0.0]));
+        assert!(!groups_thousands(&[0.0, 9_999.0]));
     }
 
     /// GUP-451: the bundled SemiBold subset is ASCII plus a few spaces, and

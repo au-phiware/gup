@@ -70,7 +70,7 @@ The rest of N0, rewritten 2026-10-24. GUP-392 and GUP-523 share no hot file and
 may run together; GUP-397 touches only `dogfood/` and the harness crate. Run
 `mask merge-check --dogfood` after merging GUP-392 and GUP-397.
 
-- [GUP-392](GUP-392_Correct_Visual_Defaults.md) 📋 — Its four original items
+- [GUP-392](GUP-392_Correct_Visual_Defaults.md) ✅ — Its four original items
   hold in `gup-core` (evidence in the story); what is left: Okabe-Ito reordered
   so yellow (1.32:1 on white) comes seventh, the marks' default blue taken from
   the palette, and linear-family tick and ramp labels grouped (`10,000`) when a

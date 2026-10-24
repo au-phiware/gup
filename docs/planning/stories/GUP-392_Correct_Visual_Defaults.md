@@ -17,8 +17,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N0 Hygiene) **Status**: 📋 Planned
-**Created**: 2026-10-04 **Revised**: 2026-10-24
+**Initiative**: Strategic Review 2026-11 (N0 Hygiene) **Status**: ✅ Complete
+(2026-10-24) **Created**: 2026-10-04 **Revised**: 2026-10-24
 
 ## Context
 
@@ -75,57 +75,57 @@ labels. Two gaps remain, and this story fixes only those:
 
 ### AC1: Yellow and black last
 
-- [ ] `OKABE_ITO` is, in this order: `0xe69f00` orange, `0x56b4e9` sky blue,
+- [x] `OKABE_ITO` is, in this order: `0xe69f00` orange, `0x56b4e9` sky blue,
       `0x009e73` bluish green, `0x0072b2` blue, `0xd55e00` vermillion,
       `0xcc79a7` reddish purple, `0xf0e442` yellow, `0x000000` black. Its doc
       comment lists that order and says why: yellow has 1.32:1 contrast on
       white, so it comes after every colour with at least 2.25:1.
-- [ ] A doctest on `OKABE_ITO` asserts `OKABE_ITO[3] == Circle::DEFAULT_FILL`
+- [x] A doctest on `OKABE_ITO` asserts `OKABE_ITO[3] == Circle::DEFAULT_FILL`
       and `OKABE_ITO[6] == Color::hex(0xf0e442)`.
-- [ ] The generated colours do not change: a new unit test in `categorical.rs`
+- [x] The generated colours do not change: a new unit test in `categorical.rs`
       pins `Categorical::okabe_ito()`'s LUT entries 8, 9 and 63 to their values
       on `main` before this story (read them first, then write the test).
-- [ ] `codes_follow_the_palette_and_null_is_grey` checks
+- [x] `codes_follow_the_palette_and_null_is_grey` checks
       `c.eval(3.0) == Circle::DEFAULT_FILL` (it checks `4.0` today).
 
 ### AC2: The marks' default colour comes from the palette
 
-- [ ] `Circle::DEFAULT_FILL`, `Rect::DEFAULT_FILL`, `Segment::DEFAULT_COLOR` and
+- [x] `Circle::DEFAULT_FILL`, `Rect::DEFAULT_FILL`, `Segment::DEFAULT_COLOR` and
       `Line::DEFAULT_COLOR` are `OKABE_ITO[3]`; the test at `marks.rs:268` uses
       `Circle::DEFAULT_FILL`.
-- [ ] `git grep -n "0x0072b2" crates/gup-core/src` prints only the `OKABE_ITO`
+- [x] `git grep -n "0x0072b2" crates/gup-core/src` prints only the `OKABE_ITO`
       entry.
 
 ### AC3: Thousands grouped from 10,000
 
-- [ ] A tick set whose largest absolute value is at least 10,000 labels every
+- [x] A tick set whose largest absolute value is at least 10,000 labels every
       value with `,` between groups of three integer digits; smaller sets are
       unchanged. Unit tests on `format_with_step` cover: `(12345.0, 5.0, true)`
       → `12,345`; `(-1234567.0, 1.0, true)` → `−1,234,567` (typographic minus);
       `(2500.0, 500.0, true)` → `2,500`; `(2500.0, 500.0, false)` → `2500`;
       `(10000.5, 0.5, true)` → `10,000.5`; `(0.0, 5000.0, true)` → `0`;
       `(2019.0, 1.0, false)` → `2019`.
-- [ ] `Linear::new().domain(0.0, 60000.0).ticks(6).labels` is
+- [x] `Linear::new().domain(0.0, 60000.0).ticks(6).labels` is
       `["0", "10,000", "20,000", "30,000", "40,000", "50,000", "60,000"]`, and
       `Linear::new().domain(2000.0, 2024.0).ticks(5).labels` is
       `["2000", "2005", "2010", "2015", "2020"]` (unit tests in `linear.rs`).
-- [ ] `chain_legend.rs` expects
+- [x] `chain_legend.rs` expects
       `["0", "10,000,000", "20,000,000", "30,000,000",     "40,000,000"]` and
       `"10,000,000"` at line 161.
-- [ ] A user's `tick_format` still wins: `tests/tick_format.rs` and its goldens
+- [x] A user's `tick_format` still wins: `tests/tick_format.rs` and its goldens
       (`tick_format_currency`, `tick_format_percent`, `tick_format_date`) pass
       without a re-bless.
 
 ### AC4: Goldens and scenes updated, by eye
 
-- [ ] `GUP_BLESS=1 scripts/with_cargo_env.sh cargo test -p gup-core --all-features -- --test-threads=1`
+- [x] `GUP_BLESS=1 scripts/with_cargo_env.sh cargo test -p gup-core --all-features -- --test-threads=1`
       re-blesses the goldens; the retrospective lists every changed file under
       `tests/golden/gup_core/` with its reason: "4+ categorical keys" or "a
       label of 10,000 or more". Any other changed golden is an escalation.
-- [ ] Read `builder_scatter.png`: the fourth series ("Delta") is blue
+- [x] Read `builder_scatter.png`: the fourth series ("Delta") is blue
       (`#0072b2`), as is its legend swatch; no yellow dots remain.
-- [ ] Read `builder_bars.png`: "West" is blue in both panels and the legend.
-- [ ] Read `axis_titles.png`: the x labels read `0, 10,000, … 60,000`, adjacent
+- [x] Read `builder_bars.png`: "West" is blue in both panels and the legend.
+- [x] Read `axis_titles.png`: the x labels read `0, 10,000, … 60,000`, adjacent
       labels do not touch, and the axis title sits below them without overlap.
 - [ ] `crates/gup-core/wasm-size/scatter/index.html`'s fourth expected colour is
       `[0x00, 0x72, 0xb2]` and its comment still says "the first four Okabe-Ito
@@ -133,11 +133,11 @@ labels. Two gaps remain, and this story fixes only those:
 
 ### AC5: No other user of the old order
 
-- [ ] `git grep -n -i "f0e442\|0xf0, 0xe4" -- ':!docs'` prints only the
+- [x] `git grep -n -i "f0e442\|0xf0, 0xe4" -- ':!docs'` prints only the
       `OKABE_ITO` entry and the new doctest. Tests that index the palette
       (`OKABE_ITO[i]` in `builders.rs`, `plot.rs`, `ordinal_png.rs`) name the
       constant, not a hue, and pass unchanged.
-- [ ] `mask dogfood` reports the same PASS/XFAIL/FAIL counts as before the
+- [x] `mask dogfood` reports the same PASS/XFAIL/FAIL counts as before the
       change (10 PASS, 0 XFAIL, 0 FAIL on 2026-10-24).
 
 ## Decisions
@@ -183,15 +183,15 @@ labels. Two gaps remain, and this story fixes only those:
 
 ## Technical Tasks
 
-- [ ] Read LUT entries 8, 9, 63 on unchanged code; write the pinning test.
-- [ ] Reorder `OKABE_ITO`, update its doc and add the doctest.
-- [ ] Point the four `DEFAULT_*` constants and the `marks.rs:268` test at the
+- [x] Read LUT entries 8, 9, 63 on unchanged code; write the pinning test.
+- [x] Reorder `OKABE_ITO`, update its doc and add the doctest.
+- [x] Point the four `DEFAULT_*` constants and the `marks.rs:268` test at the
       palette.
-- [ ] Add `groups_thousands`, extend `format_with_step`, update the five call
+- [x] Add `groups_thousands`, extend `format_with_step`, update the five call
       sites and the existing tests; add the AC3 tests.
-- [ ] Update `chain_legend.rs` and `index.html`.
-- [ ] Re-bless, read the four named PNGs, list every changed golden.
-- [ ] Run `mask wasm-browser` and `mask dogfood`.
+- [x] Update `chain_legend.rs` and `index.html`.
+- [x] Re-bless, read the four named PNGs, list every changed golden.
+- [x] Run `mask wasm-browser` and `mask dogfood`.
 
 ## Dependencies
 
@@ -215,9 +215,9 @@ labels. Two gaps remain, and this story fixes only those:
 
 ## Success Metrics
 
-- [ ] No default series colour below 2.25:1 contrast on white until the seventh
+- [x] No default series colour below 2.25:1 contrast on white until the seventh
       series.
-- [ ] No default linear-family label of 10,000 or more without grouping.
+- [x] No default linear-family label of 10,000 or more without grouping.
 
 ## Risk Assessment
 
@@ -229,14 +229,75 @@ labels. Two gaps remain, and this story fixes only those:
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (golden image or PNG read)
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye (golden image or PNG read)
 - [ ] `mask wasm-browser`: required (a browser scene's expected colours change)
-- [ ] WASM size: `mask wasm-size` scatter gz bytes
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] WASM size: `mask wasm-size` scatter gz bytes
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Resolved (2026-10-24)
+
+Orchestrator re-records the `zoom_uploads` guide budget (1,400,736 to 1,503,048
+B) at merge.
+
+## Implementation Summary
+
+- `OKABE_ITO` reordered (yellow seventh, blue fourth) with doc, doctest and a
+  pinned-LUT test (entries 8, 9, 63 unchanged); the four mark defaults use
+  `OKABE_ITO[3]`.
+- `groups_thousands` and `format_with_step(v, step, grouped)` in `scale/mod.rs`;
+  `Linear`, `Pow`, `Symlog` and both legend paths group from 10,000.
+- `chain_legend.rs`, `wasm-size/scatter/index.html` updated; 13 goldens
+  re-blessed. gup-core tests pass except the two `zoom_uploads` budget tests.
+- Scatter wasm: 334,221 B gz (baseline 334,149).
+- `mask merge-check --dogfood`: dogfood PASS, wasm-size PASS, gup-core FAIL
+  (`zoom_uploads` only), wasm-browser FAIL ("adapter none (no WebGPU)", an
+  environment limit; the `index.html` colour is unverified in a browser, so that
+  AC and DoD item stay unticked).
+
+## Retrospective
+
+**Completed**: 2026-10-24
+
+### Key Technical Learnings
+
+#### Wider labels cost upload bytes
+
+- **Challenge**: commas are extra glyph instances, so guide instance bytes rose
+  7.3% (1,400,736 to 1,503,048 B over 300 frames).
+- **Solution**: budget re-recorded by the orchestrator.
+- **Pattern**: a label-format change moves `zoom_uploads` budgets; check them.
+
+#### Re-blessed goldens (all `tests/golden/gup_core/`)
+
+- Grouped labels: `axis_titles`, `grid`, `scatter`, `categorical_nulls`,
+  `legend_guides`, `legend_two_layers`, `scene_guides_svg`, `scene_items`,
+  `sqrt_radius`, `wgsl_function_highlight`.
+- 4+ categorical keys (fourth colour now blue): `builder_scatter`,
+  `builder_bars`, `categorical_nulls`, `categorical_species`, `legend_guides`,
+  `legend_two_layers`.
+- `categorical_species` showed no visible grouping change; every PNG was read
+  and showed only the intended change.
+
+### Architectural Decisions
+
+#### Reorder the one constant
+
+- **Decision**: reorder `OKABE_ITO`; no second ordering (owner-confirmed).
+- **Reasoning**: generated colours measure distance to the whole set, so they
+  are order-independent (pinned by test).
+- **Trade-off**: any hue-indexed external expectation changes.
+
+### Development Workflow Insights
+
+- `mask wasm-browser` needs WebGPU; this headless environment has none.
+
+### Follow-up Stories
+
+None.

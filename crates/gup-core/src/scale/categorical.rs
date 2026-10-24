@@ -19,16 +19,27 @@ use std::sync::{Arc, OnceLock};
 /// `theme.null_color`.
 pub const NULL_COLOR: Color = Color::hex(0x999999);
 
-/// The Okabe-Ito colour-blind-safe palette, black last: orange, sky blue,
-/// bluish green, yellow, blue, vermillion, reddish purple, black.
+/// The Okabe-Ito colour-blind-safe palette in default-series order: orange,
+/// sky blue, bluish green, blue, vermillion, reddish purple, yellow, black.
+///
+/// Yellow has 1.32:1 contrast on white, so it comes after every colour with
+/// at least 2.25:1 (orange); black is last. Blue is fourth, so a four-series
+/// chart ends on the marks' default colour.
+///
+/// ```
+/// use gup_core::scale::OKABE_ITO;
+/// use gup_core::{Circle, Color};
+/// assert_eq!(OKABE_ITO[3], Circle::DEFAULT_FILL);
+/// assert_eq!(OKABE_ITO[6], Color::hex(0xf0e442));
+/// ```
 pub const OKABE_ITO: [Color; 8] = [
     Color::hex(0xe69f00),
     Color::hex(0x56b4e9),
     Color::hex(0x009e73),
-    Color::hex(0xf0e442),
     Color::hex(0x0072b2),
     Color::hex(0xd55e00),
     Color::hex(0xcc79a7),
+    Color::hex(0xf0e442),
     Color::hex(0x000000),
 ];
 
@@ -333,6 +344,14 @@ mod tests {
     use super::*;
     use crate::marks::Circle;
 
+    #[test]
+    fn generated_colours_do_not_depend_on_palette_order() {
+        let c = Categorical::okabe_ito();
+        assert_eq!(c.lut[8], [141, 38, 97, 255]);
+        assert_eq!(c.lut[9], [89, 89, 17, 255]);
+        assert_eq!(c.lut[63], [106, 179, 253, 255]);
+    }
+
     fn fitted(n: usize) -> Categorical {
         let mut c = Categorical::okabe_ito();
         let keys: Vec<Arc<str>> = (0..n).map(|i| format!("k{i}").into()).collect();
@@ -344,7 +363,7 @@ mod tests {
     fn codes_follow_the_palette_and_null_is_grey() {
         let c = fitted(8);
         assert_eq!(c.eval(0.0).to_rgba8(), [0xe6, 0x9f, 0x00, 255]);
-        assert_eq!(c.eval(4.0), Circle::DEFAULT_FILL);
+        assert_eq!(c.eval(3.0), Circle::DEFAULT_FILL);
         for (i, color) in OKABE_ITO.iter().enumerate() {
             assert_eq!(c.eval(i as f64), *color);
         }

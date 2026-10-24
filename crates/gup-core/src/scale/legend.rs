@@ -144,6 +144,7 @@ impl Ramp {
         if values.is_empty() {
             values = vec![lo, hi];
         }
+        let grouped = super::groups_thousands(&values);
         self.ticks = values
             .into_iter()
             .filter_map(|value| {
@@ -151,8 +152,10 @@ impl Ramp {
                 img.is_finite().then(|| RampTick {
                     t: self.t(img),
                     value,
-                    label: format
-                        .map_or_else(|| super::format_with_step(value, step), |f| f.apply(value)),
+                    label: format.map_or_else(
+                        || super::format_with_step(value, step, grouped),
+                        |f| f.apply(value),
+                    ),
                 })
             })
             .collect();
@@ -215,12 +218,13 @@ impl Ramp {
             values.push(mid);
             values.sort_by(f64::total_cmp);
         }
+        let grouped = super::groups_thousands(&values);
         ramp.ticks = values
             .into_iter()
             .map(|value| RampTick {
                 t: ramp.t(value),
                 value,
-                label: super::format_with_step(value, step),
+                label: super::format_with_step(value, step, grouped),
             })
             .collect();
         ramp
