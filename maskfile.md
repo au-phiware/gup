@@ -304,7 +304,11 @@ own workspace-member artifacts (GUP-411), and `test_prune_build_dir.sh` that the
 prune bounds the build directory's growth per commit without touching a live
 checkout's artifacts (GUP-427), and `test_checkpoint.sh` that
 `scripts/checkpoint.sh` snapshots, restores and drops work-in-progress in a
-throwaway repository, without hooks or remote refs (GUP-496).
+throwaway repository, without hooks or remote refs (GUP-496). The story ID guard
+(GUP-504) checks `docs/planning/stories`: no two story files and no two index
+entries share an ID above GUP-315, every entry links a file, and every story's
+heading and file name agree. `test_check_story_ids.sh` seeds each violation in a
+throwaway directory.
 
 The whitespace and `ignore` checks pass only when `git grep` finds nothing (exit
 1): a `git grep` error must fail them, not pass them. The `ignore` check
@@ -326,8 +330,8 @@ concurrently --group --names '\s,ignore,rs,nix,md,gha,gallery,hook' \
    'nixfmt --check flake.nix && statix check flake.nix' \
    'prettier --cache --log-level warn --check "**/*.md" && mdl --git-recurse .' \
    'actionlint .github/workflows/*.y*ml' \
-   './scripts/check_gallery_sync.sh' \
-   './scripts/test_pre_commit.sh && ./scripts/test_shared_build_dir.sh && ./scripts/test_prune_build_dir.sh && ./scripts/test_checkpoint.sh'
+   './scripts/check_gallery_sync.sh && ./scripts/check_story_ids.sh' \
+   './scripts/test_pre_commit.sh && ./scripts/test_shared_build_dir.sh && ./scripts/test_prune_build_dir.sh && ./scripts/test_checkpoint.sh && ./scripts/test_check_story_ids.sh'
 ```
 
 ## pre-commit
@@ -375,12 +379,13 @@ Run it after every merge of story branches, before pushing. It needs a GPU or
 lavapipe, Chromium and `wasm-bindgen` like its parts, and takes as long as its
 parts (it adds no new checks).
 
-Runs gup-core's tests with all features, `mask wasm-size` and
-`mask wasm-browser` one after another, even when one fails, then prints one
-table with a PASS, FAIL or SKIP per step. `--dogfood` adds the dogfood suite,
-which is off by default. Needs a GPU or lavapipe, Chromium and `wasm-bindgen`
-like its parts, and takes as long as its parts (it adds no new checks). Logs go
-to `$CARGO_TARGET_DIR/merge-check/`. See `scripts/merge_check.sh`.
+Runs the story ID guard (`scripts/check_story_ids.sh`, GUP-504) first, then
+gup-core's tests with all features, `mask wasm-size` and `mask wasm-browser` one
+after another, even when one fails, then prints one table with a PASS, FAIL or
+SKIP per step. `--dogfood` adds the dogfood suite, which is off by default.
+Needs a GPU or lavapipe, Chromium and `wasm-bindgen` like its parts, and takes
+as long as its parts (it adds no new checks). Logs go to
+`$CARGO_TARGET_DIR/merge-check/`. See `scripts/merge_check.sh`.
 
 OPTIONS
 

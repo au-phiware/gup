@@ -77,8 +77,8 @@
 #          dogfood/** (a detached crate): its rustfmt check.
 #
 # Outside full mode, these always run: the trailing-whitespace check on every
-# .rs file and the gallery sync check (both repo-wide and cheap), and
-# prettier and mdl on the changed Markdown files. nixfmt and statix need not:
+# .rs file, the gallery sync check and the story ID guard (GUP-504; all
+# repo-wide and cheap), and prettier and mdl on the changed Markdown files. nixfmt and statix need not:
 # a flake.nix change forces full mode.
 #
 # The scoping is a local-hook optimisation only. CI never scopes: every
@@ -376,8 +376,9 @@ fi
 checks=(
   'git --no-pager grep --untracked --name-only --full-name "[[:space:]]\+$" -- "*.rs"; test $? -eq 1'
   './scripts/check_gallery_sync.sh'
+  './scripts/check_story_ids.sh'
 )
-names='\s,gallery'
+names='\s,gallery,ids'
 
 # Markdown checks on the changed Markdown files (a markdown config change is
 # outside every crate, so it already forced the full, repo-wide check).
