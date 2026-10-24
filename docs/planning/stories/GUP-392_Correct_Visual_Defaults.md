@@ -1,213 +1,242 @@
+---
+implementer: sonnet
+implementer-reason:
+  palette order and label rule settled in Decisions; goldens re-blessed by a
+  stated rule
+touches:
+  [
+    crates/gup-core/src/scale/,
+    crates/gup-core/src/marks.rs,
+    crates/gup-core/wasm-size/scatter/index.html,
+    crates/gup-core/tests/chain_legend.rs,
+    tests/golden/gup_core/,
+  ]
+---
+
 # GUP-392: Correct Visual Defaults
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-10 **Status**: 📋 Planned **Created**:
-2026-10-04 **Revised**: 2026-10-04
-
-**Revised 2026-10-04**: trimmed to the subset of T4a visual-defaults work that
-survives [RFC-001](../rfcs/RFC-001_Core_Architecture.md) (Core Architecture,
-accepted) and its new `crates/gup-core` path. The colour-pipeline linearisation
-work originally proposed here (sRGB→linear conversion ahead of `*Srgb` render
-targets) is **removed**: RFC-001 §7 adopts an sRGB-space colour policy for
-`gup-core` that replaces this story's approach, so implementing a separate
-linearisation fix on the old `gup` path would be thrown away. The remaining
-scope below — a bundled font asset, a single palette data source, tick-precision
-logic, and muted theme colour _values_ — are reusable inputs (assets and pure
-data/algorithms) that `gup-core` can consume directly, not old-path-only
-plumbing, which is why they remain in scope despite the old `gup` crate path
-being otherwise frozen for feature work ahead of the RFC-001 S14 flip.
+**Initiative**: Strategic Review 2026-11 (N0 Hygiene) **Status**: 📋 Planned
+**Created**: 2026-10-04 **Revised**: 2026-10-24
 
 ## Context
 
-Verified against `main` on 2026-10-04:
+**Revised 2026-10-24.** The 2026-10-04 version targeted the old `gup` path,
+which was deleted in the RFC-001 flip (GUP-486, GUP-488); that text is in git.
+Its four items were checked against `gup-core` on 2026-10-24, and all four hold:
 
-- **Three copy-pasted categorical palettes**, each with the identical 8-colour
-  Category10-style array, confirmed via
-  `grep -n "0.122, 0.467, 0.706" src/chart_builder/builders/*.rs`:
-  `src/chart_builder/builders/bar.rs:118` (`DEFAULT_PALETTE`, marked
-  `#[allow(dead_code)]` and already removed by GUP-389), `line.rs:41`, and
-  `area.rs:54`. **Correction to the review's "bars always use colour 0" claim**:
-  that dead `DEFAULT_PALETTE`/ `accessor_to_color` pair in `bar.rs`
-  (`bar.rs:767-773`) has zero callers — the actually-live default-colour path is
-  the hardcoded steel-blue fallback in `apply_accessors_to_selection()`
-  (`src/chart_builder/builders.rs:736`) plus `AccessorValue::as_color()` mapping
-  any `String` category value to flat grey
-  (`src/chart_builder/accessor.rs:235-240`), matching the dogfood audit's own
-  finding that `.color(String)` renders grey. This story produces a single
-  **palette data source**; wiring it into the old path's
-  `apply_accessors_to_selection()` is in scope only as a minimal fix enabling
-  AC2's test, not a broader old-path colour-pipeline rewrite.
-- **Font**: the single embedded fallback font is `assets/fonts/default.ttf`,
-  loaded by `FontSource::embedded_fallback()` (`src/text/font.rs:332-339`) and
-  labelled `"Squada One"` — a display/headline face. Six test assertions in
-  `src/text/font.rs` and `src/text/atlas.rs` check the literal string
-  `"Squada One"` and must be updated alongside the font swap.
-- **Tick precision**: `NumericFormatter::default()`
-  (`src/label/formatter.rs:28-36`) hardcodes `precision: 2`, and
-  `src/axis.rs:1180` constructs the default axis formatter via
-  `NumericFormatter::default()`, so ticks always show "0.00, 2.50, 5.00"
-  regardless of the actual tick step. Per
-  [Decision 6](../STRATEGIC_REVIEW_2026-10.md#decisions)-adjacent RFC-001
-  framing, the tick-generation algorithms become the scales' CPU mirror in
-  `gup-core` — the step-aware precision logic this story writes should be
-  implemented as a reusable pure function (step → decimal places), not
-  axis-specific code, so it ports directly.
-- **Muted theme values**: default axis line colour, gridline colour, and
-  box-plot stroke/fill colour are currently full-saturation/near-black
-  (`AxisConfiguration::default()` in `src/axis.rs:149`,
-  `GridConfiguration::default()` in `src/grid.rs:398`). This story adjusts the
-  concrete default colour _values_; it does not build the `Theme` type itself
-  (T4b / `gup-core`'s own theme design, out of scope here).
+| Item                         | Evidence in `gup-core` today                                                                                                                                                                                                                                                                                |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| One Okabe-Ito data source    | `OKABE_ITO` (`crates/gup-core/src/scale/categorical.rs:24`) is the only palette; `Categorical::okabe_ito()` extends it to 64 colours. The one leftover copy: `marks.rs` writes `Color::hex(0x0072b2)` (Okabe-Ito blue) five times as the marks' default colour.                                             |
+| Inter, with its OFL licence  | `gup-text` bundles Inter 4.1 Regular and SemiBold subsets (`crates/gup-text/src/font.rs:27,35`), with `crates/gup-text/fonts/Inter-OFL.txt` shipped by the package's `include`; SVG writes `font-family="Inter, sans-serif"`.                                                                               |
+| Tick precision from the step | `format_with_step` (`crates/gup-core/src/scale/mod.rs:540`) gives as many decimals as the step needs; `Linear`, `Pow`, `Symlog` and legend ramps use it. Tests: `fractional_ticks_label_with_enough_decimals` (0–1 gives `0.0, 0.2, …`), `fractional_steps_do_not_accumulate_error` (`2500` with step 500). |
+| Muted theme colours          | `Theme::default()` (`crates/gup-core/src/theme.rs:108`): axis and labels `#333333`, grid `#e5e5e5`, title `#111111`, tooltip border `#999999`.                                                                                                                                                              |
+
+Reading the goldens (`tests/golden/gup_core/builder_line.png`, `builder_bars`,
+`builder_scatter`, `categorical_species`, `axis_titles`, `hello_world`,
+`line_series`, `symlog_signed`) shows defaults that mostly look finished: light
+1 px gridlines, a dark-grey axis, 12/13/18 px Inter, even margins, no clipped
+labels. Two gaps remain, and this story fixes only those:
+
+1. **Yellow is the fourth colour.** `OKABE_ITO[3]` is `#f0e442`, whose contrast
+   on white is 1.32:1. The other seven are 2.25:1 (orange) and up (blue 5.19:1).
+   Any chart with four or more series shows it: "Delta" in `builder_scatter.png`
+   (translucent dots that are hard to see) and "West" in `builder_bars.png`.
+2. **Large numbers print without grouping.** `axis_titles.png` labels GDP as
+   `10000 … 60000`, and `chain_legend.rs` expects a ramp labelled `10000000`
+   through `40000000`. `Log` and `Symlog` already print `10k` and `1M`
+   (`format_log_tick`), but the linear family does not group digits.
+
+## Read First
+
+- `crates/gup-core/src/scale/categorical.rs`: `OKABE_ITO` and its doc (lines
+  14–33), `extend` (lines 188–230), test
+  `codes_follow_the_palette_and_null_is_grey` (lines 343–356).
+- `crates/gup-core/src/scale/mod.rs`: `MINUS`, `typographic`, `format_with_step`
+  (lines 524–555); test `fractional_steps_do_not_accumulate_error` (lines
+  628–634).
+- The callers of `format_with_step`: `scale/linear.rs` (`ticks`, lines 187–197),
+  `scale/pow.rs` (`ticks`, lines 214–225), `scale/symlog.rs` (`ticks`, the
+  linear branch, lines 238–250), `scale/legend.rs` (`with_data_ticks`, lines
+  130–160; `build`, lines 197–230).
+- `crates/gup-core/src/marks.rs`: `DEFAULT_FILL` / `DEFAULT_COLOR` (lines 64–67,
+  136–139, 194–197, 246–249) and the test literal at line 268.
+- `crates/gup-core/wasm-size/scatter/index.html` lines 69–95 (the four expected
+  Okabe-Ito colours).
 
 ## User Story
 
-> "As a user who calls `gup::scatter(&data)` and saves a PNG without configuring
-> colours, I want categorical series to get visibly distinct, colour-blind-safe
-> colours, axis tick labels to show only the precision the data needs, chart
-> text to use a readable UI font, and axes/gridlines to look muted rather than
-> harsh — all without configuring a theme, and with the underlying font asset,
-> palette data, and tick-precision logic reusable by `gup-core`."
+> "As a user who draws a chart without choosing colours or tick formats, I want
+> every series visible on white and large numbers readable at a glance, so that
+> the default chart is one I can publish."
 
 ## Acceptance Criteria
 
-### AC1: Single Okabe-Ito categorical palette (data source)
+### AC1: Yellow and black last
 
-- [ ] One palette module/constant (not three copies) defines the default
-      categorical palette, using the
-      [Okabe-Ito](https://jfly.uni-koeln.de/color/) colour-blind-safe set per
-      [Decision 4](../STRATEGIC_REVIEW_2026-10.md#decisions), as plain data
-      (e.g. `pub const OKABE_ITO: [[f32; 4]; N]`) with no render-target-specific
-      logic attached, so `gup-core` can import the same constant.
-- [ ] `src/chart_builder/builders/line.rs` and `area.rs` use this single source;
-      their duplicated 8-colour arrays are removed.
-- [ ] `apply_accessors_to_selection()` (`builders.rs:736`) and
-      `AccessorValue::as_color()` (`accessor.rs:235-240`) are updated so a
-      `String` category value maps to a palette colour by stable index (hash or
-      first-seen order), and the no-accessor-configured default pulls from
-      palette index 0, instead of flat grey / hardcoded steel-blue.
-- [ ] A test with 3+ distinct string category values asserts 3+ visually
-      distinct colours at the expected mark locations.
+- [ ] `OKABE_ITO` is, in this order: `0xe69f00` orange, `0x56b4e9` sky blue,
+      `0x009e73` bluish green, `0x0072b2` blue, `0xd55e00` vermillion,
+      `0xcc79a7` reddish purple, `0xf0e442` yellow, `0x000000` black. Its doc
+      comment lists that order and says why: yellow has 1.32:1 contrast on
+      white, so it comes after every colour with at least 2.25:1.
+- [ ] A doctest on `OKABE_ITO` asserts `OKABE_ITO[3] == Circle::DEFAULT_FILL`
+      and `OKABE_ITO[6] == Color::hex(0xf0e442)`.
+- [ ] The generated colours do not change: a new unit test in `categorical.rs`
+      pins `Categorical::okabe_ito()`'s LUT entries 8, 9 and 63 to their values
+      on `main` before this story (read them first, then write the test).
+- [ ] `codes_follow_the_palette_and_null_is_grey` checks
+      `c.eval(3.0) == Circle::DEFAULT_FILL` (it checks `4.0` today).
 
-### AC2: Inter as the default font
+### AC2: The marks' default colour comes from the palette
 
-> **Note (2026-10-06, GUP-400):** the font item is done for the surviving path.
-> [GUP-400](GUP-400_RFC_001_S2_Extract_Gup_Text.md) vendored Inter Regular 4.1
-> as `crates/gup-text/fonts/Inter-Regular.ttf`, with its SIL OFL 1.1 licence as
-> `crates/gup-text/fonts/Inter-OFL.txt`. `gup-text` and `gup-core` use it by
-> default, and the `gup_core` scatter golden was re-blessed with it. GUP-400
-> left `assets/fonts/default.ttf` (Squada One) unchanged, so the frozen old path
-> and its goldens did not change. If this story still swaps the old path's font,
-> it should `include_bytes!` the vendored file rather than add a second copy or
-> a second licence. Tabular figures need OpenType feature support (`tnum`),
-> which `gup-text` lacks (see GUP-400's follow-ups).
+- [ ] `Circle::DEFAULT_FILL`, `Rect::DEFAULT_FILL`, `Segment::DEFAULT_COLOR` and
+      `Line::DEFAULT_COLOR` are `OKABE_ITO[3]`; the test at `marks.rs:268` uses
+      `Circle::DEFAULT_FILL`.
+- [ ] `git grep -n "0x0072b2" crates/gup-core/src` prints only the `OKABE_ITO`
+      entry.
 
-- [ ] The embedded fallback font (`assets/fonts/default.ttf`) is replaced with
-      [Inter](https://github.com/rsms/inter) (SIL OFL 1.1), a static weight
-      appropriate for UI text (e.g. Regular) with tabular figures available.
-- [ ] `FontSource::embedded_fallback()` reports `"Inter"`; all six
-      `"Squada One"` assertions in `src/text/font.rs`/`atlas.rs` are updated.
-- [ ] SVG export's default `font-family` (`src/export/svg/element.rs:233`) is
-      updated to match.
-- [ ] An SIL OFL 1.1 licence file for Inter is added under `assets/fonts/` or a
-      top-level `LICENSES/` directory, with attribution.
-- [ ] A rendered PNG with default-font title/tick-label text is visually
-      inspected (attached/described in Definition-of-Done evidence) to confirm
-      correct rendering (no missing glyphs for the ASCII range used by axis
-      labels).
+### AC3: Thousands grouped from 10,000
 
-### AC3: Tick precision derived from tick step
+- [ ] A tick set whose largest absolute value is at least 10,000 labels every
+      value with `,` between groups of three integer digits; smaller sets are
+      unchanged. Unit tests on `format_with_step` cover: `(12345.0, 5.0, true)`
+      → `12,345`; `(-1234567.0, 1.0, true)` → `−1,234,567` (typographic minus);
+      `(2500.0, 500.0, true)` → `2,500`; `(2500.0, 500.0, false)` → `2500`;
+      `(10000.5, 0.5, true)` → `10,000.5`; `(0.0, 5000.0, true)` → `0`;
+      `(2019.0, 1.0, false)` → `2019`.
+- [ ] `Linear::new().domain(0.0, 60000.0).ticks(6).labels` is
+      `["0", "10,000", "20,000", "30,000", "40,000", "50,000", "60,000"]`, and
+      `Linear::new().domain(2000.0, 2024.0).ticks(5).labels` is
+      `["2000", "2005", "2010", "2015", "2020"]` (unit tests in `linear.rs`).
+- [ ] `chain_legend.rs` expects
+      `["0", "10,000,000", "20,000,000", "30,000,000",     "40,000,000"]` and
+      `"10,000,000"` at line 161.
+- [ ] A user's `tick_format` still wins: `tests/tick_format.rs` and its goldens
+      (`tick_format_currency`, `tick_format_percent`, `tick_format_date`) pass
+      without a re-bless.
 
-- [ ] A pure function `decimal_places_for_step(step: f64) -> usize` (or
-      equivalent) computes the minimum decimal places needed to distinguish a
-      tick sequence generated at that step, independent of any axis/formatter
-      type, so it can be reused by `gup-core`'s scale CPU mirror.
-- [ ] The old path's default axis tick formatter construction
-      (`src/axis.rs:1180`) uses this function instead of a fixed `precision: 2`.
-- [ ] A test with tick values `[0.0, 2.5, 5.0, 7.5, 10.0]` (step `2.5`) asserts
-      labels `"0", "2.5", "5", "7.5", "10"`, not `"0.00", "2.50", ...`.
-- [ ] A test with a fractional step (e.g. `0.25`) still shows the necessary
-      decimal places.
+### AC4: Goldens and scenes updated, by eye
 
-### AC4: Muted theme colour values
+- [ ] `GUP_BLESS=1 scripts/with_cargo_env.sh cargo test -p gup-core --all-features -- --test-threads=1`
+      re-blesses the goldens; the retrospective lists every changed file under
+      `tests/golden/gup_core/` with its reason: "4+ categorical keys" or "a
+      label of 10,000 or more". Any other changed golden is an escalation.
+- [ ] Read `builder_scatter.png`: the fourth series ("Delta") is blue
+      (`#0072b2`), as is its legend swatch; no yellow dots remain.
+- [ ] Read `builder_bars.png`: "West" is blue in both panels and the legend.
+- [ ] Read `axis_titles.png`: the x labels read `0, 10,000, … 60,000`, adjacent
+      labels do not touch, and the axis title sits below them without overlap.
+- [ ] `crates/gup-core/wasm-size/scatter/index.html`'s fourth expected colour is
+      `[0x00, 0x72, 0xb2]` and its comment still says "the first four Okabe-Ito
+      colours"; `mask wasm-browser` passes.
 
-- [ ] Default axis line colour, gridline colour, and box-plot stroke/fill colour
-      values in `AxisConfiguration::default()` (`axis.rs:149`),
-      `GridConfiguration::default()` (`grid.rs:398`), and
-      `src/chart_builder/builders/boxplot.rs`'s defaults read as muted/neutral
-      (e.g. mid-greys) rather than full-saturation or near-black.
-- [ ] Before/after rendered PNGs of a chart with default axes/gridlines are
-      attached or described in the Definition-of-Done evidence.
+### AC5: No other user of the old order
+
+- [ ] `git grep -n -i "f0e442\|0xf0, 0xe4" -- ':!docs'` prints only the
+      `OKABE_ITO` entry and the new doctest. Tests that index the palette
+      (`OKABE_ITO[i]` in `builders.rs`, `plot.rs`, `ordinal_png.rs`) name the
+      constant, not a hue, and pass unchanged.
+- [ ] `mask dogfood` reports the same PASS/XFAIL/FAIL counts as before the
+      change (10 PASS, 0 XFAIL, 0 FAIL on 2026-10-24).
+
+## Decisions
+
+- **Reorder rather than replace.** Keep all eight Okabe-Ito colours (the October
+  review's Decision 4); move yellow to index 6, before black. Blue moves to
+  index 3, so a four-series chart ends on the marks' default colour, which is
+  the palette's highest-contrast hue.
+- **One constant.** Reorder `OKABE_ITO` itself; do not add a second ordering.
+  `extend` measures distance to the whole set, so the generated colours (index 8
+  and up) do not depend on the order (AC1 pins this).
+- **Grouping rule, per tick set.** Group when
+  `values.iter().any(|v| v.abs() >= 10_000.0)`. The threshold keeps four-digit
+  values such as years on a `Linear` axis (`2019`) ungrouped, and deciding per
+  set keeps one axis consistent (`8,000` beside `10,000`, never `8000`).
+- **Signatures** (both `pub(crate)` in `scale/mod.rs`):
+  `fn groups_thousands(values: &[f64]) -> bool` and
+  `fn format_with_step(v: f64, step: f64, grouped: bool) -> String`. Every
+  caller computes `grouped` once from its full value list before labelling;
+  `legend.rs`'s `with_data_ticks` computes it before `values` is consumed.
+- **Separator `,`** (U+002C, in the bundled subset); decimals keep `.`. Locales
+  are the user's `tick_format`.
+- **Out of the rule:** `Log`, `Symlog`'s decade ticks (`format_log_tick`, which
+  already prints `10k`), `Time`, `Band`, `Point` and a user's `tick_format`.
+- **No theme change.** `Theme::default()` values, sizes and margins stay; the
+  goldens show them working.
+
+## Escalation Triggers
+
+- A golden changes for a reason other than the two in AC4, or a generated
+  palette colour (index 8 and up) changes.
+- A y axis with grouped labels pushes the plot rect so far that a test with a
+  layout assertion (`theme_png.rs`, `builders.rs`) fails other than by a
+  re-blessable pixel diff.
+- Any dogfood check changes status.
+
+## Out of Scope
+
+- A dark theme, subtitles and font-weight changes: N2 (subtitle and dark theme).
+- Tabular figures and kerning: GUP-405. Non-Latin fallback: GUP-416.
+- Unicode thin-space or locale-aware grouping: a user's `tick_format`.
+- A high-contrast theme: N4.
 
 ## Technical Tasks
 
-- [ ] Create the single Okabe-Ito palette constant/module as plain data.
-- [ ] Update `apply_accessors_to_selection()` and `AccessorValue::as_color()`
-      per AC1; remove the duplicated arrays in `line.rs`/`area.rs`.
-- [ ] Vendor Inter (static weight(s) actually used) under `assets/fonts/`, add
-      its OFL licence file, update `FontSource::embedded_fallback()` and the six
-      test assertions, and the SVG default `font-family`.
-- [ ] Implement `decimal_places_for_step` as a standalone pure function; wire it
-      into the old path's default axis formatter construction.
-- [ ] Adjust the muted default colour values in `AxisConfiguration::default()`,
-      `GridConfiguration::default()`, and boxplot defaults.
-- [ ] Bless/update any golden images in GUP-388's harness affected by these
-      intentional visual changes.
+- [ ] Read LUT entries 8, 9, 63 on unchanged code; write the pinning test.
+- [ ] Reorder `OKABE_ITO`, update its doc and add the doctest.
+- [ ] Point the four `DEFAULT_*` constants and the `marks.rs:268` test at the
+      palette.
+- [ ] Add `groups_thousands`, extend `format_with_step`, update the five call
+      sites and the existing tests; add the AC3 tests.
+- [ ] Update `chain_legend.rs` and `index.html`.
+- [ ] Re-bless, read the four named PNGs, list every changed golden.
+- [ ] Run `mask wasm-browser` and `mask dogfood`.
 
 ## Dependencies
 
 ### Prerequisite Stories
 
-- GUP-388 (Visual regression harness) ✅ — needed to bless the new golden images
-  these intentional visual changes produce.
+- GUP-388: Visual Regression Harness ✅ — the bless workflow.
+- GUP-474: tick formats ✅ — the `tick_format` override that must still win.
 
 ### Enables Stories
 
-- Feeds `gup-core`'s theme/scale work (RFC-001, out of scope for this story)
-  with a ready-made palette constant, font asset + licence, and a reusable
-  tick-precision function.
+- None.
 
 ## Testing Strategy
 
-- **Unit tests**: `decimal_places_for_step` for a range of step values (1, 2.5,
-  5, 0.25, 0.1, 100); palette index lookup for repeated/new category strings.
-- **Pixel tests**: multi-category distinct-colour test (AC1).
-- **Visual validation**: default-font rendering (AC2) and muted-defaults
-  rendering (AC4) are visually inspected by the implementer, not just
-  pixel-counted.
+- **Unit tests**: `format_with_step` cases; `Linear` label sets; palette order
+  and the pinned generated colours.
+- **Integration tests**: `chain_legend.rs`; every golden test with `GUP_BLESS`
+  unset after the re-bless.
+- **Visual validation**: the four PNGs in AC4, read with the Read tool.
+- **Browser**: `mask wasm-browser`.
 
 ## Success Metrics
 
-- [ ] Three distinct string category values render as three distinct colours by
-      default.
-- [ ] Default tick labels for common steps (whole numbers, halves, quarters)
-      show no unnecessary trailing zeros.
-- [ ] Inter renders correctly with no missing glyphs for ASCII tick
-      labels/titles.
-- [ ] Palette constant, font asset, and tick-precision function are each
-      self-contained enough to import into `gup-core` without old-path
-      dependencies.
+- [ ] No default series colour below 2.25:1 contrast on white until the seventh
+      series.
+- [ ] No default linear-family label of 10,000 or more without grouping.
 
 ## Risk Assessment
 
-- **Low**: These are old-path visual-default value/asset changes with no
-  architectural coupling to the frozen render pipeline, so they carry lower risk
-  of wasted work than the removed colour-linearisation scope or GUP-393's
-  mark-geometry fixes.
-- **Low**: Choosing which Inter static weight(s) to vendor affects embedded font
-  file size; match the current single-weight embedding pattern.
-- **Low**: Tick-precision-from-step logic has edge cases (floating-point step
-  values); round the step to a small number of significant figures before
-  computing required decimal places, and test against real tick-generation
-  output (`src/tick_generator.rs`).
+- **Low**: wider grouped y labels shift the plot rect by a few pixels in charts
+  with large y values. _Mitigation_: the goldens catch it; layout already
+  measures label widths.
+- **Low**: a test elsewhere indexes the palette by number with a colour in mind.
+  _Mitigation_: AC5's grep.
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria are satisfied and checked.
-- [ ] All tests pass: `cargo test -- --test-threads=1`.
-- [ ] Lint and format clean: `mask all-fix`.
-- [ ] All examples compile: `cargo check --examples`.
-- [ ] Golden images in GUP-388's harness re-blessed with before/after PNGs
-      described in the completion evidence.
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md.
-- [ ] Retrospective added to story document.
+- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+      minutes between commits
+- [ ] All Acceptance Criteria are satisfied and checked
+- [ ] All tests pass: `cargo test -- --test-threads=1`
+- [ ] Lint and format clean: `mask all-fix`
+- [ ] All examples compile: `cargo check --examples`
+- [ ] Rendered output verified by eye (golden image or PNG read)
+- [ ] `mask wasm-browser`: required (a browser scene's expected colours change)
+- [ ] WASM size: `mask wasm-size` scatter gz bytes
+- [ ] Story status updated to ✅ Complete in story file and INDEX.md
+- [ ] Retrospective added to story document

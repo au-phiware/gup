@@ -66,6 +66,25 @@ file); GUP-504.
   shellcheck over `scripts/*.sh` and `dogfood/run_all.sh` (only workflow `run:`
   blocks are linted today). Deps: GUP-502 ✅.
 
+The rest of N0, rewritten 2026-10-24. GUP-392 and GUP-523 share no hot file and
+may run together; GUP-397 touches only `dogfood/` and the harness crate. Run
+`mask merge-check --dogfood` after merging GUP-392 and GUP-397.
+
+- [GUP-392](GUP-392_Correct_Visual_Defaults.md) 📋 — Its four original items
+  hold in `gup-core` (evidence in the story); what is left: Okabe-Ito reordered
+  so yellow (1.32:1 on white) comes seventh, the marks' default blue taken from
+  the palette, and linear-family tick and ramp labels grouped (`10,000`) when a
+  tick set reaches 10,000. Deps: GUP-388 ✅, GUP-474 ✅.
+- [GUP-397](GUP-397_Dogfood_Checks_On_Shared_Visual_Assertions.md) 📋 — Move
+  dogfood's `pixels.rs` verbatim into `gup_visual_regression::measure`, drop
+  dogfood's `image` dependency, and prove every check's status and detail
+  unchanged on real outputs. Deps: GUP-394 ✅, GUP-388 ✅, GUP-501 ✅.
+- [GUP-523](GUP-523_Attr_Path_Column_Value_Message.md) 📋 — Make `f64` the one
+  recommended `ColumnValue` impl, so a string accessor passed to `attr` gets
+  "implemented for `f64`" in both errors instead of an `IntoEncoding` hint, and
+  restore the `attr` form of `borrowing_accessor` with a seeded-stable snapshot.
+  Deps: GUP-511 ✅.
+
 Backlog triage for later tracks (notes only; their stories are not written):
 
 - **N2, bars**: end-bar padding on numeric axes, `group_padding`, horizontal
@@ -91,15 +110,6 @@ Backlog triage for later tracks (notes only; their stories are not written):
 Stories still worth doing that no active initiative owns, with the track that
 will pick each up.
 
-- [GUP-392](GUP-392_Correct_Visual_Defaults.md) 📋 — Trimmed to what survives
-  RFC-001: a single Okabe-Ito palette data source, Inter as the default font
-  (with OFL licence), tick-label precision derived from the tick step, and muted
-  default theme colours. Deps: GUP-388 ✅. Track: N0, verify against `gup-core`
-  (Inter, Okabe-Ito, step-derived tick precision, muted theme) and close.
-- [GUP-397](GUP-397_Dogfood_Checks_On_Shared_Visual_Assertions.md) 📋 — Replace
-  the dogfood suite's local pixel measurements with GUP-388's shared
-  visual-assertion module and layout metadata, without loosening any tracked
-  gap. Deps: GUP-394 ✅, GUP-388 ✅. Track: N0.
 - [GUP-413](GUP-413_Per_Checkout_Clippy_Artifacts.md) 💡 — Clippy artifacts are
   still shared between checkouts (GUP-411 made them re-lint on a switch, ~90 s
   instead of 26 s for `mask all-check`). Decide with measurements whether a
