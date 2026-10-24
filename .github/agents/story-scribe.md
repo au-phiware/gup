@@ -272,8 +272,8 @@ not design:
 
 ### Choosing the implementer
 
-Set `implementer` and `implementer-reason` in the story's YAML frontmatter, the
-only frontmatter a story has. The orchestrator reads it with
+Set `implementer` and `implementer-reason` in the story's YAML frontmatter, next
+to `touches:`. The orchestrator reads it with
 `grep -H "^implementer:" docs/planning/stories/GUP-*.md` and spawns the worker
 on that model. Prettier never re-wraps frontmatter into the overview paragraph,
 so the grep stays reliable. Don't repeat it in INDEX.md: the story is the one
