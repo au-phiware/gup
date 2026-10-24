@@ -204,3 +204,16 @@ weeks of steady work. N4 and N5 are the next review's question.
    - (c) Fully serial.
    - **Recommendation: (b).** The limit, not agent quality, cost 9 of 20 days;
      (b) trades some peak throughput for no stalls and fewer semantic conflicts.
+
+## Owner decisions (2026-10-24)
+
+1. **Licence:** keep GPL-3.0-or-later. No header change.
+2. **0.1 scope:** (b), publish after N0 to N2 plus N3: the common chart
+   vocabulary, tested tutorials and a gallery.
+3. **Mobile and Tauri crates:** (b), delete them and their workflows (git keeps
+   them).
+4. **Accessibility in 0.1:** (b), minimal: `Plot::describe()`, an SVG
+   title/description and a canvas `aria-label`. Full N4 comes after release.
+5. **Pace:** (b), at most two build-heavy agents, Opus early in the week,
+   hot-file serialisation, and adopt `scripts/checkpoint.sh` (a work-in-progress
+   snapshot to a private ref: no hook, never pushed, never moves the branch).
