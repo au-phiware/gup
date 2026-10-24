@@ -279,7 +279,9 @@ pre-commit hook's scoping rules and its staged snapshot,
 `test_shared_build_dir.sh` that checkouts sharing a build directory get their
 own workspace-member artifacts (GUP-411), and `test_prune_build_dir.sh` that the
 prune bounds the build directory's growth per commit without touching a live
-checkout's artifacts (GUP-427).
+checkout's artifacts (GUP-427), and `test_checkpoint.sh` that
+`scripts/checkpoint.sh` snapshots, restores and drops work-in-progress in a
+throwaway repository, without hooks or remote refs (GUP-496).
 
 The whitespace check passes only when `git grep` finds nothing (exit 1): a
 `git grep` error must fail it, not pass it.
@@ -299,7 +301,7 @@ concurrently --group --names '\s,rs,nix,md,gha,gallery,hook' \
    'prettier --cache --log-level warn --check "**/*.md" && mdl --git-recurse .' \
    'actionlint .github/workflows/*.y*ml' \
    './scripts/check_gallery_sync.sh' \
-   './scripts/test_pre_commit.sh && ./scripts/test_shared_build_dir.sh && ./scripts/test_prune_build_dir.sh'
+   './scripts/test_pre_commit.sh && ./scripts/test_shared_build_dir.sh && ./scripts/test_prune_build_dir.sh && ./scripts/test_checkpoint.sh'
 ```
 
 ## pre-commit
@@ -486,6 +488,52 @@ OPTIONS
 
 ```bash
 ./scripts/prune_build_dir.sh ${dry_run:+--dry-run}
+```
+
+## checkpoint
+
+Snapshot the whole working tree to `refs/checkpoints/<branch>` (GUP-496):
+tracked edits, staged changes, deletions and untracked files that `.gitignore`
+does not ignore. It uses git plumbing, so no hook runs, and HEAD, the branch,
+the index and the stash are untouched; nothing is sent to a remote. It never
+replaces a real commit: commit whenever the code builds.
+
+OPTIONS
+
+- message
+  - flags: -m --message
+  - type: string
+  - desc: Append to the checkpoint commit message
+
+```bash
+if [ -n "$message" ]; then
+  ./scripts/checkpoint.sh save -m "$message"
+else
+  ./scripts/checkpoint.sh save
+fi
+```
+
+## checkpoint-restore
+
+Make the working tree match the last checkpoint of a branch (GUP-496): write the
+checkpoint's files and delete tracked or untracked files (not ignored ones) that
+it lacks. HEAD, the branch and the index are untouched, so the staging area is
+not restored. It refuses when the checkpoint is not based on HEAD or the working
+tree has changes the checkpoint lacks; `--force` first saves the current state
+to `refs/checkpoints-backup/<branch>`. It never replaces a real commit.
+
+OPTIONS
+
+- force
+  - flags: --force
+  - desc: Back up the current state first, then restore even if HEAD moved
+- branch
+  - flags: --branch
+  - type: string
+  - desc: Restore this branch's checkpoint (default: the current branch)
+
+```bash
+./scripts/checkpoint.sh restore ${force:+--force} $branch
 ```
 
 ## doc

@@ -55,6 +55,11 @@ story, and big documents crowd out the code.
 6. Commit this status change: `"Start GUP-XXX: <story title>"`.
 7. Note the output of `date`, so that you can tell how long you have been
    working. You cannot sense elapsed time otherwise.
+8. Run `scripts/checkpoint.sh list`. If it shows a checkpoint for your branch
+   whose tree differs from your working tree, you are resuming after an
+   interruption: inspect it (`git diff --stat refs/checkpoints/<branch>`) and
+   restore it with `scripts/checkpoint.sh restore` (with `--force` only if the
+   working tree is behind it).
 
 ---
 
@@ -98,12 +103,12 @@ that round trip.
 
 ### How to stop
 
-1. Commit what you have on your branch, with `WIP` in the message, if it builds.
-   Then confirm with `git log -1 --oneline` that the commit exists. The
-   pre-commit hook can refuse a commit, and an unverified "committed" in a
-   report is a false report. If it doesn't, gate the broken part with
-   `#[cfg(any())]` and commit. Never leave work uncommitted, and never use
-   `--no-verify`.
+1. Run `scripts/checkpoint.sh`. Then commit what you have on your branch, with
+   `WIP` in the message, if it builds. Then confirm with `git log -1 --oneline`
+   that the commit exists. The pre-commit hook can refuse a commit, and an
+   unverified "committed" in a report is a false report. If it doesn't, gate the
+   broken part with `#[cfg(any())]` and commit. Never leave work uncommitted,
+   and never use `--no-verify`.
 2. Append a `## Blocked (YYYY-MM-DD)` section to the story containing:
    - the question;
    - the options you see, with the evidence for each (error text, numbers, image
@@ -150,7 +155,12 @@ Work iteratively in small, focused increments. For each increment:
   leave a new crate or module untracked. Sessions can be cut off without warning
   (usage limits), and uncommitted work is then at risk. If the code doesn't
   build yet, stub or `#[cfg(any())]`-gate the unfinished part so it does, then
-  commit.
+  commit. Between commits, run `scripts/checkpoint.sh` every 20-30 minutes
+  (check `date`) and before any command that may run for more than 5 minutes,
+  whether or not the code builds. It saves the whole working tree, untracked
+  files included, to `refs/checkpoints/<branch>` without running the hook or
+  moving your branch. It never replaces a commit: commit whenever the code
+  builds, as before.
 - **Pinned tools**: use the dev shell's formatters and linters (`prettier`,
   `mdl`, `actionlint`, `nixfmt`), which are pinned by the flake. Never
   `npx prettier`: it fetches the latest release, which re-wraps Markdown
