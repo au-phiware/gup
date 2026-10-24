@@ -50,7 +50,7 @@ file); GUP-504.
 - [GUP-502](GUP-502_Merge_Check_Task.md) ✅ — `mask merge-check`: gup-core
   tests, `wasm-size` and `wasm-browser` (and dogfood with `--dogfood`), each run
   regardless of failures, with one summary table. Deps: GUP-501 📋.
-- [GUP-503](GUP-503_Archive_Story_Index_History.md) 📋 — Move this file's
+- [GUP-503](GUP-503_Archive_Story_Index_History.md) 🚧 — Move this file's
   history to `INDEX_ARCHIVE.md`, keep this section and a nine-story Open Backlog
   here, close 27 obsolete or superseded stories with a new 🚫 status, and point
   the agent docs at the small index. Deps: GUP-496 📋 (soft).
