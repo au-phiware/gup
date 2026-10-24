@@ -2,14 +2,14 @@
 implementer: haiku
 implementer-reason:
   add one shellcheck invocation to an existing mask task and fix what it finds
-touches: [maskfile.md, scripts/]
+touches: [maskfile.md, flake.nix, scripts/]
 ---
 
 # GUP-517: Shellcheck the Scripts in the Gate
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N0 Hygiene) **Status**: 📋 Planned
+**Initiative**: Strategic Review 2026-11 (N0 Hygiene) **Status**: ✅ Complete
 **Created**: 2026-10-24
 
 ## Context
@@ -29,16 +29,16 @@ hook's bash scripts (`pre_commit.sh`, `checkpoint.sh`, `prune_build_dir.sh`,
 
 ### AC1: The gate lints every script
 
-- [ ] `mask all-check` runs `shellcheck` over `scripts/*.sh` and
+- [x] `mask all-check` runs `shellcheck` over `scripts/*.sh` and
       `dogfood/run_all.sh`, and fails on any finding.
-- [ ] Each finding is fixed, or suppressed with a `# shellcheck disable=` line
+- [x] Each finding is fixed, or suppressed with a `# shellcheck disable=` line
       that gives the reason on the same line. No file-wide disables.
-- [ ] The shellcheck version is the one pinned by the flake (run it from the dev
+- [x] The shellcheck version is the one pinned by the flake (run it from the dev
       shell, not from the host).
 
 ### AC2: Proof
 
-- [ ] A seeded violation in one script fails `mask all-check`, then is reverted
+- [x] A seeded violation in one script fails `mask all-check`, then is reverted
       (recorded, not committed).
 
 ## Decisions
@@ -90,3 +90,74 @@ hook's bash scripts (`pre_commit.sh`, `checkpoint.sh`, `prune_build_dir.sh`,
 - [ ] Lint and format clean: `mask all-fix`
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
+
+## Resolved (2026-10-24)
+
+Orchestrator approved the flake.nix pin: `shellcheck` added to the dev shell
+beside `actionlint` (one line; `touches:` extended to `flake.nix`). The dev
+shell now resolves it to
+`/nix/store/i5kmqg3q40a7n5v0ax06rh22l9qp3xhm-shellcheck-0.11.0-bin/bin/shellcheck`,
+version 0.11.0. `mask all-check` inside `nix develop` exits 0, which covers CI's
+Lint workflow.
+
+## Implementation Summary
+
+- `maskfile.md`: new `sh` branch in `all-check` running
+  `shellcheck scripts/*.sh dogfood/run_all.sh`, plus a paragraph describing it.
+- `flake.nix`: `shellcheck` in the dev shell.
+- Nine findings fixed in four scripts (see retrospective); two targeted disables
+  with reasons.
+- AC2 proof: a seeded `echo $GUP517_SEED` in `scripts/check_story_ids.sh` made
+  `mask all-check` exit 1 (`sh` branch, SC2086/SC2317). Reverted.
+- Tests: `scripts/test_checkpoint.sh` passes after the quoting change; the other
+  gate tests pass in `mask all-check`.
+
+## Retrospective
+
+**Completed**: 2026-10-24
+
+### Key Technical Learnings
+
+#### Shellcheck in the dev shell
+
+- **Challenge**: nixpkgs' actionlint wraps shellcheck by store path, so the dev
+  shell had no `shellcheck` on PATH and `command -v shellcheck` found the host's
+  copy.
+- **Solution**: list `shellcheck` in the dev shell's `buildInputs` beside
+  `actionlint`.
+- **Pattern**: check `command -v` inside `nix develop`, not the host, before
+  claiming a tool is pinned.
+
+#### Fixing findings without changing behaviour
+
+- **Fixed by rewrite**: SC2001 `sed 's|.*blob/main/||'` became
+  `${link##*blob/main/}` (greedy, same match; checked on four sample inputs).
+  SC2016 single-quoted `bash -c` strings became double-quoted with escaped `$`
+  and backticks, passing the same string to the child shell.
+- **Suppressed**: SC2207 (`IFS=$'\n' arr=($(sort ...))`). A `mapfile` rewrite
+  would turn an empty list into one empty entry. SC2001 on a per-line
+  `sed 's/^/  - /'`, which `${var//}` cannot express.
+- **Pattern**: a rewrite is allowed only when a sample test shows identical
+  output, including the empty case.
+
+### Architectural Decisions
+
+#### Targeted disables over rewrites when the rewrite changes edge cases
+
+- **Decision**: two `# shellcheck disable=` lines, each with its reason on the
+  same line.
+- **Reasoning**: rewrites changed the empty-list case or per-line anchoring.
+- **Trade-off**: two suppressions remain in the scripts.
+- **Future**: revisit SC2207 if the gallery's example list ever needs empty
+  handling.
+
+### Development Workflow Insights
+
+- A `Blocked` escalation for a one-line scope question worked: the orchestrator
+  approved it, and the approval was recorded in the story.
+- The seeded violation proved the gate fails on a real finding before the
+  revert.
+
+### Follow-up Stories
+
+None. GUP-521 and GUP-522 were reserved but not needed.

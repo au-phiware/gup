@@ -102,6 +102,7 @@
             # Workflow lint (GUP-409). nixpkgs wraps actionlint with
             # shellcheck, which it runs on every `run:` script.
             actionlint
+            shellcheck
 
             # Headless X server: `mask ci dogfood` runs the windowed tasks
             # under Xvfb, as the Dogfood workflow does.

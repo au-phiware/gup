@@ -69,6 +69,7 @@ else
 fi
 
 # Sort for deterministic ordering.
+# shellcheck disable=SC2207 # names are plain identifiers; mapfile would keep an empty list as one empty entry
 IFS=$'\n' EXAMPLES=($(sort <<<"${EXAMPLES[*]}")); unset IFS
 
 TOTAL=${#EXAMPLES[@]}

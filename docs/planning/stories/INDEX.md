@@ -62,7 +62,7 @@ file); GUP-504.
   above the legacy baseline (GUP-315) unique across files and both index files,
   run by the hook, `all-check` and `merge-check`, with a seeded test. Deps:
   GUP-503 ✅, GUP-502 ✅.
-- [GUP-517](GUP-517_Shellcheck_Scripts_Gate.md) 📋 — `mask all-check` runs
+- [GUP-517](GUP-517_Shellcheck_Scripts_Gate.md) ✅ — `mask all-check` runs
   shellcheck over `scripts/*.sh` and `dogfood/run_all.sh` (only workflow `run:`
   blocks are linted today). Deps: GUP-502 ✅.
 
