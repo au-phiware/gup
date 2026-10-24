@@ -4,6 +4,7 @@
 //! Marks: [`Circle`], [`Rect`], [`Segment`] and [`Line`] (RFC-001 S6).
 
 use crate::channel::{Color, Px, Unit};
+use crate::scale::OKABE_ITO;
 
 /// A filled disc centred on `(X, Y)`, sized in logical pixels so it stays
 /// round on any aspect ratio.
@@ -63,7 +64,7 @@ pub struct Circle {
 
 impl Circle {
     /// The default fill (`#0072B2`).
-    pub const DEFAULT_FILL: Color = Color::hex(0x0072b2);
+    pub const DEFAULT_FILL: Color = OKABE_ITO[3];
 }
 
 /// A filled axis-aligned box in logical pixels, with analytically
@@ -135,7 +136,7 @@ pub struct Rect {
 
 impl Rect {
     /// The default fill (`#0072B2`).
-    pub const DEFAULT_FILL: Color = Color::hex(0x0072b2);
+    pub const DEFAULT_FILL: Color = OKABE_ITO[3];
 }
 
 /// A straight line from `(x, y)` to `(x_end, y_end)` in logical pixels, with a
@@ -193,7 +194,7 @@ pub struct Segment {
 
 impl Segment {
     /// The default colour (`#0072B2`).
-    pub const DEFAULT_COLOR: Color = Color::hex(0x0072b2);
+    pub const DEFAULT_COLOR: Color = OKABE_ITO[3];
 }
 
 /// A polyline through the rows in data order: one segment from each row to
@@ -245,7 +246,7 @@ pub struct Line {
 
 impl Line {
     /// The default colour (`#0072B2`).
-    pub const DEFAULT_COLOR: Color = Color::hex(0x0072b2);
+    pub const DEFAULT_COLOR: Color = OKABE_ITO[3];
 }
 
 #[cfg(test)]
@@ -265,7 +266,7 @@ mod tests {
                 "fill",
                 Some(Role::Color),
                 "vec4<f32>",
-                ConstValue::Vec4(Color::hex(0x0072b2).to_array()),
+                ConstValue::Vec4(Circle::DEFAULT_FILL.to_array()),
             ),
             ("fill_opacity", None, "f32", ConstValue::F32(1.0)),
             (

@@ -20,7 +20,7 @@ fn a_chain_into_a_palette_labels_the_data_not_the_image() {
     let labels: Vec<&str> = ramp.ticks().iter().map(|t| &*t.label).collect();
     assert_eq!(
         labels,
-        ["0", "10000000", "20000000", "30000000", "40000000"]
+        ["0", "10,000,000", "20,000,000", "30,000,000", "40,000,000"]
     );
     let (lo, hi) = ramp.domain();
     for tick in ramp.ticks() {
@@ -158,5 +158,5 @@ fn a_plot_places_the_legend_of_a_chained_colour() {
         .collect();
     assert!(labels.iter().any(|l| l == "Cost"), "{labels:?}");
     // Round values of the data (up to 1.5e7), not of its square root.
-    assert!(labels.iter().any(|l| l == "10000000"), "{labels:?}");
+    assert!(labels.iter().any(|l| l == "10,000,000"), "{labels:?}");
 }

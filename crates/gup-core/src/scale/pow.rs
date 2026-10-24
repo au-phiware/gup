@@ -1,7 +1,7 @@
 // Copyright (C) 2024 Corin Lawson
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-use super::{PositionScale, Ticks, format_with_step, step_value, tick_step};
+use super::{PositionScale, Ticks, format_with_step, groups_thousands, step_value, tick_step};
 use crate::channel::Px;
 use crate::column::ColumnFormat;
 use crate::encoding::{CpuMirror, ShaderFn};
@@ -220,7 +220,11 @@ impl PositionScale for Pow {
         let values: Vec<f64> = (0..=((end - start).max(-1.0) as i64))
             .map(|i| step_value(start + i as f64, step))
             .collect();
-        let labels = values.iter().map(|&v| format_with_step(v, step)).collect();
+        let grouped = groups_thousands(&values);
+        let labels = values
+            .iter()
+            .map(|&v| format_with_step(v, step, grouped))
+            .collect();
         Ticks::new(values, labels)
     }
 }
