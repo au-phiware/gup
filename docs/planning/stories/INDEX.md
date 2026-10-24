@@ -33,11 +33,15 @@ file); GUP-504.
   code, archive the accessibility and research docs to `docs/archive/`, make
   `PERFORMANCE_GUIDE.md` a pointer to `PERF_BUDGETS.md`, banner the tutorials
   for N1, and move "what is next" to tracks N0–N6. Deps: GUP-497 📋.
-- [GUP-500](GUP-500_Stable_Compile_Fail_Snapshots.md) 📋 — Stop trybuild
+- [GUP-500](GUP-500_Stable_Compile_Fail_Snapshots.md) ✅ — Stop trybuild
   `.stderr` churn: `#[diagnostic::do_not_recommend]` on concrete `CpuMirror` and
   `ColumnValue` impls (a spike with a rule) and "did you mean" instead of module
   lists; plus a fixed-recipe spike on the shared-build-dir "multiple versions of
-  crate wgpu" doctest error. Deps: GUP-496 📋 (soft).
+  crate wgpu" doctest error. Deps: GUP-496 📋 (soft). Done: `CpuMirror` only
+  (`ColumnValue` attributes swap in an unrelated hint); doctest error not
+  reproduced.
+- [GUP-511](GUP-511_Stable_Column_Value_Snapshot.md) 💡 — Stop a new
+  `ColumnValue` type from changing `borrowing_accessor.stderr`.
 - [GUP-501](GUP-501_Headless_Environment_Script.md) 📋 —
   `scripts/headless_env.sh` (lavapipe ICD, no `WAYLAND_DISPLAY`, 1920x1080 Xvfb)
   used by `run_all.sh` and the mask tasks, the egui screenshot test run for real
