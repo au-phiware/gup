@@ -86,6 +86,39 @@ Backlog triage for later tracks (notes only; their stories are not written):
   SVG title and description, a canvas `aria-label`) starts from the docs GUP-499
   archives; full N4 follows the release.
 
+## Track N1: Docs and Tutorials
+
+Track N1 from the [November 2026 review](../STRATEGIC_REVIEW_2026-11.md):
+tutorials as tested Markdown, strict doc gates, an honest README. Release 0.1's
+scope is "vocabulary + docs" (owner decision 2). These stories edit docs and
+`src/lib.rs` only, so one runs beside a track N2 story. Suggested order: GUP-533
+(beside GUP-540 or GUP-541, before any N2 story touches
+`crates/gup-core/src/lib.rs`); then GUP-530, GUP-531, GUP-532, GUP-534 and
+GUP-535 in turn (they share `src/lib.rs`); GUP-536 after N2's builders.
+
+- [GUP-530](GUP-530_Tested_Tutorials_Getting_Started.md) 📋 — Tutorials 1
+  (getting started with the builders) and 2 (plots and selections) rewritten as
+  doctests of `gup`, with their images as goldens in `tests/tutorials.rs`, and
+  the conventions the other tutorial stories follow.
+- [GUP-531](GUP-531_Tutorials_Shader_Functions_And_Custom_Marks.md) 📋 —
+  Tutorials 3 (`#[wgsl_function]`, `then`) and 6 (`#[derive(Mark)]`, the custom
+  mark guide) as doctests, and a "Deriving" reference on the `Mark` trait. Deps:
+  GUP-530 📋.
+- [GUP-532](GUP-532_Tutorials_Interaction_And_Streaming.md) 📋 — Tutorials 4
+  (tooltips, `on_row`, zoom, pan, brush, tested by sending `Input`) and 5
+  (appenders, `Window::LastRows`) as doctests; the last banner and stale assets
+  removed. Deps: GUP-530 📋.
+- [GUP-533](GUP-533_Documentation_Lint_Gates.md) 📋 — `#![warn(missing_docs)]`
+  in every crate (all pass today) and `mask doc` with
+  `RUSTDOCFLAGS="-D warnings"` over seven crates in `mask all-check`.
+- [GUP-534](GUP-534_Honest_README_And_Tested_Quick_Start.md) 📋 — README tagline
+  and "Why Gup" cut to `PERF_BUDGETS.md` figures, a "Not yet" list, a
+  git-dependency Quick Start, and the README compiled as a doctest. Deps:
+  GUP-530 📋 (soft).
+- [GUP-535](GUP-535_Compiled_Integration_Guides.md) 📋 — The egui and Bevy
+  guides compiled as `no_run` doctests of `gup-egui` and `gup-bevy`. Deps:
+  GUP-483 ✅, GUP-484 ✅.
+
 ## Open Backlog
 
 Stories still worth doing that no active initiative owns, with the track that
