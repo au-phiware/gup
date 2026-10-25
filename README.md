@@ -1,29 +1,25 @@
 # Gup: GPU-Accelerated Data Visualization
 
-> **Observable Plot's simplicity meets GPU performance for billion-point
-> datasets**
+> A few lines of Rust for a publication-quality chart, drawn on the GPU: in a
+> window, a PNG, an SVG, egui, Bevy or the browser.
 
 Gup (GPU Update Pattern) is a data visualization library for Rust. Data
 encodings (scales, palettes, transfer functions) are shader functions that run
 on the GPU, each with an exact CPU twin for axes, legends, picking and SVG, so
 zooming and panning change uniforms rather than data.
 
-## Motivation
+## Why Gup
 
-### The Performance Crisis
+Figures are from [`PERF_BUDGETS.md`](./crates/gup-core/PERF_BUDGETS.md), release
+build, Intel HD Graphics 630 (an integrated GPU), Mesa 26.0.0, Vulkan:
 
-Current visualization libraries hit fundamental walls:
+- Zooming writes no column bytes: `zoom.columns.bytes` is 0 over 600 frames.
+- Culling by chunk: 4M sorted rows draw in 9.90 ms of GPU time with 14 draws
+  (`zoom_culled.gpu_pass.median_ms`, `zoom_culled.draws.median`).
+- The reference scatter's WASM build is 334,149 bytes gzipped
+  (`wasm.scatter.gz_bytes`).
 
-- **D3.js**: Limited to ~1,000 points at 60 FPS
-- **Observable Plot**: Same CPU limitations despite simpler API
-- **Plotters**: Designed for static charts, crashes with real-time updates
-- **Three.js**: General 3D graphics, not optimized for data visualization
-  patterns
-
-### The GPU Opportunity
-
-Modern GPUs can process millions of data points in parallel, but existing
-libraries don't leverage this power. Gup is built GPU-first from the ground up.
+The timings apply to that machine; measure on yours before comparing.
 
 ## Key Features
 
@@ -38,38 +34,82 @@ libraries don't leverage this power. Gup is built GPU-first from the ground up.
 - **Builders that do not trap you.** Start from `gup::scatter`, then drop to the
   typed `Selection` API.
 
+## Not yet
+
+Each item names its track in
+[`IMPLEMENTATION_STRATEGY.md`](./docs/IMPLEMENTATION_STRATEGY.md):
+
+- No CSV, serde or Arrow input: rows enter through closures (N5).
+- Nothing above 10M rows is measured, and there is no level of detail (N5).
+- No PDF export (N6).
+- No accessibility support yet: a minimum comes in N3, keyboard navigation in
+  N4.
+- CI renders on Linux only; Windows comes in N3.
+- Chart types are those the builders list today; more come in N2.
+
 ## Quick Start
 
-Add to `Cargo.toml`:
+Gup is not on crates.io yet; release 0.1 will be. Add it from git to
+`Cargo.toml`:
 
 ```toml
 [dependencies]
-gup = "0.1"
+gup = { git = "https://github.com/au-phiware/gup" }
 ```
 
-Create your first visualization (this is the doctest in `src/lib.rs`):
+Then draw a scatter chart and save it as a PNG:
+
+```rust,no_run
+use gup::prelude::*;
+
+struct Row { gdp: f64, life_exp: f64, continent: String, population: f64 }
+
+fn main() -> gup::Result<()> {
+    let data = vec![
+        Row { gdp: 1e3, life_exp: 55.0, continent: "Africa".into(), population: 3e7 },
+        Row { gdp: 2e4, life_exp: 74.0, continent: "Europe".into(), population: 6e7 },
+        Row { gdp: 6e4, life_exp: 81.0, continent: "Asia".into(), population: 1e9 },
+    ];
+
+    let mut chart = gup::scatter(data)
+        .x(|d| d.gdp)
+        .y(|d| d.life_exp)
+        .color(|d| d.continent.clone())
+        .size(|d| d.population);
+    let cx = Context::shared()?;
+    chart.save_png(&cx, "chart.png", 800, 500)?;
+    Ok(())
+}
+```
+
+To keep the image in memory instead, for a test say:
 
 ```rust
 use gup::prelude::*;
 
 struct Row { gdp: f64, life_exp: f64, continent: String, population: f64 }
-let data = vec![
-    Row { gdp: 1e3, life_exp: 55.0, continent: "Africa".into(), population: 3e7 },
-    Row { gdp: 2e4, life_exp: 74.0, continent: "Europe".into(), population: 6e7 },
-    Row { gdp: 6e4, life_exp: 81.0, continent: "Asia".into(), population: 1e9 },
-];
 
-let mut chart = gup::scatter(data)
-    .x(|d| d.gdp)
-    .y(|d| d.life_exp)
-    .color(|d| d.continent.clone())
-    .size(|d| d.population);
-let image = chart.render(&Context::shared()?, 800, 500)?;
-assert_eq!(image.dimensions(), (800, 500));
-# Ok::<(), gup::Error>(())
+fn main() -> gup::Result<()> {
+    let data = vec![
+        Row { gdp: 1e3, life_exp: 55.0, continent: "Africa".into(), population: 3e7 },
+        Row { gdp: 2e4, life_exp: 74.0, continent: "Europe".into(), population: 6e7 },
+        Row { gdp: 6e4, life_exp: 81.0, continent: "Asia".into(), population: 1e9 },
+    ];
+
+    let mut chart = gup::scatter(data)
+        .x(|d| d.gdp)
+        .y(|d| d.life_exp)
+        .color(|d| d.continent.clone())
+        .size(|d| d.population);
+    let image = chart.render(&Context::shared()?, 800, 500)?;
+    assert_eq!(image.dimensions(), (800, 500));
+    Ok(())
+}
 ```
 
-To open a window instead, pass the chart to `gup::show(chart)`.
+To open a window instead, pass the chart to `gup::show(chart)`. Continue with
+[Tutorial 1, Getting Started](./docs/tutorials/01_getting_started.md), or see
+all [tutorials](./docs/tutorials/README.md).
 
 ## Architecture Highlights
 
@@ -100,6 +140,8 @@ N1, tested tutorials; N2, more chart types; then N3, release 0.1. See
 
 ## Documentation
 
+- [`docs/tutorials/README.md`](./docs/tutorials/README.md) - Six tested
+  tutorials, from a first chart to custom marks
 - [`MISSION_AND_GOALS.md`](./docs/MISSION_AND_GOALS.md) - Project vision and
   objectives
 - [`TECHNICAL_APPROACH.md`](./docs/TECHNICAL_APPROACH.md) - How Gup works today
@@ -157,9 +199,3 @@ strategic review T7 ports what it needs. See its
 
 This project is licensed under the GNU General Public License v3.0 or later
 (GPL-3.0-or-later). See [COPYING](COPYING) for details.
-
----
-
-**Gup is transforming data visualization by bringing GPU performance to
-declarative, composable APIs. Join us in building the future of high-performance
-data visualization.**

@@ -85,6 +85,8 @@ mod architecture_docs {
     struct TechnicalApproach;
     #[doc = include_str!("../docs/IMPLEMENTATION_STRATEGY.md")]
     struct ImplementationStrategy;
+    #[doc = include_str!("../README.md")]
+    struct Readme;
 }
 
 /// The tutorials' snippets, compiled as doctests (GUP-530).
