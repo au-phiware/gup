@@ -39,6 +39,7 @@ pub(crate) enum MarkKind {
     Rect,
     Segment,
     Line,
+    Area,
 }
 
 /// What a batch carries for vector targets.
@@ -111,6 +112,14 @@ pub(crate) enum VectorMark {
         points: Vec<Point>,
         width: f32,
         color: Color,
+    },
+    /// Consecutive trapezoids of one fill: the top edge left to right, and
+    /// the baseline under it.
+    Area {
+        top: Vec<Point>,
+        base: Vec<Point>,
+        /// The fill with `fill_opacity` multiplied into its alpha.
+        fill: Color,
     },
 }
 
@@ -391,6 +400,60 @@ impl CpuLayer {
                             _ => {
                                 flush(&mut run, &mut out);
                                 run = Some((vec![a, b], p[4], col));
+                            }
+                        }
+                    }
+                }
+                flush(&mut run, &mut out);
+            }
+            MarkKind::Area => {
+                let c = |name| self.numbers(name, &needed);
+                let (x, y, ye) = (c("x")?, c("y")?, c("y_end")?);
+                let (fill, opacity) = (
+                    self.colors("fill", &needed)?,
+                    self.numbers("fill_opacity", &needed)?,
+                );
+                // The open run: its top edge and baseline, and its fill
+                // (taken from each segment's first row).
+                let mut run: Option<(Vec<Point>, Vec<Point>, Color)> = None;
+                let flush = |run: &mut Option<(Vec<Point>, Vec<Point>, Color)>,
+                             out: &mut Vec<VectorMark>| {
+                    if let Some((top, base, fill)) = run.take() {
+                        out.push(VectorMark::Area { top, base, fill });
+                    }
+                };
+                for s in spans {
+                    let e = &self.entries[s.chunk as usize];
+                    for i in s.rows.clone() {
+                        let (d, nx) = (row(e.this, e.first + i), row(e.next, e.next_first + i));
+                        let ok = d < n && nx < n && valid[d] && valid[nx];
+                        let p = [
+                            f(x.at(d)),
+                            f(y.at(d)),
+                            f(ye.at(d)),
+                            f(x.at(nx)),
+                            f(y.at(nx)),
+                            f(ye.at(nx)),
+                        ];
+                        if !(ok && p.iter().all(|v| v.is_finite())) {
+                            flush(&mut run, &mut out);
+                            continue;
+                        }
+                        let (a, a0) = (Point::new(p[0], p[1]), Point::new(p[0], p[2]));
+                        let (b, b0) = (Point::new(p[3], p[4]), Point::new(p[3], p[5]));
+                        let col = with_opacity(fill.at(d), opacity.at(d));
+                        match &mut run {
+                            Some((top, base, c))
+                                if top.last() == Some(&a)
+                                    && base.last() == Some(&a0)
+                                    && *c == col =>
+                            {
+                                top.push(b);
+                                base.push(b0);
+                            }
+                            _ => {
+                                flush(&mut run, &mut out);
+                                run = Some((vec![a, b], vec![a0, b0], col));
                             }
                         }
                     }

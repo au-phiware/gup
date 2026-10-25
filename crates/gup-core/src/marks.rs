@@ -249,6 +249,69 @@ impl Line {
     pub const DEFAULT_COLOR: Color = OKABE_ITO[3];
 }
 
+/// A filled region between a series and a baseline, in logical pixels: for
+/// each pair of consecutive rows, the trapezoid between the top edge (`y`) and
+/// the baseline (`y_end`; set it, e.g. `.y_end(|_| 0.0)`). For a range, set
+/// `y` to the high series and `y_end` to the low one.
+///
+/// Adjacent trapezoids share their edge exactly, so a translucent area has no
+/// seam and nothing is blended twice. Where the top edge crosses the baseline
+/// within a segment, the two triangles either side of the crossing are
+/// filled. A row with a null position breaks the area: neither segment
+/// touching it is drawn. The fill comes from a segment's first row. Rows with
+/// a column split across buffers (chunks) join as if they were one.
+///
+/// An area draws with 4 samples (`Antialias::Msaa`). A host that draws in its
+/// own pass (`Prepared::draw`, egui, Bevy) chooses the sample count; at 1
+/// sample the edges alias.
+///
+/// ```
+/// use gup_core::prelude::*;
+///
+/// # fn main() -> gup_core::Result<()> {
+/// let rain = vec![(0.0, 2.0), (1.0, 5.0), (2.0, 3.0), (3.0, 4.0)];
+///
+/// let mut plot = Plot::new();
+/// plot.x(Linear::new().domain(0.0, 3.0));
+/// plot.y(Linear::new().domain(0.0, 6.0));
+/// plot.area(rain)
+///     .x(|r: &(f64, f64)| r.0)
+///     .y(|r: &(f64, f64)| r.1)
+///     .y_end(|_| 0.0)
+///     .fill(Color::hex(0xcc0000));
+/// let cx = Context::new_blocking()?;
+/// let (image, _) = plot.render_resolved(&cx, 320, 200)?;
+/// // Just above the bottom of the plot, mid-way along the area.
+/// let inside = image.get_pixel(160, 150).0;
+/// assert_eq!(inside, [0xcc, 0x00, 0x00, 0xff]);
+/// # Ok(())
+/// # }
+/// ```
+#[derive(Debug, gup_core_macros::Mark)]
+#[mark(module = "gup::marks::area", geometry = Polyline, antialias = Msaa)]
+pub struct Area {
+    /// x (logical pixels).
+    #[channel(role = X)]
+    x: Px,
+    /// The top edge (logical pixels).
+    #[channel(role = Y)]
+    y: Px,
+    /// The baseline (logical pixels); set it, e.g. `.y_end(|_| 0.0)`.
+    #[channel(role = Y)]
+    y_end: Px,
+    /// Fill colour. Default Okabe-Ito blue.
+    #[channel(role = Color, default = Area::DEFAULT_FILL)]
+    fill: Color,
+    /// Fill opacity, multiplied into the fill's alpha. Default 1.
+    #[channel(default = Unit(1.0))]
+    fill_opacity: Unit,
+}
+
+impl Area {
+    /// The default fill (`#0072B2`).
+    pub const DEFAULT_FILL: Color = Color::hex(0x0072b2);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -333,5 +396,35 @@ mod tests {
         let layout = struct_layout(&module, "gup_marks_line_LineIn").expect("LineIn");
         let names: Vec<_> = layout.members.iter().map(|(n, _)| n.clone()).collect();
         assert_eq!(names, ["x", "y", "width", "color", "x_next", "y_next"]);
+    }
+
+    /// `Area` is a MSAA polyline: its `AreaIn` is its channels, then its
+    /// position channels read at the next row.
+    #[test]
+    fn area_reads_its_positions_at_the_next_row() {
+        use crate::channel::Geometry;
+        use crate::shader::MARKS_AREA;
+        use crate::shader::testing::{parse, struct_layout};
+        assert_eq!(Area::GEOMETRY, Geometry::Polyline);
+        assert_eq!(Area::ANTIALIAS, Antialias::Msaa);
+        let module = parse(
+            "area",
+            &crate::shader::link("area", "#import gup::marks::area\n", &[&MARKS_AREA]).unwrap(),
+        );
+        let layout = struct_layout(&module, "gup_marks_area_AreaIn").expect("AreaIn");
+        let names: Vec<_> = layout.members.iter().map(|(n, _)| n.clone()).collect();
+        assert_eq!(
+            names,
+            [
+                "x",
+                "y",
+                "y_end",
+                "fill",
+                "fill_opacity",
+                "x_next",
+                "y_next",
+                "y_end_next"
+            ]
+        );
     }
 }

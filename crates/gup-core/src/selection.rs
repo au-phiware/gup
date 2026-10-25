@@ -990,7 +990,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
     /// it is now: see [`LayerVector`].
     #[cfg(feature = "svg")]
     fn vector(&self, theme: &Theme, entries: &[DrawEntry]) -> LayerVector {
-        use crate::marks::{Circle, Line, Rect, Segment};
+        use crate::marks::{Area, Circle, Line, Rect, Segment};
         use std::any::TypeId;
         let id = TypeId::of::<M>();
         let kind = if id == TypeId::of::<Circle>() {
@@ -1001,6 +1001,8 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             MarkKind::Segment
         } else if id == TypeId::of::<Line>() {
             MarkKind::Line
+        } else if id == TypeId::of::<Area>() {
+            MarkKind::Area
         } else {
             return LayerVector::Skipped(format!(
                 "`{}` is a user-defined mark with no CPU description",
