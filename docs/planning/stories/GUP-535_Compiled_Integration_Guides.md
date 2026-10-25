@@ -10,8 +10,8 @@ touches: []
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N1 Docs and Tutorials) **Status**: 📋
-Planned **Created**: 2026-10-24
+**Initiative**: Strategic Review 2026-11 (N1 Docs and Tutorials) **Status**: 🚧
+In Progress Planned **Created**: 2026-10-24
 
 ## Context
 

@@ -134,7 +134,7 @@ GUP-535 in turn (they share `src/lib.rs`); GUP-536 after N2's builders.
   and "Why Gup" cut to `PERF_BUDGETS.md` figures, a "Not yet" list, a
   git-dependency Quick Start, and the README compiled as a doctest. Deps:
   GUP-530 📋 (soft), GUP-537 📋 (soft).
-- [GUP-535](GUP-535_Compiled_Integration_Guides.md) 📋 — The egui and Bevy
+- [GUP-535](GUP-535_Compiled_Integration_Guides.md) 🚧 — The egui and Bevy
   guides compiled as `no_run` doctests of `gup-egui` and `gup-bevy`. Deps:
   GUP-483 ✅, GUP-484 ✅.
 - [GUP-536](GUP-536_Tutorial_Tour_Of_Chart_Types.md) 📋 — Tutorial 7: every
