@@ -398,3 +398,33 @@ fn tutorial_4_brush() {
 
     check("tutorials/04_brush", &mut chart);
 }
+
+/// Tutorial 5 (`05_streaming_data.md`), "Step 2: A Line That Grows": a line
+/// after three appended batches.
+#[test]
+fn tutorial_5_appended() {
+    let mut chart = gup::line([(0.0, 0.0)])
+        .x(|p| p.0)
+        .y(|p| p.1)
+        .stroke(Color::hex(0xd62728))
+        .width(2.0)
+        .title("Signal")
+        .x_title("Time (s)")
+        .y_title("Level");
+    let feed = chart.appender();
+
+    std::thread::spawn(move || {
+        for batch in 0..3 {
+            let rows = (0..40).map(|i| {
+                let t = f64::from(batch * 40 + i) * 0.05;
+                (t, (t * 3.0).sin() + 0.3 * (t * 11.0).sin())
+            });
+            feed.extend(rows).unwrap();
+        }
+    })
+    .join()
+    .unwrap();
+
+    // The appended rows are drained by the resolve `check` makes.
+    check("tutorials/05_appended", &mut chart);
+}
