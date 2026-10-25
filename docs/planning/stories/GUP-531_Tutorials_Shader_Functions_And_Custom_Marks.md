@@ -10,8 +10,8 @@ touches: [src/lib.rs]
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N1 Docs and Tutorials) **Status**: 📋
-Planned **Created**: 2026-10-24
+**Initiative**: Strategic Review 2026-11 (N1 Docs and Tutorials) **Status**: ✅
+Complete (2026-10-25) **Created**: 2026-10-24
 
 ## Context
 
@@ -57,7 +57,7 @@ where `cargo doc` users find it.
 
 ### AC1: Tutorial 3, Shader Functions
 
-- [ ] Covers, in this order: what a shader function is (a WGSL function with an
+- [x] Covers, in this order: what a shader function is (a WGSL function with an
       f64 `CpuMirror`, so axes, legends, picking and SVG agree with the GPU);
       composing built-ins with `.then(..)` (e.g. `Log` then `Sequential`);
       writing one with `#[wgsl_function]` (inline `wgsl = r#"…"#`, `Params`,
@@ -65,14 +65,14 @@ where `cargo doc` users find it.
       `.attr(Circle::FILL, MyFn.encode(..))`; a `rust,compile_fail` block
       showing a WGSL error caught at compile time; and `file = "…"` for WGSL in
       a file (shown in prose, since a doctest has no crate files).
-- [ ] It embeds one golden image: a scatter coloured through the user function.
-- [ ] Every `#[wgsl_function]` block sets `path = "…"` (a doctest's crate is
+- [x] It embeds one golden image: a scatter coloured through the user function.
+- [x] Every `#[wgsl_function]` block sets `path = "…"` (a doctest's crate is
       named after `gup`, which owns the `gup::` namespace), as `src/lib.rs`'s
       doctest does.
 
 ### AC2: Tutorial 6, Custom Marks
 
-- [ ] Covers, in this order: the mark contract (`<Name>In`, `Varyings` with
+- [x] Covers, in this order: the mark contract (`<Name>In`, `Varyings` with
       `clip`, `vertex`, `shade` returning premultiplied colour); a `Square` mark
       with `#[derive(Mark)]` and inline WGSL using `gup::coverage`; channel
       roles (`X`, `Y`, `Size`, `Width`, `Height`, `Color`) and defaults, and
@@ -81,28 +81,28 @@ where `cargo doc` users find it.
       pickable (`hit = AlignedBox`, then `gpu_pick` with
       `hit_distance`/`hit_row`); and `geometry = Polyline` and
       `antialias = Msaa` in one paragraph each.
-- [ ] One `rust,compile_fail` block shows the derive rejecting a mismatched
+- [x] One `rust,compile_fail` block shows the derive rejecting a mismatched
       `SquareIn` struct.
-- [ ] It embeds one golden image of the squares.
+- [x] It embeds one golden image of the squares.
 
 ### AC3: The derive reference
 
-- [ ] The `Mark` trait's rustdoc (`crates/gup-core/src/channel.rs`) gains a
+- [x] The `Mark` trait's rustdoc (`crates/gup-core/src/channel.rs`) gains a
       "Deriving" section: a table of every `#[mark(..)]` key (`module`, `wgsl`,
       `file`, `path`, `geometry`, `antialias`, `hit`, `gpu_pick`) and every
       `#[channel(..)]` key (`role`, `default`), each with its allowed values and
       one line of meaning, matching `USAGE` and the macro's checks, and a link
       to tutorial 6.
-- [ ] `RUSTDOCFLAGS="-D warnings" cargo doc -p gup-core --no-deps` passes.
+- [x] `RUSTDOCFLAGS="-D warnings" cargo doc -p gup-core --no-deps` passes.
 
 ### AC4: Wiring
 
-- [ ] `src/lib.rs`'s `mod tutorials` gains `ShaderFunctions` and `CustomMarks`;
+- [x] `src/lib.rs`'s `mod tutorials` gains `ShaderFunctions` and `CustomMarks`;
       `cargo test --doc -p gup -- tutorials` passes; banners removed; the
       GUP-530 `awk` and `grep` checks print nothing for `03_*.md` and `06_*.md`.
-- [ ] Goldens `tutorials/03_custom_ramp` and `tutorials/06_squares` exist in
+- [x] Goldens `tutorials/03_custom_ramp` and `tutorials/06_squares` exist in
       `tests/tutorials.rs`, read by eye and described.
-- [ ] `docs/tutorials/assets/tutorial06_custom_mark.png` is deleted;
+- [x] `docs/tutorials/assets/tutorial06_custom_mark.png` is deleted;
       `docs/tutorials/README.md`'s rows for tutorials 3 and 6 are updated.
 
 ## Decisions
@@ -134,11 +134,11 @@ where `cargo doc` users find it.
 
 ## Technical Tasks
 
-- [ ] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30 min.
-- [ ] Rewrite tutorial 3; wire it; add its golden; commit.
-- [ ] Rewrite tutorial 6; wire it; add its golden; commit.
-- [ ] Write the `Mark` "Deriving" section; run `cargo doc` with `-D warnings`.
-- [ ] Update the tutorials README; run the DoD commands.
+- [x] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30 min.
+- [x] Rewrite tutorial 3; wire it; add its golden; commit.
+- [x] Rewrite tutorial 6; wire it; add its golden; commit.
+- [x] Write the `Mark` "Deriving" section; run `cargo doc` with `-D warnings`.
+- [x] Update the tutorials README; run the DoD commands.
 
 ## Dependencies
 
@@ -160,7 +160,7 @@ where `cargo doc` users find it.
 
 ## Success Metrics
 
-- [ ] Both tutorials' code is compiled by CI; the derive's attributes are
+- [x] Both tutorials' code is compiled by CI; the derive's attributes are
       documented in one place that `cargo doc` checks.
 
 ## Risk Assessment
@@ -170,14 +170,93 @@ where `cargo doc` users find it.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (the two tutorial goldens)
-- [ ] `mask wasm-browser`: not needed, no layout, input or wasm change
-- [ ] WASM size: unchanged, no library code change (rustdoc only)
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye (the two tutorial goldens)
+- [x] `mask wasm-browser`: not needed, no layout, input or wasm change
+- [x] WASM size: unchanged, no library code change (rustdoc only)
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `docs/tutorials/03_custom_shader_functions.md` rewritten: what a shader
+  function is, `Log.then(Sequential)`, a user colour ramp `Ember`
+  (`#[gup::wgsl_function]`, `Params`, `params()`, `CpuMirror`) on
+  `Circle::FILL`, an `Energy` function that starts a chain (`monotonic`), a
+  `compile_fail` WGSL syntax error, and `file = "…"` in prose.
+- `docs/tutorials/06_custom_marks.md` rewritten: the mark contract, a `Square`
+  (the WGSL of `tests/derive_mark.rs`), channel roles, generated setters, a
+  pickable `Tile` (`hit = AlignedBox`, `gpu_pick`, CPU and GPU picks agreeing),
+  `Polyline` and `Msaa` in a paragraph each, and a `compile_fail` struct/WGSL
+  mismatch.
+- `Mark`'s rustdoc (`crates/gup-core/src/channel.rs`) gained "Deriving": a table
+  of every `#[mark(..)]` and `#[channel(..)]` key.
+- `src/lib.rs` includes both tutorials; `tests/tutorials.rs` has
+  `tutorial_3_custom_ramp` and `tutorial_6_squares`; goldens
+  `tests/golden/tutorials/03_custom_ramp.png` and `06_squares.png`;
+  `tutorial06_custom_mark.png` deleted; README rows updated;
+  `scripts/test_pre_commit.sh`'s "docs-only" case moved to tutorial 04.
+- Tests: 7 new doctests (ShaderFunctions 3 run + 1 compile_fail, CustomMarks 2
+  run + 1 compile_fail), 2 golden tests. `cargo test --doc -p gup -- tutorials`:
+  20 passed + 3 compile_fail; doctest compile of the merged bundle about 12 s.
+- `RUSTDOCFLAGS="-D warnings" cargo doc -p gup-core --no-deps` passes.
+
+## Retrospective
+
+**Completed**: 2026-10-25
+
+### Key Technical Learnings
+
+#### Doctest names and the `gup::` namespace
+
+- **Challenge**: a doctest crate is named after `gup`, and the macros refuse a
+  default module path in `gup::`.
+- **Solution**: every `#[wgsl_function]` and `#[derive(Mark)]` block sets
+  `path = "tutorialN_…"`; the prose explains why and says to omit it in a real
+  project. `::gup_core` resolved without a dependency, as GUP-487 intended.
+
+#### `hit = AlignedBox` needs six channels
+
+- **Challenge**: the story's `Square` has `size`, but `AlignedBox` reads
+  `x, y, width, height, x_end, y_end` by name.
+- **Solution**: tutorial 6 keeps `Square` for drawing and introduces `Tile` (a
+  `Rect` with only a fill) for picking, and says why. This also shows the
+  `Width`/`Height` roles in a real block.
+
+#### A `compile_fail` block can fail for the wrong reason
+
+- **Challenge**: my first mismatch block also had `default = Color::BLACK` on a
+  `Px` field, a second, unrelated E0308.
+- **Solution**: removed the default, compiled the block as an example to read
+  the one remaining error, and compiled the corrected block as `rust` to prove
+  it passes. Same check for the WGSL block in tutorial 3.
+
+### Architectural Decisions
+
+#### Tile alongside Square
+
+- **Decision**: two marks in tutorial 6 instead of bending `Square`.
+- **Reasoning**: AC2 wants `Square` identical to `derive_mark.rs`, and picking
+  requires the Rect channel names.
+- **Trade-off**: about 80 more lines of WGSL on the page.
+
+### Development Workflow Insights
+
+- A fresh worktree was behind `main` (no `tests/tutorials.rs`); I merged `main`
+  before starting.
+- A chain's automatic domain is fitted at resolve, so `chain.eval(..)` before
+  rendering uses an unfitted domain; the first draft asserted it and failed.
+- The worktree guard refused long heredocs piped into `>>`; writing the snippet
+  with the file tool and `cat`-ing it worked.
+
+### Follow-up Stories
+
+None written. Small observations: the derive's `role` error message says "one of
+`X`, `Y`, `Size` or `Color`" but `Width` and `Height` are accepted
+(`crates/gup-core-macros/src/mark.rs`); `docs/gallery/index.html` still lists
+`tutorial06_custom_marks` as an example that does not exist.
