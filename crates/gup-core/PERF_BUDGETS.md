@@ -74,14 +74,14 @@ X) or `info` (printed, never fails).
 | `zoom_culled.draws.median`         | 14        | exact     | `zoom_bench` on 4M sorted rows, 64 chunks (GUP-457) |
 | `zoom_culled.gpu_clock.median_mhz` | 350       | info      | `scripts/perf_budget.sh` (i915 sysfs)               |
 | `zoom_culled.gpu_pass.median_ms`   | 9.90      | +20%      | `zoom_bench` on 4M sorted rows, 64 chunks           |
-| `zoom_culled.cpu.median_ms`        | 0.97      | +20%      | `zoom_bench` on 4M sorted rows, 64 chunks           |
+| `zoom_culled.cpu.median_ms`        | 1.24      | +20%      | `zoom_bench` on 4M sorted rows, 64 chunks           |
 | `zoom_culled.columns.bytes`        | 0         | exact     | `zoom_bench` on 4M sorted rows, 64 chunks           |
 | `pipeline.link_create.median_ms`   | 1.11      | +20%      | `pipeline_timings`, 20 runs, fresh cache each       |
 | `pipeline.link_create.cold_ms`     | 1.04      | <= 10     | `pipeline_timings`, its first run                   |
 | `pipeline.link_create.max_ms`      | 1.06      | info      | `pipeline_timings`                                  |
 | `wasm.wgpu.gz_bytes`               | 32,360    | info      | `scripts/wasm_size.sh`, bare wgpu                   |
-| `wasm.scatter.gz_bytes`            | 334,149   | +2%       | `scripts/wasm_size.sh`, the reference scatter       |
-| `wasm.over_wgpu.gz_bytes`          | 301,789   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10         |
+| `wasm.scatter.gz_bytes`            | 337,974   | +2%       | `scripts/wasm_size.sh`, the reference scatter       |
+| `wasm.over_wgpu.gz_bytes`          | 305,614   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10         |
 | `wasm.per_row_type.gz_bytes`       | 1,730     | <= 2600   | `scripts/wasm_size.sh`, one more Selection row type |
 
 A legitimate change that moves a number (a new guide, a bigger feature) records
@@ -492,3 +492,14 @@ seeded violation (GUP-417 retrospective).
   draws). `tests/zoom_uploads.rs`'s guide budget goes from 1,400,736 to
   1,503,048 B over its 300 frames. The WASM scatter reads 334,221 B gz (+72),
   under the +2% tolerance, so it is not re-recorded.
+- **GUP-528 merged (2026-10-25, orchestrator)**: explicit domains now inset each
+  edge by the overhang of the marks that reach it, re-solved whenever the app
+  sets a domain. `zoom_bench` calls `set_domain` every frame, so
+  `zoom_culled.cpu.median_ms` (4M rows, 64 chunks) goes from 0.686 to 1.239 in a
+  back-to-back A/B at the merge's first parent and at the merge (recorded 0.97
+  before; re-recorded at 1.24). The worker had already cut the per-frame solve
+  from 8.2 ms by skipping chunks the statistics clear; caching per-chunk edge
+  extremes is the next step if it matters. `zoom.cpu` is unchanged (0.596 to
+  0.516). WASM scatter 334,149 to 337,974 B gz (+3,825, mostly the inset
+  solver), over bare wgpu 301,789 to 305,614 (94 KB of headroom); GUP-545
+  (Area), 537 and 543 add under 300 B each to the reference scatter.
