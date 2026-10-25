@@ -338,6 +338,44 @@ pub enum HitShape {
 ///
 /// Implement it with `#[derive(Mark)]` (RFC-001 S6), which also checks the
 /// module's input struct against the channels at compile time.
+///
+/// # Deriving
+///
+/// `#[derive(Mark)]` goes on a struct with named fields, one per channel, in
+/// the order of the WGSL input struct. The struct is never built: its fields
+/// declare the channels. The derive also generates `<Name>::<CHANNEL>`
+/// constants and a `<Name>Attrs` trait of typed setters for
+/// [`Selection`](crate::Selection). Tutorial 6 (`docs/tutorials/06_custom_marks.md`
+/// in the repository) walks through writing a mark.
+///
+/// `#[mark(..)]` on the struct (one of `module`, `wgsl` or `file` is
+/// required, and so is `geometry`):
+///
+/// | Key | Values | Meaning |
+/// | --- | --- | --- |
+/// | `module` | `"gup::marks::circle"` | A WGSL module of Gup's own library (a path under `gup::marks::`). Not with `wgsl`, `file` or `path`. |
+/// | `wgsl` | `r#"…"#` | Your WGSL, inline. Not with `module` or `file`. |
+/// | `file` | `"src/square.wgsl"` | Your WGSL, in a file relative to your crate's manifest; cargo rebuilds when it changes. Not with `module` or `wgsl`. |
+/// | `path` | `"my_crate::square"` | The import path of your module (identifiers joined by `::`, outside the `gup::` namespace). Only with `wgsl` or `file`. Default: your crate's name and the struct's name in snake case. |
+/// | `geometry` | `Quad`, `Polyline` | One quad per row, or one per pair of consecutive rows ([`Geometry`]); the input struct then ends with `<channel>_next` members. |
+/// | `antialias` | `Analytic`, `Msaa` | Whether the shader computes its own edge coverage (the default) or relies on MSAA ([`Antialias`]). |
+/// | `hit` | `Unpickable`, `Disc`, `AlignedBox`, `Segment`, `Polyline` | The CPU hit shape ([`HitShape`]). Each reads channels by name, which must be `Px`: `Disc` reads `x`, `y`, `radius`; `AlignedBox` `x`, `y`, `width`, `height`, `x_end`, `y_end`; `Segment` `x`, `y`, `x_end`, `y_end`, `width`; `Polyline` `x`, `y`, `width`. `Polyline` needs `geometry = Polyline`, the others `Quad`. Default: unpickable. |
+/// | `gpu_pick` | (a flag) | The module defines `fn hit_distance(v: Varyings) -> f32` and `fn hit_row(v: Varyings) -> u32`, and the GPU pick draws the mark ([`Mark::GPU_PICK`]). |
+///
+/// `#[channel(..)]` on a field (both keys are optional):
+///
+/// | Key | Values | Meaning |
+/// | --- | --- | --- |
+/// | `role` | `X`, `Y`, `Size`, `Width`, `Height`, `Color` | How the plot treats the channel ([`Role`]): position scales and closure setters for `X` and `Y`, room at the plot's edge for `Size`, `Width` and `Height`, legends for `Color`. No role: a plain value for your shader. |
+/// | `default` | a constant expression of the field's type (`Px(10.0)`, `Color::BLACK`) | The value used when the channel is not set. Default: zero. |
+///
+/// A field's type is `Px`, `Unit` or `Color`, matching the WGSL member's type
+/// (`f32`, `f32`, `vec4<f32>`). A channel cannot be named like a `Selection`
+/// method (`len`, `attr`, `retain`, …), because its setter would shadow it.
+///
+/// A mark defined from outside gup-core, with a hit shape and a GPU pick,
+/// is written in tutorial 6; the derive's own tests live in
+/// `crates/gup-core/tests/derive_mark.rs` and `tests/derive_mark_fail/`.
 pub trait Mark: Send + Sync + 'static {
     /// Mark name, also the prefix of its WGSL input struct (`CircleIn`).
     const NAME: &'static str;
