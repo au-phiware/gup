@@ -22,7 +22,7 @@ use crate::input::{Axes, Brush, Button, Drag, Event, EventInfo, Input, Response}
 use crate::marks::{Area, Circle, Line, Rect as MarkRect, Segment};
 use crate::pick::{PickIndex, RowId};
 use crate::render::{LayerGpu, Span};
-use crate::scale::{DynPositionScale, Linear, PositionScale, ScaleRef, Ticks};
+use crate::scale::{DynPositionScale, Linear, PositionScale, ScaleRef, TickFormat, Ticks};
 use crate::scene::{
     Anchor, HAlign, Item, ItemKind, RectPrim, Rule, Scene, TextRole, TextRun, TextStyle, VAlign,
     Weight, Z_AXES, Z_BRUSH, Z_GRID, Z_TITLE,
@@ -162,6 +162,9 @@ pub struct Plot {
     x_title: Option<String>,
     y_title: Option<String>,
     y_right_title: Option<String>,
+    /// The tick label format set through `x_tick_format` and friends, per
+    /// axis (x, y, right y); written to each scale installed on the axis.
+    formats: [Option<TickFormat>; 3],
     theme: Theme,
     /// Set by `legends(false)`.
     legends_off: bool,
@@ -435,6 +438,7 @@ impl Plot {
             x_title: None,
             y_title: None,
             y_right_title: None,
+            formats: [None, None, None],
             theme: Theme::default(),
             legends_off: false,
             revision: 0,
@@ -553,6 +557,7 @@ impl Plot {
         let handle = ScaleRef::new(scale);
         self.x = Box::new(handle.clone());
         self.axes_generation += 1;
+        self.apply_format(0);
         handle
     }
 
@@ -562,6 +567,7 @@ impl Plot {
         let handle = ScaleRef::new(scale);
         self.y = Box::new(handle.clone());
         self.axes_generation += 1;
+        self.apply_format(1);
         handle
     }
 
@@ -603,7 +609,93 @@ impl Plot {
         let handle = ScaleRef::new(scale);
         self.y_right = Some(Box::new(handle.clone()));
         self.axes_generation += 1;
+        self.apply_format(2);
         handle
+    }
+
+    /// Label the x axis ticks with `f` instead of the default labels. `f`
+    /// receives the tick value in the scale's domain units (for [`Time`],
+    /// Unix seconds) and its string is used as is, also to measure and thin
+    /// labels. The format stays with the axis when its scale is replaced
+    /// with [`x`](Self::x); the last of this and
+    /// [`ScaleRef::tick_format`] on the current scale's handle wins.
+    /// [`resolve`](Self::resolve) fails for a band or point axis, which is
+    /// labelled by its keys.
+    ///
+    /// ```
+    /// use gup_core::prelude::*;
+    /// let mut plot = Plot::new();
+    /// plot.x_tick_format(|v| format!("${:.0}k", v / 1000.0));
+    /// let x = plot.x(Log::new());
+    /// assert_eq!(x.tick_labels(3)[0], "$0k");
+    /// ```
+    pub fn x_tick_format(
+        &mut self,
+        f: impl Fn(f64) -> String + Send + Sync + 'static,
+    ) -> &mut Self {
+        self.set_format(0, f)
+    }
+
+    /// Label the y axis ticks with `f`; see [`x_tick_format`](Self::x_tick_format).
+    ///
+    /// ```
+    /// use gup_core::prelude::*;
+    /// let mut plot = Plot::new();
+    /// let y = plot.y(Linear::new().domain(0.0, 100.0));
+    /// plot.y_tick_format(|v| format!("{v:.0}%"));
+    /// assert!(y.tick_labels(5).iter().all(|l| l.ends_with('%')));
+    /// ```
+    pub fn y_tick_format(
+        &mut self,
+        f: impl Fn(f64) -> String + Send + Sync + 'static,
+    ) -> &mut Self {
+        self.set_format(1, f)
+    }
+
+    /// Label the right y axis ticks with `f`; see
+    /// [`x_tick_format`](Self::x_tick_format). It takes effect on the axis
+    /// made by [`y_right`](Self::y_right), before or after.
+    ///
+    /// ```
+    /// use gup_core::prelude::*;
+    /// let mut plot = Plot::new();
+    /// plot.y_right_tick_format(|v| format!("{v:.0} mm"));
+    /// let right = plot.y_right(Linear::new().domain(0.0, 100.0));
+    /// assert!(right.tick_labels(5).iter().all(|l| l.ends_with(" mm")));
+    /// ```
+    pub fn y_right_tick_format(
+        &mut self,
+        f: impl Fn(f64) -> String + Send + Sync + 'static,
+    ) -> &mut Self {
+        self.set_format(2, f)
+    }
+
+    /// Store the format of axis `axis` and write it to the current scale.
+    fn set_format(
+        &mut self,
+        axis: usize,
+        f: impl Fn(f64) -> String + Send + Sync + 'static,
+    ) -> &mut Self {
+        self.revision = self.revision.wrapping_add(1);
+        self.formats[axis] = Some(TickFormat::new(f));
+        self.apply_format(axis);
+        self
+    }
+
+    /// Write the stored format of axis `axis` to its scale. A key scale is
+    /// left alone (its `ticks` would relabel codes); resolve reports it.
+    fn apply_format(&self, axis: usize) {
+        let Some(format) = &self.formats[axis] else {
+            return;
+        };
+        let scale = match axis {
+            0 => Some(&self.x),
+            1 => Some(&self.y),
+            _ => self.y_right.as_ref(),
+        };
+        if let Some(scale) = scale.filter(|s| !s.reads_keys()) {
+            scale.set_tick_format(format.clone());
+        }
     }
 
     /// Add a layer of circles over `rows` and return it.
@@ -1649,6 +1741,23 @@ impl Plot {
     fn resolve_full(&mut self, cx: &Context, width: f32, height: f32) -> Result<Resolved> {
         // Errors that a browser reported after an earlier call returned.
         cx.take_gpu_errors()?;
+        for (axis, name) in ["x_tick_format", "y_tick_format", "y_right_tick_format"]
+            .into_iter()
+            .enumerate()
+        {
+            let scale = match axis {
+                0 => Some(&self.x),
+                1 => Some(&self.y),
+                _ => self.y_right.as_ref(),
+            };
+            if self.formats[axis].is_some() && scale.is_some_and(|s| s.reads_keys()) {
+                return Err(Error::config(
+                    name,
+                    "band and point axes are labelled by their keys; \
+                     tick formats apply to numeric and time scales",
+                ));
+            }
+        }
         if self.layers.is_empty() {
             return Err(Error::config(
                 "plot layers",

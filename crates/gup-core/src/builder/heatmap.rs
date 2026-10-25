@@ -126,7 +126,7 @@ fn domain<T>(rows: &[T], key: &Option<Key<T>>) -> Vec<Arc<str>> {
 }
 
 impl<T: Send + Sync + 'static> HeatmapChart<T> {
-    plot_setters!();
+    plot_setters!(titles);
 
     fn check_open(&self) {
         assert!(self.rows.is_some(), "{DRAWN}");

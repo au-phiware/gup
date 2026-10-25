@@ -262,3 +262,107 @@ fn legend_ramp_ticks_use_the_format() {
     let labels: Vec<&str> = ramp.ticks().iter().map(|t| &*t.label).collect();
     assert_eq!(labels, ["$0M", "$10M", "$20M", "$30M", "$40M"]);
 }
+
+/// GUP-541: the plot and builder setters.
+mod setters {
+    use super::*;
+
+    #[test]
+    fn the_format_survives_replacing_the_scale() {
+        let mut plot = Plot::new();
+        plot.y_tick_format(|v| format!("<{v:.0}>"));
+        let y = plot.y(Log::new().domain(1.0, 1000.0));
+        let labels = y.tick_labels(4);
+        assert!(labels.iter().all(|l| l.starts_with('<')), "{labels:?}");
+        let y = plot.y(Linear::new().domain(0.0, 10.0));
+        assert!(y.tick_labels(4).iter().all(|l| l.starts_with('<')));
+    }
+
+    #[test]
+    fn the_last_writer_wins_in_both_orders() {
+        let mut plot = Plot::new();
+        let x = plot.x(Linear::new().domain(0.0, 10.0));
+        plot.x_tick_format(|v| format!("p{v:.0}"));
+        x.tick_format(|v| format!("h{v:.0}"));
+        assert!(x.tick_labels(3).iter().all(|l| l.starts_with('h')));
+        plot.x_tick_format(|v| format!("p{v:.0}"));
+        assert!(x.tick_labels(3).iter().all(|l| l.starts_with('p')));
+    }
+
+    #[test]
+    fn a_band_axis_is_an_error_at_resolve() {
+        let cx = Context::new_blocking().unwrap();
+        let mut plot = Plot::new();
+        let x = plot.x(Band::new());
+        let y = plot.y(Linear::new());
+        plot.x_tick_format(|v| v.to_string());
+        plot.add(Selection::<(&'static str, f64), Circle>::new(vec![(
+            "a", 1.0,
+        )]))
+        .attr(Circle::X, x.encode_key(|r: &(&'static str, f64)| r.0))
+        .attr(Circle::Y, y.encode(|r: &(&'static str, f64)| r.1))
+        .attr(Circle::RADIUS, Px(4.0));
+        let err = plot.resolve(&cx, 400.0, 300.0).expect_err("an error");
+        let message = err.to_string();
+        assert!(message.contains("x_tick_format"), "{message}");
+        assert!(message.contains("band and point axes"), "{message}");
+    }
+
+    #[test]
+    fn a_scatter_formats_y_before_or_after_the_scale() {
+        let cx = Context::new_blocking().unwrap();
+        for before in [true, false] {
+            let mut chart = gup_core::scatter([(1.0, 2.0), (5.0, 40.0)])
+                .x(|p| p.0)
+                .y(|p| p.1);
+            if before {
+                chart = chart
+                    .y_tick_format(|v| format!("{v:.0}%"))
+                    .y_scale(Linear::new());
+            } else {
+                chart = chart
+                    .y_scale(Linear::new())
+                    .y_tick_format(|v| format!("{v:.0}%"));
+            }
+            let (_, layout) = chart.render_resolved(&cx, 400, 300).unwrap();
+            let ys = labels(&layout, false);
+            assert!(!ys.is_empty());
+            assert!(ys.iter().all(|l| l.ends_with('%')), "{ys:?}");
+        }
+    }
+
+    #[test]
+    fn bars_and_histograms_format_the_value_axis() {
+        let cx = Context::new_blocking().unwrap();
+        let (_, layout) = gup_core::bar([("a", 10.0), ("b", 30.0)])
+            .x(|r| r.0)
+            .y(|r| r.1)
+            .y_tick_format(|v| format!("{v:.0}%"))
+            .render_resolved(&cx, 400, 300)
+            .unwrap();
+        let ys = labels(&layout, false);
+        assert!(
+            !ys.is_empty() && ys.iter().all(|l| l.ends_with('%')),
+            "{ys:?}"
+        );
+        let (_, layout) = gup_core::barh([("a", 10.0), ("b", 30.0)])
+            .y(|r| r.0)
+            .x(|r| r.1)
+            .x_tick_format(|v| format!("{v:.0}%"))
+            .render_resolved(&cx, 400, 300)
+            .unwrap();
+        let xs = labels(&layout, true);
+        assert!(
+            !xs.is_empty() && xs.iter().all(|l| l.ends_with('%')),
+            "{xs:?}"
+        );
+        let (_, layout) = gup_core::histogram([1.0, 2.0, 2.5, 7.0])
+            .x(|v| *v)
+            .x_tick_format(|v| format!("{v:.0}u"))
+            .y_tick_format(|v| format!("{v:.0}n"))
+            .render_resolved(&cx, 400, 300)
+            .unwrap();
+        assert!(labels(&layout, true).iter().all(|l| l.ends_with('u')));
+        assert!(labels(&layout, false).iter().all(|l| l.ends_with('n')));
+    }
+}

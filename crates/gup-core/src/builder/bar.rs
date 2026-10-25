@@ -207,6 +207,14 @@ impl<T: Send + Sync + 'static> BarChart<T, Vertical> {
     pub fn y_scale<S: PositionScale>(self, scale: S) -> Self {
         self.set_value_scale(scale)
     }
+
+    /// Label the value axis ticks with `f` instead of the default labels;
+    /// `f` receives the tick value and returns its label. The category axis
+    /// is labelled by its keys.
+    pub fn y_tick_format(mut self, f: impl Fn(f64) -> String + Send + Sync + 'static) -> Self {
+        self.plot.y_tick_format(f);
+        self
+    }
 }
 
 impl<T: Send + Sync + 'static> BarChart<T, Horizontal> {
@@ -229,6 +237,14 @@ impl<T: Send + Sync + 'static> BarChart<T, Horizontal> {
     /// supported.
     pub fn x_scale<S: PositionScale>(self, scale: S) -> Self {
         self.set_value_scale(scale)
+    }
+
+    /// Label the value axis ticks with `f` instead of the default labels;
+    /// `f` receives the tick value and returns its label. The category axis
+    /// is labelled by its keys.
+    pub fn x_tick_format(mut self, f: impl Fn(f64) -> String + Send + Sync + 'static) -> Self {
+        self.plot.x_tick_format(f);
+        self
     }
 }
 
@@ -258,7 +274,7 @@ impl<T: Send + Sync + 'static, O: Orientation> BarChart<T, O> {
         }
     }
 
-    plot_setters!();
+    plot_setters!(titles);
 
     fn check_open(&self) {
         assert!(self.rows.is_some(), "{DRAWN}");
