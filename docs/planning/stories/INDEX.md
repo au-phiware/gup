@@ -119,7 +119,7 @@ GUP-535 in turn (they share `src/lib.rs`); GUP-536 after N2's builders.
   (getting started with the builders) and 2 (plots and selections) rewritten as
   doctests of `gup`, with their images as goldens in `tests/tutorials.rs`, and
   the conventions the other tutorial stories follow. Deps: GUP-537 📋.
-- [GUP-531](GUP-531_Tutorials_Shader_Functions_And_Custom_Marks.md) 🚧 —
+- [GUP-531](GUP-531_Tutorials_Shader_Functions_And_Custom_Marks.md) ✅ —
   Tutorials 3 (`#[wgsl_function]`, `then`) and 6 (`#[derive(Mark)]`, the custom
   mark guide) as doctests, and a "Deriving" reference on the `Mark` trait. Deps:
   GUP-530 📋.
