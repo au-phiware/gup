@@ -344,3 +344,57 @@ fn tutorial_6_squares() {
 
     check("tutorials/06_squares", &mut plot);
 }
+
+/// Tutorial 4 (`04_interactions.md`), "Step 5: Brushing": nine birds with
+/// five of them brushed, so `Unbrushed` dims the rest.
+#[test]
+fn tutorial_4_brush() {
+    use gup::geom::Point;
+    use gup::{Button, Input};
+
+    struct Bird {
+        mass: f64,
+        span: f64,
+    }
+    let birds = [
+        (0.03, 0.20),
+        (0.11, 0.35),
+        (0.17, 0.55),
+        (0.50, 0.75),
+        (0.90, 0.95),
+        (1.00, 1.30),
+        (1.50, 0.55),
+        (2.10, 0.30),
+        (2.70, 0.40),
+    ]
+    .map(|(mass, span)| Bird { mass, span });
+
+    let mut chart = gup::scatter(birds)
+        .x(|b| b.mass)
+        .y(|b| b.span)
+        .radius(6.0)
+        .title("Birds of Aotearoa")
+        .x_title("Mass (kg)")
+        .y_title("Wingspan (m)");
+    chart.plot_mut().drag(Drag::Brush);
+
+    let cx = Context::shared().unwrap();
+    let plot = chart
+        .resolve(&cx, WIDTH as f32, HEIGHT as f32)
+        .unwrap()
+        .layout
+        .plot;
+    let ticks = chart.layout().unwrap().x_ticks.clone();
+    let (first, last) = (ticks[0], ticks[ticks.len() - 1]);
+    let kea_x =
+        first.1 + ((0.95 - first.0) * f64::from(last.1 - first.1) / (last.0 - first.0)) as f32;
+    let from = Point::new(plot.left() + 1.0, plot.bottom() - 1.0);
+    let to = Point::new(kea_x, plot.top() + 1.0);
+    let button = Button::Primary;
+    let _ = chart.handle(Input::PointerDown { at: from, button });
+    let _ = chart.handle(Input::PointerMoved { at: to });
+    let _ = chart.handle(Input::PointerUp { at: to, button });
+    assert_eq!(chart.plot_mut().brush().unwrap().rows.len(), 5);
+
+    check("tutorials/04_brush", &mut chart);
+}
