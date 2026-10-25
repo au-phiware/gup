@@ -126,3 +126,40 @@ follows it ("the margins may change"), or tick rounding after widening.
 
 - [ ] ACs met; `mask all-fix` clean; story ✅ in INDEX.md with Implementation
       Summary and Retrospective.
+
+## Blocked (2026-10-25)
+
+**Question**: AC1 and AC1b pass on current `main`, so there is nothing to fix as
+written. Should "whole" mean tangent to the plot edge (current behaviour), or
+must a gap remain (the story's premise of "cut in half")?
+
+**Evidence** (instrumented, `crates/gup-core/tests/shared_scale_overhang.rs`,
+which asserts the AC1/AC1b pixel rule and passes in both layer orders):
+
+- Tutorial 2 chart (title, axis titles, viridis, legend, 640×400): plot rect
+  `x 36, y 59, 518×291`; x domain 0.8696..12.1304, y domain 11.785..22.215
+  (widened, `is_auto()` stays true, `mark_overhang` 6). `x(1)` = 42 and `y(22)`
+  = 65, so each edge disc's extent is exactly 36 / 59: the plot edge. An ASCII
+  dump of rendered pixels around the (1, 22) disc shows a full 12 px disc; the
+  disc is not clipped, but is tangent to the axis line and the plot top.
+- Tutorial 4 chart (no brush): plot `x 40, y 59, 588×291`; Bellbird centre y =
+  344, plot bottom 350, rendered disc rows 338..349: whole, tangent to the
+  x-axis line (the y domain's low end is 0.2 - 6 px, as designed).
+- Cause of the tangency: `plot.rs` step 5 passes `over[i]` (overhang only) to
+  `widen`, whereas inset ranges for non-widened axes add `plot_padding`
+  (`inset = over + 4`) on the far end. Widened axes therefore get 0 px of
+  padding, the discs touch the axis lines. The goldens (`02_layers.png`,
+  `04_brush.png`) match this rendering and the tutorials test passes.
+
+**Options**:
+
+1. Close as not-a-bug; edit the story's premise (marks are whole).
+2. Pass `over[i] + plot_padding` to `widen` for automatic axes, so a 4 px gap
+   remains beyond the overhang (consistent with the explicit-domain inset's far
+   end). Changes many goldens (every widened chart), likely beyond the 12 cap
+   and the bar/line-only golden trigger.
+3. Add padding only on the near ends (left, bottom) where the axis line touches
+   discs.
+
+**Recommendation**: option 1 unless the owner wants a visible gap; then option 2
+or 3 as a separate, golden-wide story.
