@@ -28,7 +28,7 @@
 //! - [`Plot`]: any number of layers over shared x and y scales (and a
 //!   secondary [`Plot::y_right`]), with axes, grid, legends and title laid
 //!   out for you, styled by [`Theme`];
-//! - the [`scatter`], [`line()`], [`bar`], [`barh`] and [`histogram()`] builders
+//! - the [`scatter`], [`line()`], [`bar`], [`barh`], [`histogram()`] and [`heatmap`] builders
 //!   ([`ChartExt`]), and the [`transform`] module they bin with;
 //! - interaction ([`Input`], [`Response`]: picking, tooltips, pan, zoom and
 //!   brush) and streaming ([`Appender`]);
@@ -176,8 +176,8 @@ mod window;
 pub use app::{GupApp, show};
 pub use append::{Appender, Closed};
 pub use builder::{
-    BarChart, HistogramBin, HistogramChart, LineChart, ScatterChart, bar, barh, histogram, line,
-    scatter,
+    BarChart, HeatmapChart, HistogramBin, HistogramChart, LineChart, ScatterChart, bar, barh,
+    heatmap, histogram, line, scatter,
 };
 pub use channel::{
     Antialias, Channel, ChannelDesc, Color, ConstValue, Geometry, GpuType, HitShape, Mark, Px,
@@ -200,9 +200,9 @@ pub use pick::{PICK_TOLERANCE, RowId};
 pub use plot::{Layout, PlacedText, Plot, Resolved};
 pub use render::{PipelineStats, Prepared, Renderer, TargetDesc};
 pub use scale::{
-    Band, CATEGORICAL_COLORS, Categorical, ColorScale, Diverging, Legend, Linear, Log, MAX_PALETTE,
-    NULL_COLOR, OKABE_ITO, Offset, Point, PositionScale, Pow, Ramp, RampTick, ScaleRef, Sequential,
-    Swatch, Symlog, Ticks, Time,
+    Band, CATEGORICAL_COLORS, Categorical, ColorScale, ColorValueScale, Diverging, Legend, Linear,
+    Log, MAX_PALETTE, NULL_COLOR, OKABE_ITO, Offset, Point, PositionScale, Pow, Ramp, RampTick,
+    ScaleRef, Sequential, Swatch, Symlog, Ticks, Time,
 };
 pub use scene::Scene;
 pub use selection::{Retain, Selection, Window};

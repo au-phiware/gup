@@ -202,7 +202,7 @@ facets.
   `transform::bin` (Sturges or a count on a 1–2–5 step, a width, or edges) and
   `gup::histogram` with edges on round numbers, 1 px gaps, stacking by key and a
   "Count" axis title. Deps: GUP-537 📋, GUP-540 📋 (soft).
-- [GUP-549](GUP-549_Heatmap_Builder.md) 📋 — `gup::heatmap` on two band axes
+- [GUP-549](GUP-549_Heatmap_Builder.md) ✅ — `gup::heatmap` on two band axes
   with `color_value`, a ramp legend and gapped cells; `color_value_scale` takes
   `Sequential` or `Diverging` on the scatter too. Deps: GUP-537 📋.
 - [GUP-550](GUP-550_Line_Curves_And_Steps.md) 📋 — `Curve` and

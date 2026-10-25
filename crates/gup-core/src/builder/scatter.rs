@@ -11,6 +11,7 @@ use crate::Appender;
 use crate::column::DictionaryKey;
 use crate::geom::Point;
 use crate::prelude::*;
+use crate::scale::ColorValueScale;
 use crate::{ColumnValue, Context, Input, Layout, Resolved, Response, Result, RowId};
 
 type Num<T> = Arc<dyn Fn(&T) -> f64 + Send + Sync>;
@@ -42,7 +43,7 @@ pub fn scatter<T: Send + Sync + 'static>(rows: impl IntoIterator<Item = T>) -> S
         ops: Vec::new(),
         color: ColorSpec::Default,
         color_scale: Categorical::okabe_ito(),
-        color_value_scale: Sequential::viridis(),
+        color_value_scale: Sequential::viridis().into(),
         size: SizeSpec::Default,
         size_scale: Pow::sqrt().range(Px(2.0), Px(12.0)),
         legend_title: None,
@@ -65,7 +66,7 @@ pub struct ScatterChart<T> {
     ops: Vec<Op<T>>,
     color: ColorSpec<T>,
     color_scale: Categorical,
-    color_value_scale: Sequential,
+    color_value_scale: ColorValueScale,
     size: SizeSpec<T>,
     size_scale: Pow,
     legend_title: Option<String>,
@@ -153,10 +154,10 @@ impl<T: Send + Sync + 'static> ScatterChart<T> {
     }
 
     /// The scale for [`color_value`](Self::color_value) (default
-    /// [`Sequential::viridis`]).
-    pub fn color_value_scale(mut self, scale: Sequential) -> Self {
+    /// [`Sequential::viridis`]): a [`Sequential`] or a [`Diverging`].
+    pub fn color_value_scale(mut self, scale: impl Into<ColorValueScale>) -> Self {
         self.check_open();
-        self.color_value_scale = scale;
+        self.color_value_scale = scale.into();
         self
     }
 
@@ -270,7 +271,10 @@ impl<T: Send + Sync + 'static> ScatterChart<T> {
             }
             ColorSpec::Value(f) => {
                 let f = Arc::clone(f);
-                sel.fill(self.color_value_scale.clone().encode(move |r: &T| f(r)));
+                match self.color_value_scale.clone() {
+                    ColorValueScale::Sequential(s) => sel.fill(s.encode(move |r: &T| f(r))),
+                    ColorValueScale::Diverging(s) => sel.fill(s.encode(move |r: &T| f(r))),
+                };
             }
         }
         if let Some(title) = self.legend_title.take() {
