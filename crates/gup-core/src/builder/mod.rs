@@ -47,7 +47,7 @@
 //!
 //! # Category keys
 //!
-//! The category setters (`color` on the scatter, line and bar builders, and
+//! The category setters (`color` on the scatter, line, bar and histogram builders, and
 //! the bar's `x`, `group` and `stack`) take a closure returning an owned
 //! key: any `Hash + Eq + Clone + Display` value, such as an integer, an enum
 //! that implements `Display`, `r.name.clone()` or a `&'static str`. A
@@ -121,6 +121,7 @@
 //! | `.connect_nulls(false)` | default: nulls (`None`, NaN) break the line |
 //! | `.connect_nulls(true)` / `.sort_x()` | dropped: filter or sort the rows |
 //! | `.interpolate`, `.smooth`, `.monotone`, `.step` | dropped: straight segments only |
+//! | (no old histogram) | `gup_core::histogram(rows).x(\|d\| d.v).bins(Bins::Width(5.0))` |
 //! | `.group_by(..)` / `.stack_by(..)` / `.stack(..)` | `.group(\|d\| d.k.clone())` / `.stack(\|d\| d.k.clone())` |
 //! | `.gap(g)` / `.bar_width(..)` | `.padding(p)` / dropped: the band decides |
 //! | `.orient(..)` / `.horizontal()` | dropped: vertical bars only |
@@ -143,10 +144,12 @@ use std::sync::Arc;
 use crate::column::DictionaryKey;
 
 pub(crate) mod bar;
+pub(crate) mod histogram;
 pub(crate) mod line;
 pub(crate) mod scatter;
 
 pub use bar::{BarChart, bar};
+pub use histogram::{HistogramBin, HistogramChart, histogram};
 pub use line::{LineChart, line};
 pub use scatter::{ScatterChart, scatter};
 
@@ -234,6 +237,7 @@ mod send_sync {
         assert_send_sync::<super::ScatterChart<(f64, f64)>>();
         assert_send_sync::<super::LineChart<(f64, f64)>>();
         assert_send_sync::<super::BarChart<(f64, f64)>>();
+        assert_send_sync::<super::HistogramChart<f64>>();
     }
 }
 
