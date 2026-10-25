@@ -123,7 +123,7 @@
 //! | `.interpolate`, `.smooth`, `.monotone`, `.step` | dropped: straight segments only |
 //! | `.group_by(..)` / `.stack_by(..)` / `.stack(..)` | `.group(\|d\| d.k.clone())` / `.stack(\|d\| d.k.clone())` |
 //! | `.gap(g)` / `.bar_width(..)` | `.padding(p)` / dropped: the band decides |
-//! | `.orient(..)` / `.horizontal()` | dropped: vertical bars only |
+//! | `.orient(..)` / `.horizontal()` | `gup_core::barh(rows)` |
 //! | `.anti_alias(..)` / `.point_budget(..)` | dropped: analytic antialiasing always; LOD is T7 |
 //! | `.title(..)` | `.title(..)` |
 //! | `.width(w)` / `.height(h)` (canvas) | the size argument of `save_png`, `render` or `GupApp::size` |
@@ -146,7 +146,7 @@ pub(crate) mod bar;
 pub(crate) mod line;
 pub(crate) mod scatter;
 
-pub use bar::{BarChart, bar};
+pub use bar::{BarChart, Horizontal, Orientation, Vertical, bar, barh};
 pub use line::{LineChart, line};
 pub use scatter::{ScatterChart, scatter};
 
