@@ -24,13 +24,14 @@ expect() {
 }
 
 # Documentation only: no Rust check.
-expect 'mode=docs' README.md
 expect 'mode=docs' docs/planning/stories/INDEX.md crates/gup-core/README.md
 expect 'mode=docs' COPYING
 
 # Docs a crate compiles (doctests, fonts) are that crate's sources.
 # (A tutorial is one once src/lib.rs includes it, GUP-530; all six are now. The tutorials'
 # README is not included, so it stays documentation only.)
+# (The root README.md is one too, GUP-534: src/lib.rs includes it as a doctest.)
+expect 'clippy=[gup]' README.md
 expect 'clippy=[gup]' docs/tutorials/01_getting_started.md
 expect 'clippy=[gup]' docs/tutorials/04_interactions.md
 expect 'mode=docs' docs/tutorials/README.md
@@ -47,7 +48,6 @@ expect 'clippy=[gup gup-bevy gup-core gup-core-macros gup-egui]' \
 expect 'clippy=[gup gup-bevy gup-core gup-egui gup-visual-regression]' \
   crates/gup-visual-regression/src/lib.rs
 expect 'clippy=[gup]' src/lib.rs tests/kde_tests.rs
-expect 'clippy=[gup]' src/lib.rs README.md
 
 # The crates that build for wasm32 are linted on that target too (GUP-412);
 # the proc-macro crates are not.

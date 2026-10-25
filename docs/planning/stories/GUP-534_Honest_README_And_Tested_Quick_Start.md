@@ -10,8 +10,8 @@ touches: [src/lib.rs]
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N1 Docs and Tutorials) **Status**: 🚧
-In Progress **Created**: 2026-10-24
+**Initiative**: Strategic Review 2026-11 (N1 Docs and Tutorials) **Status**: ✅
+Complete (2026-10-25) **Created**: 2026-10-24
 
 ## Context
 
@@ -49,49 +49,49 @@ This story rewrites the README's top half around measured numbers and an honest
 
 ### AC1: Claims match measurements
 
-- [ ] The tagline is replaced by: "A few lines of Rust for a publication-quality
+- [x] The tagline is replaced by: "A few lines of Rust for a publication-quality
       chart, drawn on the GPU: in a window, a PNG, an SVG, egui, Bevy or the
       browser."
-- [ ] "Motivation" (with "The Performance Crisis" and "The GPU Opportunity") is
+- [x] "Motivation" (with "The Performance Crisis" and "The GPU Opportunity") is
       replaced by "Why Gup", at most 12 lines, stating only what
       `PERF_BUDGETS.md` records, each figure with its row name and machine:
       zooming writes 0 column bytes (`zoom.columns.bytes`); 4M sorted rows draw
       in the `zoom_culled.gpu_pass.median_ms` value with 14 draws on an Intel HD
       630; the reference scatter's WASM build is the `wasm.scatter.gz_bytes`
       value. Numbers are copied from the file at implementation time.
-- [ ] A new "Not yet" list (after "Key Features") names, one line each: no CSV,
+- [x] A new "Not yet" list (after "Key Features") names, one line each: no CSV,
       serde or Arrow input (rows enter through closures); nothing above 10M rows
       measured, no level of detail; no PDF export; no accessibility support; CI
       renders on Linux only; chart types are those the builders list today. Each
       line links the track that adds it (N2–N6 in `IMPLEMENTATION_STRATEGY.md`).
-- [ ] `git grep -n -i 'billion\|crisis\|crashes\|transforming data visualization' README.md`
+- [x] `git grep -n -i 'billion\|crisis\|crashes\|transforming data visualization' README.md`
       prints nothing. The closing bold paragraph is deleted.
 
 ### AC2: A tested Quick Start
 
-- [ ] The dependency line is
+- [x] The dependency line is
       `gup = { git = "https://github.com/au-phiware/gup" }` with the sentence
       "Gup is not on crates.io yet; release 0.1 will be."
-- [ ] `src/lib.rs`'s `architecture_docs` gains
+- [x] `src/lib.rs`'s `architecture_docs` gains
       `#[doc = include_str!("../README.md")] struct Readme;` and
       `cargo test --doc -p gup -- architecture_docs` runs and passes the
       README's `rust` blocks.
-- [ ] The Quick Start block is a complete program:
+- [x] The Quick Start block is a complete program:
       `fn main() -> gup::Result<()>` that builds the scatter and calls
       `chart.save_png(&cx, "chart.png", 800, 500)?` (`rust,no_run`), followed by
       a second, running block that renders in memory and asserts the image size.
       Neither block has hidden `#`-prefixed lines. The "(this is the doctest in
       `src/lib.rs`)" note is removed.
-- [ ] The Quick Start ends with links to tutorial 1 and the tutorials index.
+- [x] The Quick Start ends with links to tutorial 1 and the tutorials index.
 
 ### AC3: The rest stays true
 
-- [ ] "Documentation" lists the tutorials (link to `docs/tutorials/README.md`)
+- [x] "Documentation" lists the tutorials (link to `docs/tutorials/README.md`)
       first.
-- [ ] "Examples": every command in the block exists (`cargo run --example …`
+- [x] "Examples": every command in the block exists (`cargo run --example …`
       names an example in `Cargo.toml` or `crates/gup-core/Cargo.toml`), checked
       by running `cargo check --examples -p gup -p gup-core`.
-- [ ] `prettier --check README.md` and `mdl README.md` pass.
+- [x] `prettier --check README.md` and `mdl README.md` pass.
 
 ## Decisions
 
@@ -124,10 +124,10 @@ This story rewrites the README's top half around measured numbers and an honest
 
 ## Technical Tasks
 
-- [ ] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30 min.
-- [ ] Rewrite the tagline, "Why Gup" and "Not yet"; commit.
-- [ ] Rewrite the Quick Start; add the include; run the doctest; commit.
-- [ ] Fix the Documentation and Examples sections; run prettier and mdl.
+- [x] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30 min.
+- [x] Rewrite the tagline, "Why Gup" and "Not yet"; commit.
+- [x] Rewrite the Quick Start; add the include; run the doctest; commit.
+- [x] Fix the Documentation and Examples sections; run prettier and mdl.
 
 ## Dependencies
 
@@ -148,7 +148,7 @@ This story rewrites the README's top half around measured numbers and an honest
 
 ## Success Metrics
 
-- [ ] Every number in the README names its `PERF_BUDGETS.md` row; the Quick
+- [x] Every number in the README names its `PERF_BUDGETS.md` row; the Quick
       Start compiles in CI.
 
 ## Risk Assessment
@@ -158,14 +158,60 @@ This story rewrites the README's top half around measured numbers and an honest
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output: not applicable, no visual change
-- [ ] `mask wasm-browser`: not needed, no layout, input or wasm change
-- [ ] WASM size: unchanged, no library code change
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output: not applicable, no visual change
+- [x] `mask wasm-browser`: not needed, no layout, input or wasm change
+- [x] WASM size: unchanged, no library code change
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `README.md`: new tagline, "Why Gup" (three figures, each with its
+  `PERF_BUDGETS.md` row, copied from the file today), a "Not yet" list naming
+  tracks N2-N6, a git-dependency Quick Start with a `no_run` program and a
+  running block (no hidden lines), tutorial links, the tutorials first under
+  "Documentation"; the closing paragraph is gone.
+- `src/lib.rs`: `architecture_docs` includes `README.md` (`Readme`);
+  `cargo test --doc -p gup -- architecture_docs` runs the README's blocks (10
+  pass).
+- `scripts/test_pre_commit.sh`: `README.md` is now a `gup` source
+  (`clippy=[gup]`), not docs-only, because `src/lib.rs` compiles it.
+- Examples commands checked with `cargo check --examples -p gup -p gup-core`;
+  `prettier`, `mdl` and `mask all-fix` pass.
+
+## Retrospective
+
+**Completed**: 2026-10-25
+
+### Key Technical Learnings
+
+#### README as a doctest
+
+- **Challenge**: the AC forbids hidden `#` lines, so `?` cannot sit at the top
+  level of a block.
+- **Solution**: both blocks define `fn main() -> gup::Result<()>`; rustdoc then
+  does not wrap them.
+- **Pattern**: a self-contained `main` reads the same on GitHub and in rustdoc.
+
+### Architectural Decisions
+
+#### "Not yet" wording
+
+- **Decision**: the accessibility line says a minimum comes in N3 and keyboard
+  navigation in N4, as `IMPLEMENTATION_STRATEGY.md` plans.
+- **Trade-off**: none; each line names a planned track, not a date.
+
+### Development Workflow Insights
+
+- A worktree-isolated shell refuses inline scripts that mention git; put them in
+  a file.
+
+### Follow-up Stories
+
+None. GUP-524 and GUP-525 were reserved and are unused.
