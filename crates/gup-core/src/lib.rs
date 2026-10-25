@@ -199,6 +199,7 @@ pub use marks::{
 pub use pick::{PICK_TOLERANCE, RowId};
 pub use plot::{Layout, PlacedText, Plot, Resolved};
 pub use render::{PipelineStats, Prepared, Renderer, TargetDesc};
+pub use scale::OKABE_ITO_DARK;
 pub use scale::{
     Band, CATEGORICAL_COLORS, Categorical, ColorScale, Diverging, Legend, Linear, Log, MAX_PALETTE,
     NULL_COLOR, OKABE_ITO, Offset, Point, PositionScale, Pow, Ramp, RampTick, ScaleRef, Sequential,
