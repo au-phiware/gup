@@ -68,7 +68,7 @@ X) or `info` (printed, never fails).
 | `zoom.validity.bytes`              | 0         | exact     | `zoom_bench`                                        |
 | `zoom.uniforms.bytes_per_frame`    | 136       | exact     | `zoom_bench`                                        |
 | `zoom.uniforms.writes_per_frame`   | 3         | exact     | `zoom_bench`                                        |
-| `zoom.instances.bytes`             | 6,360,720 | exact     | `zoom_bench`, over the 600 measured frames          |
+| `zoom.instances.bytes`             | 6,362,952 | exact     | `zoom_bench`, over the 600 measured frames          |
 | `zoom.instances.writes_per_frame`  | 3         | exact     | `zoom_bench`                                        |
 | `zoom.textures.bytes`              | 0         | exact     | `zoom_bench`                                        |
 | `zoom_culled.draws.median`         | 14        | exact     | `zoom_bench` on 4M sorted rows, 64 chunks (GUP-457) |
@@ -503,3 +503,8 @@ seeded violation (GUP-417 retrospective).
   0.516). WASM scatter 334,149 to 337,974 B gz (+3,825, mostly the inset
   solver), over bare wgpu 301,789 to 305,614 (94 KB of headroom); GUP-545
   (Area), 537 and 543 add under 300 B each to the reference scatter.
+- **GUP-529 merged (2026-10-26, orchestrator)**: automatic axes widen by the
+  overhang plus `plot_padding` when marks overhang them, so discs no longer
+  touch the axis lines. The slightly wider domains add guide ticks:
+  `zoom.instances.bytes` 6,360,720 to 6,362,952 (measured at the merge), and
+  `tests/zoom_uploads.rs`'s guide budget 1,503,048 to 1,506,360 B.
