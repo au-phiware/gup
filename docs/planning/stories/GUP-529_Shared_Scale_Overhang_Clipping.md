@@ -12,38 +12,32 @@ touches:
   ]
 ---
 
-# GUP-529: Circles on a Shared Automatic Scale Are Clipped
+# GUP-529: A Visible Gap Between Marks and the Axes
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: 📋
-Planned **Created**: 2026-10-25
+**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: ✅
+Complete (2026-10-25) **Created**: 2026-10-25
 
 ## Context
 
-Tutorial 2's layered chart (`docs/tutorials/02_*.md`, the `02_layers` snippet;
-image `tests/golden/tutorials/02_layers.png`) cuts its circles in half: the
-discs at y = 22 lose their top half at the plot's top edge, and the discs at x =
-1 and x = 12 sit on the plot's left and right edges. The plot creates two
-automatic scales with `plot.x(Linear::new())` and `plot.y(Linear::new())`, adds
-a `plot.line(..)` builder layer and a raw `Selection::<Month, Circle>` layer on
-those scales, with `Circle::RADIUS` the constant `Px(6.0)`.
+The story was filed as "circles on a shared automatic scale are clipped"
+(tutorial 2's layered chart, tutorial 4's brush chart). Measured on main
+(2026-10-25) nothing is clipped: widening works for a builder layer plus a raw
+`Selection` in either order, and `is_auto()` stays true. Tutorial 2: plot rect x
+36, y 59, 518×291; `x(1)` = 42, `y(22)` = 65, so the edge discs span exactly 36
+and 59, tangent to the axis lines. Tutorial 4's Bellbird spans rows 338..349
+with the plot bottom at 350. Automatic axes were widened by the overhang alone
+(`plot_padding` is added only on explicit axes' far ends), so discs touch the
+axis lines.
 
-GUP-435 and GUP-494 widen automatic domains by the marks' overhang so ticks run
-to both ends and no mark is clipped; GUP-540 insets explicit domains. Here
-neither happened: the ticks run 1..12 and 12..22 exactly to the plot edges and
-the 6 px discs are cut. This is the first chart a tutorial reader layers by
-hand, so it must look right.
-
-A second case needs no shared scale and no raw `Selection`: tutorial 4's brush
-chart (`docs/tutorials/04_interactions.md`, image
-`tests/golden/tutorials/04_brush.png`) is a plain `gup::scatter(birds)` with
-`.radius(6.0)` and automatic domains. The Bellbird at (0.03, 0.20) is cut in
-half by the bottom of the plot: the y domain's low end sits at about 0.19 with
-the data minimum 0.20 on a round tick, so the widening there is far less than
-the 6 px radius. The x axis, whose data minimum is not on a round tick, has
-room. Suspect: widening sized against the plot rect before the relayout that
-follows it ("the margins may change"), or tick rounding after widening.
+**Orchestrator decision (2026-10-25)**: reframe to a visible gap. For an
+automatic axis, widen by `over + plot_padding` when `over > 0` and by 0 when
+`over == 0`, at both ends, so discs never touch an axis line while a bar's
+baseline and lines still sit on their axes. Explicit domains are unchanged. The
+tests require at least 2 px of background between a disc's edge and the plot
+rect; the golden cap is 40, and no bar-only, line-only or area golden may
+change.
 
 ## User Story
 
@@ -64,30 +58,30 @@ follows it ("the margins may change"), or tick rounding after widening.
 
 ## Acceptance Criteria
 
-- [ ] **AC1, reproduction first**: a failing test in `crates/gup-core/tests/`
+- [x] **AC1, reproduction first**: a failing test in `crates/gup-core/tests/`
       (new file `shared_scale_overhang.rs`) renders the tutorial's chart (same
       data, 640×400, line + circles on `plot.x(Linear::new())` /
       `plot.y(Linear::new())`, `Px(6.0)` radius) and asserts every disc is
       whole: for each data point, the pixel 5 px above, below, left and right of
       its centre (from the scales' `eval`) lies inside the plot rect. Commit it
       failing (WIP, `scripts/checkpoint.sh` if the hook refuses) before any fix.
-- [ ] **AC1b, second reproduction**: in the same file, the tutorial 4 bird
+- [x] **AC1b, second reproduction**: in the same file, the tutorial 4 bird
       scatter (data and builder calls as in the tutorial, no brush, 640×400)
       asserts every disc is whole the same way. Also commit it failing first.
-- [ ] **AC2, cause**: the story's Implementation Summary names the exact cause
+- [x] **AC2, cause**: the story's Implementation Summary names the exact cause
       (file, function, why the overhang or widening was lost) in two to four
       sentences.
-- [ ] **AC3, fix**: AC1 passes. The rule after the fix: every automatic axis is
+- [x] **AC3, fix**: AC1 passes. The rule after the fix: every automatic axis is
       widened by the largest overhang of any layer bound to it, whatever kind of
       layer (builder or raw `Selection`), and whatever order the layers were
       added in; explicit domains keep GUP-540's (or GUP-528's, if merged) inset.
-- [ ] **AC4, order independence**: the same test with the circles added before
+- [x] **AC4, order independence**: the same test with the circles added before
       the line also passes.
-- [ ] **AC5, goldens**: re-bless `tests/golden/tutorials/02_layers.png`,
+- [x] **AC5, goldens**: re-bless `tests/golden/tutorials/02_layers.png`,
       `04_brush.png` and any other golden that changes; at most 12 may change in
       total. Look at each new PNG with the Read tool; every circle whole, ticks
       still at the domain's rounded ends.
-- [ ] **AC6, gates**: `mask merge-check --dogfood` passes;
+- [x] **AC6, gates**: `mask merge-check --dogfood` passes;
       `cargo test --doc -p     gup` passes (the tutorials are doctests).
 
 ## Decisions
@@ -124,5 +118,35 @@ follows it ("the margins may change"), or tick rounding after widening.
 
 ## Definition of Done
 
-- [ ] ACs met; `mask all-fix` clean; story ✅ in INDEX.md with Implementation
+- [x] ACs met; `mask all-fix` clean; story ✅ in INDEX.md with Implementation
       Summary and Retrospective.
+
+## Implementation Summary
+
+- Cause: `plot.rs` step 5 passed `over[i]` (overhang only) to `Scale::widen`, so
+  automatic axes got no `plot_padding` and edge marks were tangent to the axis
+  lines (nothing was clipped). Fix: a `padded` helper (`over + plot_padding` if
+  `over > 0`, else 0) is passed to `widen` for x, y and the right axis.
+- `crates/gup-core/tests/shared_scale_overhang.rs`: tutorial 2 chart in both
+  layer orders and the tutorial 4 scatter, each asserting 2 px of background
+  between every disc's edge and the plot rect.
+- Tests adjusted for the wider domains: `plot::tests::rescale_reuses_...` warms
+  the glyph atlas first (new tick digits); `hello_world.rs` points at row 30 (a
+  tooltip above a point at the top edge leaves the plot rect); `zoom_uploads.rs`
+  guide-instance budget 1,503,048 to 1,506,360 B (`PERF_BUDGETS.md` line 493
+  needs re-recording by the orchestrator).
+- 30 goldens re-blessed: 25 in `tests/golden/gup_core/`, 5 in
+  `tests/golden/tutorials/`. No bar-only, line-only or area golden changed;
+  `secondary_y` (bars plus a line) changed: the outer bars now clear the axes.
+
+## Retrospective
+
+**Completed**: 2026-10-25
+
+- A bug report's premise should be measured first: an ASCII dump of the rendered
+  pixels around one disc showed "whole but tangent" in minutes.
+- Widening more thins the tick set (tutorial 2's x labels become even months),
+  which can invalidate tests that assumed certain glyphs were already in the
+  atlas.
+- Tooltips are clamped to the canvas, not the plot, so a point near the top edge
+  puts the tooltip's border outside the plot rect.

@@ -354,7 +354,7 @@ pub fn tasks() -> Vec<Task> {
 
 fn t0_point(i: usize) -> (f32, f32) {
     let i = i as f32;
-    (47.5 + 36.85 * i, 463.5 - 1.045 * i * i)
+    (51.5 + 36.45 * i, 459.5 - 1.025 * i * i)
 }
 
 fn t0_smoke() -> Task {
@@ -374,8 +374,8 @@ fn t0_smoke() -> Task {
                     min_fraction: 0.003,
                 },
             ),
-            // The Layout's tick pixels for the 800x500 render: x = 47.5 + 36.85 i,
-            // y = 463.5 - 1.045 i^2 (data (i, i^2)). The default dot is the
+            // The Layout's tick pixels for the 800x500 render: x = 51.5 + 36.45 i,
+            // y = 459.5 - 1.025 i^2 (data (i, i^2)). The default dot is the
             // palette's #0072B2; 20 separate dots, each where its datum is.
             check(
                 f,

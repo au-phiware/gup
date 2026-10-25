@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! RFC-001 S8e (GUP-448): the chart of `examples/hello_world.rs`, headless,
-//! with the pointer on row 10 so the tooltip shows.
+//! with the pointer on row 30 (mid-plot, so the tooltip stays inside) so the tooltip shows.
 
 mod common;
 
@@ -26,13 +26,13 @@ fn hello_world_golden() {
         .tooltip(|p| format!("sin({:.1}) = {:.2}", p.0, p.1));
     plot.resolve(&cx, W as f32, H as f32).unwrap();
     let at = plot
-        .pick_anchor(RowId { layer: 0, row: 10 })
-        .expect("row 10 has an anchor");
+        .pick_anchor(RowId { layer: 0, row: 30 })
+        .expect("row 30 has an anchor");
     eprintln!("hello_world pointer anchor: {},{}", at.x, at.y);
     assert!(plot.handle(Input::PointerMoved { at }).redraw);
     let resolved = plot.resolve(&cx, W as f32, H as f32).unwrap();
     let has_tooltip = resolved.scene.items.iter().any(|i| {
-        matches!(&i.kind, ItemKind::Text(runs) if runs.iter().any(|r| &*r.text == "sin(2.0) = 0.91"))
+        matches!(&i.kind, ItemKind::Text(runs) if runs.iter().any(|r| &*r.text == "sin(6.0) = -0.28"))
     });
     assert!(has_tooltip, "the scene has the tooltip text");
     let layout = resolved.layout.clone();

@@ -171,7 +171,7 @@ facets.
   is inset by the overhang of the axis-bound marks that reach it (exact from CPU
   columns, chunk stats otherwise), never more than GUP-540's; run it alone among
   `plot.rs` stories. Deps: GUP-540 ✅.
-- [GUP-529](GUP-529_Shared_Scale_Overhang_Clipping.md) 📋 — Circles on shared
+- [GUP-529](GUP-529_Shared_Scale_Overhang_Clipping.md) ✅ — Circles on shared
   automatic scales (tutorial 2: `plot.line` + a raw `Selection`, `Px(6.0)`
   radius) are clipped at the plot edges: find why widening is lost and fix it.
   Deps: GUP-530 ✅. Runs after GUP-528 (both edit `plot.rs`).
