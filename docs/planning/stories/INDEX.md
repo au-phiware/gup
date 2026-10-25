@@ -214,7 +214,7 @@ facets.
 - [GUP-552](GUP-552_Chart_Subtitle.md) 📋 — `subtitle` on `Plot` and the
   builders, laid out under the title with its own theme size and colour. Deps:
   GUP-541 📋 (soft).
-- [GUP-553](GUP-553_Dark_Theme.md) 📋 — `Theme::dark()` with contrast-checked
+- [GUP-553](GUP-553_Dark_Theme.md) 🚧 — `Theme::dark()` with contrast-checked
   colours and a theme palette (`OKABE_ITO_DARK`, black replaced) that
   `Categorical::okabe_ito()` follows. Deps: GUP-552 📋 (soft).
 - [GUP-554](GUP-554_Box_Plot_Builder.md) 📋 — `transform::box_stats` (type-7
