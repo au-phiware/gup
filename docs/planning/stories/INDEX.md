@@ -130,7 +130,7 @@ GUP-535 in turn (they share `src/lib.rs`); GUP-536 after N2's builders.
 - [GUP-533](GUP-533_Documentation_Lint_Gates.md) ✅ Complete —
   `#![warn(missing_docs)]` in every crate (all pass today) and `mask doc` with
   `RUSTDOCFLAGS="-D warnings"` over seven crates in `mask all-check`.
-- [GUP-534](GUP-534_Honest_README_And_Tested_Quick_Start.md) 📋 — README tagline
+- [GUP-534](GUP-534_Honest_README_And_Tested_Quick_Start.md) 🚧 — README tagline
   and "Why Gup" cut to `PERF_BUDGETS.md` figures, a "Not yet" list, a
   git-dependency Quick Start, and the README compiled as a doctest. Deps:
   GUP-530 📋 (soft), GUP-537 📋 (soft).
