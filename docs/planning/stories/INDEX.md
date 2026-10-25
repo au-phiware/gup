@@ -159,7 +159,7 @@ GUP-547 with GUP-535; GUP-548; GUP-549; GUP-550 (Opus) with GUP-552; GUP-551
 N2: curved and horizontal areas, heatmap cell labels, error bars, pie charts and
 facets.
 
-- [GUP-537](GUP-537_Owned_Category_Keys_In_Builders.md) 📋 — Builders' key
+- [GUP-537](GUP-537_Owned_Category_Keys_In_Builders.md) 🚧 — Builders' key
   setters take owned keys (`|r| r.year`, an enum, `r.name.clone()`) through
   `DictionaryKey`, compared by label, with a "not a category key" diagnostic and
   a snapshot of the borrowed-key lifetime error; Plot-layer `encode_key`
