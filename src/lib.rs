@@ -94,6 +94,25 @@
 //! # Ok::<(), gup::Error>(())
 //! ```
 //!
+//! ## A dark chart
+//!
+//! `Theme::dark()` styles every element for a dark background, including the
+//! default categorical palette.
+//!
+//! ```
+//! use gup::prelude::*;
+//!
+//! let rows = vec![(1.0, 2.0, "a"), (2.0, 1.0, "b")];
+//! let mut chart = gup::scatter(rows)
+//!     .x(|r| r.0)
+//!     .y(|r| r.1)
+//!     .color(|r| r.2)
+//!     .theme(Theme::dark());
+//! let image = chart.render(&Context::shared()?, 320, 200)?;
+//! assert_eq!(image.get_pixel(0, 0).0, Theme::dark().background.to_rgba8());
+//! # Ok::<(), gup::Error>(())
+//! ```
+//!
 //! ## Your own shader function
 //!
 //! `#[gup::wgsl_function]` turns WGSL into a typed shader function. Here a

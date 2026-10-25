@@ -15,8 +15,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: 📋
-Planned **Created**: 2026-10-24
+**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: 🚧 In
+Progress **Created**: 2026-10-24
 
 ## Context
 
@@ -53,30 +53,30 @@ theme the same way.
 
 ### AC1: The preset
 
-- [ ] `Theme::dark()` and `Theme::light()` (equal to `Theme::default()`) exist,
+- [x] `Theme::dark()` and `Theme::light()` (equal to `Theme::default()`) exist,
       documented, with the values in Decisions; a doctest from the `gup` crate
       sets `.theme(Theme::dark())` on a builder.
-- [ ] Unit tests compute WCAG 2 contrast ratios against `background` and assert:
+- [x] Unit tests compute WCAG 2 contrast ratios against `background` and assert:
       `label` ≥ 7, `title` ≥ 12, `axis` ≥ 4.5, `subtitle` (if GUP-552 has
       merged) ≥ 4.5, `grid` within 1.2–1.6, `tooltip_text` against
       `tooltip_background` ≥ 7, and every `palette` colour ≥ 3.
 
 ### AC2: The palette follows the theme
 
-- [ ] `Theme` gains `palette: [Color; 8]`, `OKABE_ITO` for light and
+- [x] `Theme` gains `palette: [Color; 8]`, `OKABE_ITO` for light and
       `OKABE_ITO_DARK` (Decisions) for dark; `OKABE_ITO_DARK` is a public
       constant beside `OKABE_ITO`.
-- [ ] `Categorical::okabe_ito()` draws the theme's palette, its colours past 8
+- [x] `Categorical::okabe_ito()` draws the theme's palette, its colours past 8
       generated against the theme's background; `Categorical::from_palette`
       ignores the theme (tests for both).
-- [ ] Applying the same theme again does not rebuild the LUT (test: a second
+- [x] Applying the same theme again does not rebuild the LUT (test: a second
       resolve with nothing changed is a cache hit with no texture writes in
       `Context::upload_stats`).
-- [ ] Every existing golden is unchanged (the light palette equals today's).
+- [x] Every existing golden is unchanged (the light palette equals today's).
 
 ### AC3: Visual
 
-- [ ] Golden `gup_core/theme_dark` (640×400): a scatter of 9 categories (so the
+- [x] Golden `gup_core/theme_dark` (640×400): a scatter of 9 categories (so the
       9th, generated colour shows) with legend, `grid(Axes::Both)`, a title, a
       hovered point's tooltip (`Input::PointerMoved` before rendering) and a
       brushed region in a second golden `gup_core/theme_dark_brush`. The worker
@@ -120,11 +120,11 @@ theme the same way.
 
 ## Technical Tasks
 
-- [ ] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30 min.
-- [ ] `palette`, `OKABE_ITO_DARK`, the categorical change; light goldens green;
+- [x] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30 min.
+- [x] `palette`, `OKABE_ITO_DARK`, the categorical change; light goldens green;
       commit.
-- [ ] `Theme::dark`/`light`, contrast tests; commit.
-- [ ] The two goldens; docs; commit.
+- [x] `Theme::dark`/`light`, contrast tests; commit.
+- [x] The two goldens; docs; commit.
 
 ## Dependencies
 
@@ -144,7 +144,7 @@ theme the same way.
 
 ## Success Metrics
 
-- [ ] `.theme(Theme::dark())` gives a legible, balanced chart with every element
+- [x] `.theme(Theme::dark())` gives a legible, balanced chart with every element
       styled.
 
 ## Risk Assessment
@@ -155,15 +155,94 @@ theme the same way.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1` and
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1` and
       `cargo test -p gup-core -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (the two goldens)
-- [ ] `mask wasm-browser`: not needed, no layout or input change
-- [ ] WASM size: `mask wasm-size` scatter gz bytes reported
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye (the two goldens)
+- [x] `mask wasm-browser`: not needed, no layout or input change
+- [x] WASM size: `mask wasm-size` scatter gz bytes reported
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `Theme::dark()`, `Theme::light()`, `Theme::palette: [Color; 8]`, public
+  `OKABE_ITO_DARK` (re-exported from `gup_core` and `gup`).
+- `Categorical::okabe_ito()` remembers the `(palette, background)` its LUT was
+  built for and rebuilds in `apply_theme` only when they differ. `from_palette`
+  ignores the theme. The light theme keeps the static LUT.
+- Generated colours (keys past 8) on a dark background (luminance < 0.18) must
+  reach 3:1 contrast against it; a light background keeps every candidate, so no
+  light colour or golden changed.
+- Tests: contrast and palette unit tests (`theme.rs`), `categorical.rs` theme
+  test, `tests/theme_dark_png.rs` (two goldens + no-texture-write test),
+  doctests in `Theme::dark` and the `gup` crate docs.
+- Goldens: `tests/golden/gup_core/theme_dark.png`, `theme_dark_brush.png`.
+
+## Definition-of-Done evidence
+
+- Contrast against `#1E1E22` (WCAG 2): label 9.99, title 14.62, axis 6.40, grid
+  1.34, null 3.29, tooltip text 11.46. Palette: orange 7.38, sky 7.20, green
+  4.86, blue 3.20, vermillion 4.30, purple 5.43, yellow 12.56, `#E8E8E8` 13.56.
+  Every generated colour (keys 9-64) is at least 3:1 (test).
+- `mask merge-check` PASS: story-ids 1 s, doc 24 s, gup-core 735 s, wasm-size 48
+  s, wasm-browser 4 s (dogfood skipped). WASM scatter gz 338441 B (recorded
+  337974, +0.1%), over wgpu 306081 B.
+- `theme_dark`: nine series on near-black, the 9th (generated) a mid purple;
+  title and ticks legible, grid barely visible, legend swatches and labels
+  clear, tooltip a slightly lighter box with a grey border and light text.
+- `theme_dark_brush`: unbrushed rows fade toward the background but stay
+  visible, the brush is a translucent blue box with a light-blue border.
+- Also rendered dark histogram (stacked), barh and line charts (scratch, not
+  committed): all legible. The heatmap builder (GUP-549) is not in this branch's
+  base; it uses `Sequential`, which is not themed (known limit).
+
+## Retrospective
+
+**Completed**: 2026-10-26
+
+### Key Technical Learnings
+
+#### Generated colours need a dark-background rule
+
+- **Challenge**: with the background merely swapped for the dark one, the 9th
+  colour was the same dark purple as on white (1.9:1 on `#1E1E22`), nearly
+  invisible.
+- **Solution**: on a dark background, generated candidates must reach 3:1; a
+  light background is untouched, so light goldens and the pinned LUT entries are
+  unchanged.
+- **Pattern**: farthest-point generation in OKLab ignores legibility; add the
+  contrast rule where the background can be dark.
+
+#### Goldens with tooltips and brushes
+
+- **Challenge**: the SVG parity check compares glyphs (tooltip text is not in
+  `Layout::texts`) and cannot dim unbrushed rows; a tooltip past the plot rect
+  fails `marks_confined`.
+- **Solution**: the tooltip box is added as a text region; the brush golden
+  skips the SVG check (follow-up GUP-524); the hovered row is mid-plot.
+- **Pattern**: choose the hovered row so its tooltip stays inside the plot.
+
+### Architectural Decisions
+
+#### Cache key is `(palette, background)`
+
+- **Decision**: as the story says; the generated colours also avoid
+  `NULL_COLOR`, not the theme's `null_color`.
+- **Trade-off**: dark `null_color` `#6E6E78` is not avoided by generation.
+- **Future**: add `null_color` to the key if a generated colour ever clashes.
+
+### Development Workflow Insights
+
+- `scale/mod.rs` (outside `touches`, used by GUP-542) got one added
+  `pub use categorical::OKABE_ITO_DARK;` line; the `gup` crate doctest went in
+  `src/lib.rs` docs.
+- Compound `cd && heredoc` commands are refused in a worktree; use Write/Edit.
+
+### Follow-up Stories
+
+1. **GUP-524: SVG Draws Unbrushed Rows Dimmed** — SVG parity for brushed charts.

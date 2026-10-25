@@ -31,6 +31,7 @@ mod time;
 pub(crate) mod conformance;
 
 pub use band::{Band, BandParams, Point};
+pub use categorical::OKABE_ITO_DARK;
 pub use categorical::{
     CATEGORICAL_COLORS, Categorical, CategoricalParams, MAX_PALETTE, NULL_COLOR, OKABE_ITO,
 };

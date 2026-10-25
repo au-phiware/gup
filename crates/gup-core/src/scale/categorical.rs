@@ -43,6 +43,20 @@ pub const OKABE_ITO: [Color; 8] = [
     Color::hex(0x000000),
 ];
 
+/// [`OKABE_ITO`] for a dark background (`Theme::dark`): black, which
+/// vanishes on dark, is replaced by `#E8E8E8`. The other seven colours keep
+/// their colour-blind safety, and all reach 3:1 contrast on `#1E1E22`.
+pub const OKABE_ITO_DARK: [Color; 8] = [
+    OKABE_ITO[0],
+    OKABE_ITO[1],
+    OKABE_ITO[2],
+    OKABE_ITO[3],
+    OKABE_ITO[4],
+    OKABE_ITO[5],
+    OKABE_ITO[6],
+    Color::hex(0xe8e8e8),
+];
+
 /// Distinct colours a categorical palette provides: its own, then
 /// generated ones up to this many. Past them, colours repeat.
 pub const CATEGORICAL_COLORS: usize = 64;
@@ -66,11 +80,13 @@ pub const MAX_PALETTE: usize = 2048;
 ///
 /// **Palette.** The colours live in a one-row LUT texture read by texel,
 /// so a palette may have any length up to [`MAX_PALETTE`]. The default is
-/// [`OKABE_ITO`] (8 colours, colour-blind safe). A domain with more keys
+/// the theme's palette, [`OKABE_ITO`] (8 colours, colour-blind safe)
+/// unless the theme says otherwise; [`from_palette`](Self::from_palette)
+/// ignores the theme. A domain with more keys
 /// than the palette has colours does not cycle: the scale extends the
 /// palette, once, to [`CATEGORICAL_COLORS`] with generated colours, each
-/// the farthest (in OKLab) from every colour before it, from white (the
-/// background) and from [`NULL_COLOR`]. Generated colours are distinct
+/// the farthest (in OKLab) from every colour before it, from the
+/// theme's background (white) and from [`NULL_COLOR`]. Generated colours are distinct
 /// but not colour-blind safe; past [`CATEGORICAL_COLORS`] keys, colours
 /// repeat. A new key never changes an earlier key's colour.
 ///
@@ -121,17 +137,24 @@ pub struct Categorical {
     /// `null_color_set`.
     null_color: Color,
     null_color_set: bool,
+    /// For [`okabe_ito`](Self::okabe_ito): the `(palette, background)` the
+    /// LUT was built for, which the plot's theme replaces (rebuilding the
+    /// LUT only when they differ). `None` for a palette of the user's own.
+    themed: Option<([Color; 8], Color)>,
 }
 
 impl Categorical {
-    /// The [`OKABE_ITO`] palette (extended past 8 keys).
+    /// The theme's palette ([`OKABE_ITO`] for the default theme,
+    /// [`OKABE_ITO_DARK`] for `Theme::dark`), extended past 8 keys with
+    /// colours generated against the theme's background.
     pub fn okabe_ito() -> Self {
         static LUT: OnceLock<Arc<[[u8; 4]]>> = OnceLock::new();
         Self {
-            lut: Arc::clone(LUT.get_or_init(|| extend(&OKABE_ITO).into())),
+            lut: Arc::clone(LUT.get_or_init(|| extend(&OKABE_ITO, Color::WHITE).into())),
             keys: Vec::new(),
             null_color: NULL_COLOR,
             null_color_set: false,
+            themed: Some((OKABE_ITO, Color::WHITE)),
         }
     }
 
@@ -149,10 +172,11 @@ impl Categorical {
             colors.len()
         );
         Self {
-            lut: extend(&colors).into(),
+            lut: extend(&colors, Color::WHITE).into(),
             keys: Vec::new(),
             null_color: NULL_COLOR,
             null_color_set: false,
+            themed: None,
         }
     }
 
@@ -192,11 +216,13 @@ impl Default for Categorical {
 /// [`CATEGORICAL_COLORS`] entries (a longer palette is kept as it is).
 ///
 /// Each generated colour is the candidate farthest, in OKLab, from every
-/// colour already chosen, from white and from [`NULL_COLOR`]. Candidates
+/// colour already chosen, from `background` and from [`NULL_COLOR`]
+/// (on a dark background, only candidates with at least 3:1 contrast
+/// against it). Candidates
 /// are in-gamut OKLCh colours at four lightnesses (0.45 to 0.75) and 36
 /// hues, at the most chroma up to 0.15 that stays in sRGB. Greedy, so a
 /// longer domain never changes an earlier colour.
-fn extend(palette: &[Color]) -> Vec<[u8; 4]> {
+fn extend(palette: &[Color], background: Color) -> Vec<[u8; 4]> {
     let quantise = |c: Color| c.to_rgba8();
     let mut lut: Vec<[u8; 4]> = palette.iter().map(|&c| quantise(c)).collect();
     if lut.len() >= CATEGORICAL_COLORS {
@@ -204,8 +230,10 @@ fn extend(palette: &[Color]) -> Vec<[u8; 4]> {
     }
     let lab = |c: [u8; 4]| srgb_to_oklab([c[0], c[1], c[2]].map(|v| f32::from(v) / 255.0));
     let mut taken: Vec<[f32; 3]> = lut.iter().map(|&c| lab(c)).collect();
-    taken.push(lab([255, 255, 255, 255]));
+    taken.push(lab(background.to_rgba8()));
     taken.push(lab(NULL_COLOR.to_rgba8()));
+    let bg = background.to_rgba8();
+    let dark = luminance(bg) < 0.18;
     let mut candidates: Vec<([u8; 4], [f32; 3])> = Vec::new();
     for l in [0.45f32, 0.55, 0.65, 0.75] {
         for h in (0..36).map(|i| (i as f32 * 10.0).to_radians()) {
@@ -219,6 +247,11 @@ fn extend(palette: &[Color]) -> Vec<[u8; 4]> {
             };
             let rgb = oklab_to_srgb(lab_c).map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8);
             let c = [rgb[0], rgb[1], rgb[2], 255];
+            // On a dark background, only colours that stand out from it
+            // (a light background keeps every candidate, as it always has).
+            if dark && contrast(c, bg) < 3.0 {
+                continue;
+            }
             candidates.push((c, lab(c)));
         }
     }
@@ -237,6 +270,25 @@ fn extend(palette: &[Color]) -> Vec<[u8; 4]> {
         taken.push(p);
     }
     lut
+}
+
+/// WCAG 2 relative luminance of an 8-bit sRGB colour.
+fn luminance(c: [u8; 4]) -> f32 {
+    let lin = |v: u8| {
+        let v = f32::from(v) / 255.0;
+        if v <= 0.040_45 {
+            v / 12.92
+        } else {
+            ((v + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    0.2126 * lin(c[0]) + 0.7152 * lin(c[1]) + 0.0722 * lin(c[2])
+}
+
+/// WCAG 2 contrast ratio between two 8-bit sRGB colours.
+fn contrast(a: [u8; 4], b: [u8; 4]) -> f32 {
+    let (la, lb) = (luminance(a), luminance(b));
+    (la.max(lb) + 0.05) / (la.min(lb) + 0.05)
 }
 
 /// Whether OKLab `lab` is inside the sRGB gamut.
@@ -299,6 +351,13 @@ impl ShaderFn for Categorical {
     fn apply_theme(&mut self, theme: &Theme) {
         if !self.null_color_set {
             self.null_color = theme.null_color;
+        }
+        if let Some(built) = &mut self.themed {
+            let wanted = (theme.palette, theme.background);
+            if *built != wanted {
+                self.lut = extend(&wanted.0, wanted.1).into();
+                *built = wanted;
+            }
         }
     }
 
@@ -404,6 +463,59 @@ mod tests {
         // Past CATEGORICAL_COLORS, colours repeat.
         let big = fitted(CATEGORICAL_COLORS + 1);
         assert_eq!(big.eval(CATEGORICAL_COLORS as f64), big.eval(0.0));
+    }
+
+    /// GUP-553: `okabe_ito` follows the theme's palette and background;
+    /// `from_palette` does not; the same theme again keeps the LUT.
+    #[test]
+    fn the_theme_sets_the_default_palette() {
+        let dark = Theme::dark();
+        let mut c = fitted(9);
+        let light_lut = Arc::clone(&c.lut);
+        c.apply_theme(&Theme::default());
+        assert!(
+            Arc::ptr_eq(&c.lut, &light_lut),
+            "light keeps the static LUT"
+        );
+        c.apply_theme(&dark);
+        for (i, want) in OKABE_ITO_DARK.iter().enumerate() {
+            assert_eq!(c.eval(i as f64), *want);
+        }
+        // The 9th colour is generated against the dark background: it is
+        // not the light theme's, and is clearly apart from it.
+        assert_ne!(c.eval(8.0), fitted(9).eval(8.0));
+        let lab = |c: Color| srgb_to_oklab([c.r, c.g, c.b]);
+        let (b, g) = (lab(dark.background), lab(c.eval(8.0)));
+        let d = ((b[0] - g[0]).powi(2) + (b[1] - g[1]).powi(2) + (b[2] - g[2]).powi(2)).sqrt();
+        eprintln!(
+            "9th colour {:?} is {d:.2} from the dark background",
+            c.eval(8.0)
+        );
+        assert!(d >= 0.2);
+        // Every generated colour reaches 3:1 on the dark background.
+        let bg = dark.background.to_rgba8();
+        for code in 8..CATEGORICAL_COLORS {
+            let r = contrast(c.lut[code], bg);
+            assert!(
+                r >= 3.0,
+                "generated colour {code} {:?}: {r:.2}",
+                c.lut[code]
+            );
+        }
+        // The same theme again: the same LUT, not a rebuilt copy.
+        let built = Arc::clone(&c.lut);
+        c.apply_theme(&dark);
+        assert!(Arc::ptr_eq(&c.lut, &built));
+        // Back to light: today's colours.
+        c.apply_theme(&Theme::default());
+        assert_eq!(c.lut, light_lut);
+
+        // A palette of the user's own ignores the theme.
+        let mut own = Categorical::from_palette([Color::hex(0xff0000), Color::hex(0x00ff00)]);
+        own.fit_keys(&["a".into(), "b".into()]).unwrap();
+        own.apply_theme(&dark);
+        assert_eq!(own.eval(0.0), Color::hex(0xff0000));
+        assert_eq!(own.eval(1.0), Color::hex(0x00ff00));
     }
 
     #[test]
