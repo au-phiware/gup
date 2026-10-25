@@ -30,6 +30,25 @@
 //! # Ok::<(), gup::Error>(())
 //! ```
 //!
+//! ## A histogram in one line
+//!
+//! `gup::histogram` counts a column into bins that start and end on round
+//! numbers; [`Bins`] (in the prelude) chooses them.
+//!
+//! ```
+//! use gup::prelude::*;
+//!
+//! struct Trip { minutes: f64 }
+//! let trips = (0..300).map(|i| Trip { minutes: f64::from(i % 60) });
+//!
+//! let mut chart = gup::histogram(trips).x(|t| t.minutes).bins(Bins::Width(10.0));
+//! // Six bins of ten minutes: 0-10, 10-20, ... 50-60.
+//! assert_eq!(chart.layers_mut()[0].len(), 6);
+//! let image = chart.render(&Context::shared()?, 480, 320)?;
+//! assert_eq!(image.dimensions(), (480, 320));
+//! # Ok::<(), gup::Error>(())
+//! ```
+//!
 //! ## Your own shader function
 //!
 //! `#[gup::wgsl_function]` turns WGSL into a typed shader function. Here a

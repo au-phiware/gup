@@ -28,7 +28,8 @@
 //! - [`Plot`]: any number of layers over shared x and y scales (and a
 //!   secondary [`Plot::y_right`]), with axes, grid, legends and title laid
 //!   out for you, styled by [`Theme`];
-//! - the [`scatter`], [`line()`], [`bar`] and [`barh`] builders ([`ChartExt`]);
+//! - the [`scatter`], [`line()`], [`bar`], [`barh`] and [`histogram()`] builders
+//!   ([`ChartExt`]), and the [`transform`] module they bin with;
 //! - interaction ([`Input`], [`Response`]: picking, tooltips, pan, zoom and
 //!   brush) and streaming ([`Appender`]);
 //! - targets: [`ImageTarget`], [`TextureTarget`], [`WindowTarget`], the web
@@ -163,6 +164,7 @@ mod svg;
 pub mod target;
 mod theme;
 mod tooltip;
+pub mod transform;
 #[cfg(feature = "svg")]
 mod vector;
 #[cfg(all(feature = "web", target_arch = "wasm32"))]
@@ -173,7 +175,10 @@ mod window;
 #[cfg(all(feature = "window", not(target_arch = "wasm32")))]
 pub use app::{GupApp, show};
 pub use append::{Appender, Closed};
-pub use builder::{BarChart, LineChart, ScatterChart, bar, barh, line, scatter};
+pub use builder::{
+    BarChart, HistogramBin, HistogramChart, LineChart, ScatterChart, bar, barh, histogram, line,
+    scatter,
+};
 pub use channel::{
     Antialias, Channel, ChannelDesc, Color, ConstValue, Geometry, GpuType, HitShape, Mark, Px,
     Role, Unit, Visual,
@@ -205,6 +210,7 @@ pub use shader::WgslModule;
 pub use svg::{SvgOptions, SvgTarget, VectorTarget};
 pub use target::{DEFAULT_SAMPLES, Frame, ImageTarget, RenderTarget, TargetOptions, TextureTarget};
 pub use theme::{Theme, Unbrushed};
+pub use transform::Bins;
 #[cfg(feature = "window")]
 pub use window::WindowTarget;
 
@@ -344,11 +350,11 @@ pub use gup_core_macros::Mark;
 /// The names most programs need.
 pub mod prelude {
     pub use crate::{
-        Area, AreaAttrs, Axes, Band, Categorical, Chart, ChartExt, Circle, CircleAttrs, Color,
-        ColorScale, Context, CpuMirror, Derived, Diverging, Drag, EncodeFn, Event, Line, LineAttrs,
-        Linear, Log, Mark, Offset, Plot, Point, PositionScale, Pow, Px, Rect, RectAttrs, Retain,
-        ScaleRef, Segment, SegmentAttrs, Selection, Sequential, ShaderFn, Symlog, Theme, Time,
-        Unbrushed, Unit, Window, wgsl_function,
+        Area, AreaAttrs, Axes, Band, Bins, Categorical, Chart, ChartExt, Circle, CircleAttrs,
+        Color, ColorScale, Context, CpuMirror, Derived, Diverging, Drag, EncodeFn, Event, Line,
+        LineAttrs, Linear, Log, Mark, Offset, Plot, Point, PositionScale, Pow, Px, Rect, RectAttrs,
+        Retain, ScaleRef, Segment, SegmentAttrs, Selection, Sequential, ShaderFn, Symlog, Theme,
+        Time, Unbrushed, Unit, Window, wgsl_function,
     };
 }
 

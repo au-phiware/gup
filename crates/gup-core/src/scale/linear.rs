@@ -17,6 +17,9 @@ pub struct Linear {
     domain: Option<(f64, f64)>,
     explicit: bool,
     range: (f64, f64),
+    /// Ticks are multiples of this (times 1, 2, 5, 10, ...), if set: the
+    /// bin width of a histogram, so that ticks fall on bin edges.
+    tick_unit: Option<f64>,
 }
 
 impl Default for Linear {
@@ -32,6 +35,7 @@ impl Linear {
             domain: None,
             explicit: false,
             range: (0.0, 1.0),
+            tick_unit: None,
         }
     }
 
@@ -39,6 +43,13 @@ impl Linear {
     pub fn domain(mut self, d0: f64, d1: f64) -> Self {
         self.domain = Some((d0, d1));
         self.explicit = true;
+        self
+    }
+
+    /// Put ticks only at multiples of `unit` times 1, 2, 5, 10, ...: the
+    /// step the default would choose, rounded to such a multiple.
+    pub(crate) fn tick_unit(mut self, unit: f64) -> Self {
+        self.tick_unit = Some(unit);
         self
     }
 
@@ -187,7 +198,10 @@ impl PositionScale for Linear {
     fn ticks(&self, count: usize) -> Ticks {
         let (d0, d1) = self.resolved_domain();
         let (lo, hi) = (d0.min(d1), d0.max(d1));
-        let step = tick_step(lo, hi, count);
+        let mut step = tick_step(lo, hi, count);
+        if let Some(unit) = self.tick_unit {
+            step = unit * nearest_125(step / unit);
+        }
         let (start, end) = ((lo / step - 1e-9).ceil(), (hi / step + 1e-9).floor());
         let values: Vec<f64> = (0..=((end - start).max(-1.0) as i64))
             .map(|i| step_value(start + i as f64, step))
@@ -201,10 +215,38 @@ impl PositionScale for Linear {
     }
 }
 
+/// The 1, 2, 5, 10, 20, ... closest to `ratio` (at least 1).
+fn nearest_125(ratio: f64) -> f64 {
+    if !ratio.is_finite() || ratio <= 1.0 {
+        return 1.0;
+    }
+    let power = 10f64.powf(ratio.log10().floor());
+    [1.0, 2.0, 5.0, 10.0]
+        .into_iter()
+        .map(|m| m * power)
+        .min_by(|a, b| (ratio / a).ln().abs().total_cmp(&(ratio / b).ln().abs()))
+        .unwrap_or(1.0)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::scale::{DynPositionScale, ScaleRef};
+
+    #[test]
+    fn a_tick_unit_puts_ticks_on_its_multiples() {
+        let s = Linear::new().domain(12.0, 38.0).tick_unit(2.0);
+        for count in 2..20 {
+            let ticks = s.ticks(count);
+            assert!(!ticks.values.is_empty());
+            for v in &ticks.values {
+                assert!((v / 2.0 - (v / 2.0).round()).abs() < 1e-9, "{count}: {v}");
+            }
+        }
+        // 5 would be the default step: the nearest multiple of 2 is 4.
+        let ticks = s.ticks(5);
+        assert_eq!(ticks.values[1] - ticks.values[0], 4.0);
+    }
 
     #[test]
     fn invert_undoes_eval() {

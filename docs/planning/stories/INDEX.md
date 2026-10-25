@@ -198,7 +198,7 @@ facets.
 - [GUP-547](GUP-547_Area_Builder_And_Stacked_Areas.md) 📋 — `gup::area` with
   overlapping series, stacking aligned on the union of x values, `outline` and
   tooltips. Deps: GUP-545 📋, GUP-546 📋, GUP-537 📋.
-- [GUP-548](GUP-548_Histogram_Builder_And_Bin_Transform.md) 📋 —
+- [GUP-548](GUP-548_Histogram_Builder_And_Bin_Transform.md) ✅ —
   `transform::bin` (Sturges or a count on a 1–2–5 step, a width, or edges) and
   `gup::histogram` with edges on round numbers, 1 px gaps, stacking by key and a
   "Count" axis title. Deps: GUP-537 📋, GUP-540 📋 (soft).
