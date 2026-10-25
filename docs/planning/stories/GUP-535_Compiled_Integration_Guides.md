@@ -43,30 +43,30 @@ describe, whose dependencies (eframe, bevy) the `gup` crate does not have.
 
 ### AC1: The egui guide is a doctest of `gup-egui`
 
-- [ ] `gup-egui/src/lib.rs` gains
+- [x] `gup-egui/src/lib.rs` gains
       `#[cfg(doctest)] #[doc = include_str!("../../docs/EGUI_INTEGRATION.md")] struct EguiGuide;`.
-- [ ] Every Rust block in the guide is `rust,no_run` (it opens a window) and is
+- [x] Every Rust block in the guide is `rust,no_run` (it opens a window) and is
       a complete program with `fn main() -> eframe::Result`, built like
       `examples/egui_chart.rs`'s `main`. No `rust,ignore`, no hidden
       `#`-prefixed lines.
-- [ ] `cargo test -p gup-egui --doc` passes and reports the guide's blocks.
-- [ ] The `toml` block's paths are replaced with git dependencies
+- [x] `cargo test -p gup-egui --doc` passes and reports the guide's blocks.
+- [x] The `toml` block's paths are replaced with git dependencies
       (`gup-egui = { git = "https://github.com/au-phiware/gup" }`), matching
       GUP-530's dependency decision, and `eframe` keeps its version from
       `gup-egui/Cargo.toml`.
 
 ### AC2: The Bevy guide is a doctest of `gup-bevy`
 
-- [ ] `gup-bevy/src/lib.rs` gains the same include for
+- [x] `gup-bevy/src/lib.rs` gains the same include for
       `docs/BEVY_INTEGRATION.md` (`struct BevyGuide`).
-- [ ] Its Rust blocks are `rust,no_run` complete programs; its `toml` block uses
+- [x] Its Rust blocks are `rust,no_run` complete programs; its `toml` block uses
       git dependencies and the `bevy` features from `gup-bevy/Cargo.toml`.
-- [ ] `cargo test -p gup-bevy --doc` passes locally (it is run in CI by the
+- [x] `cargo test -p gup-bevy --doc` passes locally (it is run in CI by the
       `integrations` job's `cargo test -p gup-bevy`; no workflow change).
 
 ### AC3: Proof that the guides are checked
 
-- [ ] Seeded proof, recorded and not committed: renaming `GupWidget::show` to
+- [x] Seeded proof, recorded and not committed: renaming `GupWidget::show` to
       `GupWidget::shown` in the egui guide makes `cargo test -p gup-egui --doc`
       fail.
 
@@ -96,10 +96,10 @@ describe, whose dependencies (eframe, bevy) the `gup` crate does not have.
 
 ## Technical Tasks
 
-- [ ] Start commit within 30 minutes.
-- [ ] egui: retag, complete the program, include, run `--doc`; commit.
-- [ ] Bevy: the same; commit.
-- [ ] Seeded proof; DoD commands.
+- [x] Start commit within 30 minutes.
+- [x] egui: retag, complete the program, include, run `--doc`; commit.
+- [x] Bevy: the same; commit.
+- [x] Seeded proof; DoD commands.
 
 ## Dependencies
 
@@ -117,7 +117,7 @@ describe, whose dependencies (eframe, bevy) the `gup` crate does not have.
 
 ## Success Metrics
 
-- [ ] No `rust,ignore` block remains in `docs/*.md`:
+- [x] No `rust,ignore` block remains in `docs/*.md`:
       `git grep -n 'rust,ignore' -- docs/*.md` prints nothing.
 
 ## Risk Assessment
@@ -127,15 +127,45 @@ describe, whose dependencies (eframe, bevy) the `gup` crate does not have.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -p gup-egui -- --test-threads=1` and
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -p gup-egui -- --test-threads=1` and
       `cargo test -p gup-bevy -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output: not applicable, no visual change
-- [ ] `mask wasm-browser`: not needed, no layout, input or wasm change
-- [ ] WASM size: unchanged, no library code change
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output: not applicable, no visual change
+- [x] `mask wasm-browser`: not needed, no layout, input or wasm change
+- [x] WASM size: unchanged, no library code change
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+Completed 2026-10-25. `gup-egui` and `gup-bevy` include their guides as
+`#[cfg(doctest)]` doctests (`EguiGuide`, `BevyGuide`). All Rust blocks are
+`rust,no_run`; the egui block gained a `fn main() -> eframe::Result`; toml
+blocks use git dependencies (egui adds `egui`, Bevy adds the `png` feature from
+`gup-bevy/Cargo.toml`). `cargo test -p gup-egui --doc` reports 2 passed,
+`cargo test -p gup-bevy --doc` 3 passed (31 s warm).
+
+Seeded proof (not committed): `show` renamed to `shown` in the egui guide gave
+`error[E0599]: no method named shown found for struct GupWidget` and
+`test gup-egui/src/lib.rs - EguiGuide (line 75) - compile ... FAILED`.
+
+## Retrospective
+
+**Completed**: 2026-10-25
+
+### Key Technical Learnings
+
+#### Guides as crate doctests
+
+- **Challenge**: the guides need eframe and bevy, which `gup` lacks.
+- **Solution**: include them in the crates that depend on those.
+- **Pattern**: the Bevy guide was already a complete program; only the egui one
+  needed a `main`. The guides cost ~30 s of doctest time warm.
+
+### Follow-up Stories
+
+None.

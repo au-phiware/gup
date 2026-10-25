@@ -50,6 +50,11 @@
 
 #![warn(missing_docs)]
 
+/// The integration guide, compiled as doctests.
+#[cfg(doctest)]
+#[doc = include_str!("../../docs/EGUI_INTEGRATION.md")]
+struct EguiGuide;
+
 mod input;
 mod render;
 mod widget;
