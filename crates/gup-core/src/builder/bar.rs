@@ -5,6 +5,7 @@
 
 use std::any::Any;
 use std::collections::HashMap;
+use std::marker::PhantomData;
 use std::sync::Arc;
 
 use super::{DRAWN, Key, erase_key, plot_setters};
@@ -16,8 +17,37 @@ use crate::{ColumnValue, Context, Input, Layout, Resolved, Response, Result, Row
 type Value<T> = Arc<dyn Fn(&T) -> f64 + Send + Sync>;
 type Op<T> = Box<dyn Fn(&mut Selection<T, Rect>) + Send + Sync>;
 
-/// The padding between bars within a group: a tenth of a slot.
-const SLOT_PADDING: f64 = 0.1;
+mod sealed {
+    pub trait Sealed {}
+}
+
+/// Which way a [`BarChart`]'s bars run: [`Vertical`] (from [`bar`]) or
+/// [`Horizontal`] (from [`barh`]). Sealed: only those two exist.
+pub trait Orientation: sealed::Sealed + Send + Sync + 'static {
+    /// Whether bars run rightward from a band y axis.
+    #[doc(hidden)]
+    const HORIZONTAL: bool;
+}
+
+/// Bars standing on a band x axis: the orientation of [`bar`].
+#[derive(Debug, Clone, Copy)]
+pub struct Vertical;
+
+/// Bars running rightward from a band y axis: the orientation of [`barh`].
+#[derive(Debug, Clone, Copy)]
+pub struct Horizontal;
+
+impl sealed::Sealed for Vertical {}
+impl sealed::Sealed for Horizontal {}
+impl Orientation for Vertical {
+    const HORIZONTAL: bool = false;
+}
+impl Orientation for Horizontal {
+    const HORIZONTAL: bool = true;
+}
+
+/// The default gap between the bars of a group: a tenth of a slot.
+const DEFAULT_GROUP_PADDING: f64 = 0.1;
 
 enum ColorSpec<T> {
     Default,
@@ -57,21 +87,49 @@ enum Arrange<T> {
 ///
 /// See the [module docs](crate::builder) for the pattern.
 pub fn bar<T: Send + Sync + 'static>(rows: impl IntoIterator<Item = T>) -> BarChart<T> {
-    let mut plot = Plot::new();
-    let x = plot.x(Band::new());
-    plot.y(Linear::new());
-    BarChart {
-        plot,
-        x,
-        rows: Some(rows.into_iter().collect()),
-        ops: Vec::new(),
-        x_key: None,
-        y_value: None,
-        arrange: Arrange::Simple,
-        color: ColorSpec::Default,
-        color_scale: Categorical::okabe_ito(),
-        legend_title: None,
-    }
+    BarChart::new(rows)
+}
+
+/// Start a horizontal bar chart over `rows`: one bar per row from 0 to its
+/// value, with the categories down a band y axis (the first row's category
+/// at the top) and the value along x. The setters are [`bar`]'s, with the
+/// axes swapped: [`y`](BarChart::y) is the category and
+/// [`x`](BarChart::x) the value.
+///
+/// ```
+/// use gup_core::{ChartExt, Context};
+/// # fn main() -> gup_core::Result<()> {
+/// struct Answer { text: &'static str, share: f64 }
+/// let rows = [
+///     Answer { text: "Strongly agree", share: 41.0 },
+///     Answer { text: "Agree", share: 33.0 },
+///     Answer { text: "Disagree", share: 12.0 },
+/// ];
+///
+/// let mut chart = gup_core::barh(rows)
+///     .y(|r| r.text)
+///     .x(|r| r.share);
+///
+/// # let cx = Context::new_blocking()?;
+/// let image = chart.render(&cx, 320, 200)?;
+/// assert!(image.pixels().any(|p| p.0 != [255, 255, 255, 255]));
+/// # Ok(())
+/// # }
+/// ```
+///
+/// On a horizontal chart `x` is the value, so a category accessor does not
+/// compile there:
+///
+/// ```compile_fail
+/// struct Answer { text: String, share: f64 }
+/// let rows: Vec<Answer> = Vec::new();
+/// let _ = gup_core::barh(rows).x(|r| r.text.as_str());
+/// ```
+#[doc(alias = "horizontal")]
+pub fn barh<T: Send + Sync + 'static>(
+    rows: impl IntoIterator<Item = T>,
+) -> BarChart<T, Horizontal> {
+    BarChart::new(rows)
 }
 
 /// A bar chart under construction, and a [`Chart`].
@@ -84,20 +142,22 @@ pub fn bar<T: Send + Sync + 'static>(rows: impl IntoIterator<Item = T>) -> BarCh
 /// change a drawn chart through layer_mut()". The plot-level setters work at
 /// any time.
 #[must_use]
-pub struct BarChart<T> {
+pub struct BarChart<T, O: Orientation = Vertical> {
     plot: Plot,
-    x: ScaleRef<Band>,
+    band: ScaleRef<Band>,
     rows: Option<Vec<T>>,
     ops: Vec<Op<T>>,
-    x_key: Option<Key<T>>,
-    y_value: Option<Value<T>>,
+    cat_key: Option<Key<T>>,
+    value: Option<Value<T>>,
     arrange: Arrange<T>,
     color: ColorSpec<T>,
     color_scale: Categorical,
     legend_title: Option<String>,
+    group_padding: f64,
+    orientation: PhantomData<O>,
 }
 
-impl<T> std::fmt::Debug for BarChart<T> {
+impl<T, O: Orientation> std::fmt::Debug for BarChart<T, O> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("BarChart")
             .field("drawn", &self.rows.is_none())
@@ -127,7 +187,77 @@ fn stack_tables(sums: &[HashMap<Arc<str>, f64>]) -> Vec<HashMap<Arc<str>, (f64, 
         .collect()
 }
 
-impl<T: Send + Sync + 'static> BarChart<T> {
+impl<T: Send + Sync + 'static> BarChart<T, Vertical> {
+    /// The category of each bar, on a band x axis, in first-seen order.
+    ///
+    /// The accessor returns an owned key (an integer, an enum with `Display`,
+    /// `r.name.clone()`, a `&'static str`); see
+    /// [category keys](crate::builder#category-keys).
+    pub fn x<K: DictionaryKey>(self, key: impl Fn(&T) -> K + Send + Sync + 'static) -> Self {
+        self.set_category(key)
+    }
+
+    /// The value of each bar, drawn from 0. `None` (NaN) is not drawn.
+    pub fn y<D: ColumnValue>(self, f: impl Fn(&T) -> D + Send + Sync + 'static) -> Self {
+        self.set_value(f)
+    }
+
+    /// The y scale (default [`Linear`]). Bars on a log scale are not
+    /// supported.
+    pub fn y_scale<S: PositionScale>(self, scale: S) -> Self {
+        self.set_value_scale(scale)
+    }
+}
+
+impl<T: Send + Sync + 'static> BarChart<T, Horizontal> {
+    /// The category of each bar, on a band y axis, in first-seen order from
+    /// the top.
+    ///
+    /// The accessor returns an owned key (an integer, an enum with `Display`,
+    /// `r.name.clone()`, a `&'static str`); see
+    /// [category keys](crate::builder#category-keys).
+    pub fn y<K: DictionaryKey>(self, key: impl Fn(&T) -> K + Send + Sync + 'static) -> Self {
+        self.set_category(key)
+    }
+
+    /// The value of each bar, drawn from 0. `None` (NaN) is not drawn.
+    pub fn x<D: ColumnValue>(self, f: impl Fn(&T) -> D + Send + Sync + 'static) -> Self {
+        self.set_value(f)
+    }
+
+    /// The x scale (default [`Linear`]). Bars on a log scale are not
+    /// supported.
+    pub fn x_scale<S: PositionScale>(self, scale: S) -> Self {
+        self.set_value_scale(scale)
+    }
+}
+
+impl<T: Send + Sync + 'static, O: Orientation> BarChart<T, O> {
+    fn new(rows: impl IntoIterator<Item = T>) -> Self {
+        let mut plot = Plot::new();
+        let band = if O::HORIZONTAL {
+            plot.x(Linear::new());
+            plot.y(Band::new())
+        } else {
+            plot.y(Linear::new());
+            plot.x(Band::new())
+        };
+        BarChart {
+            plot,
+            band,
+            rows: Some(rows.into_iter().collect()),
+            ops: Vec::new(),
+            cat_key: None,
+            value: None,
+            arrange: Arrange::Simple,
+            color: ColorSpec::Default,
+            color_scale: Categorical::okabe_ito(),
+            legend_title: None,
+            group_padding: DEFAULT_GROUP_PADDING,
+            orientation: PhantomData,
+        }
+    }
+
     plot_setters!();
 
     fn check_open(&self) {
@@ -140,28 +270,27 @@ impl<T: Send + Sync + 'static> BarChart<T> {
         self
     }
 
-    /// The category of each bar, on a band x axis, in first-seen order.
-    ///
-    /// The accessor returns an owned key (an integer, an enum with `Display`,
-    /// `r.name.clone()`, a `&'static str`); see
-    /// [category keys](crate::builder#category-keys).
-    pub fn x<K: DictionaryKey>(mut self, key: impl Fn(&T) -> K + Send + Sync + 'static) -> Self {
+    fn set_category<K: DictionaryKey>(
+        mut self,
+        key: impl Fn(&T) -> K + Send + Sync + 'static,
+    ) -> Self {
         self.check_open();
-        self.x_key = Some(erase_key(key));
+        self.cat_key = Some(erase_key(key));
         self
     }
 
-    /// The value of each bar, drawn from 0. `None` (NaN) is not drawn.
-    pub fn y<D: ColumnValue>(mut self, f: impl Fn(&T) -> D + Send + Sync + 'static) -> Self {
+    fn set_value<D: ColumnValue>(mut self, f: impl Fn(&T) -> D + Send + Sync + 'static) -> Self {
         self.check_open();
-        self.y_value = Some(Arc::new(move |r| f(r).to_f64()));
+        self.value = Some(Arc::new(move |r| f(r).to_f64()));
         self
     }
 
-    /// The y scale (default [`Linear`]). Bars on a log scale are not
-    /// supported.
-    pub fn y_scale<S: PositionScale>(mut self, scale: S) -> Self {
-        self.plot.y(scale);
+    fn set_value_scale<S: PositionScale>(mut self, scale: S) -> Self {
+        if O::HORIZONTAL {
+            self.plot.x(scale);
+        } else {
+            self.plot.y(scale);
+        }
         self
     }
 
@@ -169,7 +298,37 @@ impl<T: Send + Sync + 'static> BarChart<T> {
     /// bands, 0.1 outside).
     pub fn padding(mut self, p: f64) -> Self {
         self.check_open();
-        self.x = self.plot.x(Band::new().padding(p));
+        let band = Band::new().padding(p);
+        self.band = if O::HORIZONTAL {
+            self.plot.y(band)
+        } else {
+            self.plot.x(band)
+        };
+        self
+    }
+
+    /// The gap between the bars of a [`group`](Self::group), as a fraction of
+    /// a slot (default 0.1). Zero makes neighbouring bars touch.
+    ///
+    /// ```
+    /// let chart = gup_core::bar([("Q1", "North", 3.0), ("Q1", "South", 5.0)])
+    ///     .x(|r| r.0)
+    ///     .y(|r| r.2)
+    ///     .group(|r| r.1)
+    ///     .group_padding(0.0);
+    /// # let _ = chart;
+    /// ```
+    ///
+    /// # Panics
+    ///
+    /// If `p` is not in `0..1`.
+    pub fn group_padding(mut self, p: f64) -> Self {
+        assert!(
+            (0.0..1.0).contains(&p),
+            "group_padding must be within 0..1, not {p}"
+        );
+        self.check_open();
+        self.group_padding = p;
         self
     }
 
@@ -301,7 +460,7 @@ impl<T: Send + Sync + 'static> BarChart<T> {
         // Every layer shares one band domain, so a layer missing a category
         // does not reorder the axis.
         let mut categories: Vec<Arc<str>> = Vec::new();
-        if let Some(xk) = &self.x_key {
+        if let Some(xk) = &self.cat_key {
             let mut seen = std::collections::HashSet::new();
             for r in &rows {
                 let k = xk(r);
@@ -309,6 +468,11 @@ impl<T: Send + Sync + 'static> BarChart<T> {
                     categories.push(k);
                 }
             }
+        }
+        if O::HORIZONTAL {
+            // A y band's range runs bottom to top; the first category goes
+            // on top.
+            categories.reverse();
         }
         let (part_key, stacked) = match &self.arrange {
             Arrange::Simple => (None, false),
@@ -323,7 +487,7 @@ impl<T: Send + Sync + 'static> BarChart<T> {
                 .iter()
                 .map(|part| {
                     let mut sum: HashMap<Arc<str>, f64> = HashMap::new();
-                    if let (Some(xk), Some(y)) = (&self.x_key, &self.y_value) {
+                    if let (Some(xk), Some(y)) = (&self.cat_key, &self.value) {
                         for r in part {
                             let v = y(r);
                             if v.is_finite() {
@@ -342,55 +506,79 @@ impl<T: Send + Sync + 'static> BarChart<T> {
         let colours = ScaleRef::new(self.color_scale.clone());
         for (i, part) in parts.into_iter().enumerate() {
             let sel = self.plot.rects(part);
-            if let Some(xk) = &self.x_key {
+            if let Some(xk) = &self.cat_key {
                 let xk = Arc::clone(xk);
                 let enc = |s: &mut Selection<T, Rect>| {
                     let xk = Arc::clone(&xk);
                     let key = move |r: &T| xk(r);
-                    match (&self.arrange, i as u32) {
-                        (Arrange::Group(_), i) => {
+                    let grouped = matches!(self.arrange, Arrange::Group(_));
+                    // The first key takes the topmost bar of a horizontal band.
+                    let slot = if O::HORIZONTAL {
+                        count - 1 - i as u32
+                    } else {
+                        i as u32
+                    };
+                    let domain = categories.iter().cloned();
+                    match (O::HORIZONTAL, grouped) {
+                        (false, true) => {
                             s.x_with(
-                                self.x
-                                    .sub_band(i, count)
+                                self.band
+                                    .sub_band(slot, count)
                                     .encode_owned_key(key)
-                                    .domain(categories.iter().cloned()),
+                                    .domain(domain),
                             )
-                            .width(self.x.sub_band_width_px(count, SLOT_PADDING));
+                            .width(self.band.sub_band_width_px(count, self.group_padding));
                         }
-                        _ => {
-                            s.x_with(
-                                self.x
+                        (true, true) => {
+                            s.y_with(
+                                self.band
+                                    .sub_band(slot, count)
                                     .encode_owned_key(key)
-                                    .domain(categories.iter().cloned()),
+                                    .domain(domain),
                             )
-                            .width(self.x.band_width_px());
+                            .height(self.band.sub_band_width_px(count, self.group_padding));
+                        }
+                        (false, false) => {
+                            s.x_with(self.band.encode_owned_key(key).domain(domain))
+                                .width(self.band.band_width_px());
+                        }
+                        (true, false) => {
+                            s.y_with(self.band.encode_owned_key(key).domain(domain))
+                                .height(self.band.band_width_px());
                         }
                     }
                 };
                 enc(sel);
             }
-            if let Some(y) = &self.y_value {
-                if let Some(tables) = &tables {
+            if let Some(y) = &self.value {
+                let (end, base): (Value<T>, Value<T>) = if let Some(tables) = &tables {
                     let table = Arc::new(tables[i].clone());
                     let (top, base) = (Arc::clone(&table), table);
                     let (yt, yb) = (Arc::clone(y), Arc::clone(y));
-                    let (xt, xb) = (self.x_key.clone(), self.x_key.clone());
-                    sel.y(move |r: &T| match &xt {
-                        Some(xk) if yt(r).is_finite() => {
-                            top.get(&xk(r)).map_or(f64::NAN, |&(_, t)| t)
-                        }
-                        _ => f64::NAN,
-                    });
-                    sel.y_end(move |r: &T| match &xb {
-                        Some(xk) if yb(r).is_finite() => {
-                            base.get(&xk(r)).map_or(f64::NAN, |&(b, _)| b)
-                        }
-                        _ => f64::NAN,
-                    });
+                    let (xt, xb) = (self.cat_key.clone(), self.cat_key.clone());
+                    (
+                        Arc::new(move |r: &T| match &xt {
+                            Some(xk) if yt(r).is_finite() => {
+                                top.get(&xk(r)).map_or(f64::NAN, |&(_, t)| t)
+                            }
+                            _ => f64::NAN,
+                        }),
+                        Arc::new(move |r: &T| match &xb {
+                            Some(xk) if yb(r).is_finite() => {
+                                base.get(&xk(r)).map_or(f64::NAN, |&(b, _)| b)
+                            }
+                            _ => f64::NAN,
+                        }),
+                    )
                 } else {
-                    let y = Arc::clone(y);
-                    sel.y(move |r: &T| y(r));
-                    sel.y_end(|_: &T| 0.0f64);
+                    (Arc::clone(y), Arc::new(|_: &T| 0.0f64))
+                };
+                if O::HORIZONTAL {
+                    sel.x(move |r: &T| end(r));
+                    sel.x_end(move |r: &T| base(r));
+                } else {
+                    sel.y(move |r: &T| end(r));
+                    sel.y_end(move |r: &T| base(r));
                 }
             }
             for op in &self.ops {
@@ -442,7 +630,7 @@ impl<T: Send + Sync + 'static> BarChart<T> {
     }
 }
 
-impl<T: Send + Sync + 'static> Chart for BarChart<T> {
+impl<T: Send + Sync + 'static, O: Orientation> Chart for BarChart<T, O> {
     fn resolve(&mut self, cx: &Context, width: f32, height: f32) -> Result<&Resolved> {
         self.materialise();
         self.plot.resolve(cx, width, height)

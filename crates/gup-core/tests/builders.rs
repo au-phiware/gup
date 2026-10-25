@@ -1060,3 +1060,263 @@ mod bars {
             .assert_ok();
     }
 }
+
+// ---- GUP-543: horizontal bars and group padding --------------------------
+
+mod barh {
+    use super::{at, harness};
+    use crate::bars::{QUARTERS, Sale, near, sales};
+    use gup_core::prelude::*;
+    use gup_core::{ChartExt, Context, Layout, OKABE_ITO};
+    use gup_visual_regression::RgbaImage;
+
+    fn horizontal(rows: Vec<Sale>) -> gup_core::BarChart<Sale, gup_core::builder::Horizontal> {
+        gup_core::barh(rows).y(|r| r.quarter).x(|r| r.total)
+    }
+
+    fn text_y(layout: &Layout, text: &str) -> f32 {
+        let t = layout
+            .texts
+            .iter()
+            .find(|t| &*t.run.text == text)
+            .unwrap_or_else(|| panic!("no text {text:?}"));
+        t.bounds.y + t.bounds.height / 2.0
+    }
+
+    fn px(image: &image::RgbaImage, x: f64, y: f64) -> [u8; 4] {
+        image.get_pixel(x as u32, y as u32).0
+    }
+
+    #[test]
+    fn categories_run_top_to_bottom_in_first_seen_order() {
+        let cx = Context::new_blocking().unwrap();
+        let mut chart = horizontal(
+            sales()
+                .into_iter()
+                .filter(|s| s.region == "North")
+                .collect(),
+        );
+        let (_, layout) = chart.render_resolved(&cx, 400, 300).unwrap();
+        let ys: Vec<f32> = QUARTERS.iter().map(|q| text_y(&layout, q)).collect();
+        assert!(ys.windows(2).all(|w| w[0] < w[1]), "{ys:?}");
+        assert_eq!(layout.y_ticks.len(), 4);
+        // By pixel from the top, the tick values (band positions) fall: the
+        // first-seen key is the last position of the reversed domain.
+        let mut by_px = layout.y_ticks.clone();
+        by_px.sort_by(|a, b| a.1.total_cmp(&b.1));
+        let keys: Vec<f64> = by_px.iter().map(|t| t.0).collect();
+        let mut sorted = keys.clone();
+        sorted.sort_by(|a, b| b.total_cmp(a));
+        assert_eq!(keys, sorted, "{by_px:?}");
+    }
+
+    #[test]
+    fn bars_start_at_the_y_axis_and_reach_their_value() {
+        let cx = Context::new_blocking().unwrap();
+        let rows = vec![
+            Sale {
+                quarter: "Q1",
+                region: "North",
+                total: 20.0,
+            },
+            Sale {
+                quarter: "Q2",
+                region: "North",
+                total: 40.0,
+            },
+        ];
+        let mut chart = horizontal(rows);
+        let (image, layout) = chart.render_resolved(&cx, 400, 300).unwrap();
+        let x = |v: f64| at(&layout.x_ticks, v);
+        for (q, v) in [("Q1", 20.0), ("Q2", 40.0)] {
+            let y = f64::from(text_y(&layout, q));
+            assert!(near(px(&image, x(v) - 2.0, y), OKABE_ITO[3], 3), "{q} end");
+            assert!(
+                !near(px(&image, x(v) + 2.0, y), OKABE_ITO[3], 3),
+                "{q} past"
+            );
+            assert!(
+                near(px(&image, x(0.0) + 2.0, y), OKABE_ITO[3], 3),
+                "{q} start"
+            );
+        }
+    }
+
+    #[test]
+    fn grouped_bars_read_top_to_bottom_in_key_order() {
+        let cx = Context::new_blocking().unwrap();
+        let mut chart = horizontal(sales()).group(|r| r.region);
+        let (image, layout) = chart.render_resolved(&cx, 800, 500).unwrap();
+        // A column just right of the axis crosses every bar of every band.
+        let x = at(&layout.x_ticks, 0.0) + 3.0;
+        let mut order: Vec<usize> = Vec::new();
+        for y in layout.plot.top() as u32..layout.plot.bottom() as u32 {
+            let p = px(&image, x, f64::from(y));
+            if let Some(i) = OKABE_ITO[..4].iter().position(|&c| near(p, c, 3))
+                && order.last() != Some(&i)
+            {
+                order.push(i);
+            }
+        }
+        assert_eq!(
+            order,
+            [0, 1, 2, 3].repeat(4),
+            "legend order is top to bottom"
+        );
+        assert!(text_y(&layout, "Q1") < text_y(&layout, "Q4"));
+    }
+
+    #[test]
+    fn stacked_bars_stack_rightward_and_negatives_leftward() {
+        let cx = Context::new_blocking().unwrap();
+        let rows = vec![
+            Sale {
+                quarter: "Q1",
+                region: "North",
+                total: 30.0,
+            },
+            Sale {
+                quarter: "Q1",
+                region: "South",
+                total: -20.0,
+            },
+            Sale {
+                quarter: "Q1",
+                region: "East",
+                total: 20.0,
+            },
+            Sale {
+                quarter: "Q1",
+                region: "West",
+                total: -10.0,
+            },
+        ];
+        let mut chart = horizontal(rows).stack(|r| r.region);
+        let (image, layout) = chart.render_resolved(&cx, 400, 300).unwrap();
+        let y = f64::from(text_y(&layout, "Q1"));
+        for (v, colour, what) in [
+            (15.0, OKABE_ITO[0], "North from 0"),
+            (40.0, OKABE_ITO[2], "East after North"),
+            (-10.0, OKABE_ITO[1], "South left of 0"),
+            (-25.0, OKABE_ITO[3], "West left of South"),
+        ] {
+            let p = px(&image, at(&layout.x_ticks, v), y);
+            assert!(near(p, colour, 3), "{what}: {p:?}");
+        }
+    }
+
+    /// The number of pixels of `colour` along row `y`.
+    fn run_of(image: &image::RgbaImage, y: u32, colour: Color) -> usize {
+        (0..image.width())
+            .filter(|&x| near(image.get_pixel(x, y).0, colour, 3))
+            .count()
+    }
+
+    fn two_quarters(padding: f64) -> (image::RgbaImage, Layout) {
+        let cx = Context::new_blocking().unwrap();
+        let mut chart = gup_core::bar(
+            sales()
+                .into_iter()
+                .filter(|s| s.quarter == "Q1" || s.quarter == "Q2"),
+        )
+        .x(|r| r.quarter)
+        .y(|r| r.total)
+        .group(|r| r.region)
+        .group_padding(padding);
+        chart.render_resolved(&cx, 800, 500).unwrap()
+    }
+
+    #[test]
+    fn group_padding_sets_the_gap_between_bars() {
+        // A row just above the baseline crosses every bar.
+        let row = |layout: &Layout| (at(&layout.y_ticks, 0.0) - 3.0) as u32;
+        let (touching, layout) = two_quarters(0.0);
+        let y = row(&layout);
+        let first = (0..touching.width())
+            .find(|&x| near(touching.get_pixel(x, y).0, OKABE_ITO[0], 3))
+            .unwrap();
+        // Q1's four bars, with no background between the first and last.
+        let q1_last = (first..touching.width())
+            .find(|&x| near(touching.get_pixel(x, y).0, OKABE_ITO[3], 3))
+            .unwrap();
+        for x in first + 1..q1_last {
+            let p = touching.get_pixel(x, y).0;
+            assert!(
+                p[..3].iter().any(|&c| c < 200),
+                "background at x={x}: {p:?}"
+            );
+        }
+        let full = run_of(&touching, y, OKABE_ITO[0]);
+        let (halved, layout) = two_quarters(0.5);
+        let half = run_of(&halved, row(&layout), OKABE_ITO[0]);
+        // Two bands, so each count covers two bars.
+        assert!(
+            (half as f64 - full as f64 / 2.0).abs() <= 2.0,
+            "full {full} px, half {half} px"
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "group_padding must be within 0..1, not 1")]
+    fn group_padding_of_one_panics() {
+        let _ = gup_core::bar([(1, 1.0)]).group_padding(1.0);
+    }
+
+    #[test]
+    #[should_panic(expected = "not -0.5")]
+    fn negative_group_padding_panics() {
+        let _ = gup_core::barh([(1, 1.0)]).group_padding(-0.5);
+    }
+
+    struct Country {
+        name: &'static str,
+        year: i32,
+        value: f64,
+    }
+
+    #[test]
+    fn barh_golden_has_long_names_and_a_legend() {
+        use crate::common::vr::{layout_metadata, rgba8};
+        let cx = Context::new_blocking().unwrap();
+        let names = [
+            "United Arab Emirates",
+            "Democratic Republic of the Congo",
+            "Bosnia and Herzegovina",
+            "Trinidad and Tobago",
+            "New Zealand",
+        ];
+        let values = [
+            [78.0, 84.0],
+            [52.0, 61.0],
+            [64.0, 58.0],
+            [41.0, 47.0],
+            [90.0, 88.0],
+        ];
+        let mut rows = Vec::new();
+        for (name, v) in names.iter().zip(values) {
+            for (year, value) in [2019, 2023].into_iter().zip(v) {
+                rows.push(Country { name, year, value });
+            }
+        }
+        let mut chart = gup_core::barh(rows)
+            .y(|r| r.name)
+            .x(|r| r.value)
+            .group(|r| r.year)
+            .legend_title("Year")
+            .x_title("Index")
+            .grid(Axes::X);
+        let (image, layout) = chart.render_resolved(&cx, 480, 320).unwrap();
+        for name in names {
+            assert!(text_y(&layout, name) > 0.0);
+        }
+        assert!(text_y(&layout, names[0]) < text_y(&layout, names[4]));
+        let mut meta = layout_metadata(&layout);
+        for (i, year) in ["2019", "2023"].iter().enumerate() {
+            meta = meta.with_expected_color(format!("{year} fill"), rgba8(OKABE_ITO[i]));
+        }
+        let vr = RgbaImage::new(480, 320, image.into_raw()).unwrap();
+        harness()
+            .run("gup_core/builder_barh", Ok((vr, meta)))
+            .assert_ok();
+    }
+}

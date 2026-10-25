@@ -28,7 +28,7 @@
 //! - [`Plot`]: any number of layers over shared x and y scales (and a
 //!   secondary [`Plot::y_right`]), with axes, grid, legends and title laid
 //!   out for you, styled by [`Theme`];
-//! - the [`scatter`], [`line()`] and [`bar`] builders ([`ChartExt`]);
+//! - the [`scatter`], [`line()`], [`bar`] and [`barh`] builders ([`ChartExt`]);
 //! - interaction ([`Input`], [`Response`]: picking, tooltips, pan, zoom and
 //!   brush) and streaming ([`Appender`]);
 //! - targets: [`ImageTarget`], [`TextureTarget`], [`WindowTarget`], the web
@@ -173,7 +173,7 @@ mod window;
 #[cfg(all(feature = "window", not(target_arch = "wasm32")))]
 pub use app::{GupApp, show};
 pub use append::{Appender, Closed};
-pub use builder::{BarChart, LineChart, ScatterChart, bar, line, scatter};
+pub use builder::{BarChart, LineChart, ScatterChart, bar, barh, line, scatter};
 pub use channel::{
     Antialias, Channel, ChannelDesc, Color, ConstValue, Geometry, GpuType, HitShape, Mark, Px,
     Role, Unit, Visual,
