@@ -187,3 +187,68 @@ fn tutorial_2_layers() {
 
     check("tutorials/02_layers", &mut plot);
 }
+
+/// Tutorial 3 (`03_custom_shader_functions.md`), "Step 2: Write Your Own":
+/// readings coloured through a user-written ramp.
+#[test]
+fn tutorial_3_custom_ramp() {
+    #[derive(Clone, Debug)]
+    struct Ember {
+        cold: Color,
+        hot: Color,
+        bend: f32,
+    }
+
+    #[gup::wgsl_function(
+        path = "tutorial3_ember",
+        wgsl = r#"
+        struct Params { cold: vec4<f32>, hot: vec4<f32>, bend: f32 }
+
+        fn ember(t: f32, p: Params) -> vec4<f32> {
+            let k = pow(clamp(t, 0.0, 1.0), p.bend);
+            return mix(p.cold, p.hot, k);
+        }
+    "#
+    )]
+    impl ShaderFn for Ember {
+        fn params(&self) -> EmberParams {
+            EmberParams {
+                cold: self.cold,
+                hot: self.hot,
+                bend: self.bend,
+            }
+        }
+    }
+
+    struct Reading {
+        x: f64,
+        y: f64,
+        level: f64,
+    }
+    let readings: Vec<Reading> = (0..40)
+        .map(|i| {
+            let (x, y) = (f64::from(i % 8), f64::from(i / 8));
+            Reading {
+                x,
+                y,
+                level: (x + 2.0 * y) / 15.0,
+            }
+        })
+        .collect();
+    let ember = Ember {
+        cold: Color::hex(0x2b2d42),
+        hot: Color::hex(0xff7b00),
+        bend: 0.7,
+    };
+
+    let mut plot = Plot::new();
+    plot.title("Sensor readings");
+    let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
+    plot.add(Selection::<Reading, Circle>::new(readings))
+        .attr(Circle::X, x.encode(|r: &Reading| r.x))
+        .attr(Circle::Y, y.encode(|r: &Reading| r.y))
+        .attr(Circle::RADIUS, Px(14.0))
+        .attr(Circle::FILL, ember.encode(|r: &Reading| r.level));
+
+    check("tutorials/03_custom_ramp", &mut plot);
+}

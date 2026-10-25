@@ -96,4 +96,7 @@ mod tutorials {
     /// Tutorial 2, "Plots and Selections" (GUP-530).
     #[doc = include_str!("../docs/tutorials/02_data_binding.md")]
     struct PlotsAndSelections;
+    /// Tutorial 3, "Custom Shader Functions" (GUP-531).
+    #[doc = include_str!("../docs/tutorials/03_custom_shader_functions.md")]
+    struct ShaderFunctions;
 }
