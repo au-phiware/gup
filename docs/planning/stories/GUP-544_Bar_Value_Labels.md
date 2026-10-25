@@ -3,12 +3,7 @@ implementer: sonnet
 implementer-reason:
   the bar builder adds text layers (GUP-542) with placement, format, headroom
   and colour rules all fixed in Decisions
-touches:
-  [
-    crates/gup-core/src/builder/bar.rs,
-    crates/gup-core/src/plot.rs,
-    crates/gup-core/src/scale/mod.rs,
-  ]
+touches: [crates/gup-core/src/builder/bar.rs]
 ---
 
 # GUP-544: Bar Value Labels
@@ -28,10 +23,11 @@ bar builder, for simple, grouped and stacked bars, vertical and horizontal
 (GUP-543).
 
 Two details decide whether labels look right. A label above the tallest bar
-needs room the automatic domain does not leave (it is niced to the data, and
-text does not fit domains, GUP-542 Decisions). And a label inside a stacked
-segment must contrast with that segment's fill, and must not spill out of a
-segment too thin to hold it. The Decisions fix both.
+needs room the automatic domain does not leave; GUP-555 makes text layers widen
+an automatic axis on the side their labels reach (and inset an explicit one), so
+the builder adds nothing for it. And a label inside a stacked segment must
+contrast with that segment's fill, and must not spill out of a segment too thin
+to hold it. The Decisions fix this.
 
 ## Read First
 
@@ -39,9 +35,8 @@ segment too thin to hold it. The Decisions fix both.
   `dx_with`, the annotation trait) and `crates/gup-core/src/text_layer.rs`.
 - `crates/gup-core/src/builder/bar.rs` (whole file, after GUP-543:
   `materialise`, `stack_tables`, orientation).
-- `crates/gup-core/src/plot.rs` `resolve_full` steps 1–2 (the fit pass, lines
-  1663–1700 before GUP-542) and `DynPositionScale::fit_position` in
-  `scale/mod.rs` (lines 443–465).
+- GUP-555's Decisions ("Per-side extents", "Automatic axes"): how the labels'
+  room is made.
 - `crates/gup-core/src/scale/mod.rs` lines 520–535 (`MINUS`, the label minus
   sign) and `scale/categorical.rs` lines 150–170 and 303–312 (`keys`, `eval`).
 - GUP-541's Decisions (the plot's stored `formats`).
@@ -73,9 +68,11 @@ segment too thin to hold it. The Decisions fix both.
 - [ ] Stacked bars: each segment's label (its summed value) is centred in the
       segment, and a segment shorter (narrower, horizontal) than its label's ink
       plus 2 px has no label (test with one 3 px segment).
-- [ ] Headroom: with an automatic value axis, the tallest positive bar's label
-      lies wholly inside `Layout::plot` (and the most negative bar's, for
-      negative data), for plot heights 160 and 400 (tests).
+- [ ] Headroom (from GUP-555, no builder code): with an automatic value axis,
+      the tallest positive bar's label lies wholly inside `Layout::plot` (and
+      the most negative bar's, for negative data), for plot heights 160 and 400,
+      and for all-positive data the bars' baseline stays on the axis line (the
+      pixel of 0 is `plot.bottom()`, to 0.5 px) (tests).
 
 ### AC3: Text and colour
 
@@ -128,15 +125,11 @@ segment too thin to hold it. The Decisions fix both.
 - **Default format**: round to 2 decimals, trim trailing zeros and a trailing
   point, and write the minus as U+2212 (`scale::MINUS`). No thousands
   separators.
-- **Headroom**: when value labels are on and the value axis is automatic, the
-  builder asks the plot to union `max_top + 0.15 × span` (and
-  `min_bottom − 0.15 × span` when any value is negative) into the value axis's
-  fit, where `span = max(|max_top|, |min_bottom|)`, before `nice`. This needs a
-  pub(crate) hook: `DynPositionScale::fit_value(&self, v: f64)` (the data-unit
-  sibling of `fit_position`) and an `AnnotationLayer::extents()` method
-  returning `(is_x, f64)` values the plot fits in step 2, next to
-  `fixed_positions`. Stacked charts add no headroom (labels sit inside). An
-  explicit value domain is never changed; docs say labels may then clip.
+- **Headroom**: none in the builder. GUP-555 gives each text layer per-side
+  extents: an automatic value axis widens only at the end the labels reach (so
+  the baseline stays on the axis), an explicit one is inset there, up to a
+  quarter of the plot per side. No `fit_value` or `extents` hook, and no edit to
+  `plot.rs` or `scale/mod.rs`.
 - **Colours**: simple and grouped labels use `Theme::label`. Stacked labels use
   `color_by`: the segment fill is `fill(c)` when set, else the colour scale's
   colour for the stack key (`Categorical::keys()` position, then
@@ -146,9 +139,10 @@ segment too thin to hold it. The Decisions fix both.
 
 ## Escalation Triggers
 
-- The 15% headroom leaves a label clipped at plot height 160 (AC2's test): stop
-  and report the measured overflow instead of raising the fraction.
-- The headroom changes any existing bar golden (charts without labels must be
+- GUP-555's room leaves a label clipped at plot height 160 (AC2's test), or
+  lifts the baseline off the axis: stop and report the measured overflow; do not
+  add a builder-side headroom.
+- Value labels change any existing bar golden (charts without labels must be
   untouched).
 - `within_y` hides labels that visibly fit, or shows ones that spill (GUP-542's
   rule is wrong for this use): report with the pixel numbers.
@@ -164,16 +158,18 @@ segment too thin to hold it. The Decisions fix both.
 - [ ] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30 min.
 - [ ] Label rows and text layers for simple and grouped vertical bars; tests;
       commit.
-- [ ] Headroom hook; tests at both heights; commit.
+- [ ] Headroom tests at both heights (GUP-555 makes the room); commit.
 - [ ] Stacked and horizontal placement, contrast colours; goldens; commit.
 
 ## Dependencies
 
 ### Prerequisite Stories
 
-- GUP-542: Text layer 📋 — `Plot::text`, `TextLayer`, anchors.
-- GUP-543: Horizontal bars 📋 — the orientation parameter.
-- GUP-537: owned category keys 📋 (soft, via GUP-543) — bar keys are labels
+- GUP-542: Text layer ✅ — `Plot::text`, `TextLayer`, anchors.
+- GUP-543: Horizontal bars ✅ — the orientation parameter.
+- GUP-555: Text labels make room at the plot edge 📋 — the headroom above
+  (beside) bar ends, per side.
+- GUP-537: owned category keys ✅ (soft, via GUP-543) — bar keys are labels
   (`Arc<str>`), which `BarLabel::key` reuses.
 - GUP-541: Builder tick formats 📋 (soft) — the stored value-axis format for the
   default text.
@@ -194,9 +190,8 @@ segment too thin to hold it. The Decisions fix both.
 
 ## Risk Assessment
 
-- **Medium**: headroom in data units is an approximation of a pixel need.
-  _Mitigation_: the tests pin the smallest supported height; `nice` usually adds
-  more room.
+- **Low**: headroom comes from GUP-555's pixel extents, not a data-unit guess.
+  _Mitigation_: the tests pin the smallest supported height.
 
 ## Definition of Done
 
