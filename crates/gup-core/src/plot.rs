@@ -632,7 +632,7 @@ impl Plot {
     }
 
     /// Add a filled area over `rows`, in order, and return its layer. Set its
-    /// baseline with `.y_end(..)`: see [`Area`](crate::Area).
+    /// baseline with `.y_end(..)`: see [`Area`].
     pub fn area<T: Send + Sync + 'static>(
         &mut self,
         rows: impl IntoIterator<Item = T>,

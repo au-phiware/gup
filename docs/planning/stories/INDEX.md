@@ -115,7 +115,7 @@ scope is "vocabulary + docs" (owner decision 2). These stories edit docs and
 `crates/gup-core/src/lib.rs`); then GUP-530, GUP-531, GUP-532, GUP-534 and
 GUP-535 in turn (they share `src/lib.rs`); GUP-536 after N2's builders.
 
-- [GUP-530](GUP-530_Tested_Tutorials_Getting_Started.md) 📋 — Tutorials 1
+- [GUP-530](GUP-530_Tested_Tutorials_Getting_Started.md) ✅ — Tutorials 1
   (getting started with the builders) and 2 (plots and selections) rewritten as
   doctests of `gup`, with their images as goldens in `tests/tutorials.rs`, and
   the conventions the other tutorial stories follow. Deps: GUP-537 📋.
@@ -171,6 +171,10 @@ facets.
   is inset by the overhang of the axis-bound marks that reach it (exact from CPU
   columns, chunk stats otherwise), never more than GUP-540's; run it alone among
   `plot.rs` stories. Deps: GUP-540 ✅.
+- [GUP-529](GUP-529_Shared_Scale_Overhang_Clipping.md) 📋 — Circles on shared
+  automatic scales (tutorial 2: `plot.line` + a raw `Selection`, `Px(6.0)`
+  radius) are clipped at the plot edges: find why widening is lost and fix it.
+  Deps: GUP-530 ✅. Runs after GUP-528 (both edit `plot.rs`).
 - [GUP-541](GUP-541_Builder_Tick_Formats.md) 📋 — `x_tick_format`/
   `y_tick_format` on `Plot` and every builder, surviving a scale change, and the
   dogfood `%Y-%m` and `$Nk` formats restored with SVG text checks. Deps: GUP-474
