@@ -86,3 +86,10 @@ mod architecture_docs {
     #[doc = include_str!("../docs/IMPLEMENTATION_STRATEGY.md")]
     struct ImplementationStrategy;
 }
+
+/// The tutorials' snippets, compiled as doctests (GUP-530).
+#[cfg(doctest)]
+mod tutorials {
+    #[doc = include_str!("../docs/tutorials/01_getting_started.md")]
+    struct GettingStarted;
+}

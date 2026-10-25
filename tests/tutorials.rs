@@ -1,0 +1,143 @@
+// Copyright (C) 2024 Corin Lawson
+// SPDX-License-Identifier: GPL-3.0-or-later
+
+//! The images embedded in `docs/tutorials/` (GUP-530), checked as goldens.
+//!
+//! Each test repeats the chart calls of one tutorial block, so a tutorial
+//! whose chart changes fails here instead of showing a stale picture. Bless
+//! with `GUP_BLESS=1 cargo test -p gup --test tutorials -- --test-threads=1`.
+
+use gup::prelude::*;
+use gup::scene::TextRole;
+use gup_visual_regression::golden::default_artifact_dir;
+use gup_visual_regression::{
+    ExpectedFailures, GoldenStore, Harness, LayoutMetadata, PxRect, Rgba8, RgbaImage,
+    TextRole as VrTextRole,
+};
+use std::path::Path;
+
+const WIDTH: u32 = 640;
+const HEIGHT: u32 = 400;
+
+fn rect(r: gup::geom::Rect) -> PxRect {
+    PxRect::new(r.x, r.y, r.width, r.height)
+}
+
+/// Layout metadata from gup's own `Layout` (a copy of the adapter in
+/// `crates/gup-core/tests/common/vr.rs`, which this crate cannot import).
+fn layout_metadata(layout: &gup::Layout) -> LayoutMetadata {
+    let mut meta = LayoutMetadata::new(rect(layout.plot)).with_background(Rgba8::WHITE);
+    for t in &layout.texts {
+        let role = match t.run.role {
+            TextRole::Title => VrTextRole::Title,
+            TextRole::TickLabel => VrTextRole::TickLabel,
+            TextRole::AxisTitle => VrTextRole::AxisTitle,
+            TextRole::Legend => VrTextRole::Legend,
+            TextRole::Tooltip => VrTextRole::Other,
+        };
+        let [r, g, b, _] = t.run.style.color.to_rgba8();
+        meta = meta.with_text(
+            role,
+            t.run.text.to_string(),
+            rect(t.bounds),
+            Rgba8::rgb(r, g, b),
+        );
+    }
+    for g in &layout.guides {
+        meta = meta.with_guide(rect(*g).inflate(0.5));
+    }
+    meta
+}
+
+fn harness() -> Harness {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let golden = GoldenStore::new(root.join("tests/golden"), default_artifact_dir(root));
+    let expected =
+        ExpectedFailures::load(root.join("tests/visual_regression/expected_failures.toml"))
+            .expect("expected-failure list parses");
+    Harness::new(golden, expected)
+}
+
+/// Render `chart` at the tutorials' size and check it against the golden.
+fn check(name: &str, chart: &mut impl Chart) {
+    let cx = Context::shared().unwrap();
+    let (image, layout) = chart.render_resolved(&cx, WIDTH, HEIGHT).unwrap();
+    assert_eq!(image.dimensions(), (WIDTH, HEIGHT));
+    let image = RgbaImage::new(WIDTH, HEIGHT, image.into_raw()).unwrap();
+    harness()
+        .run(name, Ok((image, layout_metadata(&layout))))
+        .assert_ok();
+}
+
+/// Tutorial 1 (`01_getting_started.md`), "Step 5: Titles, a Grid and a Log
+/// Scale": the scatter chart.
+#[test]
+fn tutorial_1_scatter() {
+    struct Country {
+        region: &'static str,
+        gdp: f64,
+        life: f64,
+        people: f64,
+    }
+    let countries = [
+        ("Africa", 2.1e3, 53.0, 200e6),
+        ("Africa", 1.7e3, 67.0, 54e6),
+        ("Africa", 0.9e3, 66.0, 120e6),
+        ("Europe", 5.1e4, 81.0, 83e6),
+        ("Europe", 4.4e4, 82.0, 67e6),
+        ("Europe", 1.8e4, 77.0, 38e6),
+        ("Asia", 1.2e4, 77.0, 1400e6),
+        ("Asia", 2.3e3, 70.0, 1380e6),
+        ("Asia", 4.0e4, 85.0, 126e6),
+        ("Americas", 6.3e4, 79.0, 330e6),
+        ("Americas", 7.5e3, 75.0, 212e6),
+        ("Americas", 9.9e3, 75.0, 128e6),
+    ]
+    .map(|(region, gdp, life, people)| Country {
+        region,
+        gdp,
+        life,
+        people,
+    });
+
+    let mut chart = gup::scatter(countries)
+        .x(|c| c.gdp)
+        .y(|c| c.life)
+        .color(|c| c.region)
+        .size(|c| c.people)
+        .x_scale(Log::new())
+        .title("Wealth and health")
+        .x_title("GDP per person (US$)")
+        .y_title("Life expectancy (years)")
+        .grid(Axes::Both);
+
+    check("tutorials/01_scatter", &mut chart);
+}
+
+/// Tutorial 1 (`01_getting_started.md`), "Step 7: A Bar Chart": the grouped
+/// bars.
+#[test]
+fn tutorial_1_grouped_bars() {
+    struct Sale {
+        quarter: &'static str,
+        region: &'static str,
+        total: f64,
+    }
+    let sales = ["Q1", "Q2", "Q3", "Q4"].into_iter().flat_map(|quarter| {
+        [("North", 3.0), ("South", 5.0), ("East", 4.0)].map(|(region, base)| Sale {
+            quarter,
+            region,
+            total: base + if quarter == "Q3" { 2.0 } else { 0.0 },
+        })
+    });
+
+    let mut chart = gup::bar(sales)
+        .x(|s| s.quarter)
+        .y(|s| s.total)
+        .group(|s| s.region)
+        .title("Sales by quarter")
+        .y_title("Sales (units)")
+        .grid(Axes::Y);
+
+    check("tutorials/01_grouped_bars", &mut chart);
+}
