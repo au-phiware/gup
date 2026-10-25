@@ -194,28 +194,30 @@ fn tutorial_2_layers() {
 fn tutorial_3_custom_ramp() {
     #[derive(Clone, Debug)]
     struct Ember {
-        cold: Color,
-        hot: Color,
-        bend: f32,
+        stops: [Color; 4],
     }
 
     #[gup::wgsl_function(
         path = "tutorial3_ember",
         wgsl = r#"
-        struct Params { cold: vec4<f32>, hot: vec4<f32>, bend: f32 }
+        struct Params { dark: vec4<f32>, red: vec4<f32>, amber: vec4<f32>, pale: vec4<f32> }
 
         fn ember(t: f32, p: Params) -> vec4<f32> {
-            let k = pow(clamp(t, 0.0, 1.0), p.bend);
-            return mix(p.cold, p.hot, k);
+            let k = clamp(t, 0.0, 1.0) * 3.0;
+            let a = mix(p.dark, p.red, clamp(k, 0.0, 1.0));
+            let b = mix(a, p.amber, clamp(k - 1.0, 0.0, 1.0));
+            return mix(b, p.pale, clamp(k - 2.0, 0.0, 1.0));
         }
     "#
     )]
     impl ShaderFn for Ember {
         fn params(&self) -> EmberParams {
+            let [dark, red, amber, pale] = self.stops;
             EmberParams {
-                cold: self.cold,
-                hot: self.hot,
-                bend: self.bend,
+                dark,
+                red,
+                amber,
+                pale,
             }
         }
     }
@@ -236,13 +238,13 @@ fn tutorial_3_custom_ramp() {
         })
         .collect();
     let ember = Ember {
-        cold: Color::hex(0x2b2d42),
-        hot: Color::hex(0xff7b00),
-        bend: 0.7,
+        stops: [0x1a0a00, 0xb2182b, 0xfdb863, 0xffffbf].map(Color::hex),
     };
 
     let mut plot = Plot::new();
-    plot.title("Sensor readings");
+    plot.title("Sensor readings")
+        .x_title("Column")
+        .y_title("Row");
     let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
     plot.add(Selection::<Reading, Circle>::new(readings))
         .attr(Circle::X, x.encode(|r: &Reading| r.x))

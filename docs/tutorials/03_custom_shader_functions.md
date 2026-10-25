@@ -95,47 +95,54 @@ produces a colour, so it ends a chain.
 
 ## Step 2: Write Your Own
 
-Now a colour ramp the library does not have. The ramp mixes between a cold and a
-hot colour, and a `bend` makes the middle of the range lean to one end. The WGSL
-goes in an attribute on an `impl ShaderFn` block, and the rest of the block is
-Rust.
+Now a colour ramp the library does not have: four colours, from near-black
+through red and amber to pale yellow, like a cooling ember. Mixing only two
+colours straight across tends to give a muddy middle, so the ramp mixes between
+neighbouring stops. The WGSL goes in an attribute on an `impl ShaderFn` block,
+and the rest of the block is Rust.
 
 ```rust
 use gup::prelude::*;
 
-/// A ramp from `cold` to `hot`; `bend` below 1 reaches `hot` sooner.
+/// A ramp through four colours, from `stops[0]` at 0 to `stops[3]` at 1.
 #[derive(Clone, Debug)]
 struct Ember {
-    cold: Color,
-    hot: Color,
-    bend: f32,
+    stops: [Color; 4],
 }
 
 #[gup::wgsl_function(path = "tutorial3_ember", wgsl = r#"
-    struct Params { cold: vec4<f32>, hot: vec4<f32>, bend: f32 }
+    struct Params { dark: vec4<f32>, red: vec4<f32>, amber: vec4<f32>, pale: vec4<f32> }
 
     fn ember(t: f32, p: Params) -> vec4<f32> {
-        let k = pow(clamp(t, 0.0, 1.0), p.bend);
-        return mix(p.cold, p.hot, k);
+        // 0 to 3: the whole number is the segment, the fraction the way along it.
+        let k = clamp(t, 0.0, 1.0) * 3.0;
+        let a = mix(p.dark, p.red, clamp(k, 0.0, 1.0));
+        let b = mix(a, p.amber, clamp(k - 1.0, 0.0, 1.0));
+        return mix(b, p.pale, clamp(k - 2.0, 0.0, 1.0));
     }
 "#)]
 impl ShaderFn for Ember {
     fn params(&self) -> EmberParams {
-        EmberParams { cold: self.cold, hot: self.hot, bend: self.bend }
+        let [dark, red, amber, pale] = self.stops;
+        EmberParams { dark, red, amber, pale }
     }
 }
 
 // The same function on the CPU, in f64.
 impl CpuMirror for Ember {
     fn eval(&self, t: f64) -> Color {
-        let k = t.clamp(0.0, 1.0).powf(f64::from(self.bend)) as f32;
-        let mix = |a: f32, b: f32| a + (b - a) * k;
-        Color {
-            r: mix(self.cold.r, self.hot.r),
-            g: mix(self.cold.g, self.hot.g),
-            b: mix(self.cold.b, self.hot.b),
-            a: mix(self.cold.a, self.hot.a),
-        }
+        let k = t.clamp(0.0, 1.0) as f32 * 3.0;
+        let mix = |a: Color, b: Color, f: f32| {
+            let f = f.clamp(0.0, 1.0);
+            Color {
+                r: a.r + (b.r - a.r) * f,
+                g: a.g + (b.g - a.g) * f,
+                b: a.b + (b.b - a.b) * f,
+                a: a.a + (b.a - a.a) * f,
+            }
+        };
+        let [dark, red, amber, pale] = self.stops;
+        mix(mix(mix(dark, red, k), amber, k - 1.0), pale, k - 2.0)
     }
 }
 
@@ -155,13 +162,13 @@ fn main() -> gup::Result<()> {
         .collect();
 
     let ember = Ember {
-        cold: Color::hex(0x2b2d42),
-        hot: Color::hex(0xff7b00),
-        bend: 0.7,
+        stops: [0x1a0a00, 0xb2182b, 0xfdb863, 0xffffbf].map(Color::hex),
     };
 
     let mut plot = Plot::new();
-    plot.title("Sensor readings");
+    plot.title("Sensor readings")
+        .x_title("Column")
+        .y_title("Row");
     let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
     plot.add(Selection::<Reading, Circle>::new(readings))
         .attr(Circle::X, x.encode(|r: &Reading| r.x))
@@ -199,14 +206,13 @@ Everything else is derived by the macro from the WGSL: the input and output
 types, the entry point and the module. You never write a vertex layout or a
 binding.
 
-![Readings coloured by the Ember ramp, dark at the bottom left and orange at the top right](../../tests/golden/tutorials/03_custom_ramp.png)
+![Readings coloured by the Ember ramp, near-black at the bottom left, through red and amber, to pale yellow at the top right](../../tests/golden/tutorials/03_custom_ramp.png)
 
-The circles run from the dark `cold` colour at the bottom left to the orange
-`hot` colour at the top right, and because `bend` is below 1 they reach orange a
-little sooner than a straight mix would. The muddy middle is what mixing two
-colours component by component in sRGB gives; if you want a livelier ramp, that
-is a change to the WGSL (mix in another space, or add a middle colour), and
-nothing else in your program changes.
+The circles run from near-black at the bottom left, through red and amber, to
+pale yellow at the top right. Advice for your own ramps: give them several
+stops, or mix in linear light (convert sRGB to linear before `mix` and back
+after), because a straight sRGB mix between two distant colours passes through
+dull greys and browns.
 
 ## Step 3: Start a Chain with Your Function
 
