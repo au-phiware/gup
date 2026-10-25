@@ -167,6 +167,10 @@ facets.
 - [GUP-540](GUP-540_Explicit_Domain_Edge_Inset.md) ✅ — An explicit domain's
   near end is inset by the marks' overhang, so a point at `(0, 0)` or the first
   constant-width bar is drawn whole; bars still sit on the axis.
+- [GUP-528](GUP-528_Data_Aware_Edge_Insets.md) 📋 — Each end of an explicit axis
+  is inset by the overhang of the axis-bound marks that reach it (exact from CPU
+  columns, chunk stats otherwise), never more than GUP-540's; run it alone among
+  `plot.rs` stories. Deps: GUP-540 ✅.
 - [GUP-541](GUP-541_Builder_Tick_Formats.md) 📋 — `x_tick_format`/
   `y_tick_format` on `Plot` and every builder, surviving a scale change, and the
   dogfood `%Y-%m` and `$Nk` formats restored with SVG text checks. Deps: GUP-474
