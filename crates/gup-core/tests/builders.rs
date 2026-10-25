@@ -61,7 +61,7 @@ fn builder() -> gup_core::ScatterChart<Row> {
     gup_core::scatter(rows())
         .x(|r| r.x)
         .y(|r| r.y)
-        .color(|r| r.segment.as_str())
+        .color(|r| r.segment.clone())
         .size(|r| r.weight)
         .opacity(0.7)
         .legend_title("Segment")
@@ -172,9 +172,9 @@ fn color_scale_applies_in_either_order() {
     let _ = key;
     let before = gup_core::scatter(rows())
         .color_scale(Categorical::from_palette(palette))
-        .color(|r| r.segment.as_str());
+        .color(|r| r.segment.clone());
     let after = gup_core::scatter(rows())
-        .color(|r| r.segment.as_str())
+        .color(|r| r.segment.clone())
         .color_scale(Categorical::from_palette(palette));
     let all = rows();
     for chart in [before, after] {
@@ -282,7 +282,7 @@ fn line_builder(rows: Vec<Quote>) -> gup_core::LineChart<Quote> {
         .x_scale(Time::new())
         .x(|q| q.time)
         .y(|q| q.price)
-        .color(|q| q.ticker.as_str())
+        .color(|q| q.ticker.clone())
         .legend_title("Ticker")
         .grid(Axes::Y)
         .title("Three tickers, five years")
@@ -307,7 +307,7 @@ fn line_is_byte_identical_to_the_reference_plot() {
     let mut chart = gup_core::line(rows.clone())
         .x(|q| q.time)
         .y(|q| q.price)
-        .color(|q| q.ticker.as_str());
+        .color(|q| q.ticker.clone());
     let (built, built_layout) = chart.render_resolved(&cx, 640, 400).unwrap();
 
     let mut plot = Plot::new();
@@ -410,11 +410,11 @@ fn layers_mut_reaches_each_series() {
     let mut thin = gup_core::line(rows.clone())
         .x(|q| q.time)
         .y(|q| q.price)
-        .color(|q| q.ticker.as_str());
+        .color(|q| q.ticker.clone());
     let mut wide = gup_core::line(rows)
         .x(|q| q.time)
         .y(|q| q.price)
-        .color(|q| q.ticker.as_str());
+        .color(|q| q.ticker.clone());
     let layers = wide.layers_mut();
     assert_eq!(layers.len(), 3);
     layers.into_iter().nth(2).unwrap().width(Px(8.0));
@@ -453,12 +453,12 @@ fn line_setters_panic_after_the_first_draw() {
 fn stroke_gives_one_layer_and_the_last_colour_call_wins() {
     let rows = quotes(5);
     let mut chart = gup_core::line(rows.clone())
-        .color(|q| q.ticker.as_str())
+        .color(|q| q.ticker.clone())
         .stroke(Color::BLACK);
     assert_eq!(chart.layers_mut().len(), 1);
     let mut chart = gup_core::line(rows)
         .stroke(Color::BLACK)
-        .color(|q| q.ticker.as_str());
+        .color(|q| q.ticker.clone());
     assert_eq!(chart.layers_mut().len(), 3);
 }
 

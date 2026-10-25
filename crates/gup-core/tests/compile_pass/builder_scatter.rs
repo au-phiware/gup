@@ -17,7 +17,7 @@ fn main() {
     let chart = gup_core::scatter(data)
         .x(|d| d.gdp)
         .y(|d| d.life_exp)
-        .color(|d| d.continent.as_str())
+        .color(|d| d.continent.clone())
         .size(|d| d.population)
         .grid(Axes::Both);
     let _: &dyn Chart = &chart;

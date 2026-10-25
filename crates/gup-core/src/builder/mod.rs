@@ -19,7 +19,7 @@
 //! let mut chart = gup_core::scatter(countries)
 //!     .x(|c| c.gdp)
 //!     .y(|c| c.life)
-//!     .color(|c| c.region.as_str())
+//!     .color(|c| c.region.clone())
 //!     .size(|c| c.people);
 //!
 //! # let cx = Context::new_blocking()?;
@@ -43,6 +43,52 @@
 //! - Colour and size are an accessor plus a scale, combined at that point,
 //!   so a scale setter works before or after its accessor.
 //! - Rows are owned (`impl IntoIterator<Item = T>`).
+//! - Category keys are owned: see [Category keys](#category-keys).
+//!
+//! # Category keys
+//!
+//! The category setters (`color` on the scatter, line and bar builders, and
+//! the bar's `x`, `group` and `stack`) take a closure returning an owned
+//! key: any `Hash + Eq + Clone + Display` value, such as an integer, an enum
+//! that implements `Display`, `r.name.clone()` or a `&'static str`. A
+//! closure returning `r.name.as_str()` does not compile (rustc reports a
+//! lifetime error): return `r.name.clone()`.
+//!
+//! Keys are compared by their label, their `Display` text: two keys that
+//! print the same are one category, one colour and one series. Categories
+//! are in first-seen order.
+//!
+//! ```
+//! use std::fmt;
+//! use gup_core::{ChartExt, Context};
+//! # fn main() -> gup_core::Result<()> {
+//! #[derive(Clone, Copy, PartialEq, Eq, Hash)]
+//! enum Region { North, South }
+//! impl fmt::Display for Region {
+//!     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//!         f.write_str(match self { Region::North => "North", Region::South => "South" })
+//!     }
+//! }
+//! struct Sale { year: i32, region: Region, total: f64 }
+//! let mut rows = Vec::new();
+//! for year in [2021, 2022, 2023] {
+//!     rows.push(Sale { year, region: Region::North, total: 3.0 });
+//!     rows.push(Sale { year, region: Region::South, total: 2.0 });
+//! }
+//!
+//! let mut chart = gup_core::bar(rows)
+//!     .x(|s| s.year)
+//!     .y(|s| s.total)
+//!     .group(|s| s.region);
+//!
+//! # let cx = Context::new_blocking()?;
+//! let (_image, layout) = chart.render_resolved(&cx, 480, 320)?;
+//! for label in ["2021", "2022", "2023", "North", "South"] {
+//!     assert!(layout.texts.iter().any(|t| &*t.run.text == label), "{label}");
+//! }
+//! # Ok(())
+//! # }
+//! ```
 //!
 //! # Showing it
 //!
@@ -64,7 +110,7 @@
 //! | `.build_with_data(rows, ctx)` | rows go to `scatter(rows)`; the context is `Context::shared()` or passed to `save_png` |
 //! | `.x_scale(LinearScale::new(d0, d1, -1.0, 1.0))` | `.x_scale(Linear::new().domain(d0, d1))`; omit for an automatic domain |
 //! | `LogScale::base10(..)` | `.x_scale(Log::new())` |
-//! | `.color(Categorical/String)` | `.color(\|d\| d.key.as_str())` |
+//! | `.color(Categorical/String)` | `.color(\|d\| d.key.clone())` |
 //! | `.color(Float)` + `.color_scale(..)` | `.color_value(\|d\| d.v)` + `.color_value_scale(Sequential::..)` |
 //! | `.color(AccessorValue::Color(..))` per row | dropped: map keys through `.color_scale(Categorical::from_palette(..))` |
 //! | `.fill_color(c)` / `.stroke_color(c)` | `.fill(c)` / `.stroke(c)` |
@@ -75,7 +121,7 @@
 //! | `.connect_nulls(false)` | default: nulls (`None`, NaN) break the line |
 //! | `.connect_nulls(true)` / `.sort_x()` | dropped: filter or sort the rows |
 //! | `.interpolate`, `.smooth`, `.monotone`, `.step` | dropped: straight segments only |
-//! | `.group_by(..)` / `.stack_by(..)` / `.stack(..)` | `.group(\|d\| d.k.as_str())` / `.stack(\|d\| d.k.as_str())` |
+//! | `.group_by(..)` / `.stack_by(..)` / `.stack(..)` | `.group(\|d\| d.k.clone())` / `.stack(\|d\| d.k.clone())` |
 //! | `.gap(g)` / `.bar_width(..)` | `.padding(p)` / dropped: the band decides |
 //! | `.orient(..)` / `.horizontal()` | dropped: vertical bars only |
 //! | `.anti_alias(..)` / `.point_budget(..)` | dropped: analytic antialiasing always; LOD is T7 |
@@ -91,6 +137,11 @@
 //! | `composite().layer(a).layer(b)` | one `Plot` with `circles(..)`, `line(..)` and `rects(..)` layers |
 //! | `.layer_with_y2(..)` | `Plot::y_right` (RFC-001 S11) |
 
+use std::any::Any;
+use std::sync::Arc;
+
+use crate::column::DictionaryKey;
+
 pub(crate) mod bar;
 pub(crate) mod line;
 pub(crate) mod scatter;
@@ -98,6 +149,31 @@ pub(crate) mod scatter;
 pub use bar::{BarChart, bar};
 pub use line::{LineChart, line};
 pub use scatter::{ScatterChart, scatter};
+
+/// A category key accessor, erased to the key's label.
+pub(crate) type Key<T> = Arc<dyn Fn(&T) -> Arc<str> + Send + Sync>;
+
+/// Erase an owned key accessor to one returning the key's label.
+pub(crate) fn erase_key<T, K: DictionaryKey>(
+    key: impl Fn(&T) -> K + Send + Sync + 'static,
+) -> Key<T> {
+    Arc::new(move |row| label(key(row)))
+}
+
+/// A key's label: an `Arc<str>` key itself, a `String` or `&'static str`
+/// copied once into an `Arc<str>`, anything else through `to_string()`.
+pub(crate) fn label<K: DictionaryKey>(key: K) -> Arc<str> {
+    let any = &key as &dyn Any;
+    if let Some(label) = any.downcast_ref::<Arc<str>>() {
+        Arc::clone(label)
+    } else if let Some(s) = any.downcast_ref::<String>() {
+        Arc::from(&**s)
+    } else if let Some(s) = any.downcast_ref::<&'static str>() {
+        Arc::from(*s)
+    } else {
+        Arc::from(key.to_string())
+    }
+}
 
 /// The message of the panic when a layer setter is called on a chart that
 /// has been drawn.
@@ -158,5 +234,25 @@ mod send_sync {
         assert_send_sync::<super::ScatterChart<(f64, f64)>>();
         assert_send_sync::<super::LineChart<(f64, f64)>>();
         assert_send_sync::<super::BarChart<(f64, f64)>>();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn label_of_an_arc_str_is_the_same_allocation() {
+        let key: Arc<str> = Arc::from("north");
+        let l = label(Arc::clone(&key));
+        assert!(Arc::ptr_eq(&key, &l));
+    }
+
+    #[test]
+    fn label_of_strings_and_integers_is_their_text() {
+        assert_eq!(&*label(String::from("a b")), "a b");
+        assert_eq!(&*label("lit"), "lit");
+        assert_eq!(&*label(2021_i32), "2021");
+        assert_eq!(&*label(7_u32), "7");
     }
 }

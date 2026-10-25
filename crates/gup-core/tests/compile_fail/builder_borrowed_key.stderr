@@ -1,0 +1,8 @@
+error: lifetime may not live long enough
+  --> tests/compile_fail/builder_borrowed_key.rs:17:52
+   |
+17 |     let _ = gup_core::bar(Vec::<Row>::new()).x(|r| r.name.as_str());
+   |                                                 -- ^^^^^^^^^^^^^^^ returning this value requires that `'1` must outlive `'2`
+   |                                                 ||
+   |                                                 |return type of closure is &'2 str
+   |                                                 has type `&'1 Row`

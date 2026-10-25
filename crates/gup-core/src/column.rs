@@ -147,6 +147,11 @@ pub const NULL_CODE: u32 = u32::MAX;
 
 /// What a [`Dictionary`] can key on: strings, integers, enums, anything
 /// hashable whose `Display` is its label (on an axis or in a legend).
+#[diagnostic::on_unimplemented(
+    message = "`{Self}` is not a category key",
+    label = "this key accessor returns `{Self}`",
+    note = "a category key is an owned value that is `Hash + Eq + Clone + Display`: an integer, a `String` (`|row| row.name.clone()`), an enum that implements `Display`, or a `&'static str`"
+)]
 pub trait DictionaryKey: Hash + Eq + Clone + Display + Send + Sync + 'static {}
 
 impl<K: Hash + Eq + Clone + Display + Send + Sync + 'static> DictionaryKey for K {}

@@ -6,20 +6,15 @@
 use std::any::Any;
 use std::sync::Arc;
 
-use super::{DRAWN, plot_setters};
+use super::{DRAWN, Key, erase_key, plot_setters};
 use crate::Appender;
+use crate::column::DictionaryKey;
 use crate::geom::Point;
 use crate::prelude::*;
 use crate::{ColumnValue, Context, Input, Layout, Resolved, Response, Result, RowId};
 
-type Key<T> = Arc<dyn for<'a> Fn(&'a T) -> &'a str + Send + Sync>;
 type Num<T> = Arc<dyn Fn(&T) -> f64 + Send + Sync>;
 type Op<T> = Box<dyn FnOnce(&mut Selection<T, Circle>) + Send + Sync>;
-
-/// Fix a closure's signature to the higher-ranked key form.
-fn key_fn<T, F: for<'a> Fn(&'a T) -> &'a str>(f: F) -> F {
-    f
-}
 
 enum ColorSpec<T> {
     Default,
@@ -125,9 +120,16 @@ impl<T: Send + Sync + 'static> ScatterChart<T> {
 
     /// Colour by a category key per row, through the colour scale. The last
     /// of `color`, `color_value` and `fill` wins.
-    pub fn color(mut self, key: impl for<'a> Fn(&'a T) -> &'a str + Send + Sync + 'static) -> Self {
+    ///
+    /// The accessor returns an owned key (an integer, an enum with `Display`,
+    /// `r.name.clone()`, a `&'static str`); see
+    /// [category keys](crate::builder#category-keys).
+    pub fn color<K: DictionaryKey>(
+        mut self,
+        key: impl Fn(&T) -> K + Send + Sync + 'static,
+    ) -> Self {
         self.check_open();
-        self.color = ColorSpec::Key(Arc::new(key));
+        self.color = ColorSpec::Key(erase_key(key));
         self
     }
 
@@ -264,7 +266,7 @@ impl<T: Send + Sync + 'static> ScatterChart<T> {
             ColorSpec::Key(key) => {
                 let key = Arc::clone(key);
                 let scale = ScaleRef::new(self.color_scale.clone());
-                sel.fill(scale.encode_key(key_fn(move |r: &T| key(r))));
+                sel.fill(scale.encode_owned_key(move |r: &T| key(r)));
             }
             ColorSpec::Value(f) => {
                 let f = Arc::clone(f);

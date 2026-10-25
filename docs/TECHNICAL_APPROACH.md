@@ -22,7 +22,7 @@ let data = vec![
 let mut chart = gup::scatter(data)
     .x(|d| d.gdp)
     .y(|d| d.life_exp)
-    .color(|d| d.continent.as_str())
+    .color(|d| d.continent.clone())
     .size(|d| d.population);
 let image = chart.render(&Context::shared()?, 800, 500)?;
 assert_eq!(image.dimensions(), (800, 500));
@@ -360,7 +360,7 @@ Findings: [S8b][rfc-s8b]; S9a to S9f (picking, brush, culling); S12 (waker).
 
 `gup::scatter`, `gup::bar` and `gup::line` take rows and return a builder that
 owns a `Plot`. Setters are typed (`.x(|d| d.gdp)`,
-`.color(|d| d.region.as_str())`, `.size(..)`, `.title(..)`, `.tooltip(..)`,
+`.color(|d| d.region.clone())`, `.size(..)`, `.title(..)`, `.tooltip(..)`,
 `.window(..)`; bars add `.group(..)` and `.stack(..)`), and a builder is a
 `Chart`, so `gup::show(chart)`, `render` and `save_png` all take it. Building is
 cheap: columns are evaluated at the first resolve. A builder is not a ceiling:

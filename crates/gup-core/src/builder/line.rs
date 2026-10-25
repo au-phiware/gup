@@ -8,19 +8,14 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use std::task::Waker;
 
-use super::{DRAWN, plot_setters};
+use super::{DRAWN, Key, erase_key, plot_setters};
 use crate::append::{Appender, FeedRx};
+use crate::column::DictionaryKey;
 use crate::geom::Point;
 use crate::prelude::*;
 use crate::{ColumnValue, Context, Input, Layout, Resolved, Response, Result, RowId};
 
-type Key<T> = Arc<dyn for<'a> Fn(&'a T) -> &'a str + Send + Sync>;
 type Op<T> = Box<dyn Fn(&mut Selection<T, Line>) + Send + Sync>;
-
-/// Fix a closure's signature to the higher-ranked key form.
-fn key_fn<T, F: for<'a> Fn(&'a T) -> &'a str>(f: F) -> F {
-    f
-}
 
 enum ColorSpec<T> {
     Default,
@@ -97,7 +92,7 @@ pub struct LineChart<T> {
     /// The colour scale shared by every key's layer, once materialised.
     scale: Option<ScaleRef<Categorical>>,
     /// Each key's index among the line layers.
-    keys: HashMap<String, usize>,
+    keys: HashMap<Arc<str>, usize>,
     /// Rows pushed through [`appender`](LineChart::appender) of a keyed
     /// chart, routed to the key's layer at resolve.
     feed: Option<FeedRx<T>>,
@@ -157,9 +152,16 @@ impl<T: Send + Sync + 'static> LineChart<T> {
 
     /// One line per key, in first-seen order, coloured by key. The last of
     /// `color` and `stroke` wins.
-    pub fn color(mut self, key: impl for<'a> Fn(&'a T) -> &'a str + Send + Sync + 'static) -> Self {
+    ///
+    /// The accessor returns an owned key (an integer, an enum with `Display`,
+    /// `r.name.clone()`, a `&'static str`); see
+    /// [category keys](crate::builder#category-keys).
+    pub fn color<K: DictionaryKey>(
+        mut self,
+        key: impl Fn(&T) -> K + Send + Sync + 'static,
+    ) -> Self {
         self.check_open();
-        self.color = ColorSpec::Key(Arc::new(key));
+        self.color = ColorSpec::Key(erase_key(key));
         self
     }
 
@@ -235,16 +237,16 @@ impl<T: Send + Sync + 'static> LineChart<T> {
         let Some(key) = key else {
             return vec![rows];
         };
-        let mut index: HashMap<String, usize> = HashMap::new();
+        let mut index: HashMap<Arc<str>, usize> = HashMap::new();
         let slots: Vec<usize> = rows
             .iter()
             .map(|r| {
                 let k = key(r);
-                if let Some(&i) = index.get(k) {
+                if let Some(&i) = index.get(&k) {
                     i
                 } else {
                     let i = index.len();
-                    index.insert(k.to_owned(), i);
+                    index.insert(k, i);
                     i
                 }
             })
@@ -270,7 +272,7 @@ impl<T: Send + Sync + 'static> LineChart<T> {
             ColorSpec::Key(key) => {
                 let key = Arc::clone(key);
                 let scale = self.scale.as_ref().expect("the colour scale is made first");
-                sel.color(scale.encode_key(key_fn(move |r: &T| key(r))));
+                sel.color(scale.encode_owned_key(move |r: &T| key(r)));
             }
         }
         if let Some(title) = &self.legend_title {
@@ -290,7 +292,7 @@ impl<T: Send + Sync + 'static> LineChart<T> {
         };
         for series in Self::split(rows, key.as_ref()) {
             if let Some(key) = &key {
-                let name = key(&series[0]).to_owned();
+                let name = key(&series[0]);
                 let index = self.keys.len();
                 self.keys.insert(name, index);
             }
@@ -314,7 +316,7 @@ impl<T: Send + Sync + 'static> LineChart<T> {
             return Ok(());
         };
         for series in Self::split(rows, Some(&key)) {
-            let name = key(&series[0]).to_owned();
+            let name = key(&series[0]);
             if let Some(&i) = self.keys.get(&name) {
                 let layer = self
                     .plot

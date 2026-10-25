@@ -17,7 +17,10 @@
 //! none: the library's concrete `CpuMirror` impls carry
 //! `#[diagnostic::do_not_recommend]` (add it to a new one), which keeps them
 //! out of rustc's "other types implement" lists, and the unknown-import and
-//! unknown-module errors name only the closest module.
+//! unknown-module errors name only the closest module. `builder_borrowed_key`
+//! (rustc's lifetime error; no custom message is possible) and
+//! `builder_key_without_display` (the "not a category key" message) cover the
+//! builders' owned category keys (GUP-537).
 
 #[test]
 fn channel_mistakes_do_not_compile() {
