@@ -33,7 +33,7 @@
 //! ## A histogram in one line
 //!
 //! `gup::histogram` counts a column into bins that start and end on round
-//! numbers; [`Bins`](gup_core::Bins) (in the prelude) chooses them.
+//! numbers; [`Bins`] (in the prelude) chooses them.
 //!
 //! ```
 //! use gup::prelude::*;

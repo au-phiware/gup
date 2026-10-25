@@ -48,9 +48,9 @@ bin edges. `scale::tick_step` already computes such a step for ticks.
 
 ### AC1: `transform::bin`
 
-- [ ] `gup_core::transform` (new public module) has `Bins`, `Bin` and `bin` as
+- [x] `gup_core::transform` (new public module) has `Bins`, `Bin` and `bin` as
       in Decisions, documented with doctests.
-- [ ] Unit tests: `Bins::Auto` on 1,000 values spanning 0.3–9.7 gives 10 bins of
+- [x] Unit tests: `Bins::Auto` on 1,000 values spanning 0.3–9.7 gives 10 bins of
       width 1 from 0 to 10 (Sturges asks for ⌈log2 1000⌉ + 1 = 11 bins;
       `tick_step(0.3, 9.7, 11)` is 1); values on an inner edge go to the upper
       bin, the maximum to the last bin; NaN and infinities are dropped;
@@ -61,22 +61,22 @@ bin edges. `scale::tick_step` already computes such a step for ticks.
 
 ### AC2: The builder
 
-- [ ] `gup::histogram(rows) -> HistogramChart<T>` with the methods in Decisions,
+- [x] `gup::histogram(rows) -> HistogramChart<T>` with the methods in Decisions,
       exported from the crate root; a doctest from the `gup` crate asserting the
       bar count from `layers_mut()`.
-- [ ] The x axis domain is exactly the first to the last edge, and its ticks
+- [x] The x axis domain is exactly the first to the last edge, and its ticks
       fall on bin edges for `Bins::Auto` (test: every x tick value is an edge).
-- [ ] Bars are separated by a 1 px gap when a bin is at least 4 px wide, and
+- [x] Bars are separated by a 1 px gap when a bin is at least 4 px wide, and
       touch otherwise (pixel test at two widths).
-- [ ] `color(key)` stacks each bin's counts by key in first-seen order with a
+- [x] `color(key)` stacks each bin's counts by key in first-seen order with a
       legend (test: per-bin totals equal the unkeyed counts).
-- [ ] The y axis title defaults to "Count"; `y_title(..)` replaces it.
-- [ ] `tooltip(|b: &HistogramBin| ..)` and `pick(at) -> Option<&HistogramBin>`
+- [x] The y axis title defaults to "Count"; `y_title(..)` replaces it.
+- [x] `tooltip(|b: &HistogramBin| ..)` and `pick(at) -> Option<&HistogramBin>`
       work (test).
 
 ### AC3: Visual
 
-- [ ] Golden `gup_core/histogram` (640×400): 2,000 deterministic values from two
+- [x] Golden `gup_core/histogram` (640×400): 2,000 deterministic values from two
       overlapping normal-like humps (a fixed LCG plus Box–Muller in the test),
       stacked by hump. The worker reads it: round-number edges, ticks on edges,
       1 px gaps, legend, no clipped first or last bar.
@@ -172,10 +172,10 @@ bin edges. `scale::tick_step` already computes such a step for ticks.
 
 ## Technical Tasks
 
-- [ ] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30 min.
-- [ ] `transform.rs` with `bin` and its unit tests; commit.
-- [ ] `builder/histogram.rs`, exports, doctest; commit.
-- [ ] Gap, stacking, y title, tooltip and pick tests; golden; commit.
+- [x] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30 min.
+- [x] `transform.rs` with `bin` and its unit tests; commit.
+- [x] `builder/histogram.rs`, exports, doctest; commit.
+- [x] Gap, stacking, y title, tooltip and pick tests; golden; commit.
 
 ## Dependencies
 
@@ -201,7 +201,7 @@ bin edges. `scale::tick_step` already computes such a step for ticks.
 
 ## Success Metrics
 
-- [ ] One call draws a histogram whose bins start and end on round numbers.
+- [x] One call draws a histogram whose bins start and end on round numbers.
 
 ## Risk Assessment
 
@@ -211,15 +211,73 @@ bin edges. `scale::tick_step` already computes such a step for ticks.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1` and
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1` and
       `cargo test -p gup-core -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (`gup_core/histogram`)
-- [ ] `mask wasm-browser`: not needed, builder only
-- [ ] WASM size: `mask wasm-size` scatter gz bytes reported
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye (`gup_core/histogram`)
+- [x] `mask wasm-browser`: not needed, builder only
+- [x] WASM size: `mask wasm-size` scatter gz bytes reported
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `crates/gup-core/src/transform.rs`: `Bins`, `Bin`, `bin` (10 unit tests,
+  doctests). `builder/histogram.rs`: `histogram`, `HistogramChart`,
+  `HistogramBin` (4 unit tests, doctest); exports from the crate root, `Bins`
+  also from the prelude; a `gup` crate doctest asserting the bar count.
+- `scale/linear.rs`: a `pub(crate)` `tick_unit` so ticks fall on bin edges (see
+  the retrospective).
+- `tests/histogram_png.rs` (6 tests) and golden `gup_core/histogram`: a 640x400
+  two-hump stacked histogram with round-number 5-minute bins, ticks at 10, 20
+  ... 80, 1 px white gaps, bars on the baseline, "Count" title, "Session"
+  legend, first and last bars whole.
+- WASM scatter: 334540 B gz (+2% vs recorded 334149; far under the 4 KB
+  trigger).
+
+## Retrospective
+
+**Completed**: 2026-10-26
+
+### Key Technical Learnings
+
+#### Ticks on bin edges
+
+- **Challenge**: the plot picks tick counts from the width, so a 12..38 axis
+  with bins of 2 got ticks at 15, 20, not on edges, failing the AC.
+- **Solution**: `Linear::tick_unit` (crate-private) rounds the default step to
+  the bin width times 1, 2, 5, 10. Set only for regular bins (`Auto`, `Count`,
+  `Width`), not `Edges` nor a single centred bin.
+- **Pattern**: a chart that owns its edges should constrain tick steps, not hope
+  the two 1-2-5 sequences agree.
+
+#### Gap and variable bins
+
+- The gap is a per-layer `Derived` offset (+0.5 / -0.5 px) decided by the
+  narrowest bin, so with `Bins::Edges` all bars keep or lose the gap together.
+
+### Architectural Decisions
+
+#### Stacking by tally
+
+- **Decision**: a pure `tally` function bins all values once for shared edges,
+  then counts per key; empty bars are omitted; `HistogramBin` rows are not
+  readable from outside, so row tests are unit tests in the module.
+- **Trade-off**: `x_domain` filters values before choosing edges, so the axis
+  may extend past `lo`/`hi` to round numbers (documented).
+
+### Development Workflow Insights
+
+- The explicit x domain leaves about 13 px of plot rect right of the last bar in
+  the golden (the axis line runs past the last bar). That is plot-layout
+  behaviour (GUP-529 territory); not changed here.
+- `mask visual-regression` does not exist; the golden is checked by
+  `cargo test -p gup-core --test histogram_png`.
+
+### Follow-up Stories
+
+None (GUP-524 and GUP-525 not needed).
