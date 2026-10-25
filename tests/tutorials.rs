@@ -141,3 +141,49 @@ fn tutorial_1_grouped_bars() {
 
     check("tutorials/01_grouped_bars", &mut chart);
 }
+
+/// Tutorial 2 (`02_data_binding.md`), "Step 4: Colour Through a Scale": a line
+/// layer and a scatter layer coloured by value, with a legend.
+#[test]
+fn tutorial_2_layers() {
+    #[derive(Clone)]
+    struct Month {
+        n: f64,
+        mean: f64,
+    }
+    let months = [
+        (1.0, 22.0),
+        (2.0, 22.0),
+        (3.0, 21.0),
+        (4.0, 18.0),
+        (5.0, 15.0),
+        (6.0, 13.0),
+        (7.0, 12.0),
+        (8.0, 13.0),
+        (9.0, 16.0),
+        (10.0, 18.0),
+        (11.0, 20.0),
+        (12.0, 21.0),
+    ]
+    .map(|(n, mean)| Month { n, mean });
+
+    let mut plot = Plot::new();
+    plot.title("Monthly temperature")
+        .x_title("Month")
+        .y_title("Mean temperature (°C)");
+    let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
+    let heat = Sequential::viridis();
+
+    plot.line(months.clone())
+        .x(|m| m.n)
+        .y(|m| m.mean)
+        .color(Color::hex(0xb0b0b0));
+    plot.add(Selection::<Month, Circle>::new(months))
+        .attr(Circle::X, x.encode(|m: &Month| m.n))
+        .attr(Circle::Y, y.encode(|m: &Month| m.mean))
+        .attr(Circle::FILL, heat.encode(|m: &Month| m.mean))
+        .attr(Circle::RADIUS, Px(6.0))
+        .legend_title(Circle::FILL, "Mean (°C)");
+
+    check("tutorials/02_layers", &mut plot);
+}
