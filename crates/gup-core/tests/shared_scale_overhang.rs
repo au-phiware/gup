@@ -27,9 +27,9 @@ fn months() -> Vec<Month> {
     .collect()
 }
 
-/// Assert the pixel 5 px from `(x, y)` in each direction is inside `plot`.
+/// Assert the disc's edge (radius 6) is at least 2 px inside `plot` in each direction.
 fn assert_whole(plot: Rect, what: &str, x: f32, y: f32) {
-    for (px, py) in [(x, y - 5.0), (x, y + 5.0), (x - 5.0, y), (x + 5.0, y)] {
+    for (px, py) in [(x, y - 8.0), (x, y + 8.0), (x - 8.0, y), (x + 8.0, y)] {
         assert!(
             px >= plot.left() && px <= plot.right() && py >= plot.top() && py <= plot.bottom(),
             "{what}: disc at ({x}, {y}) reaches ({px}, {py}) outside plot {plot:?}"

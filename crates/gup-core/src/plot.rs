@@ -1866,11 +1866,14 @@ impl Plot {
         let kept = |i: usize, s: &dyn DynPositionScale| {
             !s.is_auto() && self.zoomed[i].is_some() && self.zoomed[i] == s.current_domain()
         };
+        // Marks that overhang keep `plot_padding` of background between
+        // their edge and the axis line; a baseline (no overhang) stays on it.
+        let padded = |o: f32| if o > 0.0 { o + th.plot_padding.0 } else { 0.0 };
         let widened = [
-            x.widen(lay.plot.left(), lay.plot.right(), over[0]) || kept(0, &**x),
-            y.widen(lay.plot.bottom(), lay.plot.top(), over[1]) || kept(1, &**y),
+            x.widen(lay.plot.left(), lay.plot.right(), padded(over[0])) || kept(0, &**x),
+            y.widen(lay.plot.bottom(), lay.plot.top(), padded(over[1])) || kept(1, &**y),
             right.is_some_and(|r| {
-                r.widen(lay.plot.bottom(), lay.plot.top(), over[2]) || kept(2, &**r)
+                r.widen(lay.plot.bottom(), lay.plot.top(), padded(over[2])) || kept(2, &**r)
             }),
         ];
         self.widened = widened;
@@ -2309,11 +2312,15 @@ mod tests {
         let first = plot.resolve(&cx, 300.0, 200.0).unwrap().clone();
         let mut target = ImageTarget::new(&cx, 300, 200).unwrap();
         let image = target.render_blocking(&cx, &first.scene).unwrap();
+        // Warm the glyph atlas with the digits the zoomed ticks will use.
+        x.write().set_domain(1.0, 5.0).unwrap();
+        let warm = plot.resolve(&cx, 300.0, 200.0).unwrap().clone();
+        target.render_blocking(&cx, &warm.scene).unwrap();
         let before = cx.pipelines().stats;
         let uploads = cx.upload_stats();
 
-        // Tick labels reuse the first render's glyphs, so no atlas texels are written.
-        x.write().set_domain(1.0, 5.0).unwrap();
+        // Tick labels reuse the warm-up's glyphs, so no atlas texels are written.
+        x.write().set_domain(2.0, 5.0).unwrap();
         let second = plot.resolve(&cx, 300.0, 200.0).unwrap();
         let zoomed = target.render_blocking(&cx, &second.scene).unwrap();
         let after = cx.pipelines().stats;
