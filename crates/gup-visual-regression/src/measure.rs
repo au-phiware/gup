@@ -1,24 +1,40 @@
 // Copyright (C) 2026 Corin Lawson
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! Target-agnostic pixel measurements on decoded RGBA images.
+//! Counting measurements over fractional regions of an [`RgbaImage`].
 //!
-//! These functions know nothing about gup: they take an [`image::RgbaImage`]
-//! and a [`Region`] (fractions of the image size) and return counts. The
-//! suite manifest (`suite.rs`) turns them into pass/fail checks. They are
-//! deliberately simple and should migrate to the shared visual-assertion
-//! module once it exists (GUP-388).
+//! Ported unchanged from the dogfood suite (GUP-394, GUP-397). Each function
+//! takes an image and a [`Region`] (fractions of the image size, origin
+//! top-left) and returns a count, fraction or centroid list; the caller turns
+//! it into a pass/fail check. Nothing here knows about gup.
+//!
+//! "Ink" differs from [`checks`](crate::checks): [`count_ink`] counts pixels
+//! darker than the background by a luma contrast (dark text and axis lines
+//! only), whereas the `checks` module's ink is any pixel more than a
+//! perceptual (CIEDE2000) distance from the background, whatever its colour.
+//!
+//! ```
+//! use gup_visual_regression::{Rgba8, RgbaImage};
+//! use gup_visual_regression::measure::{Region, count_near};
+//!
+//! let img = RgbaImage::filled(10, 10, Rgba8::rgb(31, 119, 180));
+//! assert_eq!(count_near(&img, Region::ALL, [31, 119, 180], 4), 100);
+//! ```
 
-use image::RgbaImage;
+use crate::{Rgba8, RgbaImage};
 use std::collections::HashMap;
 
 /// A rectangle expressed as fractions (0..1) of the image width and height,
 /// origin top-left.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Region {
+    /// Left edge fraction.
     pub x0: f32,
+    /// Top edge fraction.
     pub y0: f32,
+    /// Right edge fraction (exclusive).
     pub x1: f32,
+    /// Bottom edge fraction (exclusive).
     pub y1: f32,
 }
 
@@ -31,6 +47,7 @@ impl Region {
         y1: 1.0,
     };
 
+    /// A region from its edge fractions.
     pub const fn new(x0: f32, y0: f32, x1: f32, y1: f32) -> Self {
         Self { x0, y0, x1, y1 }
     }
@@ -49,12 +66,12 @@ impl Region {
 
     fn pixels<'a>(&self, img: &'a RgbaImage) -> impl Iterator<Item = [u8; 3]> + 'a {
         let (x0, y0, x1, y1) = self.bounds(img);
-        (y0..y1).flat_map(move |y| (x0..x1).map(move |x| rgb(img.get_pixel(x, y).0)))
+        (y0..y1).flat_map(move |y| (x0..x1).map(move |x| rgb(img.pixel(x, y))))
     }
 }
 
-fn rgb(p: [u8; 4]) -> [u8; 3] {
-    [p[0], p[1], p[2]]
+fn rgb(p: Rgba8) -> [u8; 3] {
+    [p.r, p.g, p.b]
 }
 
 fn max_channel_diff(a: [u8; 3], b: [u8; 3]) -> u8 {
@@ -69,8 +86,8 @@ fn max_channel_diff(a: [u8; 3], b: [u8; 3]) -> u8 {
 /// the background.
 pub fn background(img: &RgbaImage) -> [u8; 3] {
     let mut hist: HashMap<[u8; 3], usize> = HashMap::new();
-    for p in img.pixels() {
-        *hist.entry(rgb(p.0)).or_default() += 1;
+    for (_, _, p) in img.pixels() {
+        *hist.entry(rgb(p)).or_default() += 1;
     }
     hist.into_iter()
         .max_by_key(|(_, n)| *n)
@@ -115,7 +132,7 @@ pub fn blob_centroids(
     let (x0, y0, x1, y1) = region.bounds(img);
     let (w, h) = ((x1 - x0) as usize, (y1 - y0) as usize);
     let hit = |x: usize, y: usize| {
-        max_channel_diff(rgb(img.get_pixel(x0 + x as u32, y0 + y as u32).0), target) <= tol
+        max_channel_diff(rgb(img.pixel(x0 + x as u32, y0 + y as u32)), target) <= tol
     };
     let mut seen = vec![false; w * h];
     let mut out = Vec::new();
@@ -219,7 +236,7 @@ pub fn tooltip_panel(img: &RgbaImage, region: Region) -> Panel {
     if x1 <= x0 || y1 <= y0 {
         return none;
     }
-    let px = |x: u32, y: u32| rgb(img.get_pixel(x, y).0);
+    let px = |x: u32, y: u32| rgb(img.pixel(x, y));
     let all = || (y0..y1).flat_map(|y| (x0..x1).map(move |x| (x, y)));
     let Some(fill) = mode(all().map(|(x, y)| px(x, y))) else {
         return none;
@@ -302,7 +319,7 @@ pub fn count_runs(img: &RgbaImage, y: f32, x0: f32, x1: f32, min_len: u32) -> us
     let (start, end) = ((x0 * w) as u32, ((x1 * w) as u32).min(img.width()));
     let (mut runs, mut len) = (0, 0);
     for x in start..end {
-        if max_channel_diff(rgb(img.get_pixel(x, row).0), bg) > 8 {
+        if max_channel_diff(rgb(img.pixel(x, row)), bg) > 8 {
             len += 1;
         } else {
             if len >= min_len {
@@ -367,20 +384,25 @@ fn hue_distance(a: f32, b: f32) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use image::Rgba;
+
+    const WHITE: Rgba8 = Rgba8::WHITE;
+
+    fn rgba(r: u8, g: u8, b: u8, a: u8) -> Rgba8 {
+        Rgba8::new(r, g, b, a)
+    }
 
     /// White 100x50 image with a blue block on the left half and a black
     /// 10x2 "text" bar near the top-right.
     fn synthetic() -> RgbaImage {
-        let mut img = RgbaImage::from_pixel(100, 50, Rgba([255, 255, 255, 255]));
+        let mut img = RgbaImage::filled(100, 50, WHITE);
         for y in 20..40 {
             for x in 10..40 {
-                img.put_pixel(x, y, Rgba([31, 119, 180, 255]));
+                img.set_pixel(x, y, rgba(31, 119, 180, 255));
             }
         }
         for y in 2..4 {
             for x in 80..90 {
-                img.put_pixel(x, y, Rgba([0, 0, 0, 255]));
+                img.set_pixel(x, y, rgba(0, 0, 0, 255));
             }
         }
         img
@@ -393,7 +415,7 @@ mod tests {
 
     #[test]
     fn blank_image_has_no_foreground() {
-        let img = RgbaImage::from_pixel(10, 10, Rgba([255, 255, 255, 255]));
+        let img = RgbaImage::filled(10, 10, WHITE);
         assert_eq!(non_background_fraction(&img, Region::ALL, 8), 0.0);
         assert!(non_background_fraction(&synthetic(), Region::ALL, 8) > 0.1);
     }
@@ -427,7 +449,7 @@ mod tests {
         let mut img = synthetic();
         for y in 20..40 {
             for x in 50..60 {
-                img.put_pixel(x, y, Rgba([200, 60, 60, 255]));
+                img.set_pixel(x, y, rgba(200, 60, 60, 255));
             }
         }
         assert_eq!(count_runs(&img, 0.5, 0.0, 1.0, 3), 2);
@@ -438,7 +460,7 @@ mod tests {
     fn grey_excludes_background_and_black() {
         let mut img = synthetic();
         for x in 0..100 {
-            img.put_pixel(x, 45, Rgba([220, 220, 220, 255]));
+            img.set_pixel(x, 45, rgba(220, 220, 220, 255));
         }
         assert_eq!(count_grey(&img, Region::ALL, 0.08, 120.0), 100);
         assert_eq!(count_saturated(&img, Region::ALL, 0.25), 600);
@@ -450,9 +472,9 @@ mod tests {
     }
 
     fn tooltip_img(fill: [u8; 3], ink: [u8; 3], bars: usize) -> RgbaImage {
-        let mut img = RgbaImage::from_pixel(200, 160, Rgba([255, 255, 255, 255]));
+        let mut img = RgbaImage::filled(200, 160, WHITE);
         let dot = |img: &mut RgbaImage, x, y, c: [u8; 3]| {
-            img.put_pixel(x, y, Rgba([c[0], c[1], c[2], 255]))
+            img.set_pixel(x, y, Rgba8::rgb(c[0], c[1], c[2]))
         };
         for y in 0..160 {
             for x in 0..200 {
@@ -519,7 +541,7 @@ mod tests {
         for y in 24..136 {
             for x in 34..146 {
                 if (x * 7 + y * 13) % 10 == 0 {
-                    img.put_pixel(x, y, Rgba([200, 30, 30, 255]));
+                    img.set_pixel(x, y, rgba(200, 30, 30, 255));
                 }
             }
         }

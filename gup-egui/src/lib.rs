@@ -48,6 +48,8 @@
 //! }
 //! ```
 
+#![warn(missing_docs)]
+
 mod input;
 mod render;
 mod widget;

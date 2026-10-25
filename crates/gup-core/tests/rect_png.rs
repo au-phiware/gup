@@ -338,3 +338,51 @@ fn numeric_axis_bars_fit_and_a_derived_baseline_is_in_the_domain() {
         );
     }
 }
+
+/// GUP-540: bars of a constant 20 px width on a numeric x axis with an
+/// explicit domain starting at the first bar's x: the first bar is whole,
+/// and the bars still stand on the x axis (y has no overhang).
+#[test]
+fn the_first_bar_on_an_explicit_x_domain_is_whole_and_on_the_axis() {
+    let cx = Context::new_blocking().unwrap();
+    let rows: Vec<(f64, f64)> = (0..5)
+        .map(|i| (f64::from(i), 40.0 + 10.0 * f64::from(i)))
+        .collect();
+    let mut plot = Plot::new();
+    let x = plot.x(Linear::new().domain(0.0, 4.0));
+    let y = plot.y(Linear::new().domain(0.0, 100.0));
+    plot.legends(false);
+    plot.add(Selection::<(f64, f64), Rect>::new(rows))
+        .attr(Rect::X, x.encode(|r: &(f64, f64)| r.0))
+        .attr(Rect::WIDTH, Px(20.0))
+        .attr(Rect::Y, y.encode(|r: &(f64, f64)| r.1))
+        .attr(Rect::Y_END, y.encode(|_: &(f64, f64)| 0.0))
+        .attr(Rect::FILL, Color::hex(0x000000));
+    let resolved = plot.resolve(&cx, WIDTH as f32, HEIGHT as f32).unwrap();
+    let image = ImageTarget::new(&cx, WIDTH, HEIGHT)
+        .unwrap()
+        .render_blocking(&cx, &resolved.scene)
+        .unwrap();
+    let p = resolved.layout.plot;
+    let base = y.read().eval(0.0);
+    let row = (base - 3.0) as u32;
+    for i in [0.0, 2.0, 4.0] {
+        let c = x.read().eval(i) as u32;
+        let (a, b) = run(&image, c, row, true);
+        assert!((19..=22).contains(&(b - a)), "bar at {i}: ink {a}..{b}");
+        assert!(
+            a as f32 >= p.left() - 2.0 && (b as f32) <= p.right(),
+            "bar at {i}: {a}..{b} in {p:?}"
+        );
+        // The row just above the axis line is bar colour across the bar.
+        for xx in a + 1..b - 1 {
+            assert!(image.get_pixel(xx, row).0[0] < 128, "bar {i} gap at {xx}");
+        }
+    }
+    let first = x.read().eval(0.0) as f32;
+    assert!(
+        first - 10.0 >= p.left() - 0.5,
+        "first bar's left edge {} vs plot {p:?}",
+        first - 10.0
+    );
+}

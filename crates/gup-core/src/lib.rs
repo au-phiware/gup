@@ -126,6 +126,8 @@
 //!   no handler there); a host's device ([`Context::from_wgpu`]) keeps the
 //!   host's handler.
 
+#![warn(missing_docs)]
+
 /// The exact wgpu version Gup is built on. Hosts passing devices to
 /// [`Context::from_wgpu`] must use the same major version.
 pub use wgpu;

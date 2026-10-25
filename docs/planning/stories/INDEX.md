@@ -75,7 +75,7 @@ may run together; GUP-397 touches only `dogfood/` and the harness crate. Run
   so yellow (1.32:1 on white) comes seventh, the marks' default blue taken from
   the palette, and linear-family tick and ramp labels grouped (`10,000`) when a
   tick set reaches 10,000. Deps: GUP-388 ✅, GUP-474 ✅.
-- [GUP-397](GUP-397_Dogfood_Checks_On_Shared_Visual_Assertions.md) 📋 — Move
+- [GUP-397](GUP-397_Dogfood_Checks_On_Shared_Visual_Assertions.md) ✅ — Move
   dogfood's `pixels.rs` verbatim into `gup_visual_regression::measure`, drop
   dogfood's `image` dependency, and prove every check's status and detail
   unchanged on real outputs. Deps: GUP-394 ✅, GUP-388 ✅, GUP-501 ✅.
@@ -127,8 +127,8 @@ GUP-535 in turn (they share `src/lib.rs`); GUP-536 after N2's builders.
   (tooltips, `on_row`, zoom, pan, brush, tested by sending `Input`) and 5
   (appenders, `Window::LastRows`) as doctests; the last banner and stale assets
   removed. Deps: GUP-530 📋.
-- [GUP-533](GUP-533_Documentation_Lint_Gates.md) 📋 — `#![warn(missing_docs)]`
-  in every crate (all pass today) and `mask doc` with
+- [GUP-533](GUP-533_Documentation_Lint_Gates.md) ✅ Complete —
+  `#![warn(missing_docs)]` in every crate (all pass today) and `mask doc` with
   `RUSTDOCFLAGS="-D warnings"` over seven crates in `mask all-check`.
 - [GUP-534](GUP-534_Honest_README_And_Tested_Quick_Start.md) 📋 — README tagline
   and "Why Gup" cut to `PERF_BUDGETS.md` figures, a "Not yet" list, a
@@ -164,7 +164,7 @@ facets.
   `DictionaryKey`, compared by label, with a "not a category key" diagnostic and
   a snapshot of the borrowed-key lifetime error; Plot-layer `encode_key`
   unchanged. Deps: GUP-419 ✅, GUP-464 ✅.
-- [GUP-540](GUP-540_Explicit_Domain_Edge_Inset.md) 📋 — An explicit domain's
+- [GUP-540](GUP-540_Explicit_Domain_Edge_Inset.md) ✅ — An explicit domain's
   near end is inset by the marks' overhang, so a point at `(0, 0)` or the first
   constant-width bar is drawn whole; bars still sit on the axis.
 - [GUP-541](GUP-541_Builder_Tick_Formats.md) 📋 — `x_tick_format`/

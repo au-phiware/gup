@@ -279,3 +279,57 @@ fn categorical_scatter_with_nulls() {
     // is not); the SVG draws the same marks.
     svg_marks::assert_matches("gup_core/categorical_nulls", &scene, &vr, &meta);
 }
+
+/// GUP-540: with explicit domains, a point on the domain's edge is drawn
+/// whole: the range is inset by the radius at its near end too, so every
+/// disc lies inside the plot rect and the first tick sits a radius in.
+#[test]
+fn points_on_an_explicit_domain_edge_are_whole() {
+    let cx = Context::new_blocking().unwrap();
+    let mut plot = Plot::new();
+    let x = plot.x(Linear::new().domain(0.0, 10.0));
+    let y = plot.y(Linear::new().domain(0.0, 10.0));
+    plot.legends(false);
+    plot.add(Selection::<(f64, f64), Circle>::new(vec![
+        (0.0, 0.0),
+        (10.0, 10.0),
+        (0.0, 10.0),
+    ]))
+    .attr(Circle::X, x.encode(|r: &(f64, f64)| r.0))
+    .attr(Circle::Y, y.encode(|r: &(f64, f64)| r.1))
+    .attr(Circle::RADIUS, Px(5.0))
+    .attr(Circle::FILL, Color::hex(0x0072b2));
+    let (image, layout) = plot.render_resolved(&cx, 480, 320).unwrap();
+    let p = layout.plot;
+    let tick = layout.x_ticks[0].1;
+    assert!(
+        (tick - (p.left() + 5.0)).abs() <= 0.5,
+        "first x tick {tick} in {p:?}"
+    );
+    let centre = |a: f64, b: f64| (x.read().eval(a) as f32, y.read().eval(b) as f32);
+    for (a, b) in [(0.0, 0.0), (10.0, 10.0), (0.0, 10.0)] {
+        let (cx_, cy) = centre(a, b);
+        for (dx, dy) in [(-1.0f32, 0.0f32), (1.0, 0.0), (0.0, -1.0), (0.0, 1.0)] {
+            // 4 px inside the edge of a radius-5 disc is 1 px from its centre.
+            let (px, py) = (cx_ + dx, cy + dy);
+            assert!(
+                px >= p.left() && px < p.right() && py >= p.top() && py < p.bottom(),
+                "({a}, {b}) probe ({px}, {py}) outside {p:?}"
+            );
+            assert_eq!(
+                image.get_pixel(px as u32, py as u32).0[..3],
+                [0x00, 0x72, 0xb2],
+                "disc at ({a}, {b}) near ({px}, {py})"
+            );
+            // The disc's outer edge is in the plot too.
+            let (ex, ey) = (cx_ + 5.0 * dx, cy + 5.0 * dy);
+            assert!(
+                ex >= p.left() - 0.5
+                    && ex <= p.right() + 0.5
+                    && ey >= p.top() - 0.5
+                    && ey <= p.bottom() + 0.5,
+                "({a}, {b}) edge ({ex}, {ey}) outside {p:?}"
+            );
+        }
+    }
+}

@@ -33,6 +33,8 @@
 //! checks::check_color_present(&image, &layout, &tol).unwrap();
 //! ```
 
+#![warn(missing_docs)]
+
 pub mod checks;
 pub mod color;
 pub mod diff;
@@ -41,6 +43,7 @@ pub mod golden;
 mod harness;
 pub mod image;
 pub mod layout;
+pub mod measure;
 
 pub use checks::{Check, CheckFailure, Tolerances};
 pub use color::Rgba8;
