@@ -521,3 +521,63 @@ fn svg_writes_every_visible_label_inside_the_plot_clip() {
     want.sort_unstable();
     assert_eq!(found, want, "each visible label once, and no Auckland");
 }
+
+/// AC4: the cost of 1,000 labels on a 1,000-point scatter, as the median
+/// full resolve (a resize each time) with and without the text layer, and
+/// a render of every label (the glyph atlas holds them). The numbers mean
+/// something in release: `cargo test -p gup-core --release --test
+/// text_layer resolve_cost -- --nocapture`.
+#[test]
+fn resolve_cost_of_a_thousand_labels() {
+    let cx = Context::new_blocking().unwrap();
+    let rows: Vec<(f64, f64)> = (0..1000)
+        .map(|i| {
+            let t = f64::from(i);
+            (
+                (t * 0.618_034).fract() * 100.0,
+                (t * 0.414_214).fract() * 100.0,
+            )
+        })
+        .collect();
+    let make = |labelled: bool| {
+        let mut plot = Plot::new();
+        plot.circles(rows.clone())
+            .x(|r: &(f64, f64)| r.0)
+            .y(|r: &(f64, f64)| r.1);
+        if labelled {
+            plot.text(rows.clone())
+                .x(|r: &(f64, f64)| r.0)
+                .y(|r: &(f64, f64)| r.1)
+                .text(|r: &(f64, f64)| format!("{:.1}", r.0))
+                .anchor(Anchor::BOTTOM)
+                .dy(-4.0);
+        }
+        plot
+    };
+    let median = |plot: &mut Plot| {
+        plot.resolve(&cx, 800.0, 600.0).unwrap();
+        let mut times: Vec<f64> = (0..21)
+            .map(|i| {
+                let start = std::time::Instant::now();
+                plot.resolve(&cx, 800.0 + (i % 2) as f32, 600.0).unwrap();
+                start.elapsed().as_secs_f64() * 1e3
+            })
+            .collect();
+        times.sort_by(f64::total_cmp);
+        times[times.len() / 2]
+    };
+    let (without, with) = (median(&mut make(false)), median(&mut make(true)));
+    println!(
+        "metric text_layer.resolve_ms without={without:.3} with={with:.3} delta={:.3}",
+        with - without
+    );
+    let mut plot = make(true);
+    let resolved = plot.resolve(&cx, 800.0, 600.0).unwrap().clone();
+    let drawn = labels(&resolved.layout).len();
+    assert!(drawn > 900, "{drawn} of 1000 labels drawn");
+    let image = ImageTarget::new(&cx, 800, 600)
+        .unwrap()
+        .render_blocking(&cx, &resolved.scene)
+        .unwrap();
+    assert_eq!(image.dimensions(), (800, 600));
+}

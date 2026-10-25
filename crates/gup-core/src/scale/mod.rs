@@ -629,6 +629,30 @@ mod tests {
         check(Point::new(), (0.0, 3.0));
     }
 
+    /// GUP-542: `key_position` is the centre of a key's band or point, by
+    /// label, and `None` for an unknown key or a numeric scale.
+    #[test]
+    fn key_position_is_the_centre_of_a_keys_slot() {
+        let keys: Vec<Arc<str>> = ["Mon", "Tue", "Wed"].map(Arc::from).to_vec();
+        let mut band = Band::new().padding(0.25).range(Px(0.0), Px(325.0));
+        ShaderFn::fit_keys(&mut band, &keys).unwrap();
+        let band = ScaleRef::new(band);
+        // A step of 100 px after 25 px of outer padding; bands 75 px wide.
+        assert_eq!(band.key_position("Mon"), Some(62.5));
+        assert_eq!(band.key_position("Wed"), Some(262.5));
+        assert_eq!(band.key_position("Thu"), None);
+
+        let mut point = Point::new().range(Px(0.0), Px(300.0));
+        ShaderFn::fit_keys(&mut point, &keys).unwrap();
+        let point = ScaleRef::new(point);
+        assert_eq!(point.key_position("Mon"), Some(50.0));
+        assert_eq!(point.key_position("Tue"), Some(150.0));
+        assert_eq!(point.key_position(""), None);
+
+        let lin = ScaleRef::new(Linear::new().domain(0.0, 1.0));
+        assert_eq!(lin.key_position("Mon"), None);
+    }
+
     /// Panning moves the domain by whole pixels in the scale's own space.
     #[test]
     fn pan_moves_the_domain_by_pixels() {

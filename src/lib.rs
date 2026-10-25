@@ -49,6 +49,51 @@
 //! # Ok::<(), gup::Error>(())
 //! ```
 //!
+//! ## Labels at data positions
+//!
+//! `plot.text(rows)` adds a layer of labels, placed through the plot's
+//! scales like any layer. `Anchor::BOTTOM` puts each label's bottom-centre
+//! on its point, so `.dy(-6.0)` lifts it 6 px clear of the disc.
+//!
+//! ```
+//! use gup::prelude::*;
+//! use gup::scene::TextRole;
+//!
+//! #[derive(Clone)]
+//! struct City { name: &'static str, lon: f64, lat: f64 }
+//! let cities = vec![
+//!     City { name: "Perth", lon: 115.9, lat: -31.9 },
+//!     City { name: "Darwin", lon: 130.8, lat: -12.5 },
+//!     City { name: "Sydney", lon: 151.2, lat: -33.9 },
+//! ];
+//!
+//! let mut plot = Plot::new();
+//! let x = plot.x(Linear::new().domain(110.0, 160.0));
+//! let y = plot.y(Linear::new().domain(-45.0, -5.0));
+//! plot.circles(cities.clone()).x(|c| c.lon).y(|c| c.lat).radius(Px(4.0));
+//! plot.text(cities.clone())
+//!     .x(|c| c.lon)
+//!     .y(|c| c.lat)
+//!     .text(|c| c.name)
+//!     .anchor(Anchor::BOTTOM)
+//!     .dy(-6.0);
+//!
+//! let layout = &plot.resolve(&Context::shared()?, 480.0, 320.0)?.layout;
+//! for city in &cities {
+//!     let label = layout
+//!         .texts
+//!         .iter()
+//!         .find(|t| t.run.role == TextRole::Annotation && &*t.run.text == city.name)
+//!         .expect("every city is labelled");
+//!     let (px, py) = (x.read().eval(city.lon) as f32, y.read().eval(city.lat) as f32);
+//!     // The ink is above the point, at least the 6 px offset, and centred on it.
+//!     assert!(label.bounds.bottom() <= py - 5.5);
+//!     let centre = label.bounds.x + label.bounds.width / 2.0;
+//!     assert!((centre - px).abs() < 2.0);
+//! }
+//! # Ok::<(), gup::Error>(())
+//! ```
+//!
 //! ## Your own shader function
 //!
 //! `#[gup::wgsl_function]` turns WGSL into a typed shader function. Here a

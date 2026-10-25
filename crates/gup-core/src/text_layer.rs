@@ -479,3 +479,38 @@ impl<T: Send + Sync + 'static> AnnotationLayer for TextLayer<T> {
         self
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::scale::{Band, Linear, ScaleRef};
+
+    /// The `within` rule: the ink fits when it is at most the span's pixel
+    /// extent less 2 px, whichever way round the span and the range run.
+    #[test]
+    fn a_label_fits_a_span_less_two_pixels() {
+        // 10 px per data unit, on a reversed (y-like) range.
+        let y = ScaleRef::new(Linear::new().domain(0.0, 10.0).range(Px(100.0), Px(0.0)));
+        assert!(fits(18.0, (0.0, 2.0), &y));
+        assert!(!fits(18.5, (0.0, 2.0), &y));
+        assert!(fits(18.0, (2.0, 0.0), &y));
+        assert!(!fits(1.0, (f64::NAN, 2.0), &y));
+    }
+
+    /// A value on a band axis and a key on a numeric one are errors that
+    /// name the setter to use; matching ones and missing ones are not.
+    #[test]
+    fn positions_must_suit_their_axis() {
+        let band = ScaleRef::new(Band::new());
+        let lin = ScaleRef::new(Linear::new());
+        let value: Position<()> = Position::Value(Arc::new(|_| 0.0));
+        let key: Position<()> = Position::Key(Arc::new(|_| "a".into()));
+        let err = check_axis("x", Some(&value), &band).unwrap_err();
+        assert!(err.to_string().contains("`x_key(..)`"), "{err}");
+        let err = check_axis("y", Some(&key), &lin).unwrap_err();
+        assert!(err.to_string().contains("`y(..)`"), "{err}");
+        assert!(check_axis("x", Some(&key), &band).is_ok());
+        assert!(check_axis("x", Some(&value), &lin).is_ok());
+        assert!(check_axis::<()>("x", None, &band).is_ok());
+    }
+}
