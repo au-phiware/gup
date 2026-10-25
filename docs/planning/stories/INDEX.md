@@ -153,11 +153,11 @@ non-conflicting N2 story beside it (two build-heavy agents at most; check
 `touches:`). Suggested pairs, in order: GUP-540 with GUP-533; GUP-537 with
 GUP-535 (before GUP-541 and GUP-530: it edits `builder/`, `dogfood/` and
 `src/lib.rs`); GUP-541 with GUP-530; GUP-542 (Opus) with GUP-531; GUP-543 with
-GUP-532; GUP-544 with GUP-553; GUP-545 with GUP-534; GUP-546 with GUP-405;
-GUP-547 with GUP-535; GUP-548; GUP-549; GUP-550 (Opus) with GUP-552; GUP-551
-(Opus) with GUP-416; GUP-439 (Opus) with GUP-554; then GUP-536. Deferred from
-N2: curved and horizontal areas, heatmap cell labels, error bars, pie charts and
-facets.
+GUP-532; GUP-555 (alone among `plot.rs` stories); GUP-544 with GUP-553; GUP-545
+with GUP-534; GUP-546 with GUP-405; GUP-547 with GUP-535; GUP-548; GUP-549;
+GUP-550 (Opus) with GUP-552; GUP-551 (Opus) with GUP-416; GUP-439 (Opus) with
+GUP-554; then GUP-536. Deferred from N2: curved and horizontal areas, heatmap
+cell labels, error bars, pie charts and facets.
 
 - [GUP-537](GUP-537_Owned_Category_Keys_In_Builders.md) ✅ — Builders' key
   setters take owned keys (`|r| r.year`, an enum, `r.name.clone()`) through
@@ -183,6 +183,11 @@ facets.
   CPU-laid-out `TextLayer` at data or band positions with anchors, offsets and
   `within` spans, clipped, in every target and SVG. Deps: GUP-540 📋, GUP-541 📋
   (soft, `plot.rs`), GUP-537 📋 (soft).
+- [GUP-555](GUP-555_Text_Labels_Make_Room_At_The_Plot_Edge.md) 📋 — Text layers
+  report per-side label extents, so automatic axes widen and explicit ones inset
+  only where labels reach (capped at a quarter of the axis) and edge labels are
+  drawn whole; label boxes measured once and cached. Not beside GUP-541 or
+  GUP-552 (`plot.rs`). Deps: GUP-542 ✅, GUP-528 ✅, GUP-529 ✅.
 - [GUP-526](GUP-526_Text_Layers_On_The_Right_Axis.md) 💡 — A text layer's `y`
   mapped through the plot's right y axis, so dual-axis charts can label both
   series. Deps: GUP-542 ✅.
@@ -194,8 +199,9 @@ facets.
   `BarChart::group_padding`. Deps: GUP-537 📋.
 - [GUP-544](GUP-544_Bar_Value_Labels.md) 📋 — `value_labels()` and
   `value_labels_with(f)` on every bar variant: above or beside bar ends with
-  headroom, centred and contrast-coloured in stacks, hidden where they do not
-  fit. Deps: GUP-542 📋, GUP-543 📋, GUP-541 📋 (soft), GUP-537 📋 (soft).
+  room from GUP-555, centred and contrast-coloured in stacks, hidden where they
+  do not fit. Deps: GUP-542 ✅, GUP-543 ✅, GUP-555 📋, GUP-541 📋 (soft),
+  GUP-537 ✅ (soft).
 - [GUP-545](GUP-545_Area_Mark.md) ✅ — The `Area` mark (`Plot::area`): MSAA
   trapezoids on the `Polyline` geometry, split where the top crosses the
   baseline, seam-free when translucent, written to SVG as paths.
