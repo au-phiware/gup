@@ -614,7 +614,7 @@ impl Plot {
     }
 
     /// Label the x axis ticks with `f` instead of the default labels. `f`
-    /// receives the tick value in the scale's domain units (for [`Time`],
+    /// receives the tick value in the scale's domain units (for [`Time`](crate::scale::Time),
     /// Unix seconds) and its string is used as is, also to measure and thin
     /// labels. The format stays with the axis when its scale is replaced
     /// with [`x`](Self::x); the last of this and
