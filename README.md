@@ -14,10 +14,10 @@ Figures are from [`PERF_BUDGETS.md`](./crates/gup-core/PERF_BUDGETS.md), release
 build, Intel HD Graphics 630 (an integrated GPU), Mesa 26.0.0, Vulkan:
 
 - Zooming writes no column bytes: `zoom.columns.bytes` is 0 over 600 frames.
-- Culling by chunk: 4M sorted rows draw in 9.90 ms of GPU time with 14 draws
+- Culling by chunk: 4M sorted rows draw in about 10 ms of GPU time with 14 draws
   (`zoom_culled.gpu_pass.median_ms`, `zoom_culled.draws.median`).
-- The reference scatter's WASM build is 334,149 bytes gzipped
-  (`wasm.scatter.gz_bytes`).
+- The reference scatter's WASM build is about 340 KB gzipped, under a 400 KB cap
+  for gup-core over wgpu (`wasm.scatter.gz_bytes`, `wasm.over_wgpu.gz_bytes`).
 
 The timings apply to that machine; measure on yours before comparing.
 
