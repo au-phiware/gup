@@ -458,3 +458,40 @@ the best achievable outcome:
 - [ ] `./dogfood/run_all.sh` passes with every check's status unchanged
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
+
+## Blocked (2026-10-25)
+
+**Question**: AC7's escalation trigger fired: the owned-key first resolve is
+1.83x the borrowed-key one (limit 1.5x). Accept it, or approve the buffered
+label lookup that touches `encoding.rs`?
+
+**Measurement** (release, throwaway example, 1,000,000-row `scatter` with `x`,
+`y` and `.color` over 8 distinct `String` keys, first `Chart::resolve`, 5 runs
+each, sorted):
+
+- Parent (`.color(|r| r.key.as_str())`, `encode_key`): 62.0, 63.3, 63.3, 66.4,
+  68.0 ms; median **63.3 ms**.
+- After (`.color(|r| r.key.clone())`, `erase_key` then `encode_owned_key`):
+  113.0, 115.3, 115.6, 117.4, 121.9 ms; median **115.6 ms**.
+
+The extra ~52 ms is about 52 ns per row: the user's `String` clone, the
+`Arc<str>` copy in `label`, and a hash of the `Arc<str>` in the dictionary.
+Everything else in the story is done and committed (ACs 1-6; AC4 greps clean);
+only AC7 sign-off, the docs (AC5 setter docs are done, the `# Category keys`
+section is done), `mask merge-check --dogfood` and the Implementation Summary
+remain.
+
+**Options**:
+
+1. Accept 1.83x (an absolute cost of about 52 ms per million keyed rows, once at
+   first resolve). The story's own text says a clone costs once per row.
+2. Cut the double allocation inside the builder: `erase_key` stores the key's
+   hash-then-label lookup in a small per-chart cache (`HashMap<K, Arc<str>>`
+   behind a mutex), so a repeated key is not re-allocated by `label`. Does not
+   remove the user's own clone. Needs `K` in the erased closure; stays within
+   `builder/mod.rs`. Expected to remove roughly half the overhead (unmeasured).
+3. The story's fix: a buffered label lookup through a new `KeyAccessor` in
+   `encoding.rs`.
+
+**Recommendation**: option 1 or 2; the absolute number is small and resolve
+happens once. I have not tried option 2.
