@@ -18,8 +18,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: 🚧 In
-Progress Planned **Created**: 2026-10-24
+**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: ✅
+Complete (2026-10-25) **Created**: 2026-10-24
 
 ## Context
 
@@ -459,39 +459,68 @@ the best achievable outcome:
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
 
-## Blocked (2026-10-25)
+## Resolved (2026-10-25)
 
-**Question**: AC7's escalation trigger fired: the owned-key first resolve is
-1.83x the borrowed-key one (limit 1.5x). Accept it, or approve the buffered
-label lookup that touches `encoding.rs`?
+Orchestrator chose option 2 then accepted the remaining cost (owned keys are the
+API decision; the user's own clone is inherent).
 
-**Measurement** (release, throwaway example, 1,000,000-row `scatter` with `x`,
-`y` and `.color` over 8 distinct `String` keys, first `Chart::resolve`, 5 runs
-each, sorted):
+## Implementation Summary
 
-- Parent (`.color(|r| r.key.as_str())`, `encode_key`): 62.0, 63.3, 63.3, 66.4,
-  68.0 ms; median **63.3 ms**.
-- After (`.color(|r| r.key.clone())`, `erase_key` then `encode_owned_key`):
-  113.0, 115.3, 115.6, 117.4, 121.9 ms; median **115.6 ms**.
+Builders' six key setters take `K: DictionaryKey` and owned keys; `Key`,
+`erase_key` and `label` live in `builder/mod.rs`; `DictionaryKey` carries the
+`on_unimplemented` diagnostic. Two compile-fail snapshots, one compile-pass
+file, three behaviour tests (2 in `tests/builders.rs`, 1 in `tests/append.rs`)
+plus the `label` unit tests, the `gup_core/builder_owned_keys` golden (read:
+three bands 2019-2021, two palette-coloured bars each, "Region" legend North
+then South, bars inside the plot), and the AC4 call sites migrated. Existing
+goldens and `.stderr` snapshots unchanged.
 
-The extra ~52 ms is about 52 ns per row: the user's `String` clone, the
-`Arc<str>` copy in `label`, and a hash of the `Arc<str>` in the dictionary.
-Everything else in the story is done and committed (ACs 1-6; AC4 greps clean);
-only AC7 sign-off, the docs (AC5 setter docs are done, the `# Category keys`
-section is done), `mask merge-check --dogfood` and the Implementation Summary
-remain.
+**AC7 (release, 1M rows, 8 `String` keys, first resolve, median of 5)**:
 
-**Options**:
+- Parent, `.color(|r| r.key.as_str())`: 63.3 ms (re-measured later: 64.5 ms).
+- After, `.color(|r| r.key.clone())`: 115.6 ms (1.83x).
+- With a bounded per-closure `HashMap<K, Arc<str>>` label cache in `erase_key`:
+  119.0 ms (no gain), so it was reverted. The cost is not the label allocation;
+  it is the user's clone and the per-row dictionary work.
 
-1. Accept 1.83x (an absolute cost of about 52 ms per million keyed rows, once at
-   first resolve). The story's own text says a clone costs once per row.
-2. Cut the double allocation inside the builder: `erase_key` stores the key's
-   hash-then-label lookup in a small per-chart cache (`HashMap<K, Arc<str>>`
-   behind a mutex), so a repeated key is not re-allocated by `label`. Does not
-   remove the user's own clone. Needs `K` in the erased closure; stays within
-   `builder/mod.rs`. Expected to remove roughly half the overhead (unmeasured).
-3. The story's fix: a buffered label lookup through a new `KeyAccessor` in
-   `encoding.rs`.
+**Verification**: `cargo test -p gup-core --all-features -- --test-threads=1`
+and doctests pass; `mask merge-check --dogfood`: story-ids, gup-core, wasm-size,
+wasm-browser and dogfood all PASS. WASM scatter gz 334416 B (budget baseline
+334149, +267 B).
 
-**Recommendation**: option 1 or 2; the absolute number is small and resolve
-happens once. I have not tried option 2.
+## Retrospective
+
+**Completed**: 2026-10-25
+
+### Key Technical Learnings
+
+#### Label cache did not help
+
+- **Challenge**: AC7's owned-key resolve was 1.83x the borrowed one.
+- **Solution**: Tried a bounded `Mutex<HashMap<K, Arc<str>>>` in `erase_key`;
+  119 ms vs 115.6 ms, so it was reverted.
+- **Pattern**: Measure before optimising; the overhead is the user's clone plus
+  the encoder's `Arc<str>` hashing, which only an `encoding.rs` change (option
+  3, not taken) could reduce.
+
+#### trybuild snapshots
+
+- **Challenge**: Unused `prelude` import warnings landed in the `.stderr`.
+- **Solution**: Drop the import from compile-fail files so the snapshot is one
+  error.
+
+### Architectural Decisions
+
+#### Keys compared by label
+
+- **Decision**: As in the story: `Arc<str>` channels everywhere.
+- **Trade-off**: About 52 ns per keyed row at first resolve.
+
+### Development Workflow Insights
+
+- A sandbox guard refused long compound commands; write files with the Write
+  tool and keep commands simple.
+
+### Follow-up Stories
+
+None. A cheaper keyed encode (option 3) is available if a profile ever asks.
