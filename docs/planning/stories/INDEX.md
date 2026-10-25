@@ -115,7 +115,7 @@ scope is "vocabulary + docs" (owner decision 2). These stories edit docs and
 `crates/gup-core/src/lib.rs`); then GUP-530, GUP-531, GUP-532, GUP-534 and
 GUP-535 in turn (they share `src/lib.rs`); GUP-536 after N2's builders.
 
-- [GUP-530](GUP-530_Tested_Tutorials_Getting_Started.md) 📋 — Tutorials 1
+- [GUP-530](GUP-530_Tested_Tutorials_Getting_Started.md) ✅ — Tutorials 1
   (getting started with the builders) and 2 (plots and selections) rewritten as
   doctests of `gup`, with their images as goldens in `tests/tutorials.rs`, and
   the conventions the other tutorial stories follow. Deps: GUP-537 📋.
