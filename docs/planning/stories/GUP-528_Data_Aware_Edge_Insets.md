@@ -10,8 +10,8 @@ touches: [crates/gup-core/src/plot.rs, crates/gup-core/src/selection.rs]
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: 📋
-Planned **Created**: 2026-10-25
+**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: ✅
+Complete (2026-10-25) **Created**: 2026-10-25
 
 ## Context
 
@@ -70,7 +70,7 @@ than GUP-540's inset.
 
 ### AC1: The inset rule, as a pure function
 
-- [ ] `edge_insets` (Decisions) has unit tests in `plot/inset.rs`: no candidates
+- [x] `edge_insets` (Decisions) has unit tests in `plot/inset.rs`: no candidates
       gives `(0.0, 0.0)`; `[(0.0, 5.0)]` gives `(5.0, 0.0)`; `[(1.0, 5.0)]`
       gives `(0.0, 5.0)`; `[(0.5, 5.0)]` with `len` 100 gives `(0.0, 0.0)`; and
       a property test over 1,000 candidate sets from a fixed-seed LCG written in
@@ -81,7 +81,7 @@ than GUP-540's inset.
 
 ### AC2: Each edge is inset by the marks that reach it
 
-- [ ] New test `scatter_png::explicit_domain_insets_follow_the_edge_marks`: x
+- [x] New test `scatter_png::explicit_domain_insets_follow_the_edge_marks`: x
       and y domains `0..10`, 480×320, a `Circle` layer on the plot's axes with a
       radius column (pixel identity scale) and rows `(0.5, 5, r 30)`,
       `(9.9, 5, r 20)`, `(5, 9.8, r 15)`, `(5, 4, r 10)`. After resolve, with
@@ -92,14 +92,14 @@ than GUP-540's inset.
       far-only); y value 0 maps to `plot.bottom()` (±0.5) (no mark reaches the
       bottom); every disc's colour is present 4 px inside its edge in the four
       directions (GUP-540's sampling).
-- [ ] `scatter_png::points_on_an_explicit_domain_edge_are_whole` and
+- [x] `scatter_png::points_on_an_explicit_domain_edge_are_whole` and
       `rect_png::the_first_bar_on_an_explicit_x_domain_is_whole_and_on_the_axis`
       (GUP-540) pass unchanged: a mark on the domain end still gets its full
       overhang.
 
 ### AC3: Axes no mark is bound to are not inset
 
-- [ ] `stroke_png::bubbles_with_translucent_fills_and_outlines`: its bubbles are
+- [x] `stroke_png::bubbles_with_translucent_fills_and_outlines`: its bubbles are
       not encoded by the plot's scales, so both axes get near inset 0 and far
       inset `plot_padding`. Its assertions change from "first tick 60 px in" to:
       the first x tick within 1 px of the corner, the first y tick within 1 px
@@ -108,12 +108,12 @@ than GUP-540's inset.
 
 ### AC4: Released CPU data falls back to chunk statistics
 
-- [ ] The AC2 scene with `.retain(Retain::GpuOnly)` renders with every disc
+- [x] The AC2 scene with `.retain(Retain::GpuOnly)` renders with every disc
       whole (same sampling), and each of its four insets (near:
       `eval(0) − plot.left()`, `plot.bottom() − eval(0)`; far:
       `plot.right() − eval(10)`, `eval(10) − plot.top()`) is at least the AC2
       (`Retain::Auto`) inset and at most GUP-540's (`over`, `over + pad`).
-- [ ] A 70,000-row layer (one chunk under default chunking, above
+- [x] A 70,000-row layer (one chunk under default chunking, above
       `EDGE_ROW_BUDGET`), with a radius-20 point at the domain's lower-left
       corner, under `Retain::Auto` gives exactly the same `Layout::x_ticks` and
       `y_ticks` pixel positions as the same layer under `Retain::GpuOnly` (both
@@ -121,40 +121,40 @@ than GUP-540's inset.
 
 ### AC5: A moved view keeps its insets
 
-- [ ] New test in `crates/gup-core/tests/events.rs` (or `zoom_uploads.rs`):
+- [x] New test in `crates/gup-core/tests/events.rs` (or `zoom_uploads.rs`):
       explicit domains, a radius-20 point at `(0, 5)`; resolve;
       `plot.pan(30.0,     0.0)`; resolve: the pixel of x value 5 moved by 30.0 ±
       0.01. Then `reset_view()` and resolve: every tick's pixel equals the first
       resolve's (±0.01).
-- [ ] `zoom_uploads.rs`, `resolve_cache.rs` and `events.rs` pass unchanged
+- [x] `zoom_uploads.rs`, `resolve_cache.rs` and `events.rs` pass unchanged
       (zooming still writes no column bytes).
 
 ### AC6: Bars and lines are unchanged
 
-- [ ] `gup_core/builder_bars`, `gup_core/grouped_bars`, `gup_core/rect_bars`,
+- [x] `gup_core/builder_bars`, `gup_core/grouped_bars`, `gup_core/rect_bars`,
       `gup_core/line_series`, `gup_core/builder_line`, `gup_core/scatter`,
       `gup_core/msaa_1x` and `gup_core/msaa_4x` pass without re-blessing, and
       `fixtures/msaa_guides.svg` is unchanged.
 
 ### AC7: Every moved golden is listed and read
 
-- [ ] Re-blessed goldens (`GUP_BLESS=1`) are a subset of `bubble_stroke`,
+- [x] Re-blessed goldens (`GUP_BLESS=1`) are a subset of `bubble_stroke`,
       `categorical_nulls`, `wgsl_function_highlight`, `band_months`,
       `tick_format_currency` and `tick_format_percent`, each listed with what
       moved. The worker reads each PNG: `bubble_stroke`'s axes meet at the
       corner with the first ticks on it and no empty band; in the others every
       edge mark is whole and no gap is wider than the mark that needs it.
-- [ ] Tests that compute pixels from the old inset by hand and break are fixed
+- [x] Tests that compute pixels from the old inset by hand and break are fixed
       to read `Layout` or `ScaleRef::eval`, and listed.
 
 ### AC8: Every host agrees
 
-- [ ] `mask wasm-browser` passes; scene code under `crates/gup-core/wasm-size/`
+- [x] `mask wasm-browser` passes; scene code under `crates/gup-core/wasm-size/`
       that computes expected pixels by hand is updated and listed (none
       expected).
-- [ ] `mask egui-screenshot` passes, and the worker reads its PNG: the egui
+- [x] `mask egui-screenshot` passes, and the worker reads its PNG: the egui
       scatter's `(0, 0)` point is still a whole disc.
-- [ ] `./dogfood/run_all.sh` reports every scenario PASS.
+- [x] `./dogfood/run_all.sh` reports every scenario PASS.
 
 ## Decisions
 
@@ -278,20 +278,20 @@ than GUP-540's inset.
 
 ## Technical Tasks
 
-- [ ] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30 min.
-- [ ] `plot/inset.rs`: `EdgeAxis`, `EDGE_ROW_BUDGET`, `edge_insets` and the AC1
+- [x] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30 min.
+- [x] `plot/inset.rs`: `EdgeAxis`, `EDGE_ROW_BUDGET`, `edge_insets` and the AC1
       tests; commit.
-- [ ] `column.rs`: `ColumnStore::chunk_values`. `selection.rs`: the scale
+- [x] `column.rs`: `ColumnStore::chunk_values`. `selection.rs`: the scale
       identity helper (shared with `y_axis_id`), the ignored-end helper (shared
       with `visible_entries`) and `Layer::edge_marks`.
-- [ ] `plot.rs` step 5: provisional ranges, candidates, solved ranges, relayout
+- [x] `plot.rs` step 5: provisional ranges, candidates, solved ranges, relayout
       re-solve, axis lines, the `edge_insets` freeze field; run gup-core tests
       with `--no-fail-fast` and list failures; commit.
-- [ ] AC2–AC5 tests; fix hand-computed tests; re-bless and read goldens in a
+- [x] AC2–AC5 tests; fix hand-computed tests; re-bless and read goldens in a
       commit of their own.
-- [ ] One sentence in the rustdoc of `Selection::retain`: policies that drop the
+- [x] One sentence in the rustdoc of `Selection::retain`: policies that drop the
       CPU columns inset explicit-domain edges from chunk statistics.
-- [ ] `mask wasm-browser`, `mask egui-screenshot`, dogfood, `mask wasm-size`.
+- [x] `mask wasm-browser`, `mask egui-screenshot`, dogfood, `mask wasm-size`.
 
 ## Dependencies
 
@@ -318,9 +318,9 @@ than GUP-540's inset.
 
 ## Success Metrics
 
-- [ ] No explicit-domain axis is inset at an end that no axis-bound mark
+- [x] No explicit-domain axis is inset at an end that no axis-bound mark
       reaches, and no axis-bound mark inside the domain is clipped.
-- [ ] At most the 6 goldens in AC7 change.
+- [x] At most the 6 goldens in AC7 change.
 
 ## Risk Assessment
 
@@ -339,14 +339,97 @@ than GUP-540's inset.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (re-blessed goldens, egui screenshot)
-- [ ] `mask wasm-browser` passes (layout change)
-- [ ] WASM size: `mask wasm-size` scatter gz bytes reported
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye (re-blessed goldens, egui screenshot)
+- [x] `mask wasm-browser` passes (layout change)
+- [x] WASM size: `mask wasm-size` scatter gz bytes reported
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `plot/inset.rs` (new): `EdgeAxis`, `EDGE_ROW_BUDGET` (65,536) and
+  `edge_insets` (the three-pass solver) with the AC1 unit and property tests.
+- `column.rs`: `ColumnStore::chunk_values`. `selection.rs`: `scale_identity`
+  (shared with `y_axis_id`), `ignored_end` (shared with `visible_entries`),
+  `Layer::edge_marks`, `in_domain_extremes`.
+- `plot.rs` step 5: provisional ranges (GUP-540's insets), candidates, solved
+  ranges, re-solve after a relayout, axis lines read the solved far inset,
+  `Plot::edge_insets` freezes the insets while `home` is `Some`.
+- Tests: `scatter_png` (4 new: AC2, AC4 statistics, AC4 70,000 rows, constant
+  radius), `events` (AC5 pan and reset), `stroke_png` (AC3 assertions).
+- Goldens re-blessed (5 of the 6 allowed; `band_months` unchanged):
+  `bubble_stroke` (axes now meet at the corner, first ticks on it, no empty band
+  at the bottom and left), `categorical_nulls`, `wgsl_function_highlight` (same
+  scene: a few pixels less empty margin at the left and bottom; every edge disc
+  whole), `tick_format_currency` and `tick_format_percent` (the `x = 0` point
+  whole, a smaller left and bottom gap). Every PNG was read.
+- AC6 goldens and `msaa_guides.svg` did not change. No hand-computed test broke
+  except `stroke_png`'s own assertions (rewritten from `Layout`).
+- Gates: `cargo test --workspace` 628 passed, 0 failed;
+  `mask merge-check --dogfood` PASS (gup-core, wasm-size, wasm-browser,
+  dogfood); `mask egui-screenshot` and `mask smoke-examples` pass; egui PNG
+  read: the `(0, 0)` scatter point is a whole disc. `mask wasm-size`: scatter
+  337,986 gz bytes (recorded 334,149, limit +2%).
+
+## Retrospective
+
+**Completed**: 2026-10-25
+
+### Key Technical Learnings
+
+#### The solver's guarantee needs a non-negative GUP-540 span
+
+- **Challenge**: the AC1 property test failed when `cap` was drawn up to 60 px
+  on a 50 px axis.
+- **Solution**: the guarantee (`s` only grows from `len - 2 cap - pad`) holds
+  only when that starting span is non-negative; a plot smaller than its two
+  overhangs has no room for any inset to help. The test draws `cap` at most
+  `(len - pad) / 2`. The solver is unchanged.
+- **Pattern**: state the precondition of a fixed-point iteration in the property
+  test instead of adding passes or margins.
+
+#### The per-resolve cost of exact insets is real under `set_domain` per frame
+
+- **Challenge**: `zoom_bench` sets domains each frame (so the view is not
+  "moved" and the insets are solved every frame). On 4M rows the first chunk fit
+  the 65,536-row budget and decoding it cost about 8 ms per frame
+  (`zoom_culled.cpu` 0.97 to 8.2 ms).
+- **Solution** (private, same results): the chunk's statistics are computed
+  first and a chunk they say cannot reach an edge is not decoded; only axes
+  whose statistics may bind are decoded; with no size column, only the rows
+  nearest each end bind, found by evaluating few rows (scales are monotonic,
+  `in_domain_extremes`). `zoom_culled.cpu` is now about 1.27 ms against a
+  recorded 0.97 (limit 1.164), measured on a machine where `zoom.cpu` is 0.53
+  against 0.69 recorded. Not re-recorded (the orchestrator does that).
+- **Pattern**: the cheap statistics bound is also a free pre-filter for the
+  exact path.
+
+### Architectural Decisions
+
+#### Frozen insets stored on `Plot`
+
+- **Decision**: as specified, `edge_insets: Option<[(f32, f32); 3]>`, set by
+  each resolve while the view is home.
+- **Trade-off**: a mark brought to the edge by a zoom may be cut, as before
+  GUP-540.
+
+### Development Workflow Insights
+
+- Candidate rows outside `[0, 1]` on one axis still count for the other axis (a
+  chunk culled in x still insets y). It is per the Decisions and is
+  conservative, but it is why the 4M scene still decodes a chunk for y.
+- `Layer::edge_marks` is `&self` and never evaluated accessors, so the
+  escalation trigger did not fire; the plot's own `ScaleRef` reports the axis
+  identity through `links().first()?.dictionary_slot()`.
+
+### Follow-up Stories
+
+None. Possible tuning if the `zoom_culled` budget matters: lower
+`EDGE_ROW_BUDGET` (a Decision of this story) or skip candidates whose other axis
+is outside its domain.
