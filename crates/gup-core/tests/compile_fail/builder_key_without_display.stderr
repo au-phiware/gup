@@ -14,5 +14,5 @@ help: the trait `std::fmt::Display` is not implemented for `Region`
 note: required by a bound in `BarChart::<T>::x`
   --> src/builder/bar.rs
    |
-   |     pub fn x<K: DictionaryKey>(mut self, key: impl Fn(&T) -> K + Send + Sync + 'static) -> Self {
+   |     pub fn x<K: DictionaryKey>(self, key: impl Fn(&T) -> K + Send + Sync + 'static) -> Self {
    |                 ^^^^^^^^^^^^^ required by this bound in `BarChart::<T>::x`

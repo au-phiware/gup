@@ -55,39 +55,39 @@ does across an x band.
 
 ### AC1: `gup::barh`
 
-- [ ] `gup::barh(rows)` returns `BarChart<T, Horizontal>` with `y(key)` (the
+- [x] `gup::barh(rows)` returns `BarChart<T, Horizontal>` with `y(key)` (the
       category, on a band y axis), `x(value)` (drawn from 0) and
       `x_scale(scale)`, and every orientation-independent setter of `BarChart`
       (`padding`, `group_padding`, `color`, `color_scale`, `fill`, `group`,
       `stack`, `opacity`, `legend_title`, `tooltip`, the plot setters,
       `layers_mut`, `plot_mut`, `into_plot`, `pick`).
-- [ ] `BarChart<T>` keeps compiling unchanged (default type parameter): every
+- [x] `BarChart<T>` keeps compiling unchanged (default type parameter): every
       existing bar test, doctest and example passes without edits.
-- [ ] Categories run top to bottom in first-seen order: the first row's category
+- [x] Categories run top to bottom in first-seen order: the first row's category
       is the topmost band (test from `Layout::y_ticks`).
-- [ ] Grouped horizontal bars: within each band the first-seen group key is the
+- [x] Grouped horizontal bars: within each band the first-seen group key is the
       topmost bar (test), so bars read in legend order.
-- [ ] Stacked horizontal bars stack rightward from 0 in first-seen key order,
+- [x] Stacked horizontal bars stack rightward from 0 in first-seen key order,
       negatives leftward (test reusing `stack_tables`).
-- [ ] A `rust,compile_fail` doctest on `barh` shows `.x(|r| r.name.as_str())`
+- [x] A `rust,compile_fail` doctest on `barh` shows `.x(|r| r.name.as_str())`
       does not compile (x is the value on a horizontal chart).
 
 ### AC2: `group_padding`
 
-- [ ] `BarChart::group_padding(p)` sets the gap between the bars of a group as a
+- [x] `BarChart::group_padding(p)` sets the gap between the bars of a group as a
       fraction of a slot (default 0.1), for both orientations; it panics unless
       `0.0 <= p < 1.0`, with a message giving `p`.
-- [ ] Test: with `group_padding(0.0)` adjacent group bars in a band touch (no
+- [x] Test: with `group_padding(0.0)` adjacent group bars in a band touch (no
       background pixel between them on a row through the bars); with `0.5` each
       bar is half its slot wide (±1 px).
 
 ### AC3: Visual
 
-- [ ] Golden `gup_core/builder_barh` (480×320): five countries with long names,
+- [x] Golden `gup_core/builder_barh` (480×320): five countries with long names,
       grouped by two years, legend at the right. The worker reads it: names
       fully visible left of the axis, bars start at the y axis, the first
       country at the top, legend order matches the bar order.
-- [ ] The migration table's `.orient(..)`/`.horizontal()` row says
+- [x] The migration table's `.orient(..)`/`.horizontal()` row says
       `gup::barh(rows)`.
 
 ## Decisions
@@ -156,11 +156,11 @@ does across an x band.
 
 ## Technical Tasks
 
-- [ ] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30 min.
-- [ ] Introduce `Orientation` and move shared setters to the generic impl; all
+- [x] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30 min.
+- [x] Introduce `Orientation` and move shared setters to the generic impl; all
       bar tests green; commit.
-- [ ] Add `barh`, the axis and slot order, tests; commit.
-- [ ] Add `group_padding` and its tests; the golden; docs; commit.
+- [x] Add `barh`, the axis and slot order, tests; commit.
+- [x] Add `group_padding` and its tests; the golden; docs; commit.
 
 ## Dependencies
 
@@ -182,7 +182,7 @@ does across an x band.
 
 ## Success Metrics
 
-- [ ] A ranked horizontal bar chart is one call chain, with the same setters as
+- [x] A ranked horizontal bar chart is one call chain, with the same setters as
       the vertical one.
 
 ## Risk Assessment
@@ -192,15 +192,83 @@ does across an x band.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1` and
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1` and
       `cargo test -p gup-core -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (`gup_core/builder_barh`)
-- [ ] `mask wasm-browser`: not needed, builder only (no layout rule change)
-- [ ] WASM size: `mask wasm-size` scatter gz bytes reported
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye (`gup_core/builder_barh`)
+- [x] `mask wasm-browser`: not needed, builder only (no layout rule change)
+- [x] WASM size: `mask wasm-size` scatter gz bytes reported
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `crates/gup-core/src/builder/bar.rs`: `BarChart<T, O: Orientation = Vertical>`
+  with sealed `Orientation`, `Vertical`, `Horizontal`; `gup_core::barh` (with a
+  `compile_fail` doctest and `#[doc(alias = "horizontal")]`); `y`/`x`/`x_scale`
+  on the horizontal impl, `x`/`y`/`y_scale` on the vertical one, both through
+  shared private `set_category`/`set_value`/`set_value_scale`; `group_padding`
+  (field, default 0.1, replaces `SLOT_PADDING`). One `materialise`, with
+  `O::HORIZONTAL` picking the band axis, the `Rect` channels, reversed domain
+  and reversed slot.
+- `builder/mod.rs`, `lib.rs`: exports (`barh` at the root; `Orientation`,
+  `Vertical`, `Horizontal` from `gup_core::builder` only) and the migration
+  table row.
+- Tests: 8 new in `tests/builders.rs` (`mod barh`); golden
+  `tests/golden/gup_core/builder_barh.png`. No existing golden changed. The
+  `builder_key_without_display.stderr` snapshot changed by one source line.
+- WASM: scatter 334437 B gz (recorded 334149, +288 B, within the 2% limit).
+
+### Evidence
+
+`gup_core/builder_barh` (480x320), read by eye: five long country names fully
+visible left of the axis, the first (United Arab Emirates) on top, bars start at
+the y axis, 2019 (orange) above 2023 (blue) in every band, matching the legend
+order, x ticks 0..80 with a light grid, no clipped bars.
+
+## Retrospective
+
+**Completed**: 2026-10-25
+
+### Key Technical Learnings
+
+#### Orientation as a type parameter
+
+- **Challenge**: one materialise path for two orientations whose `Selection`
+  setter names differ.
+- **Solution**: a sealed trait with `const HORIZONTAL`; the four setter call
+  sites branch on it, everything else (splitting, stacking, colour, legend) is
+  shared.
+- **Pattern**: orientation-specific accessors live in per-orientation `impl`
+  blocks that forward to private shared setters, so the shared setters are not
+  duplicated and the types prevent `.x(category)` on `barh`.
+
+#### Y band direction
+
+- A y band's range runs bottom to top, so the first-seen category needs a
+  reversed domain and the first group key slot `count - 1 - i`. No band bug was
+  found, so the escalation trigger did not fire.
+
+### Architectural Decisions
+
+#### Per-orientation `x`/`y` impls
+
+- **Decision**: as in the story. **Trade-off**: `BarChart<T, Vertical>` shows in
+  rustc diagnostics (the compile-fail snapshot was affected only by a changed
+  source line). **Future**: GUP-544 value labels cover both through `O`.
+
+### Development Workflow Insights
+
+- The worktree sandbox refused compound shell commands (heredocs with `cd`, `$f`
+  variables in sed); writing scripts to `/tmp` and running them separately
+  worked.
+- `mask merge-check` caught the trybuild snapshot that the targeted tests did
+  not run.
+
+### Follow-up Stories
+
+None.

@@ -183,7 +183,7 @@ facets.
   CPU-laid-out `TextLayer` at data or band positions with anchors, offsets and
   `within` spans, clipped, in every target and SVG. Deps: GUP-540 📋, GUP-541 📋
   (soft, `plot.rs`), GUP-537 📋 (soft).
-- [GUP-543](GUP-543_Horizontal_Bars_And_Group_Padding.md) 🚧 — `gup::barh`
+- [GUP-543](GUP-543_Horizontal_Bars_And_Group_Padding.md) ✅ — `gup::barh`
   (`BarChart<T, Horizontal>`, categories top to bottom) and
   `BarChart::group_padding`. Deps: GUP-537 📋.
 - [GUP-544](GUP-544_Bar_Value_Labels.md) 📋 — `value_labels()` and
