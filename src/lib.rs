@@ -99,4 +99,7 @@ mod tutorials {
     /// Tutorial 3, "Custom Shader Functions" (GUP-531).
     #[doc = include_str!("../docs/tutorials/03_custom_shader_functions.md")]
     struct ShaderFunctions;
+    /// Tutorial 6, "Custom Marks" (GUP-531).
+    #[doc = include_str!("../docs/tutorials/06_custom_marks.md")]
+    struct CustomMarks;
 }

@@ -26,10 +26,10 @@ Before you begin, make sure you have:
 | --- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
 | 1   | [Getting Started](01_getting_started.md)                 | Draw scatter, line and bar charts from your own structs, save them as PNGs, colour by key and size by value. |
 | 2   | [Plots and Selections](02_data_binding.md)               | What a builder is made of: layers of marks on shared scales, colour scales with legends, a second y axis.    |
-| 3   | [Custom Shader Functions](03_custom_shader_functions.md) | Write GPU shader transforms with `ComposableShaderFunction` and the `wgsl_function!` macro.                  |
+| 3   | [Custom Shader Functions](03_custom_shader_functions.md) | Chain scales with `.then(..)`, write your own in WGSL with `#[wgsl_function]` and give it a CPU mirror.      |
 | 4   | [Interactions](04_interactions.md)                       | Add hover, click, brush, and zoom/pan interactions to your charts.                                           |
 | 5   | [Streaming Data](05_streaming_data.md)                   | Connect live data sources using `StreamingDataSource` and `DataStream`.                                      |
-| 6   | [Custom Marks](06_custom_marks.md)                       | Implement a new mark type from scratch with the `Mark` trait and `#[derive(Mark)]`.                          |
+| 6   | [Custom Marks](06_custom_marks.md)                       | Write a new mark with `#[derive(Mark)]` and WGSL: channel roles, setters, CPU and GPU picking.               |
 
 ## Learning Path
 

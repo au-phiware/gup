@@ -252,3 +252,93 @@ fn tutorial_3_custom_ramp() {
 
     check("tutorials/03_custom_ramp", &mut plot);
 }
+
+/// Tutorial 6 (`06_custom_marks.md`), "Step 1: A Square": a user-written
+/// mark, one square per day, coloured through viridis.
+#[test]
+fn tutorial_6_squares() {
+    #[derive(Debug, Mark)]
+    #[mark(
+        path = "tutorial6_square",
+        wgsl = r#"
+        #import gup::view::{View, px_to_clip}
+        #import gup::coverage::{rect_quad, box_coverage}
+
+        struct SquareIn {
+            x: f32,
+            y: f32,
+            size: f32,
+            fill: vec4<f32>,
+        }
+
+        struct Varyings {
+            @builtin(position) clip: vec4<f32>,
+            @location(0) local: vec2<f32>,
+            @location(1) half: vec2<f32>,
+            @location(2) fill: vec4<f32>,
+        }
+
+        fn vertex(m: SquareIn, vertex_index: u32, row: u32, view: View) -> Varyings {
+            let centre = vec2<f32>(m.x, m.y);
+            let half = vec2<f32>(m.size * 0.5);
+            let q = rect_quad(centre - half, centre + half, vertex_index, view.dpr);
+            var out: Varyings;
+            out.clip = px_to_clip(q.position, view);
+            out.local = q.local;
+            out.half = q.half;
+            out.fill = m.fill;
+            return out;
+        }
+
+        fn shade(v: Varyings) -> vec4<f32> {
+            let alpha = v.fill.a * box_coverage(v.local, v.half);
+            if (alpha <= 0.0) {
+                discard;
+            }
+            return vec4<f32>(v.fill.rgb * alpha, alpha);
+        }
+    "#,
+        geometry = Quad
+    )]
+    struct Square {
+        #[channel(role = X)]
+        x: Px,
+        #[channel(role = Y)]
+        y: Px,
+        #[channel(role = Size, default = Px(10.0))]
+        size: Px,
+        #[channel(role = Color, default = Color::BLACK)]
+        fill: Color,
+    }
+
+    struct Day {
+        week: f64,
+        weekday: f64,
+        steps: f64,
+    }
+    let days: Vec<Day> = (0..28)
+        .map(|i| {
+            let (week, weekday) = (f64::from(i / 7), f64::from(i % 7));
+            let steps = 4000.0 + 900.0 * ((i * 5) % 11) as f64 + 1500.0 * f64::from(weekday > 4.5);
+            Day {
+                week,
+                weekday,
+                steps,
+            }
+        })
+        .collect();
+
+    let mut plot = Plot::new();
+    plot.title("Steps per day")
+        .x_title("Weekday (Monday is 0)")
+        .y_title("Week");
+    let steps = Sequential::viridis();
+    plot.add(Selection::<Day, Square>::new(days))
+        .x(|d| d.weekday)
+        .y(|d| d.week)
+        .size(Px(36.0))
+        .fill(steps.encode(|d: &Day| d.steps))
+        .legend_title(Square::FILL, "Steps");
+
+    check("tutorials/06_squares", &mut plot);
+}
