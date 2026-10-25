@@ -356,3 +356,26 @@ fn a_keyed_line_chart_routes_rows_to_lines() {
         .collect();
     assert_eq!(legend.len(), 1, "a legend entry for the new key");
 }
+
+/// A keyed line chart over `u32` ids: a row of a known id extends its line,
+/// a new id adds one (GUP-537).
+#[test]
+fn an_integer_keyed_line_chart_adds_a_line_per_new_id() {
+    let cx = Context::new_blocking().unwrap();
+    type P = (f64, f64, u32);
+    let mut chart = gup_core::line(vec![(0.0, 0.0, 7), (1.0, 1.0, 9), (2.0, 2.0, 7)])
+        .x(|p: &P| p.0)
+        .y(|p: &P| p.1)
+        .color(|p| p.2);
+    let feed = chart.appender();
+    chart.resolve(&cx, W as f32, H as f32).unwrap();
+    assert_eq!(chart.layers_mut().len(), 2);
+
+    feed.extend(vec![(3.0, 3.0, 7)]).unwrap();
+    chart.resolve(&cx, W as f32, H as f32).unwrap();
+    assert_eq!(chart.layers_mut().len(), 2);
+
+    feed.extend(vec![(4.0, 4.0, 11)]).unwrap();
+    chart.resolve(&cx, W as f32, H as f32).unwrap();
+    assert_eq!(chart.layers_mut().len(), 3);
+}
