@@ -179,7 +179,7 @@ facets.
   `y_tick_format` on `Plot` and every builder, surviving a scale change, and the
   dogfood `%Y-%m` and `$Nk` formats restored with SVG text checks. Deps: GUP-474
   ✅.
-- [GUP-542](GUP-542_Text_Layer_For_Annotations.md) 📋 — `Plot::text(rows)`: a
+- [GUP-542](GUP-542_Text_Layer_For_Annotations.md) 🚧 — `Plot::text(rows)`: a
   CPU-laid-out `TextLayer` at data or band positions with anchors, offsets and
   `within` spans, clipped, in every target and SVG. Deps: GUP-540 📋, GUP-541 📋
   (soft, `plot.rs`), GUP-537 📋 (soft).
