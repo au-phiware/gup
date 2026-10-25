@@ -3,9 +3,9 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 
 # The post-merge checks that textual merges cannot catch (GUP-502). Runs, in
-# order, the story ID guard (GUP-504), gup-core's tests with all features,
-# scripts/wasm_size.sh and scripts/wasm_browser.sh, and with --dogfood
-# ./dogfood/run_all.sh. Every step runs even when an earlier one failed; each
+# order, the story ID guard (GUP-504), the API docs with warnings as errors
+# (`mask doc`), gup-core's tests with all features, scripts/wasm_size.sh and
+# scripts/wasm_browser.sh, and with --dogfood ./dogfood/run_all.sh. Every step runs even when an earlier one failed; each
 # step's output goes to ${CARGO_TARGET_DIR:-target}/merge-check/<step>.log. Then
 # it prints one table and exits 0 only if every step that ran passed. `mask
 # merge-check` runs this script.
@@ -89,6 +89,7 @@ run_step() {
 }
 
 run_step story-ids ./scripts/check_story_ids.sh
+run_step doc mask doc
 run_step gup-core cargo test -p gup-core --all-features -- --test-threads=1
 run_step wasm-size ./scripts/wasm_size.sh
 run_step wasm-browser ./scripts/wasm_browser.sh
