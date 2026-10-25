@@ -91,7 +91,7 @@ Multi-line time series (three tickers, five years of daily prices with gaps)
 from CSV, with a date axis, legend and title, exported to PNG.
 
 - `gup::line(rows)` with Unix-second `f64` x values and `Time::new()`, an
-  `Option<f64>` y (a `None` breaks the line), `.color(|r| r.ticker.as_str())`
+  `Option<f64>` y (a `None` breaks the line), `.color(|r| r.ticker.clone())`
   with an explicit palette, `.width(1.5)`, `.grid(Axes::Y)` and a title. No
   hand-computed domain, plot rect, legend or SVG workaround.
 - Works: title, date ticks, legend at the right, grid, exact series colours.

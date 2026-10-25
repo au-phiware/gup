@@ -42,7 +42,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .x(|r| r.t)
         .x_scale(Time::new())
         .y(|r| r.price)
-        .color(|r| r.ticker.as_str())
+        .color(|r| r.ticker.clone())
         .color_scale(Categorical::from_palette(PALETTE.map(Color::hex)))
         .width(1.5)
         .grid(Axes::Y)

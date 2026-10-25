@@ -7,22 +7,17 @@ use std::any::Any;
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use super::{DRAWN, plot_setters};
+use super::{DRAWN, Key, erase_key, plot_setters};
+use crate::column::DictionaryKey;
 use crate::geom::Point;
 use crate::prelude::*;
 use crate::{ColumnValue, Context, Input, Layout, Resolved, Response, Result, RowId};
 
-type Key<T> = Arc<dyn for<'a> Fn(&'a T) -> &'a str + Send + Sync>;
 type Value<T> = Arc<dyn Fn(&T) -> f64 + Send + Sync>;
 type Op<T> = Box<dyn Fn(&mut Selection<T, Rect>) + Send + Sync>;
 
 /// The padding between bars within a group: a tenth of a slot.
 const SLOT_PADDING: f64 = 0.1;
-
-/// Fix a closure's signature to the higher-ranked key form.
-fn key_fn<T, F: for<'a> Fn(&'a T) -> &'a str>(f: F) -> F {
-    f
-}
 
 enum ColorSpec<T> {
     Default,
@@ -146,9 +141,13 @@ impl<T: Send + Sync + 'static> BarChart<T> {
     }
 
     /// The category of each bar, on a band x axis, in first-seen order.
-    pub fn x(mut self, key: impl for<'a> Fn(&'a T) -> &'a str + Send + Sync + 'static) -> Self {
+    ///
+    /// The accessor returns an owned key (an integer, an enum with `Display`,
+    /// `r.name.clone()`, a `&'static str`); see
+    /// [category keys](crate::builder#category-keys).
+    pub fn x<K: DictionaryKey>(mut self, key: impl Fn(&T) -> K + Send + Sync + 'static) -> Self {
         self.check_open();
-        self.x_key = Some(Arc::new(key));
+        self.x_key = Some(erase_key(key));
         self
     }
 
@@ -177,9 +176,16 @@ impl<T: Send + Sync + 'static> BarChart<T> {
     /// Colour by a category key per row, through the colour scale. The last
     /// of `color` and `fill` wins; either replaces the colouring by group
     /// or stack key.
-    pub fn color(mut self, key: impl for<'a> Fn(&'a T) -> &'a str + Send + Sync + 'static) -> Self {
+    ///
+    /// The accessor returns an owned key (an integer, an enum with `Display`,
+    /// `r.name.clone()`, a `&'static str`); see
+    /// [category keys](crate::builder#category-keys).
+    pub fn color<K: DictionaryKey>(
+        mut self,
+        key: impl Fn(&T) -> K + Send + Sync + 'static,
+    ) -> Self {
         self.check_open();
-        self.color = ColorSpec::Key(Arc::new(key));
+        self.color = ColorSpec::Key(erase_key(key));
         self
     }
 
@@ -199,9 +205,16 @@ impl<T: Send + Sync + 'static> BarChart<T> {
 
     /// Bars side by side within each band, one slot per key (first-seen
     /// order), coloured by key. The last of `group` and `stack` wins.
-    pub fn group(mut self, key: impl for<'a> Fn(&'a T) -> &'a str + Send + Sync + 'static) -> Self {
+    ///
+    /// The accessor returns an owned key (an integer, an enum with `Display`,
+    /// `r.name.clone()`, a `&'static str`); see
+    /// [category keys](crate::builder#category-keys).
+    pub fn group<K: DictionaryKey>(
+        mut self,
+        key: impl Fn(&T) -> K + Send + Sync + 'static,
+    ) -> Self {
         self.check_open();
-        self.arrange = Arrange::Group(Arc::new(key));
+        self.arrange = Arrange::Group(erase_key(key));
         self
     }
 
@@ -210,9 +223,16 @@ impl<T: Send + Sync + 'static> BarChart<T> {
     /// negative values downward from 0. Rows sharing a category and a key
     /// draw as one bar of their summed height. The last of `group` and
     /// `stack` wins.
-    pub fn stack(mut self, key: impl for<'a> Fn(&'a T) -> &'a str + Send + Sync + 'static) -> Self {
+    ///
+    /// The accessor returns an owned key (an integer, an enum with `Display`,
+    /// `r.name.clone()`, a `&'static str`); see
+    /// [category keys](crate::builder#category-keys).
+    pub fn stack<K: DictionaryKey>(
+        mut self,
+        key: impl Fn(&T) -> K + Send + Sync + 'static,
+    ) -> Self {
         self.check_open();
-        self.arrange = Arrange::Stack(Arc::new(key));
+        self.arrange = Arrange::Stack(erase_key(key));
         self
     }
 
@@ -252,16 +272,16 @@ impl<T: Send + Sync + 'static> BarChart<T> {
         let Some(key) = key else {
             return vec![rows];
         };
-        let mut index: HashMap<String, usize> = HashMap::new();
+        let mut index: HashMap<Arc<str>, usize> = HashMap::new();
         let slots: Vec<usize> = rows
             .iter()
             .map(|r| {
                 let k = key(r);
-                if let Some(&i) = index.get(k) {
+                if let Some(&i) = index.get(&k) {
                     i
                 } else {
                     let i = index.len();
-                    index.insert(k.to_owned(), i);
+                    index.insert(k, i);
                     i
                 }
             })
@@ -285,8 +305,8 @@ impl<T: Send + Sync + 'static> BarChart<T> {
             let mut seen = std::collections::HashSet::new();
             for r in &rows {
                 let k = xk(r);
-                if seen.insert(k.to_owned()) {
-                    categories.push(k.into());
+                if seen.insert(Arc::clone(&k)) {
+                    categories.push(k);
                 }
             }
         }
@@ -307,7 +327,7 @@ impl<T: Send + Sync + 'static> BarChart<T> {
                         for r in part {
                             let v = y(r);
                             if v.is_finite() {
-                                *sum.entry(xk(r).into()).or_insert(0.0) += v;
+                                *sum.entry(xk(r)).or_insert(0.0) += v;
                             }
                         }
                     }
@@ -326,20 +346,24 @@ impl<T: Send + Sync + 'static> BarChart<T> {
                 let xk = Arc::clone(xk);
                 let enc = |s: &mut Selection<T, Rect>| {
                     let xk = Arc::clone(&xk);
-                    let key = key_fn(move |r: &T| xk(r));
+                    let key = move |r: &T| xk(r);
                     match (&self.arrange, i as u32) {
                         (Arrange::Group(_), i) => {
                             s.x_with(
                                 self.x
                                     .sub_band(i, count)
-                                    .encode_key(key)
+                                    .encode_owned_key(key)
                                     .domain(categories.iter().cloned()),
                             )
                             .width(self.x.sub_band_width_px(count, SLOT_PADDING));
                         }
                         _ => {
-                            s.x_with(self.x.encode_key(key).domain(categories.iter().cloned()))
-                                .width(self.x.band_width_px());
+                            s.x_with(
+                                self.x
+                                    .encode_owned_key(key)
+                                    .domain(categories.iter().cloned()),
+                            )
+                            .width(self.x.band_width_px());
                         }
                     }
                 };
@@ -353,13 +377,13 @@ impl<T: Send + Sync + 'static> BarChart<T> {
                     let (xt, xb) = (self.x_key.clone(), self.x_key.clone());
                     sel.y(move |r: &T| match &xt {
                         Some(xk) if yt(r).is_finite() => {
-                            top.get(xk(r)).map_or(f64::NAN, |&(_, t)| t)
+                            top.get(&xk(r)).map_or(f64::NAN, |&(_, t)| t)
                         }
                         _ => f64::NAN,
                     });
                     sel.y_end(move |r: &T| match &xb {
                         Some(xk) if yb(r).is_finite() => {
-                            base.get(xk(r)).map_or(f64::NAN, |&(b, _)| b)
+                            base.get(&xk(r)).map_or(f64::NAN, |&(b, _)| b)
                         }
                         _ => f64::NAN,
                     });
@@ -381,7 +405,7 @@ impl<T: Send + Sync + 'static> BarChart<T> {
                 (ColorSpec::Default, k) => k.clone(),
             };
             if let Some(key) = key {
-                sel.fill(colours.encode_key(key_fn(move |r: &T| key(r))));
+                sel.fill(colours.encode_owned_key(move |r: &T| key(r)));
                 if let Some(title) = &self.legend_title {
                     sel.legend_title(Rect::FILL, title.clone());
                 }

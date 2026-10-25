@@ -61,7 +61,7 @@ fn builder() -> gup_core::ScatterChart<Row> {
     gup_core::scatter(rows())
         .x(|r| r.x)
         .y(|r| r.y)
-        .color(|r| r.segment.as_str())
+        .color(|r| r.segment.clone())
         .size(|r| r.weight)
         .opacity(0.7)
         .legend_title("Segment")
@@ -172,9 +172,9 @@ fn color_scale_applies_in_either_order() {
     let _ = key;
     let before = gup_core::scatter(rows())
         .color_scale(Categorical::from_palette(palette))
-        .color(|r| r.segment.as_str());
+        .color(|r| r.segment.clone());
     let after = gup_core::scatter(rows())
-        .color(|r| r.segment.as_str())
+        .color(|r| r.segment.clone())
         .color_scale(Categorical::from_palette(palette));
     let all = rows();
     for chart in [before, after] {
@@ -282,7 +282,7 @@ fn line_builder(rows: Vec<Quote>) -> gup_core::LineChart<Quote> {
         .x_scale(Time::new())
         .x(|q| q.time)
         .y(|q| q.price)
-        .color(|q| q.ticker.as_str())
+        .color(|q| q.ticker.clone())
         .legend_title("Ticker")
         .grid(Axes::Y)
         .title("Three tickers, five years")
@@ -307,7 +307,7 @@ fn line_is_byte_identical_to_the_reference_plot() {
     let mut chart = gup_core::line(rows.clone())
         .x(|q| q.time)
         .y(|q| q.price)
-        .color(|q| q.ticker.as_str());
+        .color(|q| q.ticker.clone());
     let (built, built_layout) = chart.render_resolved(&cx, 640, 400).unwrap();
 
     let mut plot = Plot::new();
@@ -410,11 +410,11 @@ fn layers_mut_reaches_each_series() {
     let mut thin = gup_core::line(rows.clone())
         .x(|q| q.time)
         .y(|q| q.price)
-        .color(|q| q.ticker.as_str());
+        .color(|q| q.ticker.clone());
     let mut wide = gup_core::line(rows)
         .x(|q| q.time)
         .y(|q| q.price)
-        .color(|q| q.ticker.as_str());
+        .color(|q| q.ticker.clone());
     let layers = wide.layers_mut();
     assert_eq!(layers.len(), 3);
     layers.into_iter().nth(2).unwrap().width(Px(8.0));
@@ -453,12 +453,12 @@ fn line_setters_panic_after_the_first_draw() {
 fn stroke_gives_one_layer_and_the_last_colour_call_wins() {
     let rows = quotes(5);
     let mut chart = gup_core::line(rows.clone())
-        .color(|q| q.ticker.as_str())
+        .color(|q| q.ticker.clone())
         .stroke(Color::BLACK);
     assert_eq!(chart.layers_mut().len(), 1);
     let mut chart = gup_core::line(rows)
         .stroke(Color::BLACK)
-        .color(|q| q.ticker.as_str());
+        .color(|q| q.ticker.clone());
     assert_eq!(chart.layers_mut().len(), 3);
 }
 
@@ -946,6 +946,117 @@ mod bars {
         let vr = RgbaImage::new(800, 500, image.into_raw()).unwrap();
         harness()
             .run("gup_core/builder_bars", Ok((vr, meta)))
+            .assert_ok();
+    }
+
+    #[derive(Clone, Copy, PartialEq, Eq, Hash)]
+    enum Region {
+        North,
+        South,
+    }
+
+    impl std::fmt::Display for Region {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.write_str(match self {
+                Region::North => "North",
+                Region::South => "South",
+            })
+        }
+    }
+
+    struct Yearly {
+        year: i32,
+        region: Region,
+        total: f64,
+    }
+
+    fn yearly(years: &[i32]) -> Vec<Yearly> {
+        years
+            .iter()
+            .enumerate()
+            .flat_map(|(i, &year)| {
+                [
+                    Yearly {
+                        year,
+                        region: Region::North,
+                        total: 40.0 + 10.0 * i as f64,
+                    },
+                    Yearly {
+                        year,
+                        region: Region::South,
+                        total: 25.0 + 15.0 * i as f64,
+                    },
+                ]
+            })
+            .collect()
+    }
+
+    /// The bounds of the one text run reading `text`.
+    fn text_at(layout: &Layout, text: &str) -> (f32, f32) {
+        let found: Vec<_> = layout
+            .texts
+            .iter()
+            .filter(|t| &*t.run.text == text)
+            .collect();
+        assert_eq!(found.len(), 1, "{text} appears once");
+        (found[0].bounds.x, found[0].bounds.y)
+    }
+
+    #[test]
+    fn integer_and_enum_keys_label_bands_and_legend_in_first_seen_order() {
+        let cx = Context::new_blocking().unwrap();
+        let mut chart = gup_core::bar(yearly(&[2021, 2019, 2020]))
+            .x(|r| r.year)
+            .y(|r| r.total)
+            .group(|r| r.region);
+        let (_, layout) = chart.render_resolved(&cx, 480, 320).unwrap();
+        let (a, b, c) = (
+            text_at(&layout, "2021").0,
+            text_at(&layout, "2019").0,
+            text_at(&layout, "2020").0,
+        );
+        assert!(a < b && b < c, "tick labels out of order: {a} {b} {c}");
+        let (n, s) = (text_at(&layout, "North").1, text_at(&layout, "South").1);
+        assert!(n < s, "legend order: North at {n}, South at {s}");
+    }
+
+    #[test]
+    fn keys_with_the_same_label_are_one_category() {
+        #[derive(Clone, Copy, PartialEq, Eq, Hash)]
+        enum Alias {
+            A,
+            B,
+        }
+        impl std::fmt::Display for Alias {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                f.write_str("same")
+            }
+        }
+        let cx = Context::new_blocking().unwrap();
+        let mut chart = gup_core::bar([(Alias::A, 1.0), (Alias::B, 2.0)])
+            .x(|r| r.0)
+            .y(|r| r.1);
+        let (_, layout) = chart.render_resolved(&cx, 400, 300).unwrap();
+        text_at(&layout, "same");
+    }
+
+    #[test]
+    fn owned_keys_golden() {
+        use crate::common::vr::{layout_metadata, rgba8};
+        let cx = Context::new_blocking().unwrap();
+        let mut chart = gup_core::bar(yearly(&[2019, 2020, 2021]))
+            .x(|r| r.year)
+            .y(|r| r.total)
+            .group(|r| r.region)
+            .legend_title("Region");
+        let (image, layout) = chart.render_resolved(&cx, 480, 320).unwrap();
+        let mut meta = layout_metadata(&layout);
+        for (i, region) in ["North", "South"].iter().enumerate() {
+            meta = meta.with_expected_color(format!("{region} fill"), rgba8(OKABE_ITO[i]));
+        }
+        let vr = RgbaImage::new(480, 320, image.into_raw()).unwrap();
+        harness()
+            .run("gup_core/builder_owned_keys", Ok((vr, meta)))
             .assert_ok();
     }
 }

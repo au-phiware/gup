@@ -18,8 +18,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: 📋
-Planned **Created**: 2026-10-24
+**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: ✅
+Complete (2026-10-25) **Created**: 2026-10-24
 
 ## Context
 
@@ -458,3 +458,69 @@ the best achievable outcome:
 - [ ] `./dogfood/run_all.sh` passes with every check's status unchanged
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
+
+## Resolved (2026-10-25)
+
+Orchestrator chose option 2 then accepted the remaining cost (owned keys are the
+API decision; the user's own clone is inherent).
+
+## Implementation Summary
+
+Builders' six key setters take `K: DictionaryKey` and owned keys; `Key`,
+`erase_key` and `label` live in `builder/mod.rs`; `DictionaryKey` carries the
+`on_unimplemented` diagnostic. Two compile-fail snapshots, one compile-pass
+file, three behaviour tests (2 in `tests/builders.rs`, 1 in `tests/append.rs`)
+plus the `label` unit tests, the `gup_core/builder_owned_keys` golden (read:
+three bands 2019-2021, two palette-coloured bars each, "Region" legend North
+then South, bars inside the plot), and the AC4 call sites migrated. Existing
+goldens and `.stderr` snapshots unchanged.
+
+**AC7 (release, 1M rows, 8 `String` keys, first resolve, median of 5)**:
+
+- Parent, `.color(|r| r.key.as_str())`: 63.3 ms (re-measured later: 64.5 ms).
+- After, `.color(|r| r.key.clone())`: 115.6 ms (1.83x).
+- With a bounded per-closure `HashMap<K, Arc<str>>` label cache in `erase_key`:
+  119.0 ms (no gain), so it was reverted. The cost is not the label allocation;
+  it is the user's clone and the per-row dictionary work.
+
+**Verification**: `cargo test -p gup-core --all-features -- --test-threads=1`
+and doctests pass; `mask merge-check --dogfood`: story-ids, gup-core, wasm-size,
+wasm-browser and dogfood all PASS. WASM scatter gz 334416 B (budget baseline
+334149, +267 B).
+
+## Retrospective
+
+**Completed**: 2026-10-25
+
+### Key Technical Learnings
+
+#### Label cache did not help
+
+- **Challenge**: AC7's owned-key resolve was 1.83x the borrowed one.
+- **Solution**: Tried a bounded `Mutex<HashMap<K, Arc<str>>>` in `erase_key`;
+  119 ms vs 115.6 ms, so it was reverted.
+- **Pattern**: Measure before optimising; the overhead is the user's clone plus
+  the encoder's `Arc<str>` hashing, which only an `encoding.rs` change (option
+  3, not taken) could reduce.
+
+#### trybuild snapshots
+
+- **Challenge**: Unused `prelude` import warnings landed in the `.stderr`.
+- **Solution**: Drop the import from compile-fail files so the snapshot is one
+  error.
+
+### Architectural Decisions
+
+#### Keys compared by label
+
+- **Decision**: As in the story: `Arc<str>` channels everywhere.
+- **Trade-off**: About 52 ns per keyed row at first resolve.
+
+### Development Workflow Insights
+
+- A sandbox guard refused long compound commands; write files with the Write
+  tool and keep commands simple.
+
+### Follow-up Stories
+
+None. A cheaper keyed encode (option 3) is available if a profile ever asks.

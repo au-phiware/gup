@@ -19,7 +19,7 @@ use crate::error::{Error, Result};
 use crate::geom::{Point, Rect};
 use crate::gpu_pick::{GpuPicker, PickTicket};
 use crate::input::{Axes, Brush, Button, Drag, Event, EventInfo, Input, Response};
-use crate::marks::{Circle, Line, Rect as MarkRect, Segment};
+use crate::marks::{Area, Circle, Line, Rect as MarkRect, Segment};
 use crate::pick::{PickIndex, RowId};
 use crate::render::{LayerGpu, Span};
 use crate::scale::{DynPositionScale, Linear, PositionScale, ScaleRef, Ticks};
@@ -628,6 +628,15 @@ impl Plot {
         &mut self,
         rows: impl IntoIterator<Item = T>,
     ) -> &mut Selection<T, Line> {
+        self.add(Selection::new(rows.into_iter().collect::<Vec<_>>()))
+    }
+
+    /// Add a filled area over `rows`, in order, and return its layer. Set its
+    /// baseline with `.y_end(..)`: see [`Area`](crate::Area).
+    pub fn area<T: Send + Sync + 'static>(
+        &mut self,
+        rows: impl IntoIterator<Item = T>,
+    ) -> &mut Selection<T, Area> {
         self.add(Selection::new(rows.into_iter().collect::<Vec<_>>()))
     }
 

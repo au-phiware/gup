@@ -15,8 +15,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: 📋
-Planned **Created**: 2026-10-24
+**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: ✅
+Complete 2026-10-25 **Created**: 2026-10-24
 
 ## Context
 
@@ -60,19 +60,19 @@ GUP-546; the builder and stacking are GUP-547.
 
 ### AC1: The mark
 
-- [ ] `gup_core::Area` (and `AreaAttrs`) as in Decisions, exported from the
+- [x] `gup_core::Area` (and `AreaAttrs`) as in Decisions, exported from the
       crate root and the prelude, with
       `Plot::area(rows) -> &mut Selection<T, Area>`.
-- [ ] Unit test like `line_reads_its_positions_at_the_next_row`: `AreaIn`'s
+- [x] Unit test like `line_reads_its_positions_at_the_next_row`: `AreaIn`'s
       members are `x, y, y_end, fill, fill_opacity, x_next, y_next, y_end_next`;
       `Area::ANTIALIAS == Antialias::Msaa`;
       `Area::GEOMETRY == Geometry::Polyline`.
-- [ ] A doctest draws an area from the `gup` crate and asserts a pixel inside it
+- [x] A doctest draws an area from the `gup` crate and asserts a pixel inside it
       has the fill colour.
 
 ### AC2: Geometry
 
-- [ ] Integration tests (`crates/gup-core/tests/area_png.rs`): the pixel at the
+- [x] Integration tests (`crates/gup-core/tests/area_png.rs`): the pixel at the
       centre of each trapezoid is the fill over white (±2/255); at
       `fill_opacity(0.5)` a horizontal scan through the interior of five
       consecutive trapezoids varies by at most 1/255 (no seams); a segment whose
@@ -81,21 +81,21 @@ GUP-546; the builder and stacking are GUP-547.
       the crossing are filled; the pixel at the crossing column 3 px off the
       baseline on the wrong side is background); a null `y` row breaks the area
       (no fill over the two segments touching it).
-- [ ] A 10-row area in 4-row chunks (`max_chunk_rows(4)`) renders within 8
+- [x] A 10-row area in 4-row chunks (`max_chunk_rows(4)`) renders within 8
       pixels at 2/255 of the one-chunk render (the bridges work).
-- [ ] `Scene::min_samples()` is 4 for a scene with an area layer.
+- [x] `Scene::min_samples()` is 4 for a scene with an area layer.
 
 ### AC3: SVG
 
-- [ ] `SvgTarget` writes an area run as one `<path>` (Decisions); test: an area
+- [x] `SvgTarget` writes an area run as one `<path>` (Decisions); test: an area
       of 5 rows with a null in the middle writes two paths, with the expected
       point counts.
-- [ ] The rasterised SVG (resvg, as `svg_marks.rs` does) matches the GPU render
+- [x] The rasterised SVG (resvg, as `svg_marks.rs` does) matches the GPU render
       under the existing `svg_marks` block-average tolerance.
 
 ### AC4: Visual
 
-- [ ] Golden `gup_core/area_mark` (480×320): a sine wave filled to a 0 baseline
+- [x] Golden `gup_core/area_mark` (480×320): a sine wave filled to a 0 baseline
       at `fill_opacity(0.6)` over `grid(Axes::Y)`, crossing the baseline four
       times, with one null gap. The worker reads it: smooth edges, no seams, the
       fill meets the baseline exactly at each crossing.
@@ -179,11 +179,11 @@ GUP-546; the builder and stacking are GUP-547.
 
 ## Technical Tasks
 
-- [ ] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30 min.
-- [ ] `area.wgsl`, the `Area` struct, `Plot::area`, exports; the unit test;
+- [x] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30 min.
+- [x] `area.wgsl`, the `Area` struct, `Plot::area`, exports; the unit test;
       commit.
-- [ ] `area_png.rs` geometry tests and the chunked test; commit.
-- [ ] The SVG form and its tests; the golden; commit.
+- [x] `area_png.rs` geometry tests and the chunked test; commit.
+- [x] The SVG form and its tests; the golden; commit.
 
 ## Dependencies
 
@@ -205,7 +205,7 @@ GUP-546; the builder and stacking are GUP-547.
 
 ## Success Metrics
 
-- [ ] A filled area renders identically (within the SVG tolerance) in PNG and
+- [x] A filled area renders identically (within the SVG tolerance) in PNG and
       SVG, with no seams at any opacity.
 
 ## Risk Assessment
@@ -219,15 +219,71 @@ GUP-546; the builder and stacking are GUP-547.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1` and
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1` and
       `cargo test -p gup-core -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (`gup_core/area_mark`)
-- [ ] `mask wasm-browser` passes (a new mark in every target)
-- [ ] WASM size: `mask wasm-size` scatter gz bytes reported
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye (`gup_core/area_mark`)
+- [x] `mask wasm-browser` passes (a new mark in every target)
+- [x] WASM size: `mask wasm-size` scatter gz bytes reported
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `area.wgsl` (6 vertices per instance; the crossing split), `Area` /
+  `AreaAttrs` in `marks.rs`, `Plot::area`, exports in the crate root and the
+  prelude.
+- SVG: `MarkKind::Area`, `VectorMark::Area`, one `<path>` per run (`vector.rs`,
+  `svg.rs`, the dispatch in `selection.rs`).
+- Tests: `area_reads_its_positions_at_the_next_row` (unit), the `Area` doctest
+  (a pixel inside has the fill), and `tests/area_png.rs` (7 tests: centres at
+  two opacities, no seams, the crossing, a null break, chunks, SVG paths, the
+  golden `gup_core/area_mark` and its SVG match).
+- The doctest lives in `gup-core`'s `Area` docs (the `gup` crate re-exports the
+  mark); no doctest was added to the root crate's `src/lib.rs`.
+- The golden has a 60% fill, so it sets no expected colour (the colour check
+  looks for the configured, opaque colour); the pixel tests check the blend.
+- `mask merge-check` PASS; WASM scatter 334,365 B gz (budget 334,149, +216 B).
+
+## Retrospective
+
+**Completed**: 2026-10-25
+
+### Key Technical Learnings
+
+#### Shared edges and MSAA
+
+- **Challenge**: Whether adjacent MSAA triangles seam at partial opacity.
+- **Solution**: They do not: the seam scan varies by at most 1/255, so the
+  rasterisation rule gives each sample to one triangle.
+- **Pattern**: Build translucent fills from triangles sharing exact vertices.
+
+#### The bowtie
+
+- **Challenge**: A segment whose top crosses the baseline.
+- **Solution**: The naive `(a, b, b0), (a, b0, a0)` split fills the wrong side
+  of the crossing (right of it, above the baseline); the test checks those
+  pixels, so the split at `c` is what the test proves.
+
+### Architectural Decisions
+
+#### No expected colour on a translucent golden
+
+- **Decision**: `area_mark` sets no `with_expected_color`.
+- **Reasoning**: `color_present` looks for the configured colour at full
+  strength; a 60% fill never shows it.
+- **Future**: A harness option for "the colour over white at this opacity" would
+  let translucent marks keep the check.
+
+### Development Workflow Insights
+
+- The worktree sandbox refuses compound shell commands (`cd x && ...`, `;` with
+  `git`); run plain commands from the checkout root.
+
+### Follow-up Stories
+
+None.
