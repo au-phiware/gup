@@ -19,6 +19,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut chart = gup::scatter(data)
         .x(|p| p.income)
         .x_scale(Log::new())
+        .x_tick_format(|v| format!("${:.0}k", v / 1000.0))
         .y(|p| p.spend)
         .color(|p| p.segment.clone())
         .color_scale(Categorical::from_palette(PALETTE_HEX.map(Color::hex)))
