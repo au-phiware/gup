@@ -475,3 +475,45 @@ fn a_layer_over_the_row_budget_insets_from_statistics_under_every_policy() {
     assert_eq!(auto.x_ticks, gpu.x_ticks);
     assert_eq!(auto.y_ticks, gpu.y_ticks);
 }
+
+/// GUP-528: with a constant radius only the rows nearest each end bind;
+/// rows outside the domain are clipped by design and do not inset it.
+#[test]
+fn a_constant_radius_insets_by_the_rows_nearest_each_end() {
+    let cx = Context::new_blocking().unwrap();
+    let mut plot = Plot::new();
+    let x = plot.x(Linear::new().domain(0.0, 10.0));
+    let y = plot.y(Linear::new().domain(0.0, 10.0));
+    plot.legends(false);
+    plot.add(Selection::<(f64, f64), Circle>::new(vec![
+        (5.0, 5.0),
+        (14.0, 5.0),
+        (9.5, 5.0),
+        (-3.0, 5.0),
+        (0.2, 5.0),
+        (2.0, 5.0),
+    ]))
+    .attr(Circle::X, x.encode(|r: &(f64, f64)| r.0))
+    .attr(Circle::Y, y.encode(|r: &(f64, f64)| r.1))
+    .attr(Circle::RADIUS, Px(25.0))
+    .attr(Circle::FILL, Color::hex(0x0072b2));
+    let (_, layout) = plot.render_resolved(&cx, 480, 320).unwrap();
+    let p = layout.plot;
+    let pad = Theme::default().plot_padding.0;
+    let ex = |v: f64| x.read().eval(v) as f32;
+    let left = ex(0.2) - 25.0 - p.left();
+    assert!((0.0..=1.5).contains(&left), "left edge {left} px in");
+    let right = p.right() - (ex(9.5) + 25.0);
+    assert!(
+        (pad..=pad + 1.5).contains(&right),
+        "right edge {right} px in"
+    );
+    // No y mark is near its ends: y has no inset at all.
+    let ey = |v: f64| y.read().eval(v) as f32;
+    assert!((ey(0.0) - p.bottom()).abs() <= 0.5, "y=0 at {}", ey(0.0));
+    assert!(
+        (ey(10.0) - (p.top() + pad)).abs() <= 0.5,
+        "y=10 at {}",
+        ey(10.0)
+    );
+}

@@ -1402,45 +1402,10 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         let exact_ok = self.retain.keeps_columns(store.rows());
         for (k, chunk) in store.chunks().iter().enumerate() {
             let rows = chunk.rows() as usize;
-            let mut tmp: [Vec<(f32, f32)>; 3] = Default::default();
-            let mut done = false;
-            if exact_ok && rows <= *budget {
-                done = (|| -> Option<()> {
-                    let mut decoded: Vec<Option<Vec<f64>>> = vec![None; store.formats().len()];
-                    for &(_, col, _) in &positions {
-                        decoded[col] = Some(store.chunk_values(k, col)?);
-                    }
-                    for &(col, _) in &size_cols {
-                        decoded[col] = Some(store.chunk_values(k, col)?);
-                    }
-                    for r in 0..rows {
-                        let mut reach = 0.0f64;
-                        for &(col, c) in &size_cols {
-                            let v = decoded[col].as_ref()?[r];
-                            if !v.is_nan() {
-                                reach = reach.max(c.cpu_eval(v)?.abs());
-                            }
-                        }
-                        for &(a, col, c) in &positions {
-                            let v = decoded[col].as_ref()?[r];
-                            if v.is_nan() {
-                                continue;
-                            }
-                            let axis = axes[a].as_ref()?;
-                            let t = axis.t(c.cpu_eval(v)?)?;
-                            axis.push(&mut tmp[a], t, reach.max(f64::from(fixed[a])) as f32);
-                        }
-                    }
-                    Some(())
-                })()
-                .is_some();
-                if done {
-                    *budget -= rows;
-                } else {
-                    tmp = Default::default();
-                }
-            }
-            if !done {
+            // The chunk's statistics bound its marks; a chunk they say
+            // cannot reach an edge is not decoded.
+            let mut stat: [Vec<(f32, f32)>; 3] = Default::default();
+            {
                 // The chunk's statistics bound its marks.
                 let stat_reach = |a: usize| -> f32 {
                     let mut reach = fixed[a];
@@ -1471,11 +1436,69 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
                         Some((lo, hi)) => (lo.clamp(0.0, 1.0), hi.clamp(0.0, 1.0)),
                         None => (0.0, 1.0),
                     };
-                    axis.push(&mut tmp[a], lo, h);
-                    axis.push(&mut tmp[a], hi, h);
+                    axis.push(&mut stat[a], lo, h);
+                    axis.push(&mut stat[a], hi, h);
                 }
             }
-            for (o, t) in out.iter_mut().zip(tmp) {
+            if stat.iter().all(Vec::is_empty) {
+                continue;
+            }
+            let mut tmp: [Vec<(f32, f32)>; 3] = Default::default();
+            let mut done = false;
+            if exact_ok && rows <= *budget {
+                // Only the axes the statistics say may bind are decoded.
+                let live: Vec<_> = positions.iter().filter(|p| !stat[p.0].is_empty()).collect();
+                done = (|| -> Option<()> {
+                    let mut decoded: Vec<Option<Vec<f64>>> = vec![None; store.formats().len()];
+                    for &&(_, col, _) in &live {
+                        decoded[col] = Some(store.chunk_values(k, col)?);
+                    }
+                    for &(col, _) in &size_cols {
+                        decoded[col] = Some(store.chunk_values(k, col)?);
+                    }
+                    if size_cols.is_empty() {
+                        // Every row reaches `fixed`, so only the two rows
+                        // nearest the ends can bind.
+                        for &&(a, col, c) in &live {
+                            let axis = axes[a].as_ref()?;
+                            let stats = chunk.columns()[col].stats()?;
+                            let values = decoded[col].as_ref()?;
+                            let (lo, hi) = in_domain_extremes(values, axis, c, stats.extent())?;
+                            for t in [lo, hi].into_iter().flatten() {
+                                axis.push(&mut tmp[a], t, fixed[a]);
+                            }
+                        }
+                        return Some(());
+                    }
+                    for r in 0..rows {
+                        let mut reach = 0.0f64;
+                        for &(col, c) in &size_cols {
+                            let v = decoded[col].as_ref()?[r];
+                            if !v.is_nan() {
+                                reach = reach.max(c.cpu_eval(v)?.abs());
+                            }
+                        }
+                        for &&(a, col, c) in &live {
+                            let v = decoded[col].as_ref()?[r];
+                            if v.is_nan() {
+                                continue;
+                            }
+                            let axis = axes[a].as_ref()?;
+                            let t = axis.t(c.cpu_eval(v)?)?;
+                            axis.push(&mut tmp[a], t, reach.max(f64::from(fixed[a])) as f32);
+                        }
+                    }
+                    Some(())
+                })()
+                .is_some();
+                if done {
+                    *budget -= rows;
+                } else {
+                    tmp = Default::default();
+                }
+            }
+            let found = if done { tmp } else { stat };
+            for (o, t) in out.iter_mut().zip(found) {
                 o.extend(t);
             }
         }
@@ -2035,6 +2058,56 @@ fn chunk_validity<'c>(
     cx: &Context,
 ) -> Option<&'c wgpu::Buffer> {
     reads.then(|| chunk.validity_buffer(cx).expect("uploaded above"))
+}
+
+/// The smallest and largest normalized position among the rows of
+/// `values` that lie in the domain (`0..=1`), where `c` maps a value to
+/// pixels and `extent` is the values' (min, max). Every library scale is
+/// monotonic, so a row between two rows already seen in the domain cannot
+/// be an extreme, and one beyond a row seen outside cannot be inside: only
+/// a few rows are evaluated. `None` if `c` has no CPU mirror.
+fn in_domain_extremes<T>(
+    values: &[f64],
+    axis: &EdgeAxis,
+    c: &dyn crate::encoding::DynColumnEncoding<T>,
+    extent: (f64, f64),
+) -> Option<(Option<f32>, Option<f32>)> {
+    let t_of = |v: f64| axis.t(c.cpu_eval(v)?);
+    let (t0, t1) = (t_of(extent.0)?, t_of(extent.1)?);
+    if t0 == t1 {
+        // A constant column, or a degenerate range: one row decides.
+        let t = (0.0..=1.0).contains(&t0).then_some(t0);
+        return Some((t, t));
+    }
+    // `key` grows with the normalized position.
+    let sign = if t1 > t0 { 1.0 } else { -1.0 };
+    let (mut out_below, mut out_above) = (f64::NEG_INFINITY, f64::INFINITY);
+    let (mut in_lo, mut in_hi) = ((f64::INFINITY, 0.0f32), (f64::NEG_INFINITY, 0.0f32));
+    for &v in values {
+        let k = v * sign;
+        if v.is_nan() || k <= out_below || k >= out_above || (k >= in_lo.0 && k <= in_hi.0) {
+            continue;
+        }
+        let t = t_of(v)?;
+        if t < 0.0 {
+            out_below = out_below.max(k);
+        } else if t > 1.0 {
+            out_above = out_above.min(k);
+        } else {
+            if k < in_lo.0 {
+                in_lo = (k, t);
+            }
+            if k > in_hi.0 {
+                in_hi = (k, t);
+            }
+        }
+    }
+    let found = in_lo.0 <= in_hi.0;
+    Some(if found {
+        (Some(in_lo.1), Some(in_hi.1))
+    } else {
+        (None, None)
+    })
 }
 
 /// The identity ([`DynPositionScale::identity`]) of the scale a column
