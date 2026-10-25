@@ -20,7 +20,7 @@ fn chart(data: Vec<Pt>) -> ScatterChart<Pt> {
         .x(|p| p.income)
         .x_scale(Log::new())
         .y(|p| p.spend)
-        .color(|p| p.segment.as_str())
+        .color(|p| p.segment.clone())
         .color_scale(Categorical::from_palette(PALETTE_HEX.map(Color::hex)))
         .size(|p| p.weight)
         .opacity(0.35)

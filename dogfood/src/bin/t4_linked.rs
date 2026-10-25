@@ -44,7 +44,7 @@ fn left_chart(data: &[Pt], shared: Arc<Shared>) -> ScatterChart<Pt> {
         .x(|p| p.income)
         .x_scale(Log::new())
         .y(|p| p.spend)
-        .color(|p| p.segment.as_str())
+        .color(|p| p.segment.clone())
         .color_scale(Categorical::from_palette(palette()))
         .size(|p| p.weight)
         .opacity(0.6)
@@ -91,9 +91,9 @@ fn right_chart(data: &[Pt], selected: &[usize]) -> ScatterChart<R> {
         .y(|r| r.pt.spend)
         .color(|r| {
             if r.hot {
-                r.pt.segment.as_str()
+                r.pt.segment.clone()
             } else {
-                "unselected"
+                "unselected".to_owned()
             }
         })
         .color_scale(Categorical::from_palette(colors))

@@ -40,16 +40,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             sales: s.sales,
         });
         let chart = gup::bar(rows)
-            .x(|d| d.quarter.as_str())
+            .x(|d| d.quarter.clone())
             .y(|d| d.sales)
-            .color(|d| d.region.as_str())
+            .color(|d| d.region.clone())
             .color_scale(Categorical::from_palette(PALETTE.map(Color::hex)))
             .padding(0.15)
             .title(format!("Sales by quarter and region ({name})"));
         let mut chart = if stacked {
-            chart.stack(|d| d.region.as_str())
+            chart.stack(|d| d.region.clone())
         } else {
-            chart.group(|d| d.region.as_str())
+            chart.group(|d| d.region.clone())
         };
         chart.save_png(&cx, format!("/tmp/gup-dogfood/t2_{name}.png"), 800, 500)?;
     }

@@ -23,7 +23,7 @@
 //! let mut chart = gup::scatter(data)
 //!     .x(|d| d.gdp)
 //!     .y(|d| d.life_exp)
-//!     .color(|d| d.continent.as_str())
+//!     .color(|d| d.continent.clone())
 //!     .size(|d| d.population);
 //! let image = chart.render(&Context::shared()?, 800, 500)?;
 //! assert_eq!(image.dimensions(), (800, 500));
