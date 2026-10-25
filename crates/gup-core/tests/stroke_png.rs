@@ -10,7 +10,6 @@ mod common;
 use common::vr::{harness, layout_metadata};
 use gup_core::ImageTarget;
 use gup_core::prelude::*;
-use gup_core::scene::{ItemKind, Rule};
 use gup_visual_regression::RgbaImage;
 
 const WIDTH: u32 = 720;
@@ -158,29 +157,28 @@ fn bubbles_with_translucent_fills_and_outlines() {
         .assert_ok();
 
     // GUP-435: the domains are fixed, so the axis lines cover only the
-    // range and the last tick sits on its end. GUP-540: the first tick sits
-    // the largest radius (60 px) in from the corner, where the axes meet.
-    let axes: Vec<&Rule> = resolved
-        .scene
-        .items
-        .iter()
-        .filter_map(|i| match &i.kind {
-            ItemKind::Rules(r) => Some(r),
-            _ => None,
-        })
-        .flatten()
-        .take(2)
-        .collect();
-    let step = |t: &[(f64, f32)]| (t[1].1 - t[0].1).abs();
+    // range and the last tick sits on its end. GUP-528: the bubbles are
+    // placed by a pixel-identity scale, not the plot's axes, so no mark is
+    // bound to them: the axes meet at the corner (no inset at the near
+    // end) and the far ends keep only the plot padding.
+    let plot = resolved.layout.plot;
+    let pad = Theme::default().plot_padding.0;
     let (xt, yt) = (&resolved.layout.x_ticks, &resolved.layout.y_ticks);
-    let (x_axis, y_axis) = (axes[0], axes[1]);
-    let (x_lo, x_hi) = (x_axis.p0.x.min(x_axis.p1.x), x_axis.p0.x.max(x_axis.p1.x));
-    let (y_lo, y_hi) = (y_axis.p0.y.min(y_axis.p1.y), y_axis.p0.y.max(y_axis.p1.y));
-    let (xs, ys) = (step(xt), step(yt));
-    assert!((xt[0].1 - x_lo - 60.0).abs() <= 1.0 && (xt[xt.len() - 1].1 - x_hi).abs() <= xs);
-    let (y_first, y_last) = (yt[0].1, yt[yt.len() - 1].1);
-    assert!((y_hi - y_first.max(y_last) - 60.0).abs() <= 1.0);
-    assert!((y_first.min(y_last) - y_lo).abs() <= ys);
+    assert!(
+        (xt[0].1 - plot.left()).abs() <= 1.0,
+        "first x tick {} vs corner {}",
+        xt[0].1,
+        plot.left()
+    );
+    assert!((yt[0].1 - plot.bottom()).abs() <= 1.0, "first y tick");
+    assert!(
+        (xt[xt.len() - 1].1 - (plot.right() - pad)).abs() <= 1.0,
+        "last x tick"
+    );
+    assert!(
+        (yt[yt.len() - 1].1 - (plot.top() + pad)).abs() <= 1.0,
+        "last y tick"
+    );
 }
 
 /// The `i`-th element of the base-`b` Halton sequence, in `[0, 1)`.

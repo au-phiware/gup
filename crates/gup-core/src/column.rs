@@ -1214,6 +1214,26 @@ impl ColumnStore {
         Some(out)
     }
 
+    /// Chunk `k`'s values of column `column`, decoded as
+    /// [`cpu_values`](Self::cpu_values) does; `None` if the chunk's CPU copy
+    /// was released, or `k` or `column` is out of range.
+    pub(crate) fn chunk_values(&self, k: usize, column: usize) -> Option<Vec<f64>> {
+        let format = *self.formats.get(column)?;
+        let chunk = self.chunks.get(k)?;
+        let cpu = chunk.cpu.as_ref()?;
+        let mut out = Vec::with_capacity(chunk.len as usize);
+        decode_chunk(
+            &mut out,
+            format,
+            self.plane_of(column),
+            self.validity_planes(),
+            chunk.len,
+            chunk.columns.get(column)?,
+            cpu,
+        );
+        Some(out)
+    }
+
     /// The validity plane of numeric column `column` (columns before it
     /// that have validity).
     fn plane_of(&self, column: usize) -> usize {
