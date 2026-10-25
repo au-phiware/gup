@@ -644,6 +644,39 @@ fn drag_zoom_sets_the_domains_to_the_rectangle_and_reset_view_undoes_it() {
     );
 }
 
+/// GUP-528: a moved view keeps the edge insets it had, so a pan moves the
+/// content by exactly the dragged pixels, and `reset_view` solves again.
+#[test]
+fn a_pan_keeps_the_edge_insets_and_reset_view_restores_them() {
+    let cx = Context::new_blocking().expect("headless GPU context");
+    let mut plot = Plot::new();
+    let x = plot.x(Linear::new().domain(0.0, 10.0));
+    let y = plot.y(Linear::new().domain(0.0, 10.0));
+    plot.add(Selection::<(f64, f64), Circle>::new(vec![(0.0, 5.0)]))
+        .attr(Circle::X, x.encode(|r: &(f64, f64)| r.0))
+        .attr(Circle::Y, y.encode(|r: &(f64, f64)| r.1))
+        .attr(Circle::RADIUS, Px(20.0));
+    let first = plot.resolve(&cx, W, H).unwrap().layout.clone();
+    let before = x.read().eval(5.0) as f32;
+    plot.pan(30.0, 0.0).unwrap();
+    let after_layout = plot.resolve(&cx, W, H).unwrap().layout.clone();
+    let after = x.read().eval(5.0) as f32;
+    assert!(
+        (after - before - 30.0).abs() <= 0.01,
+        "x=5 moved {} px: {first:?} then {after_layout:?}",
+        after - before
+    );
+    plot.reset_view();
+    let again = plot.resolve(&cx, W, H).unwrap().layout.clone();
+    for (a, b) in first.x_ticks.iter().zip(&again.x_ticks) {
+        assert!((a.1 - b.1).abs() <= 0.01, "{a:?} vs {b:?}");
+    }
+    for (a, b) in first.y_ticks.iter().zip(&again.y_ticks) {
+        assert!((a.1 - b.1).abs() <= 0.01, "{a:?} vs {b:?}");
+    }
+    assert_eq!(first.x_ticks.len(), again.x_ticks.len());
+}
+
 #[test]
 fn brush_golden() {
     let cx = Context::new_blocking().expect("headless GPU context");

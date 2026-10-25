@@ -17,6 +17,7 @@ use crate::input::{Event, EventInfo};
 use crate::order::{DrawEntry, DrawOrder, chunk_spans, draw_entries, polyline_spans};
 use crate::pick::PICK_TOLERANCE;
 use crate::pick::{Chan, Chans, PickItem, build_items};
+use crate::plot::inset::EdgeAxis;
 use crate::render::{
     ChunkDraw, Draws, LayerGpu, LayerUniforms, chunk_uniform_offset, chunk_uniforms,
 };
@@ -349,6 +350,30 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
     }
 
     /// Whether every row not evicted is still in `rows` (none released).
+    /// Whether position channel `name` is ignored: a box in
+    /// centre-plus-extent mode (a constant, non-zero width or height) draws
+    /// centre +- extent / 2, and ignores its far edge.
+    fn ignored_end(&self, name: &str) -> bool {
+        let extent_set = |name: &str| {
+            M::CHANNELS
+                .iter()
+                .position(|d| d.name == name)
+                .is_some_and(|i| match &self.encodings[i] {
+                    Some(Encoding::Const(v)) => matches!(v, ConstValue::F32(w) if *w != 0.0),
+                    Some(Encoding::Derived(f)) => {
+                        matches!(f(), ConstValue::F32(w) if w != 0.0)
+                    }
+                    _ => false,
+                })
+        };
+        M::HIT == HitShape::AlignedBox
+            && match name {
+                "x_end" => extent_set("width"),
+                "y_end" => extent_set("height"),
+                _ => false,
+            }
+    }
+
     fn all_rows_held(&self) -> bool {
         self.released as u64 == self.evicted
     }
@@ -400,7 +425,9 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
     }
 
     /// Set how much CPU data to keep once the columns are on the GPU
-    /// (default [`Retain::Auto`]).
+    /// (default [`Retain::Auto`]). Policies that drop the CPU columns
+    /// inset the edges of an explicit-domain axis from chunk statistics, so
+    /// a few pixels more than the exact rows would need (GUP-528).
     pub fn retain(&mut self, policy: Retain) -> &mut Self {
         self.retain = policy;
         self
@@ -874,6 +901,17 @@ pub(crate) trait Layer: wgpu::WasmNotSendSync {
     /// pixel inside `plot`, from the chunks' position stats and the
     /// current scales. Empty when the layer has no column store.
     fn visible_entries(&self, plot: Rect) -> Vec<bool>;
+    /// GUP-528: the marks that can reach within an axis's edge allowance,
+    /// pushed onto `out[i]` as `(t, h)` for each asked axis `axes[i]`
+    /// (x, y, right y): `t` is the mark's position normalized to the axis
+    /// range, `h` its half-extent in pixels along the axis. Rows are
+    /// decoded while `budget` lasts, else chunk statistics bound them.
+    fn edge_marks(
+        &self,
+        axes: &[Option<EdgeAxis>; 3],
+        budget: &mut usize,
+        out: &mut [Vec<(f32, f32)>; 3],
+    );
     /// Generate the glue, link it (cached), write uniforms and upload.
     ///
     /// `brushable`: the glue dims rows outside the plot's brush
@@ -1141,10 +1179,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             let (Some(Role::Y), Some(Encoding::Column(c))) = (d.role, e) else {
                 return None;
             };
-            c.links()
-                .first()?
-                .dictionary_slot()
-                .map(|slot| std::ptr::from_ref(slot) as usize)
+            scale_identity(c.as_ref())
         })
     }
 
@@ -1259,28 +1294,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             ConstValue::F32(r) => (f64::from(*r), f64::from(*r)),
             ConstValue::Vec4(_) => (f64::NEG_INFINITY, f64::INFINITY),
         };
-        // A box in centre-plus-extent mode (a constant, non-zero width or
-        // height) draws centre +- extent / 2, and ignores its far edge.
-        let extent_set = |name: &str| {
-            M::CHANNELS
-                .iter()
-                .position(|d| d.name == name)
-                .is_some_and(|i| match &self.encodings[i] {
-                    Some(Encoding::Const(v)) => matches!(v, ConstValue::F32(w) if *w != 0.0),
-                    Some(Encoding::Derived(f)) => {
-                        matches!(f(), ConstValue::F32(w) if w != 0.0)
-                    }
-                    _ => false,
-                })
-        };
-        let ignored = |name: &str| {
-            M::HIT == HitShape::AlignedBox
-                && match name {
-                    "x_end" => extent_set("width"),
-                    "y_end" => extent_set("height"),
-                    _ => false,
-                }
-        };
+        let ignored = |name: &str| self.ignored_end(name);
         let boxes: Vec<Option<PixelBox>> = (0..stored.len())
             .map(|k| {
                 let mut b = PixelBox::EMPTY;
@@ -1327,6 +1341,169 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             self.cull_margin() + PICK_TOLERANCE.0 + 1.0,
             plot,
         )
+    }
+
+    fn edge_marks(
+        &self,
+        axes: &[Option<EdgeAxis>; 3],
+        budget: &mut usize,
+        out: &mut [Vec<(f32, f32)>; 3],
+    ) {
+        type Col<'c, T> = &'c dyn crate::encoding::DynColumnEncoding<T>;
+        let Some(store) = &self.columns else { return };
+        // The position columns bound to each asked axis, and the size
+        // columns (which reach along every axis), by column index.
+        let mut positions: Vec<(usize, usize, Col<T>)> = Vec::new();
+        let mut size_cols: Vec<(usize, Col<T>)> = Vec::new();
+        let mut size_const = 0.0f32;
+        let mut column = 0;
+        for (d, e) in M::CHANNELS.iter().zip(&self.encodings) {
+            let value = |v: &ConstValue| match v {
+                ConstValue::F32(r) => *r,
+                ConstValue::Vec4(_) => 0.0,
+            };
+            match e {
+                Some(Encoding::Column(c)) => {
+                    column += 1;
+                    match d.role {
+                        Some(Role::X | Role::Y) if self.ignored_end(d.name) => {}
+                        Some(role @ (Role::X | Role::Y)) => {
+                            let id = scale_identity(c.as_ref());
+                            let axes_of: &[usize] = if role == Role::X { &[0] } else { &[1, 2] };
+                            for &a in axes_of {
+                                if axes[a].is_some_and(|x| Some(x.identity) == id) {
+                                    positions.push((a, column - 1, c.as_ref()));
+                                }
+                            }
+                        }
+                        Some(Role::Size) => size_cols.push((column - 1, c.as_ref())),
+                        _ => {}
+                    }
+                }
+                _ if d.role == Some(Role::Size) => {
+                    let v = match e {
+                        Some(Encoding::Const(v)) => value(v),
+                        Some(Encoding::Derived(f)) => value(&f()),
+                        _ => value(&d.default),
+                    };
+                    size_const = size_const.max(v);
+                }
+                _ => {}
+            }
+        }
+        if positions.is_empty() {
+            return;
+        }
+        let o = self.overhang();
+        // Per axis: what a mark reaches regardless of its row.
+        let fixed = [
+            size_const.max(o.x),
+            size_const.max(o.y),
+            size_const.max(o.y),
+        ];
+        let exact_ok = self.retain.keeps_columns(store.rows());
+        for (k, chunk) in store.chunks().iter().enumerate() {
+            let rows = chunk.rows() as usize;
+            // The chunk's statistics bound its marks; a chunk they say
+            // cannot reach an edge is not decoded.
+            let mut stat: [Vec<(f32, f32)>; 3] = Default::default();
+            {
+                // The chunk's statistics bound its marks.
+                let stat_reach = |a: usize| -> f32 {
+                    let mut reach = fixed[a];
+                    for &(col, c) in &size_cols {
+                        let image = chunk.columns()[col]
+                            .stats()
+                            .map_or(Some((0.0, 0.0)), |s| c.image(s.extent()));
+                        reach = reach.max(
+                            image.map_or(f32::INFINITY, |(lo, hi)| lo.abs().max(hi.abs()) as f32),
+                        );
+                    }
+                    reach
+                };
+                for &(a, col, c) in &positions {
+                    let Some(axis) = axes[a].as_ref() else {
+                        continue;
+                    };
+                    let Some(stats) = chunk.columns()[col].stats() else {
+                        continue;
+                    };
+                    let h = stat_reach(a);
+                    let span = c
+                        .image(stats.extent())
+                        .and_then(|(p, q)| Some((axis.t(p)?, axis.t(q)?)))
+                        .map(|(p, q)| (p.min(q), p.max(q)));
+                    let (lo, hi) = match span {
+                        Some((lo, hi)) if hi < 0.0 || lo > 1.0 => continue,
+                        Some((lo, hi)) => (lo.clamp(0.0, 1.0), hi.clamp(0.0, 1.0)),
+                        None => (0.0, 1.0),
+                    };
+                    axis.push(&mut stat[a], lo, h);
+                    axis.push(&mut stat[a], hi, h);
+                }
+            }
+            if stat.iter().all(Vec::is_empty) {
+                continue;
+            }
+            let mut tmp: [Vec<(f32, f32)>; 3] = Default::default();
+            let mut done = false;
+            if exact_ok && rows <= *budget {
+                // Only the axes the statistics say may bind are decoded.
+                let live: Vec<_> = positions.iter().filter(|p| !stat[p.0].is_empty()).collect();
+                done = (|| -> Option<()> {
+                    let mut decoded: Vec<Option<Vec<f64>>> = vec![None; store.formats().len()];
+                    for &&(_, col, _) in &live {
+                        decoded[col] = Some(store.chunk_values(k, col)?);
+                    }
+                    for &(col, _) in &size_cols {
+                        decoded[col] = Some(store.chunk_values(k, col)?);
+                    }
+                    if size_cols.is_empty() {
+                        // Every row reaches `fixed`, so only the two rows
+                        // nearest the ends can bind.
+                        for &&(a, col, c) in &live {
+                            let axis = axes[a].as_ref()?;
+                            let stats = chunk.columns()[col].stats()?;
+                            let values = decoded[col].as_ref()?;
+                            let (lo, hi) = in_domain_extremes(values, axis, c, stats.extent())?;
+                            for t in [lo, hi].into_iter().flatten() {
+                                axis.push(&mut tmp[a], t, fixed[a]);
+                            }
+                        }
+                        return Some(());
+                    }
+                    for r in 0..rows {
+                        let mut reach = 0.0f64;
+                        for &(col, c) in &size_cols {
+                            let v = decoded[col].as_ref()?[r];
+                            if !v.is_nan() {
+                                reach = reach.max(c.cpu_eval(v)?.abs());
+                            }
+                        }
+                        for &&(a, col, c) in &live {
+                            let v = decoded[col].as_ref()?[r];
+                            if v.is_nan() {
+                                continue;
+                            }
+                            let axis = axes[a].as_ref()?;
+                            let t = axis.t(c.cpu_eval(v)?)?;
+                            axis.push(&mut tmp[a], t, reach.max(f64::from(fixed[a])) as f32);
+                        }
+                    }
+                    Some(())
+                })()
+                .is_some();
+                if done {
+                    *budget -= rows;
+                } else {
+                    tmp = Default::default();
+                }
+            }
+            let found = if done { tmp } else { stat };
+            for (o, t) in out.iter_mut().zip(found) {
+                o.extend(t);
+            }
+        }
     }
 
     fn legends(&self) -> Vec<(Option<String>, Legend)> {
@@ -1883,6 +2060,65 @@ fn chunk_validity<'c>(
     cx: &Context,
 ) -> Option<&'c wgpu::Buffer> {
     reads.then(|| chunk.validity_buffer(cx).expect("uploaded above"))
+}
+
+/// The smallest and largest normalized position among the rows of
+/// `values` that lie in the domain (`0..=1`), where `c` maps a value to
+/// pixels and `extent` is the values' (min, max). Every library scale is
+/// monotonic, so a row between two rows already seen in the domain cannot
+/// be an extreme, and one beyond a row seen outside cannot be inside: only
+/// a few rows are evaluated. `None` if `c` has no CPU mirror.
+fn in_domain_extremes<T>(
+    values: &[f64],
+    axis: &EdgeAxis,
+    c: &dyn crate::encoding::DynColumnEncoding<T>,
+    extent: (f64, f64),
+) -> Option<(Option<f32>, Option<f32>)> {
+    let t_of = |v: f64| axis.t(c.cpu_eval(v)?);
+    let (t0, t1) = (t_of(extent.0)?, t_of(extent.1)?);
+    if t0 == t1 {
+        // A constant column, or a degenerate range: one row decides.
+        let t = (0.0..=1.0).contains(&t0).then_some(t0);
+        return Some((t, t));
+    }
+    // `key` grows with the normalized position.
+    let sign = if t1 > t0 { 1.0 } else { -1.0 };
+    let (mut out_below, mut out_above) = (f64::NEG_INFINITY, f64::INFINITY);
+    let (mut in_lo, mut in_hi) = ((f64::INFINITY, 0.0f32), (f64::NEG_INFINITY, 0.0f32));
+    for &v in values {
+        let k = v * sign;
+        if v.is_nan() || k <= out_below || k >= out_above || (k >= in_lo.0 && k <= in_hi.0) {
+            continue;
+        }
+        let t = t_of(v)?;
+        if t < 0.0 {
+            out_below = out_below.max(k);
+        } else if t > 1.0 {
+            out_above = out_above.min(k);
+        } else {
+            if k < in_lo.0 {
+                in_lo = (k, t);
+            }
+            if k > in_hi.0 {
+                in_hi = (k, t);
+            }
+        }
+    }
+    let found = in_lo.0 <= in_hi.0;
+    Some(if found {
+        (Some(in_lo.1), Some(in_hi.1))
+    } else {
+        (None, None)
+    })
+}
+
+/// The identity ([`DynPositionScale::identity`]) of the scale a column
+/// encoding's first link is, if it is one.
+fn scale_identity<T>(c: &dyn crate::encoding::DynColumnEncoding<T>) -> Option<usize> {
+    c.links()
+        .first()?
+        .dictionary_slot()
+        .map(|slot| std::ptr::from_ref(slot) as usize)
 }
 
 fn context(e: Error, mark: &str, channel: &str) -> Error {

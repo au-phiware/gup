@@ -333,3 +333,187 @@ fn points_on_an_explicit_domain_edge_are_whole() {
         }
     }
 }
+
+/// Discs `(x, y, radius)` on explicit `0..10` domains; the radius is a
+/// column on a pixel-identity scale, so it is a size, not a position.
+fn edge_discs(
+    rows: Vec<(f64, f64, f64)>,
+    retain: Retain,
+) -> (image::RgbaImage, Layout, ScaleRef<Linear>, ScaleRef<Linear>) {
+    let cx = Context::new_blocking().unwrap();
+    let mut plot = Plot::new();
+    let x = plot.x(Linear::new().domain(0.0, 10.0));
+    let y = plot.y(Linear::new().domain(0.0, 10.0));
+    plot.legends(false);
+    let pixels = || Linear::new().domain(0.0, 1.0).range(Px(0.0), Px(1.0));
+    plot.add(Selection::<(f64, f64, f64), Circle>::new(rows))
+        .attr(Circle::X, x.encode(|r: &(f64, f64, f64)| r.0))
+        .attr(Circle::Y, y.encode(|r: &(f64, f64, f64)| r.1))
+        .attr(Circle::RADIUS, pixels().encode(|r: &(f64, f64, f64)| r.2))
+        .attr(Circle::FILL, Color::hex(0x0072b2))
+        .retain(retain);
+    let (image, layout) = plot.render_resolved(&cx, 480, 320).unwrap();
+    (image, layout, x, y)
+}
+
+const EDGE_ROWS: [(f64, f64, f64); 4] = [
+    (0.5, 5.0, 30.0),
+    (9.9, 5.0, 20.0),
+    (5.0, 9.8, 15.0),
+    (5.0, 4.0, 10.0),
+];
+
+/// Every disc's colour is present 4 px inside its edge, in four directions.
+fn assert_discs_whole(
+    image: &image::RgbaImage,
+    layout: &Layout,
+    x: &ScaleRef<Linear>,
+    y: &ScaleRef<Linear>,
+) {
+    let p = layout.plot;
+    for (a, b, r) in EDGE_ROWS {
+        let (cx_, cy) = (x.read().eval(a) as f32, y.read().eval(b) as f32);
+        for (dx, dy) in [(-1.0f32, 0.0f32), (1.0, 0.0), (0.0, -1.0), (0.0, 1.0)] {
+            let (px, py) = (cx_ + dx * (r as f32 - 4.0), cy + dy * (r as f32 - 4.0));
+            assert!(
+                px >= p.left() && px < p.right() && py >= p.top() && py < p.bottom(),
+                "({a}, {b}) probe ({px}, {py}) outside {p:?}"
+            );
+            assert_eq!(
+                image.get_pixel(px as u32, py as u32).0[..3],
+                [0x00, 0x72, 0xb2],
+                "disc at ({a}, {b}) near ({px}, {py})"
+            );
+        }
+    }
+}
+
+/// The four insets of an `edge_discs` plot: near x, near y, far x, far y.
+fn edge_insets(layout: &Layout, x: &ScaleRef<Linear>, y: &ScaleRef<Linear>) -> [f32; 4] {
+    let p = layout.plot;
+    let (x0, x10) = (x.read().eval(0.0) as f32, x.read().eval(10.0) as f32);
+    let (y0, y10) = (y.read().eval(0.0) as f32, y.read().eval(10.0) as f32);
+    [
+        x0 - p.left(),
+        p.bottom() - y0,
+        p.right() - x10,
+        y10 - p.top(),
+    ]
+}
+
+/// GUP-528: each end of an explicit axis is inset by the marks that reach
+/// it, not by the largest mark: the bottom has no mark, the left disc's
+/// edge lies on the plot's edge, and the far discs keep the padding only.
+#[test]
+fn explicit_domain_insets_follow_the_edge_marks() {
+    let (image, layout, x, y) = edge_discs(EDGE_ROWS.to_vec(), Retain::Auto);
+    let p = layout.plot;
+    let pad = Theme::default().plot_padding.0;
+    let ex = |v: f64| x.read().eval(v) as f32;
+    let ey = |v: f64| y.read().eval(v) as f32;
+    let left = ex(0.5) - 30.0 - p.left();
+    assert!((0.0..=1.5).contains(&left), "left disc edge {left} px in");
+    let right = p.right() - (ex(9.9) + 20.0);
+    assert!(
+        (pad..=pad + 1.5).contains(&right),
+        "right disc edge {right} px in"
+    );
+    let top = (ey(9.8) - 15.0) - p.top();
+    assert!(
+        (pad..=pad + 1.5).contains(&top),
+        "top disc edge {top} px in"
+    );
+    assert!(
+        (ey(0.0) - p.bottom()).abs() <= 0.5,
+        "y=0 at {} vs {}",
+        ey(0.0),
+        p.bottom()
+    );
+    assert_discs_whole(&image, &layout, &x, &y);
+}
+
+/// GUP-528: with the CPU columns released, chunk statistics give insets
+/// that are no smaller than the exact ones and no larger than GUP-540's.
+#[test]
+fn released_columns_inset_from_chunk_statistics() {
+    let (_, exact_layout, ex, ey) = edge_discs(EDGE_ROWS.to_vec(), Retain::Auto);
+    let exact = edge_insets(&exact_layout, &ex, &ey);
+    let (image, layout, x, y) = edge_discs(EDGE_ROWS.to_vec(), Retain::GpuOnly);
+    assert_discs_whole(&image, &layout, &x, &y);
+    let pad = Theme::default().plot_padding.0;
+    let got = edge_insets(&layout, &x, &y);
+    let max = [30.0, 30.0, 30.0 + pad, 30.0 + pad];
+    for i in 0..4 {
+        assert!(
+            got[i] >= exact[i] - 0.01 && got[i] <= max[i] + 0.01,
+            "inset {i}: {} not in {}..={}",
+            got[i],
+            exact[i],
+            max[i]
+        );
+    }
+}
+
+/// GUP-528: above the row budget both retain policies use the statistics.
+#[test]
+fn a_layer_over_the_row_budget_insets_from_statistics_under_every_policy() {
+    let rows = || -> Vec<(f64, f64, f64)> {
+        let mut rows: Vec<(f64, f64, f64)> = (0..70_000)
+            .map(|i| {
+                (
+                    1.0 + f64::from(i % 97) / 12.0,
+                    1.0 + f64::from(i % 89) / 11.0,
+                    2.0,
+                )
+            })
+            .collect();
+        rows[0] = (0.0, 0.0, 20.0);
+        rows
+    };
+    let (_, auto, ..) = edge_discs(rows(), Retain::Auto);
+    let (_, gpu, ..) = edge_discs(rows(), Retain::GpuOnly);
+    assert_eq!(auto.x_ticks, gpu.x_ticks);
+    assert_eq!(auto.y_ticks, gpu.y_ticks);
+}
+
+/// GUP-528: with a constant radius only the rows nearest each end bind;
+/// rows outside the domain are clipped by design and do not inset it.
+#[test]
+fn a_constant_radius_insets_by_the_rows_nearest_each_end() {
+    let cx = Context::new_blocking().unwrap();
+    let mut plot = Plot::new();
+    let x = plot.x(Linear::new().domain(0.0, 10.0));
+    let y = plot.y(Linear::new().domain(0.0, 10.0));
+    plot.legends(false);
+    plot.add(Selection::<(f64, f64), Circle>::new(vec![
+        (5.0, 5.0),
+        (14.0, 5.0),
+        (9.5, 5.0),
+        (-3.0, 5.0),
+        (0.2, 5.0),
+        (2.0, 5.0),
+    ]))
+    .attr(Circle::X, x.encode(|r: &(f64, f64)| r.0))
+    .attr(Circle::Y, y.encode(|r: &(f64, f64)| r.1))
+    .attr(Circle::RADIUS, Px(25.0))
+    .attr(Circle::FILL, Color::hex(0x0072b2));
+    let (_, layout) = plot.render_resolved(&cx, 480, 320).unwrap();
+    let p = layout.plot;
+    let pad = Theme::default().plot_padding.0;
+    let ex = |v: f64| x.read().eval(v) as f32;
+    let left = ex(0.2) - 25.0 - p.left();
+    assert!((0.0..=1.5).contains(&left), "left edge {left} px in");
+    let right = p.right() - (ex(9.5) + 25.0);
+    assert!(
+        (pad..=pad + 1.5).contains(&right),
+        "right edge {right} px in"
+    );
+    // No y mark is near its ends: y has no inset at all.
+    let ey = |v: f64| y.read().eval(v) as f32;
+    assert!((ey(0.0) - p.bottom()).abs() <= 0.5, "y=0 at {}", ey(0.0));
+    assert!(
+        (ey(10.0) - (p.top() + pad)).abs() <= 0.5,
+        "y=10 at {}",
+        ey(10.0)
+    );
+}

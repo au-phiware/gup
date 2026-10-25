@@ -32,6 +32,8 @@ use crate::theme::Theme;
 use gup_text::TextSystem;
 use std::sync::Arc;
 
+pub(crate) mod inset;
+
 /// A text run placed by layout, with its ink box.
 #[derive(Clone, Debug, PartialEq)]
 pub struct PlacedText {
@@ -217,6 +219,10 @@ pub struct Plot {
     /// How each axis was before the first view change since the last
     /// [`reset_view`](Self::reset_view).
     home: Option<[Home; 3]>,
+    /// The edge insets (near, far without padding) of each axis, solved by
+    /// the last resolve made while the view was home (GUP-528); a moved
+    /// view keeps them, so a pan moves content by the dragged pixels.
+    edge_insets: Option<[(f32, f32); 3]>,
     /// The brush, in data units, with its rows.
     brush: Option<Brush>,
     /// Bumped by every brush set or clear, and the generation (and layer
@@ -450,6 +456,7 @@ impl Plot {
             drag: Drag::Pan,
             dragging: None,
             home: None,
+            edge_insets: None,
             brush: None,
             brush_gen: 0,
             brush_synced: (0, 0),
@@ -1838,21 +1845,32 @@ impl Plot {
             right.map_or(0.0, |r| over(&**r, ext_r)),
         ];
         let mark_overhang = over.into_iter().fold(0.0, f32::max);
-        let inset = over.map(|o| o + th.plot_padding.0);
+        let pad = th.plot_padding.0;
         // A widened axis already holds the inset in its domain, so its
         // range is the whole plot rect. Any other axis insets its far end
-        // (right, top) by overhang and padding, and its near end (left,
-        // bottom) by the overhang alone, so a circle at the domain's corner
-        // is whole while a baseline, which has no overhang, sits on its axis.
-        let set_ranges = |plot: Rect, widened: [bool; 3]| {
-            let far = |i: usize| if widened[i] { 0.0 } else { inset[i] };
-            let near = |i: usize| if widened[i] { 0.0 } else { over[i] };
-            x.set_range(Px(plot.left() + near(0)), Px(plot.right() - far(0)));
-            y.set_range(Px(plot.bottom() - near(1)), Px(plot.top() + far(1)));
-            if let Some(r) = right {
-                r.set_range(Px(plot.bottom() - near(2)), Px(plot.top() + far(2)));
+        // (right, top) by `far` and padding, and its near end (left,
+        // bottom) by `near` alone, so a circle at the domain's corner is
+        // whole while a baseline, which has no overhang, sits on its axis.
+        // `insets` is (near, far) per axis: the overhang at both ends
+        // until the data says less (GUP-528).
+        let ranges = |plot: Rect, widened: [bool; 3], insets: [(f32, f32); 3]| {
+            let near = |i: usize| if widened[i] { 0.0 } else { insets[i].0 };
+            let far = |i: usize| if widened[i] { 0.0 } else { insets[i].1 + pad };
+            [
+                (plot.left() + near(0), plot.right() - far(0)),
+                (plot.bottom() - near(1), plot.top() + far(1)),
+                (plot.bottom() - near(2), plot.top() + far(2)),
+            ]
+        };
+        let set_ranges = |plot: Rect, widened: [bool; 3], insets: [(f32, f32); 3]| {
+            let r = ranges(plot, widened, insets);
+            x.set_range(Px(r[0].0), Px(r[0].1));
+            y.set_range(Px(r[1].0), Px(r[1].1));
+            if let Some(rs) = right {
+                rs.set_range(Px(r[2].0), Px(r[2].1));
             }
         };
+        let mut insets = over.map(|o| (o, o));
         let y_count = ((height / th.y_tick_spacing.0) as usize).max(2);
         let mut counts = (
             ((width / th.x_tick_spacing.0) as usize).max(2),
@@ -1878,7 +1896,57 @@ impl Plot {
             // Tick values stay on the rounded numbers; the margins may change.
             lay = layout(counts)?;
         }
-        set_ranges(lay.plot, widened);
+        set_ranges(lay.plot, widened, insets);
+        // Each end of an explicit axis is inset by what the marks bound to
+        // it need, from the provisional range (GUP-528). A moved view keeps
+        // the insets it had, so panning moves content by the drag alone.
+        let moved = self.home.is_some();
+        let solve = {
+            let scales: [Option<&dyn DynPositionScale>; 3] =
+                [Some(&**x), Some(&**y), right.map(|r| &**r)];
+            let asked: [bool; 3] = std::array::from_fn(|i| {
+                scales[i].is_some_and(|s| !widened[i] && !s.reads_keys() && over[i] > 0.0) && !moved
+            });
+            if moved {
+                insets = self.edge_insets.unwrap_or(insets);
+            }
+            if asked.contains(&true) {
+                let plot = lay.plot;
+                let provisional = ranges(plot, widened, insets);
+                let lens = [plot.width, plot.height, plot.height];
+                let axes: [Option<inset::EdgeAxis>; 3] = std::array::from_fn(|i| {
+                    let s = scales[i].filter(|_| asked[i])?;
+                    Some(inset::EdgeAxis {
+                        identity: s.identity(),
+                        range: provisional[i],
+                        span_min: lens[i] - 2.0 * over[i] - pad,
+                    })
+                });
+                let mut cands: [Vec<(f32, f32)>; 3] = Default::default();
+                let mut budget = inset::EDGE_ROW_BUDGET;
+                for layer in &self.layers {
+                    layer.edge_marks(&axes, &mut budget, &mut cands);
+                }
+                Some((asked, cands))
+            } else {
+                None
+            }
+        };
+        let solve_insets = |plot: Rect, insets: &mut [(f32, f32); 3]| {
+            if let Some((asked, cands)) = &solve {
+                let lens = [plot.width, plot.height, plot.height];
+                for i in 0..3 {
+                    if asked[i] {
+                        insets[i] = inset::edge_insets(&cands[i], lens[i], pad, over[i]);
+                    }
+                }
+            }
+        };
+        if !moved {
+            solve_insets(lay.plot, &mut insets);
+            self.edge_insets = Some(insets);
+        }
+        set_ranges(lay.plot, widened, insets);
         // Thin ticks until no two labels collide; relayout at most once.
         let gap = th.label_gap.0;
         let thin = |lay: &mut TickLayout, counts: &mut (usize, usize, usize)| {
@@ -1925,7 +1993,11 @@ impl Plot {
             let again = layout(counts)?;
             if (again.y_label_w, again.y_right_label_w) != reserved || again.plot != lay.plot {
                 lay = again;
-                set_ranges(lay.plot, widened);
+                if !moved {
+                    solve_insets(lay.plot, &mut insets);
+                    self.edge_insets = Some(insets);
+                }
+                set_ranges(lay.plot, widened, insets);
                 thin(&mut lay, &mut counts);
             }
         }
@@ -1997,12 +2069,12 @@ impl Plot {
         let (x_from, x_to) = if x.is_auto() || widened[0] {
             (ay_x, plot.right() - 0.5)
         } else {
-            (ay_x, plot.right() - inset[0])
+            (ay_x, plot.right() - (insets[0].1 + pad))
         };
         let (y_from, y_to) = if y.is_auto() || widened[1] {
             (plot.top() + 0.5, ax_y)
         } else {
-            (plot.top() + inset[1], ax_y)
+            (plot.top() + (insets[1].1 + pad), ax_y)
         };
         rules.push(axis(Point::new(x_from, ax_y), Point::new(x_to, ax_y)));
         rules.push(axis(Point::new(ay_x, y_from), Point::new(ay_x, y_to)));
@@ -2012,7 +2084,7 @@ impl Plot {
             let (from, to) = if r.is_auto() || widened[2] {
                 (plot.top() + 0.5, ax_y)
             } else {
-                (plot.top() + inset[2], ax_y)
+                (plot.top() + (insets[2].1 + pad), ax_y)
             };
             rules.push(axis(Point::new(by_x, from), Point::new(by_x, to)));
         }
