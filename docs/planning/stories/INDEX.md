@@ -123,7 +123,7 @@ GUP-535 in turn (they share `src/lib.rs`); GUP-536 after N2's builders.
   Tutorials 3 (`#[wgsl_function]`, `then`) and 6 (`#[derive(Mark)]`, the custom
   mark guide) as doctests, and a "Deriving" reference on the `Mark` trait. Deps:
   GUP-530 📋.
-- [GUP-532](GUP-532_Tutorials_Interaction_And_Streaming.md) 🚧 — Tutorials 4
+- [GUP-532](GUP-532_Tutorials_Interaction_And_Streaming.md) ✅ — Tutorials 4
   (tooltips, `on_row`, zoom, pan, brush, tested by sending `Input`) and 5
   (appenders, `Window::LastRows`) as doctests; the last banner and stale assets
   removed. Deps: GUP-530 📋.
