@@ -35,6 +35,16 @@ neither happened: the ticks run 1..12 and 12..22 exactly to the plot edges and
 the 6 px discs are cut. This is the first chart a tutorial reader layers by
 hand, so it must look right.
 
+A second case needs no shared scale and no raw `Selection`: tutorial 4's brush
+chart (`docs/tutorials/04_interactions.md`, image
+`tests/golden/tutorials/04_brush.png`) is a plain `gup::scatter(birds)` with
+`.radius(6.0)` and automatic domains. The Bellbird at (0.03, 0.20) is cut in
+half by the bottom of the plot: the y domain's low end sits at about 0.19 with
+the data minimum 0.20 on a round tick, so the widening there is far less than
+the 6 px radius. The x axis, whose data minimum is not on a round tick, has
+room. Suspect: widening sized against the plot rect before the relayout that
+follows it ("the margins may change"), or tick rounding after widening.
+
 ## User Story
 
 > "As a newcomer layering a line and circles on shared scales, I want every
@@ -61,6 +71,9 @@ hand, so it must look right.
       whole: for each data point, the pixel 5 px above, below, left and right of
       its centre (from the scales' `eval`) lies inside the plot rect. Commit it
       failing (WIP, `scripts/checkpoint.sh` if the hook refuses) before any fix.
+- [ ] **AC1b, second reproduction**: in the same file, the tutorial 4 bird
+      scatter (data and builder calls as in the tutorial, no brush, 640×400)
+      asserts every disc is whole the same way. Also commit it failing first.
 - [ ] **AC2, cause**: the story's Implementation Summary names the exact cause
       (file, function, why the overhang or widening was lost) in two to four
       sentences.
@@ -70,10 +83,10 @@ hand, so it must look right.
       added in; explicit domains keep GUP-540's (or GUP-528's, if merged) inset.
 - [ ] **AC4, order independence**: the same test with the circles added before
       the line also passes.
-- [ ] **AC5, goldens**: re-bless `tests/golden/tutorials/02_layers.png` and any
-      other golden that changes; at most 8 may change in total. Look at each new
-      PNG with the Read tool; every circle whole, ticks still at the domain's
-      rounded ends.
+- [ ] **AC5, goldens**: re-bless `tests/golden/tutorials/02_layers.png`,
+      `04_brush.png` and any other golden that changes; at most 12 may change in
+      total. Look at each new PNG with the Read tool; every circle whole, ticks
+      still at the domain's rounded ends.
 - [ ] **AC6, gates**: `mask merge-check --dogfood` passes;
       `cargo test --doc -p     gup` passes (the tutorials are doctests).
 
@@ -89,10 +102,18 @@ hand, so it must look right.
   and add a unit test in `selection.rs` for a constant `Px` radius on a raw
   `Selection`.
 
+- If widening is sized against a plot rect that the following relayout changes,
+  iterate: re-widen against the new plot rect until the domain stops growing (at
+  most 3 passes; assert it converges in the test), or size the widening against
+  the final rect. Either is acceptable; prefer the one that keeps tick values
+  unchanged.
+- If tick rounding after widening shrinks the room, the rounding must never give
+  back less than the overhang.
+
 ## Escalation Triggers
 
-- The cause is neither of the two named in Decisions.
-- The fix changes more than 8 goldens, or any bar/line-only golden.
+- The cause is none of those named in Decisions.
+- The fix changes more than 12 goldens, or any bar/line-only golden.
 - The fix needs a public API change.
 - `scripts/perf_budget.sh --skip-wasm` changes an `exact` row.
 
