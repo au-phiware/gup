@@ -179,10 +179,16 @@ facets.
   `y_tick_format` on `Plot` and every builder, surviving a scale change, and the
   dogfood `%Y-%m` and `$Nk` formats restored with SVG text checks. Deps: GUP-474
   ✅.
-- [GUP-542](GUP-542_Text_Layer_For_Annotations.md) 📋 — `Plot::text(rows)`: a
+- [GUP-542](GUP-542_Text_Layer_For_Annotations.md) ✅ — `Plot::text(rows)`: a
   CPU-laid-out `TextLayer` at data or band positions with anchors, offsets and
   `within` spans, clipped, in every target and SVG. Deps: GUP-540 📋, GUP-541 📋
   (soft, `plot.rs`), GUP-537 📋 (soft).
+- [GUP-526](GUP-526_Text_Layers_On_The_Right_Axis.md) 💡 — A text layer's `y`
+  mapped through the plot's right y axis, so dual-axis charts can label both
+  series. Deps: GUP-542 ✅.
+- [GUP-527](GUP-527_Label_Halos_And_Overlap_Culling.md) 💡 — `halo(Px)` and
+  `hide_overlaps(true)` on text layers, so labels stay legible over dense marks.
+  Deps: GUP-542 ✅, GUP-405 📋 (soft).
 - [GUP-543](GUP-543_Horizontal_Bars_And_Group_Padding.md) ✅ — `gup::barh`
   (`BarChart<T, Horizontal>`, categories top to bottom) and
   `BarChart::group_padding`. Deps: GUP-537 📋.

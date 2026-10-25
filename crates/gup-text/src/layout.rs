@@ -44,6 +44,34 @@ pub struct Anchor {
 }
 
 impl Anchor {
+    /// The point is the centre of the text: halfway along it and halfway
+    /// up its capitals.
+    pub const CENTER: Self = Self::new(HAlign::Middle, VAlign::Middle);
+    /// The point is the middle of the text's top (cap-height) edge, so the
+    /// text hangs below it.
+    pub const TOP: Self = Self::new(HAlign::Middle, VAlign::Top);
+    /// The point is the middle of the text's bottom (descender) edge, so
+    /// the text sits above it.
+    pub const BOTTOM: Self = Self::new(HAlign::Middle, VAlign::Bottom);
+    /// The point is the middle of the text's left edge, so the text runs to
+    /// its right.
+    pub const LEFT: Self = Self::new(HAlign::Start, VAlign::Middle);
+    /// The point is the middle of the text's right edge, so the text ends at
+    /// it.
+    pub const RIGHT: Self = Self::new(HAlign::End, VAlign::Middle);
+    /// The point is the text's top-left corner: the text lies below and to
+    /// the right.
+    pub const TOP_LEFT: Self = Self::new(HAlign::Start, VAlign::Top);
+    /// The point is the text's top-right corner: the text lies below and to
+    /// the left.
+    pub const TOP_RIGHT: Self = Self::new(HAlign::End, VAlign::Top);
+    /// The point is the text's bottom-left corner: the text lies above and
+    /// to the right.
+    pub const BOTTOM_LEFT: Self = Self::new(HAlign::Start, VAlign::Bottom);
+    /// The point is the text's bottom-right corner: the text lies above and
+    /// to the left.
+    pub const BOTTOM_RIGHT: Self = Self::new(HAlign::End, VAlign::Bottom);
+
     /// An anchor.
     pub const fn new(h: HAlign, v: VAlign) -> Self {
         Self { h, v }

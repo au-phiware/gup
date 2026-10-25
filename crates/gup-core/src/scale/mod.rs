@@ -134,6 +134,14 @@ pub trait PositionScale: ShaderFn<Out = Px> + EncodeFn<Output = Px> + CpuMirror 
     fn nice(&mut self);
     /// About `count` ticks inside the domain.
     fn ticks(&self, count: usize) -> Ticks;
+    /// The code of the key labelled `key` in an ordinal scale's domain
+    /// ([`Band`], [`Point`]); `None` for an unknown key and for every
+    /// numeric scale (the default). How a text layer places a label by key.
+    #[doc(hidden)]
+    fn key_code(&self, key: &str) -> Option<f64> {
+        let _ = key;
+        None
+    }
 }
 
 /// A shared handle to a scale. The plot keeps one clone to draw axes and
@@ -376,6 +384,10 @@ pub(crate) trait DynPositionScale: Send + Sync {
     fn dyn_encode(&self) -> Box<dyn crate::encoding::DynEncodeFn>;
     /// Whether the scale reads dictionary keys (`Band`, `Point`).
     fn reads_keys(&self) -> bool;
+    /// The pixel centre of `key`'s band (or point), for a scale that
+    /// [`reads_keys`](Self::reads_keys); `None` for a numeric scale or a
+    /// key not in the domain.
+    fn key_position(&self, key: &str) -> Option<f64>;
 
     /// Zoom by `factor` about pixel `anchor`: the domain becomes the values
     /// now drawn at the range ends pulled towards (`factor < 1`) or pushed
@@ -416,6 +428,11 @@ impl<S: PositionScale> DynPositionScale for ScaleRef<S> {
         EncodeFn::links(self)
             .first()
             .is_some_and(|l| l.input_format() == crate::column::ColumnFormat::U32)
+    }
+
+    fn key_position(&self, key: &str) -> Option<f64> {
+        let scale = self.read();
+        scale.key_code(key).map(|code| scale.eval(code))
     }
 
     fn is_auto(&self) -> bool {
@@ -632,6 +649,30 @@ mod tests {
         check(Time::new(), (0.0, 1e9));
         check(Band::new(), (0.0, 3.0));
         check(Point::new(), (0.0, 3.0));
+    }
+
+    /// GUP-542: `key_position` is the centre of a key's band or point, by
+    /// label, and `None` for an unknown key or a numeric scale.
+    #[test]
+    fn key_position_is_the_centre_of_a_keys_slot() {
+        let keys: Vec<Arc<str>> = ["Mon", "Tue", "Wed"].map(Arc::from).to_vec();
+        let mut band = Band::new().padding(0.25).range(Px(0.0), Px(325.0));
+        ShaderFn::fit_keys(&mut band, &keys).unwrap();
+        let band = ScaleRef::new(band);
+        // A step of 100 px after 25 px of outer padding; bands 75 px wide.
+        assert_eq!(band.key_position("Mon"), Some(62.5));
+        assert_eq!(band.key_position("Wed"), Some(262.5));
+        assert_eq!(band.key_position("Thu"), None);
+
+        let mut point = Point::new().range(Px(0.0), Px(300.0));
+        ShaderFn::fit_keys(&mut point, &keys).unwrap();
+        let point = ScaleRef::new(point);
+        assert_eq!(point.key_position("Mon"), Some(50.0));
+        assert_eq!(point.key_position("Tue"), Some(150.0));
+        assert_eq!(point.key_position(""), None);
+
+        let lin = ScaleRef::new(Linear::new().domain(0.0, 1.0));
+        assert_eq!(lin.key_position("Mon"), None);
     }
 
     /// Panning moves the domain by whole pixels in the scale's own space.

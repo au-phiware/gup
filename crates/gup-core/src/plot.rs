@@ -28,6 +28,7 @@ use crate::scene::{
     Weight, Z_AXES, Z_BRUSH, Z_GRID, Z_TITLE,
 };
 use crate::selection::{Layer, Selection};
+use crate::text_layer::{AnnotationLayer, TextLayer};
 use crate::theme::Theme;
 use gup_text::TextSystem;
 use std::sync::Arc;
@@ -39,7 +40,9 @@ pub(crate) mod inset;
 pub struct PlacedText {
     /// The run, as it appears in the scene.
     pub run: TextRun,
-    /// Where its glyphs are drawn.
+    /// Where its glyphs are drawn. A text layer's label
+    /// ([`TextRole::Annotation`]) is clipped to the plot rect, and so is
+    /// its box.
     pub bounds: Rect,
 }
 
@@ -157,6 +160,8 @@ pub struct Plot {
     /// closures they encode through the plot's scales (starts at 1).
     axes_generation: u64,
     pub(crate) layers: Vec<Box<dyn Layer>>,
+    /// Text layers (GUP-542): labels laid out on the CPU at resolve.
+    annotations: Vec<Box<dyn AnnotationLayer>>,
     /// The host's waker, given to every layer's feed (RFC-001 S12a).
     waker: Option<std::task::Waker>,
     x_title: Option<String>,
@@ -431,6 +436,7 @@ impl Plot {
             y_right: None,
             axes_generation: 1,
             layers: Vec::new(),
+            annotations: Vec::new(),
             waker: None,
             x_title: None,
             y_title: None,
@@ -645,6 +651,53 @@ impl Plot {
         rows: impl IntoIterator<Item = T>,
     ) -> &mut Selection<T, Area> {
         self.add(Selection::new(rows.into_iter().collect::<Vec<_>>()))
+    }
+
+    /// Add a layer of text labels over `rows`, one line per row, and return
+    /// it: set where each label goes with `.x(..)` and `.y(..)` (or
+    /// `.x_key(..)`/`.y_key(..)` on a band axis), what it says with
+    /// `.text(..)`, and where it sits on its point with `.anchor(..)`.
+    ///
+    /// Labels annotate data that other layers draw: they never fit a
+    /// domain or widen an axis, and an offset label is not a data extent.
+    /// They are drawn above the data layers and below the axes, and
+    /// clipped to the plot rect, so a label near its edge is cut off.
+    /// The layer is laid out on the CPU, for tens to thousands of labels;
+    /// it is not pickable (no hover, tooltip or brush).
+    ///
+    /// ```
+    /// use gup_core::prelude::*;
+    ///
+    /// #[derive(Clone)]
+    /// struct City { name: &'static str, lon: f64, lat: f64 }
+    /// let cities = vec![
+    ///     City { name: "Perth", lon: 115.9, lat: -31.9 },
+    ///     City { name: "Darwin", lon: 130.8, lat: -12.5 },
+    ///     City { name: "Sydney", lon: 151.2, lat: -33.9 },
+    /// ];
+    /// let mut plot = Plot::new();
+    /// plot.circles(cities.clone()).x(|c| c.lon).y(|c| c.lat);
+    /// plot.text(cities)
+    ///     .x(|c| c.lon)
+    ///     .y(|c| c.lat)
+    ///     .text(|c| c.name)
+    ///     .anchor(Anchor::BOTTOM)
+    ///     .dy(-6.0);
+    /// let image = plot.render(&Context::new_blocking()?, 480, 320)?;
+    /// assert_eq!(image.dimensions(), (480, 320));
+    /// # Ok::<(), gup_core::Error>(())
+    /// ```
+    pub fn text<T: Send + Sync + 'static>(
+        &mut self,
+        rows: impl IntoIterator<Item = T>,
+    ) -> &mut TextLayer<T> {
+        self.revision = self.revision.wrapping_add(1);
+        self.annotations
+            .push(Box::new(TextLayer::new(rows.into_iter().collect())));
+        self.annotations
+            .last_mut()
+            .and_then(|l| l.as_any_mut().downcast_mut())
+            .expect("the text layer just pushed has this type")
     }
 
     /// Add a data layer and return it for further `attr` calls.
@@ -1643,6 +1696,9 @@ impl Plot {
         for layer in &self.layers {
             sum = sum.wrapping_add(layer.revision());
         }
+        for layer in &self.annotations {
+            sum = sum.wrapping_add(layer.revision());
+        }
         sum
     }
 
@@ -1655,14 +1711,16 @@ impl Plot {
                 "the plot has no layers; add one with `plot.add(..)`",
             ));
         }
-        for (i, layer) in self.layers.iter().enumerate() {
-            if !(Z_GRID + 1..Z_AXES).contains(&layer.z()) {
+        let zs = (self.layers.iter().map(|l| l.z()).enumerate()).map(|(i, z)| ("layer", i, z));
+        let text_zs =
+            (self.annotations.iter().map(|l| l.z()).enumerate()).map(|(i, z)| ("text layer", i, z));
+        for (what, i, z) in zs.chain(text_zs) {
+            if !(Z_GRID + 1..Z_AXES).contains(&z) {
                 return Err(Error::config(
                     "layer z",
                     format!(
-                        "layer {i} has z {}; marks must stay between the grid and the axes, \
+                        "{what} {i} has z {z}; marks must stay between the grid and the axes, \
                          so z is in {}..={}",
-                        layer.z(),
                         Z_GRID + 1,
                         Z_AXES - 1
                     ),
@@ -2228,6 +2286,17 @@ impl Plot {
                 })
                 .collect()
         };
+        let mut texts: Vec<PlacedText> = texts;
+        // Text layers, mapped through the scales' final ranges (GUP-542).
+        let mut annotation_runs = Vec::with_capacity(self.annotations.len());
+        {
+            let text = cx.text();
+            for layer in &mut self.annotations {
+                let placed = layer.runs(&text, &**x, &**y, plot, &th)?;
+                annotation_runs.push((layer.z(), placed.iter().map(|p| p.run.clone()).collect()));
+                texts.extend(placed);
+            }
+        }
         let mut guides: Vec<Rect> = rules.iter().map(Rule::bounds).collect();
         guides.extend(legend.iter().flat_map(|l| l.guides.iter().copied()));
 
@@ -2271,6 +2340,13 @@ impl Plot {
                 z,
                 clip: Some(clip),
                 kind: ItemKind::Marks(batch),
+            });
+        }
+        for (z, runs) in annotation_runs {
+            scene.push(Item {
+                z,
+                clip: Some(clip),
+                kind: ItemKind::Text(runs),
             });
         }
         scene.push(Item {
