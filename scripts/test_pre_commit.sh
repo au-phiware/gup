@@ -29,9 +29,11 @@ expect 'mode=docs' docs/planning/stories/INDEX.md crates/gup-core/README.md
 expect 'mode=docs' COPYING
 
 # Docs a crate compiles (doctests, fonts) are that crate's sources.
-# (A tutorial is one once src/lib.rs includes it, GUP-530; the others are not yet.)
+# (A tutorial is one once src/lib.rs includes it, GUP-530; all six are now. The tutorials'
+# README is not included, so it stays documentation only.)
 expect 'clippy=[gup]' docs/tutorials/01_getting_started.md
-expect 'mode=docs' docs/tutorials/04_interactions.md
+expect 'clippy=[gup]' docs/tutorials/04_interactions.md
+expect 'mode=docs' docs/tutorials/README.md
 expect 'clippy=[gup gup-bevy gup-core gup-egui gup-text]' \
   crates/gup-text/fonts/Inter-Regular.ttf
 

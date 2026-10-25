@@ -1,11 +1,5 @@
 # Gup Tutorials
 
-> **Out of date.** This tutorial was written for the API before the RFC-001 flip
-> and does not compile against `gup` today. It is being rewritten as tested
-> Markdown (strategic review 2026-11, track N1). Until then, start from the
-> [README](../../README.md) Quick Start and
-> [Technical Approach](../TECHNICAL_APPROACH.md).
-
 Welcome to the Gup tutorial series! These tutorials take you from your first
 chart to advanced topics like custom GPU shaders and streaming data, one step at
 a time.
@@ -27,8 +21,8 @@ Before you begin, make sure you have:
 | 1   | [Getting Started](01_getting_started.md)                 | Draw scatter, line and bar charts from your own structs, save them as PNGs, colour by key and size by value. |
 | 2   | [Plots and Selections](02_data_binding.md)               | What a builder is made of: layers of marks on shared scales, colour scales with legends, a second y axis.    |
 | 3   | [Custom Shader Functions](03_custom_shader_functions.md) | Chain scales with `.then(..)`, write your own in WGSL with `#[wgsl_function]` and give it a CPU mirror.      |
-| 4   | [Interactions](04_interactions.md)                       | Add hover, click, brush, and zoom/pan interactions to your charts.                                           |
-| 5   | [Streaming Data](05_streaming_data.md)                   | Connect live data sources using `StreamingDataSource` and `DataStream`.                                      |
+| 4   | [Interactions](04_interactions.md)                       | Tooltips, hover and click on rows, wheel zoom, drag pan, brushing, and testing it all by sending `Input`.    |
+| 5   | [Streaming Data](05_streaming_data.md)                   | Push rows from another thread with an `Appender`, bound memory with `Window::LastRows`, grow keyed lines.    |
 | 6   | [Custom Marks](06_custom_marks.md)                       | Write a new mark with `#[derive(Mark)]` and WGSL: channel roles, setters, CPU and GPU picking.               |
 
 ## Learning Path
@@ -54,17 +48,19 @@ Tutorial 2 ─── Plots and Selections
 
 ## Images
 
-The images in tutorials 1 and 2 are golden images, not screenshots:
+The images in the tutorials are golden images, not screenshots:
 `tests/tutorials.rs` repeats each chart's calls from the tutorial text, renders
 it at 640 by 400 and compares it with `tests/golden/tutorials/<name>.png`, so a
 chart that changes fails CI instead of leaving a stale picture. After an
 intentional change, run
 `GUP_BLESS=1 cargo test -p gup --test tutorials -- --test-threads=1`, look at
-every image that changed, and commit them. The other tutorials still use
-screenshots in `assets/` until they are rewritten.
+every image that changed, and commit them. Every code block is a doctest:
+`cargo test --doc -p gup -- tutorials`.
 
 ## Further Reading
 
-- [API Reference](../TECHNICAL_APPROACH.md) — <!-- TODO(GUP-280): link to
-  generated API docs --> deep dive into the unified shader function architecture
+- [Technical Approach](../TECHNICAL_APPROACH.md) — a deep dive into the unified
+  shader function architecture
+- The API reference: run `cargo doc --open -p gup` (the `gup` crate re-exports
+  `gup-core`)
 - [Performance Guide](../PERFORMANCE_GUIDE.md) — profiling and optimisation tips
