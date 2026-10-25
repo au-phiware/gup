@@ -40,7 +40,9 @@ pub(crate) mod inset;
 pub struct PlacedText {
     /// The run, as it appears in the scene.
     pub run: TextRun,
-    /// Where its glyphs are drawn.
+    /// Where its glyphs are drawn. A text layer's label
+    /// ([`TextRole::Annotation`]) is clipped to the plot rect, and so is
+    /// its box.
     pub bounds: Rect,
 }
 

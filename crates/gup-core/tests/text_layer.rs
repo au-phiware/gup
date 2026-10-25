@@ -7,6 +7,7 @@
 
 mod common;
 
+use common::svg_marks;
 use common::vr::{harness, layout_metadata};
 use gup_core::prelude::*;
 use gup_core::scene::TextRole;
@@ -482,12 +483,11 @@ fn text_annotations_golden() {
         .render_blocking(&cx, &resolved.scene)
         .unwrap();
     let vr = RgbaImage::new(image.width(), image.height(), image.as_raw().clone()).unwrap();
+    let meta = layout_metadata(&resolved.layout);
     harness()
-        .run(
-            "gup_core/text_annotations",
-            Ok((vr, layout_metadata(&resolved.layout))),
-        )
+        .run("gup_core/text_annotations", Ok((vr.clone(), meta.clone())))
         .assert_ok();
+    svg_marks::assert_matches("gup_core/text_annotations", &resolved.scene, &vr, &meta);
 }
 
 /// AC3: `SvgTarget` writes every visible label as a `<text>` inside the
