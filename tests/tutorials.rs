@@ -33,7 +33,7 @@ fn layout_metadata(layout: &gup::Layout) -> LayoutMetadata {
             TextRole::TickLabel => VrTextRole::TickLabel,
             TextRole::AxisTitle => VrTextRole::AxisTitle,
             TextRole::Legend => VrTextRole::Legend,
-            TextRole::Tooltip => VrTextRole::Other,
+            TextRole::Tooltip | TextRole::Annotation => VrTextRole::Other,
         };
         let [r, g, b, _] = t.run.style.color.to_rgba8();
         meta = meta.with_text(

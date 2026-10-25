@@ -435,6 +435,14 @@ macro_rules! ordinal_scale {
             fn ticks(&self, count: usize) -> Ticks {
                 self.0.ticks(count)
             }
+
+            fn key_code(&self, key: &str) -> Option<f64> {
+                self.0
+                    .keys
+                    .iter()
+                    .position(|k| &**k == key)
+                    .map(|c| c as f64)
+            }
         }
     };
 }

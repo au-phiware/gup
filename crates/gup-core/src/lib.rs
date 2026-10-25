@@ -162,6 +162,7 @@ mod shader;
 mod surface;
 mod svg;
 pub mod target;
+mod text_layer;
 mod theme;
 mod tooltip;
 pub mod transform;
@@ -209,6 +210,7 @@ pub use selection::{Retain, Selection, Window};
 pub use shader::WgslModule;
 pub use svg::{SvgOptions, SvgTarget, VectorTarget};
 pub use target::{DEFAULT_SAMPLES, Frame, ImageTarget, RenderTarget, TargetOptions, TextureTarget};
+pub use text_layer::TextLayer;
 pub use theme::{Theme, Unbrushed};
 pub use transform::Bins;
 #[cfg(feature = "window")]
@@ -349,6 +351,7 @@ pub use gup_core_macros::Mark;
 
 /// The names most programs need.
 pub mod prelude {
+    pub use crate::scene::Anchor;
     pub use crate::{
         Area, AreaAttrs, Axes, Band, Bins, Categorical, Chart, ChartExt, Circle, CircleAttrs,
         Color, ColorScale, Context, CpuMirror, Derived, Diverging, Drag, EncodeFn, Event, Line,

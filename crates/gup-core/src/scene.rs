@@ -317,6 +317,8 @@ pub enum TextRole {
     Legend,
     /// A line of a hover tooltip.
     Tooltip,
+    /// A label drawn by a text layer ([`Plot::text`](crate::Plot::text)).
+    Annotation,
 }
 
 /// One line of horizontal text.
