@@ -144,11 +144,13 @@ use std::sync::Arc;
 use crate::column::DictionaryKey;
 
 pub(crate) mod bar;
+pub(crate) mod heatmap;
 pub(crate) mod histogram;
 pub(crate) mod line;
 pub(crate) mod scatter;
 
 pub use bar::{BarChart, Horizontal, Orientation, Vertical, bar, barh};
+pub use heatmap::{HeatmapChart, heatmap};
 pub use histogram::{HistogramBin, HistogramChart, histogram};
 pub use line::{LineChart, line};
 pub use scatter::{ScatterChart, scatter};
@@ -238,6 +240,7 @@ mod send_sync {
         assert_send_sync::<super::LineChart<(f64, f64)>>();
         assert_send_sync::<super::BarChart<(f64, f64)>>();
         assert_send_sync::<super::HistogramChart<f64>>();
+        assert_send_sync::<super::HeatmapChart<(f64, f64)>>();
     }
 }
 

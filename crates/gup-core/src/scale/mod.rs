@@ -44,6 +44,28 @@ pub use sequential::{Sequential, SequentialParams};
 pub use symlog::{Symlog, SymlogParams};
 pub use time::Time;
 
+/// A continuous colour scale for a builder's `color_value`: a
+/// [`Sequential`] ramp, or a [`Diverging`] one around a midpoint.
+#[derive(Clone, Debug)]
+pub enum ColorValueScale {
+    /// A ramp from low to high.
+    Sequential(Sequential),
+    /// A ramp that diverges from a midpoint.
+    Diverging(Diverging),
+}
+
+impl From<Sequential> for ColorValueScale {
+    fn from(scale: Sequential) -> Self {
+        Self::Sequential(scale)
+    }
+}
+
+impl From<Diverging> for ColorValueScale {
+    fn from(scale: Diverging) -> Self {
+        Self::Diverging(scale)
+    }
+}
+
 use crate::channel::Px;
 use crate::column::ColumnFormat;
 use crate::encoding::{CpuMirror, DictionarySlot, EncodeFn, Resource, ShaderFn};
