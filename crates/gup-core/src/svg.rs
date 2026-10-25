@@ -534,6 +534,24 @@ fn write_layer(
                     opacity("stroke-opacity", *color)
                 )?;
             }
+            VectorMark::Area { top, base, fill } => {
+                // The top edge, then the baseline back: the default nonzero
+                // rule fills both lobes where the edge crosses the baseline.
+                s.push_str(r#"<path d=""#);
+                for (i, p) in top.iter().chain(base.iter().rev()).enumerate() {
+                    let op = if i == 0 { 'M' } else { 'L' };
+                    if i > 0 {
+                        s.push(' ');
+                    }
+                    write!(s, "{op}{},{}", num2(p.x), num2(p.y))?;
+                }
+                writeln!(
+                    s,
+                    r#" Z" fill="{}"{}/>"#,
+                    hex(*fill),
+                    opacity("fill-opacity", *fill)
+                )?;
+            }
         }
     }
     Ok(())
