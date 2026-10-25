@@ -182,7 +182,7 @@ facets.
   `value_labels_with(f)` on every bar variant: above or beside bar ends with
   headroom, centred and contrast-coloured in stacks, hidden where they do not
   fit. Deps: GUP-542 📋, GUP-543 📋, GUP-541 📋 (soft), GUP-537 📋 (soft).
-- [GUP-545](GUP-545_Area_Mark.md) 🚧 — The `Area` mark (`Plot::area`): MSAA
+- [GUP-545](GUP-545_Area_Mark.md) ✅ — The `Area` mark (`Plot::area`): MSAA
   trapezoids on the `Polyline` geometry, split where the top crosses the
   baseline, seam-free when translucent, written to SVG as paths.
 - [GUP-546](GUP-546_Area_Picking.md) 📋 — `HitShape::Area` on the CPU and GPU,
