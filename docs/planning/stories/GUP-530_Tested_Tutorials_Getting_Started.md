@@ -10,8 +10,8 @@ touches: [src/lib.rs]
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N1 Docs and Tutorials) **Status**: 🚧
-In Progress Created**Created**: 2026-10-24
+**Initiative**: Strategic Review 2026-11 (N1 Docs and Tutorials) **Status**: ✅
+Complete (2026-10-25) **Created**: 2026-10-24
 
 ## Context
 
@@ -55,32 +55,32 @@ The tutorials keep their file names so existing links stay valid.
 
 ### AC1: Tutorials compile as doctests
 
-- [ ] `src/lib.rs` gains `#[cfg(doctest)] mod tutorials` with one
+- [x] `src/lib.rs` gains `#[cfg(doctest)] mod tutorials` with one
       `#[doc = include_str!("../docs/tutorials/<file>.md")]` unit struct per
       rewritten tutorial (`GettingStarted`, `PlotsAndSelections`), with a doc
       comment naming GUP-530.
-- [ ] `cargo test --doc -p gup -- tutorials` runs every `rust` block of both
+- [x] `cargo test --doc -p gup -- tutorials` runs every `rust` block of both
       files and they pass; the count of doctests run is recorded.
-- [ ] No ignored blocks and no hidden lines: `grep -c 'rust,ignore'` prints 0
+- [x] No ignored blocks and no hidden lines: `grep -c 'rust,ignore'` prints 0
       for both files, and
       `awk '/^```rust/{f=1;next} /^```/{f=0} f && /^ *# /' docs/tutorials/0[12]_*.md`
       prints nothing.
 
 ### AC2: Tutorial 1, Getting Started
 
-- [ ] Covers, in this order: the `Cargo.toml` dependency (Decisions); a scatter
+- [x] Covers, in this order: the `Cargo.toml` dependency (Decisions); a scatter
       from a `Vec` of structs (`gup::scatter(rows).x(..).y(..)`); saving a PNG
       (`save_png`) and opening a window (`gup::show`); colour by key and size by
       value; titles and grid; a line chart (`gup::line`, `.color` by key, a
       `None` gap); a bar chart (`gup::bar` with `.group` and `.stack`); and
       "where next" (links to tutorials 2–6).
-- [ ] The "Out of date" banner is removed.
-- [ ] It embeds two images from the golden store (AC4): the final scatter and
+- [x] The "Out of date" banner is removed.
+- [x] It embeds two images from the golden store (AC4): the final scatter and
       the grouped bar chart.
 
 ### AC3: Tutorial 2, Plots and Selections
 
-- [ ] Retitled "Plots and Selections" (file name unchanged). Covers: dropping
+- [x] Retitled "Plots and Selections" (file name unchanged). Covers: dropping
       from a builder to its plot (`into_plot`, `layer_mut`, `layers_mut`);
       `Plot::new` with `circles`, `line`, `rects`, `segments` layers sharing
       axes; `plot.x(..)`/`plot.y(..)` returning `ScaleRef` handles;
@@ -89,27 +89,27 @@ The tutorials keep their file names so existing links stay valid.
       legend; a compile-error example (`rust,compile_fail`) showing that a
       colour scale cannot feed `Circle::RADIUS`; `Plot::y_right`; and `Retain`
       in one paragraph.
-- [ ] The "Out of date" banner is removed. It embeds one image (AC4): a plot
+- [x] The "Out of date" banner is removed. It embeds one image (AC4): a plot
       with a scatter layer, a line layer and a legend.
 
 ### AC4: Tutorial images are goldens
 
-- [ ] A new root integration test `tests/tutorials.rs` renders each embedded
+- [x] A new root integration test `tests/tutorials.rs` renders each embedded
       image from the same calls as the tutorial's block (the test function's doc
       comment names the tutorial and section) and checks it against
       `tests/golden/tutorials/<name>.png` through `gup-visual-regression`'s
       `Harness` (`GUP_BLESS=1` to bless), at 640×400.
-- [ ] Goldens `tutorials/01_scatter`, `tutorials/01_grouped_bars` and
+- [x] Goldens `tutorials/01_scatter`, `tutorials/01_grouped_bars` and
       `tutorials/02_layers` exist; the worker reads each PNG and records what it
       shows (title, tick labels, legend, marks inside the plot area).
-- [ ] The tutorials link the images as
+- [x] The tutorials link the images as
       `../../tests/golden/tutorials/<name>.png`. The stale
       `docs/tutorials/assets/tutorial01_scatter.png` is deleted (the other three
       stay until GUP-531 and GUP-532 replace them).
 
 ### AC5: Index
 
-- [ ] `docs/tutorials/README.md`'s table gives the new titles and one-line
+- [x] `docs/tutorials/README.md`'s table gives the new titles and one-line
       descriptions of tutorials 1 and 2, its "Screenshot Sources" section is
       replaced by one paragraph on `tests/tutorials.rs` and `GUP_BLESS`, and its
       prerequisites say "Rust 1.85+ (edition 2024)" and drop `tokio`. The banner
@@ -162,14 +162,14 @@ The tutorials keep their file names so existing links stay valid.
 
 ## Technical Tasks
 
-- [ ] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30 min.
-- [ ] Add `mod tutorials` to `src/lib.rs` with tutorial 1 only; rewrite tutorial
+- [x] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30 min.
+- [x] Add `mod tutorials` to `src/lib.rs` with tutorial 1 only; rewrite tutorial
       1; run `cargo test --doc -p gup -- tutorials`; commit.
-- [ ] Add `tests/tutorials.rs` with the two tutorial-1 images; bless; read the
+- [x] Add `tests/tutorials.rs` with the two tutorial-1 images; bless; read the
       PNGs; commit.
-- [ ] Rewrite tutorial 2, add it to `mod tutorials`, add its image; commit.
-- [ ] Update `docs/tutorials/README.md`; delete the stale asset.
-- [ ] Run the DoD commands.
+- [x] Rewrite tutorial 2, add it to `mod tutorials`, add its image; commit.
+- [x] Update `docs/tutorials/README.md`; delete the stale asset.
+- [x] Run the DoD commands.
 
 ## Dependencies
 
@@ -194,8 +194,8 @@ The tutorials keep their file names so existing links stay valid.
 
 ## Success Metrics
 
-- [ ] Every `rust` block in tutorials 1 and 2 is compiled by CI.
-- [ ] A newcomer can copy tutorial 1's final program into a new crate and get
+- [x] Every `rust` block in tutorials 1 and 2 is compiled by CI.
+- [x] A newcomer can copy tutorial 1's final program into a new crate and get
       the image shown.
 
 ## Risk Assessment
@@ -208,14 +208,83 @@ The tutorials keep their file names so existing links stay valid.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (the three tutorial goldens)
-- [ ] `mask wasm-browser`: not needed, no layout, input or wasm change
-- [ ] WASM size: unchanged, no library code change
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye (the three tutorial goldens)
+- [x] `mask wasm-browser`: not needed, no layout, input or wasm change
+- [x] WASM size: unchanged, no library code change
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `src/lib.rs`: `#[cfg(doctest)] mod tutorials` with `GettingStarted` and
+  `PlotsAndSelections`, each including its tutorial.
+- `docs/tutorials/01_getting_started.md` and `02_data_binding.md` rewritten
+  (banner removed). Tutorial 1 has 7 doctests (two `no_run`); tutorial 2 has 9
+  (one `compile_fail`). `cargo test --doc -p gup` runs 27 doctests in about 9 s
+  (merged compilation 8 s).
+- `tests/tutorials.rs`: three golden tests; goldens
+  `tests/golden/tutorials/01_scatter.png`, `01_grouped_bars.png`,
+  `02_layers.png` (640 by 400). Read by eye: the scatter has the title "Wealth
+  and health", log GDP ticks 500 to 100k, twelve discs in four Okabe-Ito colours
+  inside the plot, a four-entry legend on the right and a grid; the bars have
+  four groups of three (North, South, East) over Q1 to Q4, the Q3 group taller,
+  a legend and y grid lines; the layers plot has a grey line through twelve
+  viridis circles (yellow warm, purple cool), axis titles, and a "Mean (°C)"
+  colour bar on the right. The two end circles touch the plot edge because the
+  domain is automatic (GUP-528 changes insets for explicit domains only).
+- `docs/tutorials/README.md`: new titles, "Images" paragraph, Rust 1.85+, no
+  `tokio`. `docs/tutorials/assets/tutorial01_scatter.png` deleted.
+- `scripts/test_pre_commit.sh`: its case "tutorial 01 is docs-only" was stale
+  once `src/lib.rs` includes it; now expects `clippy=[gup]` for tutorial 1 and
+  keeps `mode=docs` for tutorial 3.
+- Greps: `rust,ignore` count 0 in both; no hidden `#` lines.
+- `mask all-check` failed in `mask doc` at `crates/gup-core/src/plot.rs:635`
+  (GUP-545's redundant `crate::Area` link target); fixed here, one line.
+
+## Retrospective
+
+**Completed**: 2026-10-25
+
+### Key Technical Learnings
+
+#### Doctests of Markdown need no hidden lines
+
+- **Challenge**: Repeating twelve rows of data in every block is noisy, and
+  rustdoc's `#` lines are banned.
+- **Solution**: Each block is a complete `fn main() -> gup::Result<()>`; data is
+  an array of tuples mapped into a struct (about 12 lines). Short snippets use
+  tuples as rows.
+- **Pattern**: Blocks with the same data repeat it; accept the length.
+
+#### `compile_fail` is only as good as its neighbours
+
+- **Challenge**: stable rustdoc passes `compile_fail` for any error.
+- **Solution**: the block is the working block plus one line; the real error
+  (E0271, "expected `Px`, found `Color`") was read with a scratch test and is
+  quoted in the prose.
+- **Pattern**: build a failing example from a passing one.
+
+### Architectural Decisions
+
+#### Included tutorials make the hook scope the `gup` crate
+
+- **Decision**: update `scripts/test_pre_commit.sh`'s stale docs-only case.
+- **Reasoning**: the hook already classifies included Markdown as a source.
+- **Trade-off**: each tutorial added to `mod tutorials` costs a scoped, not
+  docs-only, commit.
+
+### Development Workflow Insights
+
+- The worktree was based before GUP-537; merging main in was needed first.
+- Plot-level `encode_key` still takes a borrowed `&str` closure while builders
+  take owned keys; tutorial 2 uses `|r: &Rain| r.month` (a `&'static str`).
+
+### Follow-up Stories
+
+None. The `mask doc` failure at `plot.rs:635` was fixed in this story.
