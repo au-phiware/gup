@@ -40,6 +40,11 @@
 
 #![warn(missing_docs)]
 
+/// The integration guide, compiled as doctests.
+#[cfg(doctest)]
+#[doc = include_str!("../../docs/BEVY_INTEGRATION.md")]
+struct BevyGuide;
+
 mod chart;
 mod copy;
 mod plugin;

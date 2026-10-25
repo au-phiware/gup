@@ -19,13 +19,13 @@ gup-core = { git = "https://github.com/au-phiware/gup" }
 gup-bevy = { git = "https://github.com/au-phiware/gup" }
 bevy = { version = "0.18", default-features = false, features = [
     "2d_bevy_render", "bevy_asset", "bevy_log", "bevy_window", "bevy_winit",
-    "x11", # replace with your platform feature
+    "x11", "png", # replace with your platform feature
 ] }
 ```
 
 ## Minimal Example
 
-```rust,ignore
+```rust,no_run
 use bevy::prelude::*;
 use gup_bevy::prelude::*;
 

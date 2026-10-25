@@ -8,8 +8,9 @@ forwards pointer input to the chart.
 
 ```toml
 [dependencies]
-gup-egui = { path = "gup-egui" }
-gup-core = { path = "crates/gup-core" }
+gup-egui = { git = "https://github.com/au-phiware/gup" }
+gup-core = { git = "https://github.com/au-phiware/gup" }
+egui = "0.33"
 eframe = { version = "0.33", features = ["wgpu"] }
 ```
 
@@ -18,8 +19,7 @@ The app must use eframe's wgpu backend
 
 ## Minimal code
 
-```rust,ignore
-use gup_core::prelude::*;
+```rust,no_run
 use gup_egui::GupWidget;
 
 struct App {
@@ -43,6 +43,14 @@ impl eframe::App for App {
             self.widget.show(ui, egui::vec2(480.0, 320.0), &mut self.chart);
         });
     }
+}
+
+fn main() -> eframe::Result {
+    let options = eframe::NativeOptions {
+        renderer: eframe::Renderer::Wgpu,
+        ..Default::default()
+    };
+    eframe::run_native("chart", options, Box::new(|cc| Ok(Box::new(App::new(cc)))))
 }
 ```
 
