@@ -391,3 +391,27 @@ fn heatmap_diverging_golden() {
         .unwrap();
     golden("gup_core/heatmap_diverging", &resolved, image, true);
 }
+
+/// GUP-561: the axes end with the grid. The last column's far edge is the
+/// plot rect's right edge and the top row's top edge is its top.
+#[test]
+fn the_axes_end_with_the_last_column_and_the_top_row() {
+    let cx = Context::new_blocking().unwrap();
+    let mut c = chart(grid(24, &DAYS));
+    let (_, layout) = render(&cx, &mut c, W, H);
+    let right = along(&layout.x_ticks, 23.0) + step(&layout) / 2.0;
+    let rows = DAYS.len();
+    let ystep = along(&layout.y_ticks, 1.0) - along(&layout.y_ticks, 0.0);
+    let top = along(&layout.y_ticks, (rows - 1) as f64) + ystep / 2.0;
+    let plot = layout.plot;
+    assert!(
+        (right - f64::from(plot.right())).abs() <= 0.5,
+        "last column ends at {right}, plot at {}",
+        plot.right()
+    );
+    assert!(
+        (top - f64::from(plot.top())).abs() <= 0.5,
+        "top row starts at {top}, plot at {}",
+        plot.top()
+    );
+}

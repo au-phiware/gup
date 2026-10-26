@@ -195,13 +195,30 @@ impl PositionScale for Linear {
         self.domain = Some((lo, hi));
     }
 
+    fn nice_to(&mut self, count: usize) {
+        let (mut lo, mut hi) = self.resolved_domain();
+        if lo == hi {
+            let pad = if lo == 0.0 { 1.0 } else { lo.abs() * 0.1 };
+            (lo, hi) = (lo - pad, hi + pad);
+        }
+        for _ in 0..4 {
+            let step = self.step(lo, hi, count);
+            let next = (
+                step_value((lo / step + 1e-9).floor(), step),
+                step_value((hi / step - 1e-9).ceil(), step),
+            );
+            if next == (lo, hi) {
+                break;
+            }
+            (lo, hi) = next;
+        }
+        self.domain = Some((lo, hi));
+    }
+
     fn ticks(&self, count: usize) -> Ticks {
         let (d0, d1) = self.resolved_domain();
         let (lo, hi) = (d0.min(d1), d0.max(d1));
-        let mut step = tick_step(lo, hi, count);
-        if let Some(unit) = self.tick_unit {
-            step = unit * nearest_125(step / unit);
-        }
+        let step = self.step(lo, hi, count);
         let (start, end) = ((lo / step - 1e-9).ceil(), (hi / step + 1e-9).floor());
         let values: Vec<f64> = (0..=((end - start).max(-1.0) as i64))
             .map(|i| step_value(start + i as f64, step))
@@ -212,6 +229,18 @@ impl PositionScale for Linear {
             .map(|&v| format_with_step(v, step, grouped))
             .collect();
         Ticks::new(values, labels)
+    }
+}
+
+impl Linear {
+    /// The step `ticks(count)` uses over `lo..hi`: [`tick_step`], then the
+    /// `tick_unit` rounding.
+    fn step(&self, lo: f64, hi: f64, count: usize) -> f64 {
+        let step = tick_step(lo, hi, count);
+        match self.tick_unit {
+            Some(unit) => unit * nearest_125(step / unit),
+            None => step,
+        }
     }
 }
 
@@ -246,6 +275,58 @@ mod tests {
         // 5 would be the default step: the nearest multiple of 2 is 4.
         let ticks = s.ticks(5);
         assert_eq!(ticks.values[1] - ticks.values[0], 4.0);
+    }
+
+    /// A seeded xorshift in 0..1.
+    fn unit_rand(state: &mut u64) -> f64 {
+        *state ^= *state << 13;
+        *state ^= *state >> 7;
+        *state ^= *state << 17;
+        (*state >> 11) as f64 / (1u64 << 53) as f64
+    }
+
+    fn check_nice_to(mut s: Linear, lo: f64, hi: f64, count: usize) {
+        s.nice_to(count);
+        let (d0, d1) = s.resolved_domain();
+        let tol = 1e-9 * (hi - lo).abs().max(1e-300);
+        assert!(d0 <= lo + tol && d1 >= hi - tol, "{lo}..{hi} -> {d0}..{d1}");
+        let ticks = s.ticks(count);
+        let first = *ticks.values.first().expect("ticks");
+        let last = *ticks.values.last().expect("ticks");
+        let rel = |a: f64, b: f64| (a - b).abs() <= 1e-9 * (d1 - d0).abs().max(a.abs());
+        assert!(
+            rel(first, d0) && rel(last, d1),
+            "{lo}..{hi} count {count}: domain {d0}..{d1}, ticks {first}..{last}"
+        );
+    }
+
+    #[test]
+    fn nice_to_makes_both_ends_ticks() {
+        let mut state = 0x9e37_79b9_7f4a_7c15u64;
+        for i in 0..10_000 {
+            let lo = if i % 10 == 0 {
+                0.0
+            } else {
+                unit_rand(&mut state) * 2000.0 - 1000.0
+            };
+            let span = 10f64.powf(unit_rand(&mut state) * 9.0 - 3.0);
+            let hi = lo + span;
+            for count in 2..=12 {
+                check_nice_to(Linear::new().domain(lo, hi), lo, hi, count);
+                let unit = [1.0, 0.5, 2.0, 10.0][i % 4];
+                check_nice_to(Linear::new().domain(lo, hi).tick_unit(unit), lo, hi, count);
+            }
+        }
+    }
+
+    #[test]
+    fn nice_to_pads_a_zero_width_domain_like_nice() {
+        let mut a = Linear::new().domain(0.0, 0.0);
+        let mut b = a.clone();
+        a.nice();
+        b.nice_to(5);
+        assert_eq!(a.resolved_domain(), (-1.0, 1.0));
+        assert_eq!(b.resolved_domain(), (-1.0, 1.0));
     }
 
     #[test]
