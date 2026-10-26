@@ -33,7 +33,7 @@
 //!
 //! - Setters take and return `self`, so a chain on a temporary works;
 //!   rendering needs `let mut chart`.
-//! - Plot-level setters (`title`, `x_title`, `y_title`, `theme`, `grid`,
+//! - Plot-level setters (`title`, `subtitle`, `x_title`, `y_title`, `theme`, `grid`,
 //!   `legends`, the axis scales) apply to the inner plot at once and work
 //!   at any time.
 //! - Layer setters (positions, colour, size, ...) are recorded and applied
@@ -220,6 +220,12 @@ macro_rules! plot_setters {
         /// Set the chart title.
         pub fn title(mut self, title: impl Into<String>) -> Self {
             self.plot.title(title);
+            self
+        }
+
+        /// Set the chart subtitle, shown under the title in lighter text.
+        pub fn subtitle(mut self, subtitle: impl Into<String>) -> Self {
+            self.plot.subtitle(subtitle);
             self
         }
 

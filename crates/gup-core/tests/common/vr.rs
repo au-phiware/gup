@@ -31,7 +31,7 @@ pub fn role(role: TextRole) -> VrTextRole {
         TextRole::TickLabel => VrTextRole::TickLabel,
         TextRole::AxisTitle => VrTextRole::AxisTitle,
         TextRole::Legend => VrTextRole::Legend,
-        TextRole::Tooltip | TextRole::Annotation => VrTextRole::Other,
+        TextRole::Subtitle | TextRole::Tooltip | TextRole::Annotation => VrTextRole::Other,
     }
 }
 
