@@ -223,7 +223,7 @@ cell labels, error bars, pie charts and facets.
 - [GUP-551](GUP-551_Monotone_Line_Curves.md) 📋 — `Curve::MonotoneX`: Steffen
   tangents on the CPU as Bezier control columns, tessellated per segment, never
   overshooting. Deps: GUP-550 📋.
-- [GUP-552](GUP-552_Chart_Subtitle.md) 🚧 — `subtitle` on `Plot` and the
+- [GUP-552](GUP-552_Chart_Subtitle.md) ✅ — `subtitle` on `Plot` and the
   builders, laid out under the title with its own theme size and colour. Deps:
   GUP-541 📋 (soft).
 - [GUP-553](GUP-553_Dark_Theme.md) ✅ — `Theme::dark()` with contrast-checked
