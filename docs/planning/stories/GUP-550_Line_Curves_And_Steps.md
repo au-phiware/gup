@@ -16,8 +16,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: 🚧 In
-Progress **Created**: 2026-10-24
+**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: ✅
+Complete (2026-10-26) **Created**: 2026-10-24
 
 ## Context
 
@@ -66,48 +66,48 @@ GUP-551 adds a smooth monotone curve on the same machinery.
 
 ### AC1: API
 
-- [ ] `Curve` (Decisions) is exported from the crate root and the prelude;
+- [x] `Curve` (Decisions) is exported from the crate root and the prelude;
       `Selection<T, Line>::curve` and `LineChart::curve` exist with doctests
       from the `gup` crate.
-- [ ] The migration table row says `.curve(Curve::StepAfter)` (and names GUP-551
+- [x] The migration table row says `.curve(Curve::StepAfter)` (and names GUP-551
       for smooth curves).
 
 ### AC2: Straight lines are untouched
 
-- [ ] With `Curve::Linear` (the default) a line's glue source, glue signature,
+- [x] With `Curve::Linear` (the default) a line's glue source, glue signature,
       vertex count (6) and pixels are unchanged: `line_series`, `builder_line`
       and every golden pass without re-blessing, and a test asserts the default
       layer's glue equals the glue built before this story (compare with a
       snapshot taken at the story's first commit, or assert the signature
       string).
-- [ ] `mask perf-budget`'s exact counters are unchanged (timing rows are
+- [x] `mask perf-budget`'s exact counters are unchanged (timing rows are
       advisory).
 
 ### AC3: Steps
 
-- [ ] Pixel tests (`crates/gup-core/tests/line_curves.rs`), each on four rows
+- [x] Pixel tests (`crates/gup-core/tests/line_curves.rs`), each on four rows
       with distinct y: `StepAfter` has ink along `y = y_i` from `x_i` to
       `x_{i+1}` and along `x = x_{i+1}` between the two y values, and none on
       the straight diagonal's midpoint; `StepBefore` the mirror; `Step` turns at
       the midpoint x. Opaque joins show no gap (coverage ≥ 0.9 along every 0.5
       px sample of the path).
-- [ ] On a log y scale the step's horizontal pieces stay exactly horizontal (the
+- [x] On a log y scale the step's horizontal pieces stay exactly horizontal (the
       same pixel row at both ends, ±0.5 px).
-- [ ] Nulls break step lines as they do straight ones; a 10-row step line in
+- [x] Nulls break step lines as they do straight ones; a 10-row step line in
       4-row chunks matches the one-chunk render within 8 pixels at 2/255.
 
 ### AC4: Picking, SVG
 
-- [ ] CPU and GPU picks on a step line report: `StepAfter`, row `i` for any
+- [x] CPU and GPU picks on a step line report: `StepAfter`, row `i` for any
       point on segment `i`'s path; `StepBefore`, row `i + 1`; `Step`, row `i`
       left of the midpoint, else `i + 1` (tests).
-- [ ] `SvgTarget` writes a step line as one `<polyline>` with the corner points
+- [x] `SvgTarget` writes a step line as one `<polyline>` with the corner points
       inserted; the rasterised SVG matches the GPU render under `svg_marks.rs`'s
       tolerance.
 
 ### AC5: Visual
 
-- [ ] Golden `gup_core/line_steps` (640×400): the same eight points drawn as
+- [x] Golden `gup_core/line_steps` (640×400): the same eight points drawn as
       `StepAfter`, `StepBefore` and `Step` in three colours with a legend (three
       layers). The worker reads it: square corners, no gaps, correct turn
       positions.
@@ -184,11 +184,11 @@ GUP-551 adds a smooth monotone curve on the same machinery.
 
 ## Technical Tasks
 
-- [ ] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30 min.
-- [ ] Snapshot a linear line's glue; add `Curve`, the per-layer vertex count and
+- [x] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30 min.
+- [x] Snapshot a linear line's glue; add `Curve`, the per-layer vertex count and
       the glue constant; AC2 green; commit.
-- [ ] Step pieces in `line.wgsl`; AC3 tests; commit.
-- [ ] Picks, SVG, golden, builder setter, docs, RFC findings; commit.
+- [x] Step pieces in `line.wgsl`; AC3 tests; commit.
+- [x] Picks, SVG, golden, builder setter, docs, RFC findings; commit.
 
 ## Dependencies
 
@@ -210,7 +210,7 @@ GUP-551 adds a smooth monotone curve on the same machinery.
 
 ## Success Metrics
 
-- [ ] Step lines are one setter away and straight lines cost exactly what they
+- [x] Step lines are one setter away and straight lines cost exactly what they
       did.
 
 ## Risk Assessment
@@ -221,15 +221,145 @@ GUP-551 adds a smooth monotone curve on the same machinery.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1` and
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1` and
       `cargo test -p gup-core -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (`gup_core/line_steps`)
-- [ ] `mask wasm-browser` passes (glue change)
-- [ ] WASM size: `mask wasm-size` scatter gz bytes reported
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye (`gup_core/line_steps`)
+- [x] `mask wasm-browser` passes (glue change)
+- [x] WASM size: `mask wasm-size` scatter gz bytes reported
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- **API**: `Curve` (`Linear`, `Step`, `StepBefore`, `StepAfter`;
+  `#[non_exhaustive]`) in `marks.rs`, exported from the crate root and the
+  prelude. `Selection<T, Line>::curve` (in `selection.rs`) and
+  `LineChart::curve` (add-only in `builder/line.rs`), with doctests in gup-core
+  and a "Step lines" section in the `gup` crate docs (`src/lib.rs`). The
+  migration table row now names `.curve(Curve::StepAfter)` and GUP-551.
+- **Mechanism** (RFC-001 "GUP-550 findings"): `GlueSpec::variant` is a per-layer
+  constant. With one, the glue calls
+  `vertex_variant(m, vertex_index, row, u_view, <value>u)` and appends the label
+  (`curve step-after`) to the signature. Without one, the glue is byte-identical
+  to the glue before the story. `Selection` holds its vertex count
+  (`6 × Curve::pieces()`) and passes it to `LayerUniforms::build`. The `Mark`
+  trait and the derive are unchanged.
+- **WGSL** (`line.wgsl`): a shared `capsule`. `vertex_variant` draws piece
+  `vertex_index / 6` between `step_point`s computed in pixel space.
+  `Varyings.side` drives `hit_row` for straight and step lines alike.
+- **CPU**: `Curve::path` gives the segment's 2 to 4 points. `Shape::Step` uses
+  it for CPU picks (`pick.rs`), and `MarkKind::Line(Curve)` uses it for SVG
+  polylines (`vector.rs`). The curve reaches `build_items` through `Chans`.
+- **Tests**: `crates/gup-core/tests/line_curves.rs` has 8 tests: the glue
+  snapshot against fixtures `line_glue.wgsl` and `line_glue_nulls.wgsl` (written
+  at the first commit), paths and diagonals, log scale, chunks, nulls, CPU and
+  GPU picks, SVG point counts, and the golden. There is also a `Curve::path`
+  unit test, 3 gup-core doctests and 1 `gup` doctest section.
+  `cargo test -p gup-core -- --test-threads=1`: 593 tests ok. Root crate: all
+  ok.
+
+### Definition of Done evidence (2026-10-26)
+
+- **Golden `gup_core/line_steps.png`** (640×400, new): three step lines over the
+  same eight y values, raised by 0, 6 and 12 so all three show.
+  - Orange `StepAfter` holds each level to the next x, then rises.
+  - Blue `StepBefore` rises at each row's x first.
+  - Green `Step` turns at the midpoints (0.5, 1.5, …).
+  - Legend "curve" with the three entries; title "Step curves".
+
+  Read at 8× zoom: corners square with round outer edges 2.5 px wide, no gap at
+  any corner or row, and the antialiased rim is even along levels and risers.
+  One known nit: where a level runs through a row, both capsules' rims blend
+  there, which leaves one slightly darker rim pixel. Straight lines have the
+  same thing at joins; it is GUP-439's to remove. `StepBefore`'s first riser
+  lies on the plot's left edge and is clipped to half width (follow-up GUP-558).
+  The SVG rasterisation matches the GPU render (`svg_marks::assert_matches`).
+
+- **No other golden changed**, and none was re-blessed.
+- `mask merge-check --dogfood`: PASS for story-ids, doc, gup-core, wasm-size,
+  wasm-browser and dogfood.
+- `mask all-check`: exit 0. `cargo check --examples`: ok. `mask smoke-examples`:
+  ok. `cargo test --doc -p gup`: 51 passed.
+- `scripts/perf_budget.sh --skip-wasm`: every exact counter passes (`zoom.*`
+  bytes and writes, `zoom_culled.draws.median` 14, `zoom_culled.columns.bytes`
+  0). Timings pass: `zoom.gpu_pass.median_ms` 2.694,
+  `zoom_culled.gpu_pass.median_ms` 9.906 (limit 11.880),
+  `pipeline.link_create.median_ms` 1.140. Its 4 WASM rows read "not measured"
+  under `--skip-wasm`; `mask wasm-size` in merge-check passed.
+- **WASM scatter**: 339,448 B gz, against 338,629 B gz at main `514ec9c6`
+  measured the same way: +819 B, under the 4 KB trigger.
+
+## Retrospective
+
+**Completed**: 2026-10-26
+
+### Key Technical Learnings
+
+#### A per-layer shader variant without touching the default glue
+
+- **Challenge**: The curve had to reach `line.wgsl` and give each curve its own
+  pipeline, while a straight line's glue stayed byte-identical. Library modules
+  are flattened at build time, so they cannot see a constant the glue declares.
+- **Solution**: Pass the constant as a literal argument to a second entry,
+  `vertex_variant`, and put a label in the signature. The default variant
+  (`None`) emits exactly the old text.
+- **Pattern**: Snapshot the old glue _before_ changing anything. The fixtures
+  were written by running the new test against the unchanged code, then
+  committed alone.
+
+#### Pick rows from one interpolated varying
+
+- **Challenge**: The GPU pick's `hit_row` must apply three rules (nearer end,
+  always this row, side of the midpoint). Overlapping pieces tie at depth 0
+  inside the stroke.
+- **Solution**: Add `side: f32` to `Varyings`, set per vertex and affine in
+  screen space, with `hit_row = side > 0 ? row + 1 : row`. Every piece of a
+  segment computes the same side for the same pixel, so ties do not matter.
+- **Pattern**: Encode a pick rule as a signed linear function of position.
+  Interpolation then evaluates it exactly, and the CPU mirror is one comparison
+  (`Curve::picks_next`).
+
+### Architectural Decisions
+
+#### The curve on `Selection` for every mark
+
+- **Decision**: `Selection` stores `curve` and `vertices` for all marks. Only
+  `Selection<T, Line>::curve` can change them.
+- **Reasoning**: The Decisions put the vertex count on `Selection`, and the
+  glue, pick and vector paths are generic over `M`.
+- **Trade-off**: Two fields that are dead for other marks.
+- **Future**: GUP-551 adds a variant and pieces. Any library mark can take a
+  variant by defining `vertex_variant`.
+
+#### Polyline geometry shared through `Curve::path`
+
+- **Decision**: One CPU description of a segment's path, which SVG and CPU picks
+  read. The GPU computes the same points in `step_point`.
+- **Reasoning**: GUP-439's joins and later area outlines need the same points.
+  GUP-551 generalises the path from 4 points to its cubic's pieces.
+- **Trade-off**: The WGSL and Rust copies must agree. `line_curves.rs` checks
+  both against a third, independent path in the test.
+
+### Development Workflow Insights
+
+- The tests' first failures were the tests' own geometry: pixel y runs down, and
+  a step's "other" corner lies on the neighbour's riser. Check expected points
+  against the rendered PNG before suspecting the shader.
+- A session limit hit mid-story. The coordinator's checkpoint kept the tree, and
+  committing as soon as the tree built was the right reflex.
+- To measure WASM size at main: `git worktree add --detach`, then run the
+  checkout's own `mask wasm-size` _from that directory_. Run from elsewhere,
+  mask builds the current checkout.
+- I left `plot.rs`'s `pick_row` docs alone, though they could mention step rows,
+  to keep clear of GUP-541's file.
+
+### Follow-up Stories
+
+1. **GUP-558: Step Risers at the Plot Edge Draw Whole**: a `StepBefore` or
+   `StepAfter` riser on the x domain's end is clipped to half width. Step lines
+   should add half their width to the x overhang.

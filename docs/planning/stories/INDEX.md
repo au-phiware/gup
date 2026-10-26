@@ -217,7 +217,7 @@ cell labels, error bars, pie charts and facets.
 - [GUP-549](GUP-549_Heatmap_Builder.md) ✅ — `gup::heatmap` on two band axes
   with `color_value`, a ramp legend and gapped cells; `color_value_scale` takes
   `Sequential` or `Diverging` on the scatter too. Deps: GUP-537 📋.
-- [GUP-550](GUP-550_Line_Curves_And_Steps.md) 🚧 — `Curve` and
+- [GUP-550](GUP-550_Line_Curves_And_Steps.md) ✅ — `Curve` and
   `.curve(Curve::StepAfter)` on lines: step pieces drawn exactly in the shader
   through a per-layer vertex count and glue constant, straight lines unchanged.
 - [GUP-551](GUP-551_Monotone_Line_Curves.md) 📋 — `Curve::MonotoneX`: Steffen
