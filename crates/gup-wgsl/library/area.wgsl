@@ -30,6 +30,9 @@ struct Varyings {
     // sRGB-encoded, straight alpha.
     @location(0) fill: vec4<f32>,
     @location(1) @interpolate(flat) row: u32,
+    // How far along the segment in x: 0 at row `i`'s vertices, 1 at row
+    // `i + 1`'s, and the crossing's own at `c`; so it is linear in x.
+    @location(2) t: f32,
 }
 
 fn vertex(m: AreaIn, vertex_index: u32, row: u32, view: View) -> Varyings {
@@ -40,30 +43,32 @@ fn vertex(m: AreaIn, vertex_index: u32, row: u32, view: View) -> Varyings {
     let d0 = m.y - m.y_end;
     let d1 = m.y_next - m.y_end_next;
     var p: vec2<f32>;
+    var t = 0.0;
     if (d0 * d1 >= 0.0) {
         // No crossing: (a, b, b0) and (a, b0, a0).
         switch (vertex_index) {
             case 0u, 3u: { p = a; }
-            case 1u: { p = b; }
-            case 2u, 4u: { p = b0; }
+            case 1u: { p = b; t = 1.0; }
+            case 2u, 4u: { p = b0; t = 1.0; }
             default: { p = a0; }
         }
     } else {
         // The top edge meets the baseline at `c`: (a, a0, c) and (b, b0, c).
-        let t = d0 / (d0 - d1);
-        let c = a + t * (b - a);
+        let s = d0 / (d0 - d1);
+        let c = a + s * (b - a);
         switch (vertex_index) {
             case 0u: { p = a; }
             case 1u: { p = a0; }
-            case 3u: { p = b; }
-            case 4u: { p = b0; }
-            default: { p = c; }
+            case 3u: { p = b; t = 1.0; }
+            case 4u: { p = b0; t = 1.0; }
+            default: { p = c; t = s; }
         }
     }
     var out: Varyings;
     out.clip = px_to_clip(p, view);
     out.fill = vec4<f32>(m.fill.rgb, m.fill.a * m.fill_opacity);
     out.row = row;
+    out.t = t;
     return out;
 }
 
@@ -72,4 +77,16 @@ fn shade(v: Varyings) -> vec4<f32> {
         discard;
     }
     return vec4<f32>(v.fill.rgb * v.fill.a, v.fill.a);
+}
+
+// The pick draws the triangles unchanged, so a fragment is inside: the
+// distance is negative (a pick margin would need the region grown).
+fn hit_distance(v: Varyings) -> f32 {
+    return -1.0;
+}
+
+// The row a fragment picks: this row (the segment's first) in the first
+// half of the segment's x span, else the next.
+fn hit_row(v: Varyings) -> u32 {
+    return select(v.row + 1u, v.row, v.t <= 0.5);
 }

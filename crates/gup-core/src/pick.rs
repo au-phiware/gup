@@ -61,6 +61,40 @@ pub(crate) enum Shape {
         h: f32,
         curve: Curve,
     },
+    /// The area between the top edge `a`–`b` (row `i` to row `i + 1`) and
+    /// the baseline `a0`–`b0`: the two triangles `area.wgsl` draws (split
+    /// at the crossing, if the edge meets the baseline within the segment).
+    Area {
+        a: [f32; 2],
+        b: [f32; 2],
+        a0: [f32; 2],
+        b0: [f32; 2],
+    },
+}
+
+/// The triangles an area segment fills: `(a, b, b0)` and `(a, b0, a0)`, or
+/// `(a, a0, c)` and `(b, b0, c)` where the top edge crosses the baseline at
+/// `c`; the same rule as `area.wgsl`.
+fn area_triangles(a: [f32; 2], b: [f32; 2], a0: [f32; 2], b0: [f32; 2]) -> [[[f32; 2]; 3]; 2] {
+    let (d0, d1) = (a[1] - a0[1], b[1] - b0[1]);
+    if d0 * d1 >= 0.0 {
+        [[a, b, b0], [a, b0, a0]]
+    } else {
+        let t = d0 / (d0 - d1);
+        let c = [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])];
+        [[a, a0, c], [b, b0, c]]
+    }
+}
+
+/// Whether `p` lies in the triangle (edges included; a triangle of no area
+/// holds nothing).
+fn in_triangle(p: [f32; 2], t: &[[f32; 2]; 3]) -> bool {
+    let side =
+        |u: [f32; 2], v: [f32; 2]| (v[0] - u[0]) * (p[1] - u[1]) - (v[1] - u[1]) * (p[0] - u[0]);
+    let (s0, s1, s2) = (side(t[0], t[1]), side(t[1], t[2]), side(t[2], t[0]));
+    let twice =
+        (t[1][0] - t[0][0]) * (t[2][1] - t[0][1]) - (t[1][1] - t[0][1]) * (t[2][0] - t[0][0]);
+    twice != 0.0 && ((s0 >= 0.0 && s1 >= 0.0 && s2 >= 0.0) || (s0 <= 0.0 && s1 <= 0.0 && s2 <= 0.0))
 }
 
 fn hypot(x: f32, y: f32) -> f32 {
@@ -118,6 +152,20 @@ impl Shape {
                     .fold(f32::INFINITY, f32::min)
                     - h
             }
+            Shape::Area { a, b, a0, b0 } => {
+                let tris = area_triangles(a, b, a0, b0);
+                let edges = tris
+                    .iter()
+                    .flat_map(|t| (0..3).map(move |k| (t[k], t[(k + 1) % 3])));
+                let outline = edges
+                    .map(|(u, v)| segment_distance(p, u, v))
+                    .fold(f32::INFINITY, f32::min);
+                if tris.iter().any(|t| in_triangle(p, t)) {
+                    -outline
+                } else {
+                    outline
+                }
+            }
         }
     }
 
@@ -150,6 +198,15 @@ impl Shape {
                     (row, at(a))
                 }
             }
+            Shape::Area { a, b, .. } => {
+                // The row nearer in x: the segment's first row at or before
+                // its middle (`area.wgsl`'s `t <= 0.5`), else the next.
+                if (p[0] - (a[0] + b[0]) * 0.5) * (b[0] - a[0]) > 0.0 {
+                    (next(row), at(b))
+                } else {
+                    (row, at(a))
+                }
+            }
         }
     }
 
@@ -165,6 +222,10 @@ impl Shape {
                     [a[0].max(b[0]) + g, a[1].max(b[1]) + g],
                 )
             }
+            Shape::Area { a, b, a0, b0 } => (
+                [a[0].min(b[0]), a[1].min(b[1]).min(a0[1]).min(b0[1])],
+                [a[0].max(b[0]), a[1].max(b[1]).max(a0[1]).max(b0[1])],
+            ),
             Shape::Capsule { a, b, h } | Shape::Step { a, b, h, .. } => (
                 [a[0].min(b[0]) - h, a[1].min(b[1]) - h],
                 [a[0].max(b[0]) + h, a[1].max(b[1]) + h],
@@ -220,7 +281,8 @@ pub(crate) struct Chans {
     pub height: Chan,
     pub x_end: Chan,
     pub y_end: Chan,
-    /// How a `Polyline` runs between rows: a step is a [`Shape::Step`].
+    /// How a `Polyline` runs between rows: a step is a [`Shape::Step`]. (An
+    /// `Area` is always straight.)
     pub curve: Curve,
 }
 
@@ -308,6 +370,31 @@ pub(crate) fn build_items(
                             a: [v[0], v[1]],
                             b: [v[2], v[3]],
                             h: v[4] / 2.0,
+                        },
+                    );
+                }
+            }
+        }
+        HitShape::Area => {
+            for pair in slots.windows(2) {
+                let ((d, rank), (e, _)) = (pair[0], pair[1]);
+                let v = [
+                    c.x.at(d),
+                    c.y.at(d),
+                    c.y_end.at(d),
+                    c.x.at(e),
+                    c.y.at(e),
+                    c.y_end.at(e),
+                ];
+                if finite(&v) {
+                    push(
+                        d,
+                        rank,
+                        Shape::Area {
+                            a: [v[0], v[1]],
+                            b: [v[3], v[4]],
+                            a0: [v[0], v[2]],
+                            b0: [v[3], v[5]],
                         },
                     );
                 }
@@ -475,7 +562,9 @@ impl PickIndex {
                                 out.push(item.row);
                             }
                         }
-                        Shape::Capsule { a, b, .. } | Shape::Step { a, b, .. } => {
+                        Shape::Capsule { a, b, .. }
+                        | Shape::Step { a, b, .. }
+                        | Shape::Area { a, b, .. } => {
                             if inside(a) {
                                 out.push(item.row);
                             }
@@ -527,7 +616,9 @@ impl PickIndex {
                 return None;
             }
             match item.shape {
-                Shape::Capsule { a, b, .. } | Shape::Step { a, b, .. } => {
+                Shape::Capsule { a, b, .. }
+                | Shape::Step { a, b, .. }
+                | Shape::Area { a, b, .. } => {
                     let q = if item.row.row == row.row {
                         a
                     } else if item.row.row + 1 == row.row {
@@ -569,6 +660,38 @@ mod tests {
         assert_eq!(s.distance([10.0, 2.0]), 0.0);
         assert_eq!(s.distance([14.0, 2.0]), 4.0);
         assert!((s.distance([13.0, 8.0]) - 5.0).abs() < 1e-6, "corner");
+    }
+
+    #[test]
+    fn area_distance_is_negative_inside_the_triangles() {
+        // No crossing: the trapezoid (0, 10)–(10, 20) over the baseline y = 40.
+        let s = Shape::Area {
+            a: [0.0, 10.0],
+            b: [10.0, 20.0],
+            a0: [0.0, 40.0],
+            b0: [10.0, 40.0],
+        };
+        assert!(s.distance([5.0, 30.0]) < 0.0);
+        assert!(s.distance([5.0, 12.0]) > 0.0, "above the top edge");
+        assert!((s.distance([5.0, 45.0]) - 5.0).abs() < 1e-5, "below");
+        assert!((s.distance([13.0, 30.0]) - 3.0).abs() < 1e-5, "beside");
+        // The crossing: top (0, 0)–(10, 20), baseline (0, 10)–(10, 10), so
+        // they meet at (5, 10); the region is the two wedges either side.
+        let x = Shape::Area {
+            a: [0.0, 0.0],
+            b: [10.0, 20.0],
+            a0: [0.0, 10.0],
+            b0: [10.0, 10.0],
+        };
+        assert!(x.distance([1.0, 5.0]) < 0.0, "left wedge");
+        assert!(x.distance([9.0, 15.0]) < 0.0, "right wedge");
+        assert!(x.distance([5.0, 4.0]) > 0.0, "above the crossing");
+        assert!(x.distance([5.0, 16.0]) > 0.0, "below the crossing");
+        // The row: the first at or before the middle in x, else the next.
+        let row = RowId { layer: 0, row: 3 };
+        assert_eq!(x.anchor([5.0, 10.0], row), (row, Point::new(0.0, 0.0)));
+        let (next, at) = x.anchor([5.5, 10.0], row);
+        assert_eq!((next.row, at), (4, Point::new(10.0, 20.0)));
     }
 
     #[test]
