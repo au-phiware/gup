@@ -309,6 +309,8 @@ pub struct TextStyle {
 pub enum TextRole {
     /// The chart title.
     Title,
+    /// The chart subtitle.
+    Subtitle,
     /// An axis tick label.
     TickLabel,
     /// An axis title.

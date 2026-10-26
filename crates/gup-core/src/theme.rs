@@ -66,8 +66,12 @@ pub struct Theme {
     pub label: Color,
     /// The chart title.
     pub title: Color,
+    /// The chart subtitle.
+    pub subtitle: Color,
     /// Chart title text size.
     pub title_size: Px,
+    /// Chart subtitle text size.
+    pub subtitle_size: Px,
     /// Axis title text size.
     pub axis_title_size: Px,
     /// Tick label text size.
@@ -121,7 +125,9 @@ impl Default for Theme {
             grid: Color::hex(0xe5e5e5),
             label: Color::hex(0x333333),
             title: Color::hex(0x111111),
+            subtitle: Color::hex(0x555555),
             title_size: Px(18.0),
+            subtitle_size: Px(13.0),
             axis_title_size: Px(13.0),
             tick_size: Px(12.0),
             tick_len: Px(5.0),
@@ -189,6 +195,7 @@ impl Theme {
             grid: Color::hex(0x34343a),
             label: Color::hex(0xc8c8d0),
             title: Color::hex(0xf0f0f4),
+            subtitle: Color::hex(0xa8a8b4),
             null_color: Color::hex(0x6e6e78),
             tooltip_background: Color::hex(0x2a2a30),
             tooltip_border: Color::hex(0x5a5a64),
@@ -239,12 +246,15 @@ mod tests {
         let report = |name: &str, r: f64| eprintln!("{name}: {r:.2}");
         report("label", contrast(t.label, bg));
         report("title", contrast(t.title, bg));
+        report("subtitle", contrast(t.subtitle, bg));
         report("axis", contrast(t.axis, bg));
         report("grid", contrast(t.grid, bg));
         report("null", contrast(t.null_color, bg));
         report("tooltip", contrast(t.tooltip_text, t.tooltip_background));
         assert!(contrast(t.label, bg) >= 7.0);
         assert!(contrast(t.title, bg) >= 12.0);
+        assert!(contrast(t.subtitle, bg) >= 4.5);
+        assert!(contrast(t.subtitle, bg) < contrast(t.title, bg));
         assert!(contrast(t.axis, bg) >= 4.5);
         assert!((1.2..=1.6).contains(&contrast(t.grid, bg)));
         assert!(contrast(t.tooltip_text, t.tooltip_background) >= 7.0);
@@ -273,7 +283,9 @@ mod tests {
         assert_eq!(t.axis, Color::hex(0x333333));
         assert_eq!(t.label, Color::hex(0x333333));
         assert_eq!(t.title, Color::hex(0x111111));
+        assert_eq!(t.subtitle, Color::hex(0x555555));
         assert_eq!(t.title_size, Px(18.0));
+        assert_eq!(t.subtitle_size, Px(13.0));
         assert_eq!(t.axis_title_size, Px(13.0));
         assert_eq!(t.tick_size, Px(12.0));
         assert_eq!(t.tick_len, Px(5.0));

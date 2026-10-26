@@ -152,6 +152,7 @@ pub struct Resolved {
 /// ```
 pub struct Plot {
     title: Option<String>,
+    subtitle: Option<String>,
     x: Box<dyn DynPositionScale>,
     y: Box<dyn DynPositionScale>,
     /// The scale of the right y axis, if the plot has one.
@@ -387,6 +388,7 @@ impl std::fmt::Debug for Plot {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Plot")
             .field("title", &self.title)
+            .field("subtitle", &self.subtitle)
             .field("layers", &self.layers.len())
             .finish_non_exhaustive()
     }
@@ -434,6 +436,7 @@ impl Plot {
     pub fn new() -> Self {
         Self {
             title: None,
+            subtitle: None,
             x: Box::new(ScaleRef::new(Linear::new())),
             y: Box::new(ScaleRef::new(Linear::new())),
             y_right: None,
@@ -494,6 +497,23 @@ impl Plot {
     pub fn title(&mut self, title: impl Into<String>) -> &mut Self {
         self.revision = self.revision.wrapping_add(1);
         self.title = Some(title.into());
+        self
+    }
+
+    /// Set the subtitle: a line of lighter, smaller text under the title
+    /// (or in the title's place when there is no title), centred on the plot.
+    ///
+    /// ```
+    /// use gup_core::Plot;
+    ///
+    /// let mut plot = Plot::new();
+    /// plot.title("Rain fell most in June")
+    ///     .subtitle("Monthly rainfall, mm, 2025");
+    /// assert_eq!(plot.title_text(), Some("Rain fell most in June"));
+    /// ```
+    pub fn subtitle(&mut self, subtitle: impl Into<String>) -> &mut Self {
+        self.revision = self.revision.wrapping_add(1);
+        self.subtitle = Some(subtitle.into());
         self
     }
 
@@ -1904,7 +1924,7 @@ impl Plot {
         } else {
             crate::guide::column_width(&cx.text(), &th, &legends) + crate::guide::COLUMN_GAP
         };
-        let (title_h, axis_title_h, x_label_h) = {
+        let (title_h, subtitle_h, axis_title_h, x_label_h) = {
             let text = cx.text();
             let axis_title_h = {
                 let m = text.measure("0", th.axis_title_size.0);
@@ -1914,11 +1934,22 @@ impl Plot {
                 let m = text.measure(t, th.title_size.0);
                 m.cap_height + m.descent
             });
+            let subtitle_h = self.subtitle.as_ref().map_or(0.0, |t| {
+                let m = text.measure(t, th.subtitle_size.0);
+                m.cap_height + m.descent
+            });
             let m = text.measure("0", th.tick_size.0);
-            (title_h, axis_title_h, m.cap_height + m.descent)
+            (title_h, subtitle_h, axis_title_h, m.cap_height + m.descent)
+        };
+        // The title block: the title, then the subtitle a label gap below it.
+        let title_block_h = match (self.title.is_some(), self.subtitle.is_some()) {
+            (false, false) => 0.0,
+            (true, false) => title_h,
+            (false, true) => subtitle_h,
+            (true, true) => title_h + th.label_gap.0 + subtitle_h,
         };
         let (has_title, has_x_title, has_y_title) = (
-            self.title.is_some(),
+            self.title.is_some() || self.subtitle.is_some(),
             self.x_title.is_some(),
             self.y_title.is_some() || self.y_right_title.is_some(),
         );
@@ -1962,7 +1993,11 @@ impl Plot {
                 .checked_sub(1)
                 .map_or(0.0, |i| width_of(&x_ticks, i));
             let top = th.pad.0
-                + if has_title { title_h + th.pad.0 } else { 0.0 }
+                + if has_title {
+                    title_block_h + th.pad.0
+                } else {
+                    0.0
+                }
                 + if has_y_title {
                     axis_title_h + th.label_gap.0
                 } else {
@@ -2412,7 +2447,7 @@ impl Plot {
                 y_right_placed.push((*v, py));
             }
         }
-        let (title, axis_titles) = {
+        let (title, subtitle, axis_titles) = {
             let text = cx.text();
             let title = self.title.as_ref().map(|t| TextRun {
                 text: fit_text(&text, t, th.title_size.0, plot.width).into(),
@@ -2424,6 +2459,27 @@ impl Plot {
                     weight: Weight::Regular,
                 },
                 role: TextRole::Title,
+            });
+            // The subtitle's ink top is a label gap below the title's ink
+            // bottom (or at the title's own top, without a title).
+            let subtitle = self.subtitle.as_ref().map(|t| {
+                let mut run = TextRun {
+                    text: fit_text(&text, t, th.subtitle_size.0, plot.width).into(),
+                    at: Point::new(plot.x + plot.width / 2.0, th.pad.0),
+                    anchor: Anchor::new(HAlign::Middle, VAlign::Top),
+                    style: TextStyle {
+                        size: th.subtitle_size,
+                        color: th.subtitle,
+                        weight: Weight::Regular,
+                    },
+                    role: TextRole::Subtitle,
+                };
+                if let Some(title) = &title {
+                    let above: Rect = text.ink_bounds(&title.layout_run()).into();
+                    let own: Rect = text.ink_bounds(&run.layout_run()).into();
+                    run.at.y += above.bottom() + th.label_gap.0 - own.top();
+                }
+                run
             });
             let axis_style = TextStyle {
                 size: th.axis_title_size,
@@ -2461,7 +2517,7 @@ impl Plot {
                     role: TextRole::AxisTitle,
                 });
             }
-            (title, axis_titles)
+            (title, subtitle, axis_titles)
         };
 
         let legend = (!legends.is_empty()).then(|| {
@@ -2479,6 +2535,7 @@ impl Plot {
             labels
                 .iter()
                 .chain(&title)
+                .chain(&subtitle)
                 .chain(&axis_titles)
                 .chain(legend_texts)
                 .map(|run| PlacedText {
@@ -2560,7 +2617,11 @@ impl Plot {
             clip: None,
             kind: ItemKind::Text(labels),
         });
-        let titles: Vec<TextRun> = title.into_iter().chain(axis_titles).collect();
+        let titles: Vec<TextRun> = title
+            .into_iter()
+            .chain(subtitle)
+            .chain(axis_titles)
+            .collect();
         if !titles.is_empty() {
             scene.push(Item {
                 z: Z_TITLE,

@@ -16,8 +16,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: 📋
-Planned **Created**: 2026-10-24
+**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: ✅
+Complete (2026-10-27) **Created**: 2026-10-24
 
 ## Context
 
@@ -46,28 +46,28 @@ the only place that changes.
 
 ### AC1: API and theme
 
-- [ ] `Plot::subtitle(text) -> &mut Self` and a builder `subtitle` in
+- [x] `Plot::subtitle(text) -> &mut Self` and a builder `subtitle` in
       `plot_setters!`, with doctests.
-- [ ] `Theme` gains `subtitle_size: Px` (default 13) and `subtitle: Color`
+- [x] `Theme` gains `subtitle_size: Px` (default 13) and `subtitle: Color`
       (default `#555555`); `default_is_the_old_styling` asserts both.
-- [ ] `TextRole::Subtitle` (documented "the chart subtitle"); the tests'
+- [x] `TextRole::Subtitle` (documented "the chart subtitle"); the tests'
       `vr::role` maps it to the harness's `Other`.
 
 ### AC2: Layout
 
-- [ ] With a title and a subtitle, the subtitle's ink top is `label_gap` (±1 px)
+- [x] With a title and a subtitle, the subtitle's ink top is `label_gap` (±1 px)
       below the title's ink bottom, centred on the plot like the title, and the
       plot rect's top moves down by the subtitle's height plus the gap (test
       from `Layout::texts` and `Layout::plot`).
-- [ ] With a subtitle and no title, the subtitle takes the title's position.
-- [ ] A subtitle wider than the plot is shortened with `fit_text` (ellipsis), as
+- [x] With a subtitle and no title, the subtitle takes the title's position.
+- [x] A subtitle wider than the plot is shortened with `fit_text` (ellipsis), as
       the title is (test).
-- [ ] Without a subtitle, every layout and golden is unchanged.
-- [ ] `Chart::title_text` (the window title) still returns the title only.
+- [x] Without a subtitle, every layout and golden is unchanged.
+- [x] `Chart::title_text` (the window title) still returns the title only.
 
 ### AC3: Visual
 
-- [ ] Golden `gup_core/subtitle` (640×400): a line chart with title "Rain fell
+- [x] Golden `gup_core/subtitle` (640×400): a line chart with title "Rain fell
       most in June" and subtitle "Monthly rainfall, mm, 2025". The worker reads
       it: hierarchy clear (larger, darker title), aligned centres.
 
@@ -94,9 +94,9 @@ the only place that changes.
 
 ## Technical Tasks
 
-- [ ] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30 min.
-- [ ] Theme fields, role, setters; commit.
-- [ ] Layout in step 4 and the run in step 7; AC2 tests; golden; commit.
+- [x] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30 min.
+- [x] Theme fields, role, setters; commit.
+- [x] Layout in step 4 and the run in step 7; AC2 tests; golden; commit.
 
 ## Dependencies
 
@@ -116,7 +116,7 @@ the only place that changes.
 
 ## Success Metrics
 
-- [ ] Title and subtitle in one call each, laid out without overlap at any size
+- [x] Title and subtitle in one call each, laid out without overlap at any size
       the title fits.
 
 ## Risk Assessment
@@ -126,15 +126,66 @@ the only place that changes.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1` and
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1` and
       `cargo test -p gup-core -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (`gup_core/subtitle`)
-- [ ] `mask wasm-browser` passes (layout change)
-- [ ] WASM size: `mask wasm-size` scatter gz bytes reported
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye (`gup_core/subtitle`)
+- [x] `mask wasm-browser` passes (layout change)
+- [x] WASM size: `mask wasm-size` scatter gz bytes reported
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `Plot::subtitle` and the builders' `subtitle` (through `plot_setters!`);
+  `Theme::subtitle` (#555555 light, #a8a8b4 dark) and `Theme::subtitle_size`
+  (13); `TextRole::Subtitle`.
+- Layout (`plot.rs`): the title block is the title, a `label_gap`, then the
+  subtitle; the subtitle's ink top is placed from measured ink bounds, so it is
+  `label_gap` below the title's ink bottom. Without a title it takes the title's
+  place. `fit_text` shortens it. Without a subtitle nothing changes.
+- Also fixed the exhaustive `TextRole` match in `tests/tutorials.rs` (outside
+  `touches:`, as the escalation trigger allows).
+- Tests: `crates/gup-core/tests/subtitle.rs` (6 tests); goldens
+  `gup_core/subtitle` and `gup_core/subtitle_dark`. `mask merge-check --dogfood`
+  passes; `cargo test --doc -p gup` passes; WASM scatter 341563 B gz.
+- Goldens, read by eye: title (18 px, near-black / near-white) over a smaller,
+  lighter grey subtitle, both centred on the plot, the subtitle snug under the
+  title (4 px gap) with clear space above the y title and plot; the dark theme
+  keeps the hierarchy with a muted light-grey subtitle on the dark background.
+
+## Retrospective
+
+**Completed**: 2026-10-27
+
+### Key Technical Learnings
+
+#### Ink versus em-box placement
+
+- **Challenge**: Placing the subtitle at title top plus cap height plus gap left
+  a 7 px ink gap, not 4, because glyph ink differs from the metrics.
+- **Solution**: Measure the title's and subtitle's ink bounds in step 7 and
+  shift the subtitle to hit the gap.
+- **Pattern**: When a spec is in ink pixels, position from `ink_bounds`.
+
+### Architectural Decisions
+
+#### Dark subtitle colour
+
+- **Decision**: `Theme::dark()` subtitle #a8a8b4, between label and title.
+- **Reasoning**: Keeps the hierarchy; a contrast test asserts at least 4.5:1 and
+  below the title's.
+- **Trade-off**: None.
+
+### Development Workflow Insights
+
+- Worktree agents' shell refuses chained `cd`/heredoc-plus-git commands; split
+  them.
+
+### Follow-up Stories
+
+None.
