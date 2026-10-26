@@ -49,6 +49,54 @@
 //! # Ok::<(), gup::Error>(())
 //! ```
 //!
+//! ## Areas
+//!
+//! The region under a line: one series, one per key (overlapping, drawn at
+//! half opacity), or stacked, where each layer sits on the sum of those
+//! below it and the layers meet exactly.
+//!
+//! ```
+//! use gup::prelude::*;
+//!
+//! let rain: Vec<(f64, f64)> = (0..12).map(|m| (f64::from(m), 20.0 + f64::from(m % 5) * 6.0)).collect();
+//! let mut chart = gup::area(rain).x(|r| r.0).y(|r| r.1);
+//! let image = chart.render(&Context::shared()?, 480, 320)?;
+//! assert_eq!(image.dimensions(), (480, 320));
+//! # Ok::<(), gup::Error>(())
+//! ```
+//!
+//! ```
+//! use gup::prelude::*;
+//!
+//! struct Visit { day: f64, source: &'static str, count: f64 }
+//! let visits: Vec<Visit> = (0..10)
+//!     .flat_map(|d| {
+//!         ["web", "app"].map(|source| Visit {
+//!             day: f64::from(d),
+//!             source,
+//!             count: 4.0 + f64::from(d % 4) + if source == "web" { 3.0 } else { 0.0 },
+//!         })
+//!     })
+//!     .collect();
+//!
+//! // One area per source, overlapping.
+//! let mut overlapping = gup::area(visits.iter().map(|v| (v.day, v.source, v.count)))
+//!     .x(|v| v.0)
+//!     .y(|v| v.2)
+//!     .color(|v| v.1);
+//! assert_eq!(overlapping.layers_mut().len(), 2);
+//!
+//! // The same rows stacked, with a line along each layer's top.
+//! let mut stacked = gup::area(visits)
+//!     .x(|v| v.day)
+//!     .y(|v| v.count)
+//!     .stack(|v| v.source)
+//!     .outline(1.0);
+//! let image = stacked.render(&Context::shared()?, 480, 320)?;
+//! assert_eq!(image.dimensions(), (480, 320));
+//! # Ok::<(), gup::Error>(())
+//! ```
+//!
 //! ## Step lines
 //!
 //! A price set at times holds until it changes: [`Curve::StepAfter`] draws

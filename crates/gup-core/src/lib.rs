@@ -28,7 +28,7 @@
 //! - [`Plot`]: any number of layers over shared x and y scales (and a
 //!   secondary [`Plot::y_right`]), with axes, grid, legends and title laid
 //!   out for you, styled by [`Theme`];
-//! - the [`scatter`], [`line()`], [`bar`], [`barh`], [`histogram()`] and [`heatmap`] builders
+//! - the [`scatter`], [`line()`], [`area`], [`bar`], [`barh`], [`histogram()`] and [`heatmap`] builders
 //!   ([`ChartExt`]), and the [`transform`] module they bin with;
 //! - interaction ([`Input`], [`Response`]: picking, tooltips, pan, zoom and
 //!   brush) and streaming ([`Appender`]);
@@ -177,8 +177,8 @@ mod window;
 pub use app::{GupApp, show};
 pub use append::{Appender, Closed};
 pub use builder::{
-    BarChart, HeatmapChart, HistogramBin, HistogramChart, LineChart, ScatterChart, bar, barh,
-    heatmap, histogram, line, scatter,
+    AreaChart, AreaPoint, BarChart, HeatmapChart, HistogramBin, HistogramChart, LineChart,
+    ScatterChart, area, bar, barh, heatmap, histogram, line, scatter,
 };
 pub use channel::{
     Antialias, Channel, ChannelDesc, Color, ConstValue, Geometry, GpuType, HitShape, Mark, Px,

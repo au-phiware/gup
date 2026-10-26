@@ -47,8 +47,8 @@
 //!
 //! # Category keys
 //!
-//! The category setters (`color` on the scatter, line, bar and histogram builders, and
-//! the bar's `x`, `group` and `stack`) take a closure returning an owned
+//! The category setters (`color` on the scatter, line, area, bar and histogram builders, the
+//! area's `stack`, and the bar's `x`, `group` and `stack`) take a closure returning an owned
 //! key: any `Hash + Eq + Clone + Display` value, such as an integer, an enum
 //! that implements `Display`, `r.name.clone()` or a `&'static str`. A
 //! closure returning `r.name.as_str()` does not compile (rustc reports a
@@ -122,6 +122,7 @@
 //! | `.connect_nulls(true)` / `.sort_x()` | dropped: filter or sort the rows |
 //! | `.interpolate`, `.step` | `.curve(Curve::StepAfter)` (also `Step`, `StepBefore`); `.smooth`, `.monotone`: straight segments until GUP-551 |
 //! | (no old histogram) | `gup_core::histogram(rows).x(\|d\| d.v).bins(Bins::Width(5.0))` |
+//! | (no old area) | `gup_core::area(rows).x(\|d\| d.t).y(\|d\| d.v).stack(\|d\| d.k.clone())` |
 //! | `.group_by(..)` / `.stack_by(..)` / `.stack(..)` | `.group(\|d\| d.k.clone())` / `.stack(\|d\| d.k.clone())` |
 //! | `.gap(g)` / `.bar_width(..)` | `.padding(p)` / dropped: the band decides |
 //! | `.orient(..)` / `.horizontal()` | `gup_core::barh(rows)` |
@@ -143,12 +144,14 @@ use std::sync::Arc;
 
 use crate::column::DictionaryKey;
 
+pub(crate) mod area;
 pub(crate) mod bar;
 pub(crate) mod heatmap;
 pub(crate) mod histogram;
 pub(crate) mod line;
 pub(crate) mod scatter;
 
+pub use area::{AreaChart, AreaPoint, area};
 pub use bar::{BarChart, Horizontal, Orientation, Vertical, bar, barh};
 pub use heatmap::{HeatmapChart, heatmap};
 pub use histogram::{HistogramBin, HistogramChart, histogram};
@@ -273,6 +276,7 @@ mod send_sync {
         assert_send_sync::<crate::Plot>();
         assert_send_sync::<super::ScatterChart<(f64, f64)>>();
         assert_send_sync::<super::LineChart<(f64, f64)>>();
+        assert_send_sync::<super::AreaChart<(f64, f64)>>();
         assert_send_sync::<super::BarChart<(f64, f64)>>();
         assert_send_sync::<super::HistogramChart<f64>>();
         assert_send_sync::<super::HeatmapChart<(f64, f64)>>();
