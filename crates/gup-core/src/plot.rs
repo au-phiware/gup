@@ -750,10 +750,13 @@ impl Plot {
     /// `.x_key(..)`/`.y_key(..)` on a band axis), what it says with
     /// `.text(..)`, and where it sits on its point with `.anchor(..)`.
     ///
-    /// Labels annotate data that other layers draw: they never fit a
-    /// domain or widen an axis, and an offset label is not a data extent.
-    /// They are drawn above the data layers and below the axes, and
-    /// clipped to the plot rect, so a label near its edge is cut off.
+    /// Labels never fit a domain, but the plot makes room for them. An
+    /// automatic axis widens and an explicit one is inset, so a label whose
+    /// point lies in the domain is drawn whole, using up to a quarter of the
+    /// plot's width (height) per side. Labels are drawn above the data
+    /// layers and below the axes, and are clipped to the plot rect: a label
+    /// whose point is outside the domain (or moved there by a zoom or pan)
+    /// or that reaches past the cap is cut off.
     /// The layer is laid out on the CPU, for tens to thousands of labels;
     /// it is not pickable (no hover, tooltip or brush).
     ///
@@ -765,7 +768,7 @@ impl Plot {
     /// let cities = vec![
     ///     City { name: "Perth", lon: 115.9, lat: -31.9 },
     ///     City { name: "Darwin", lon: 130.8, lat: -12.5 },
-    ///     City { name: "Sydney", lon: 151.2, lat: -33.9 },
+    ///     City { name: "Sydney", lon: 150.0, lat: -33.9 },
     /// ];
     /// let mut plot = Plot::new();
     /// plot.circles(cities.clone()).x(|c| c.lon).y(|c| c.lat);
@@ -775,7 +778,15 @@ impl Plot {
     ///     .text(|c| c.name)
     ///     .anchor(Anchor::BOTTOM)
     ///     .dy(-6.0);
-    /// let image = plot.render(&Context::new_blocking()?, 480, 320)?;
+    /// let cx = Context::new_blocking()?;
+    /// // Every label is drawn whole, centred over its point.
+    /// for t in &plot.resolve(&cx, 480.0, 320.0)?.layout.texts {
+    ///     if t.run.role == gup_core::scene::TextRole::Annotation {
+    ///         let centre = (t.bounds.left() + t.bounds.right()) / 2.0;
+    ///         assert!((centre - t.run.at.x).abs() < 1.5, "{t:?}");
+    ///     }
+    /// }
+    /// let image = plot.render(&cx, 480, 320)?;
     /// assert_eq!(image.dimensions(), (480, 320));
     /// # Ok::<(), gup_core::Error>(())
     /// ```

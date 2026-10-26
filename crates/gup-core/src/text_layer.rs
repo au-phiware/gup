@@ -653,6 +653,63 @@ mod tests {
         assert!(!fits(1.0, (f64::NAN, 2.0), &y));
     }
 
+    /// GUP-555 AC1: a label's ink box anywhere is its box at the origin
+    /// shifted by whole pixels, to the last bit, so `runs` needs no layout.
+    #[test]
+    fn a_translated_ink_box_equals_the_laid_out_one() {
+        let anchors = [
+            Anchor::CENTER,
+            Anchor::TOP,
+            Anchor::BOTTOM,
+            Anchor::LEFT,
+            Anchor::RIGHT,
+            Anchor::TOP_LEFT,
+            Anchor::TOP_RIGHT,
+            Anchor::BOTTOM_LEFT,
+            Anchor::BOTTOM_RIGHT,
+        ];
+        let mut state = 0x9e37_79b9_7f4a_7c15u64;
+        let mut next = move || {
+            state = state
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            ((state >> 33) as f32) / ((1u64 << 31) as f32)
+        };
+        let mut checked = 0;
+        for weight in [Weight::Regular, Weight::SemiBold] {
+            let font = match weight {
+                Weight::Regular => gup_text::Font::inter(),
+                Weight::SemiBold => gup_text::Font::inter_semibold(),
+            };
+            for anchor in anchors {
+                for size in [11.0, 12.0, 16.0] {
+                    for text in ["Sydney", "Alice Springs", "\u{2212}0.5"] {
+                        let run = |at: [f32; 2]| gup_text::Run {
+                            text,
+                            size,
+                            at,
+                            anchor,
+                            weight,
+                        };
+                        let box0 = font.ink_bounds(&run([0.0, 0.0]));
+                        let off = font.baseline_origin(&run([0.0, 0.0]));
+                        for _ in 0..50 {
+                            let at = [next() * 800.0, next() * 800.0];
+                            let want = font.ink_bounds(&run(at));
+                            let got = shift(box0, off, Point::new(at[0], at[1]));
+                            assert_eq!(
+                                got, want,
+                                "{text:?} {anchor:?} {size} {weight:?} at {at:?}"
+                            );
+                            checked += 1;
+                        }
+                    }
+                }
+            }
+        }
+        assert_eq!(checked, 2 * 9 * 3 * 3 * 50);
+    }
+
     /// A value on a band axis and a key on a numeric one are errors that
     /// name the setter to use; matching ones and missing ones are not.
     #[test]
