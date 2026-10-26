@@ -205,7 +205,7 @@ cell labels, error bars, pie charts and facets.
 - [GUP-545](GUP-545_Area_Mark.md) ✅ — The `Area` mark (`Plot::area`): MSAA
   trapezoids on the `Polyline` geometry, split where the top crosses the
   baseline, seam-free when translucent, written to SVG as paths.
-- [GUP-546](GUP-546_Area_Picking.md) 🚧 — `HitShape::Area` on the CPU and GPU,
+- [GUP-546](GUP-546_Area_Picking.md) ✅ — `HitShape::Area` on the CPU and GPU,
   so areas get hover, tooltips and brushing. Deps: GUP-545 📋.
 - [GUP-547](GUP-547_Area_Builder_And_Stacked_Areas.md) 📋 — `gup::area` with
   overlapping series, stacking aligned on the union of x values, `outline` and

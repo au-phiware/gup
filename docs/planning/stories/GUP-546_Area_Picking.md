@@ -50,17 +50,17 @@ reported) is the closest precedent.
 
 ### AC1: CPU picking
 
-- [ ] `HitShape::Area` exists (documented: "the trapezoid from each row to the
+- [x] `HitShape::Area` exists (documented: "the trapezoid from each row to the
       next between `y` and `y_end`, `Geometry::Polyline`"), the derive accepts
       `hit = Area` for a polyline mark with `x`, `y`, `y_end` `Px` channels and
       rejects it otherwise (a `derive_mark_fail` case), and `Area` uses it.
-- [ ] `pick.rs` gains `Shape::Area { a, b, a0, b0 }`: the distance is negative
+- [x] `pick.rs` gains `Shape::Area { a, b, a0, b0 }`: the distance is negative
       inside the segment's region (the two GPU triangles of GUP-545's rule,
       crossing included) and the distance to its outline outside. The row
       reported is the segment's first row when the point's x is at or before the
       segment's midpoint in x, else the next row; the anchor is that row's top
       point `(x, y)`.
-- [ ] Tests (`tests/pick.rs`): a point inside segment 2 left of its middle picks
+- [x] Tests (`tests/pick.rs`): a point inside segment 2 left of its middle picks
       row 2, right of it row 3; a point between the top edge and the baseline of
       a crossing segment but outside both triangles picks nothing; of two
       stacked area layers, the point inside the upper band picks the upper
@@ -68,19 +68,19 @@ reported) is the closest precedent.
 
 ### AC2: GPU picking
 
-- [ ] `Area` is `gpu_pick`: `area.wgsl` defines `hit_distance` (−1 inside, the
+- [x] `Area` is `gpu_pick`: `area.wgsl` defines `hit_distance` (−1 inside, the
       fragment exists only inside the triangles) and `hit_row` (from a varying
       `t`, 0 at row `i`'s vertices and 1 at row `i + 1`'s, `c` at its own `t`:
       row `i` when `t <= 0.5`).
-- [ ] A test in `gpu_pick/tests.rs` (or `tests/pick.rs` with `Retain::GpuOnly`)
+- [x] A test in `gpu_pick/tests.rs` (or `tests/pick.rs` with `Retain::GpuOnly`)
       agrees with the CPU pick on the three AC1 points.
 
 ### AC3: The user-visible result
 
-- [ ] A tooltip test: an area layer with `.tooltip(|r| ..)` shows the tooltip
+- [x] A tooltip test: an area layer with `.tooltip(|r| ..)` shows the tooltip
       text of the row under the pointer after `Input::PointerMoved`
       (`Layout::tooltip` is `Some`).
-- [ ] `Drag::Brush` over part of an area selects the rows whose top point lies
+- [x] `Drag::Brush` over part of an area selects the rows whose top point lies
       in the rectangle, as for lines (test).
 
 ## Decisions
@@ -107,10 +107,10 @@ reported) is the closest precedent.
 
 ## Technical Tasks
 
-- [ ] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30 min.
-- [ ] `HitShape::Area`, the macro allow-list and fail case; commit.
-- [ ] `Shape::Area`, `hit_items`, CPU tests; commit.
-- [ ] GPU hit functions and test; tooltip and brush tests; commit.
+- [x] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30 min.
+- [x] `HitShape::Area`, the macro allow-list and fail case; commit.
+- [x] `Shape::Area`, `hit_items`, CPU tests; commit.
+- [x] GPU hit functions and test; tooltip and brush tests; commit.
 
 ## Dependencies
 
@@ -129,7 +129,7 @@ reported) is the closest precedent.
 
 ## Success Metrics
 
-- [ ] Hover and tooltips work on areas as on every other library mark.
+- [x] Hover and tooltips work on areas as on every other library mark.
 
 ## Risk Assessment
 
@@ -140,15 +140,63 @@ reported) is the closest precedent.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1` and
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1` and
       `cargo test -p gup-core -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output: tooltip test only (no new golden)
-- [ ] `mask wasm-browser` passes (input handling)
-- [ ] WASM size: `mask wasm-size` scatter gz bytes reported
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output: tooltip test only (no new golden)
+- [x] `mask wasm-browser` passes (input handling)
+- [x] WASM size: `mask wasm-size` scatter gz bytes reported
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `HitShape::Area` (channel.rs), derive allow-list and two fail cases
+  (`hit_area_on_quad`, `hit_area_missing_channel`), `Area` is
+  `hit = Area, gpu_pick`.
+- `Shape::Area { a, b, a0, b0 }` in `pick.rs`: the triangles of `area.wgsl`
+  (crossing included), signed distance, row by x-midpoint, top-point anchor,
+  brush and tooltip anchors as for lines.
+- `area.wgsl`: varying `t`, `hit_distance` (-1), `hit_row` (`t <= 0.5`).
+- Tests: `tests/area_pick.rs` (7: picks, crossing, stacked, CPU/GPU agreement
+  with released rows, GPU-hit-is-CPU-hit grid, tooltip, brush) and a `pick.rs`
+  unit test. Index build for 100k area rows measured 10-12 ms against 5-6 ms for
+  100k capsules (about 2x, under the 3x trigger).
+
+## Retrospective
+
+**Completed**: 2026-10-27
+
+### Key Technical Learnings
+
+#### CPU tolerance band versus the GPU pick
+
+- **Challenge**: the CPU pick accepts anything within `PICK_TOLERANCE` (3 px) of
+  a shape; the GPU pick of an area draws only the triangles (no margin, per
+  Decisions), so outside the region the CPU hits and the GPU does not.
+- **Solution**: kept the Decision; the test asserts a GPU hit equals the CPU hit
+  and that fixed points agree away from edges. Documented on `Area`.
+- **Pattern**: points computed from scales must be taken after `resolve`.
+
+### Architectural Decisions
+
+#### Area is straight only
+
+- **Decision**: `Chans.curve` is ignored for `HitShape::Area`.
+- **Trade-off**: an area with a step or curved outline (GUP-547/551) must build
+  its CPU region from `Curve::path(a, b)` (and `a0`, `b0` likewise) and decide
+  the row with `Curve::picks_next`, then extend `area.wgsl`'s `t`.
+
+### Development Workflow Insights
+
+- `compile_fail` takes 80-370 s; trybuild column numbers are easy to get wrong,
+  use `TRYBUILD=overwrite` and read the diff.
+
+### Follow-up Stories
+
+None written. GUP-576 / GUP-577 unused. Possible: grow the GPU area region by
+the pick margin to close the 3 px band (not needed for the story).
