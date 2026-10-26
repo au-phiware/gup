@@ -245,7 +245,6 @@ back is the answer). You opt into each in the `#[mark(..)]` attribute:
   that both functions exist.
 
 ```rust
-use gup::geom::Point;
 use gup::prelude::*;
 
 /// A filled box, from the centre and size, or from two edges.
@@ -361,7 +360,7 @@ fn main() -> gup::Result<()> {
     plot.resolve(&cx, 320.0, 200.0)?;
 
     // The middle of seat B1, in logical pixels, from the plot's own scales.
-    let b1 = Point::new(x.read().eval(1.0) as f32, y.read().eval(2.0) as f32);
+    let b1 = (x.read().eval(1.0) as f32, y.read().eval(2.0) as f32);
 
     // On the CPU, the data of the row under a point.
     assert_eq!(plot.pick::<Seat>(b1).map(|s| s.name), Some("B1"));
@@ -371,7 +370,7 @@ fn main() -> gup::Result<()> {
     assert_eq!(row.row, 2);
 
     // Between the seats, nothing.
-    let gap = Point::new(x.read().eval(1.5) as f32, y.read().eval(1.5) as f32);
+    let gap = (x.read().eval(1.5) as f32, y.read().eval(1.5) as f32);
     assert_eq!(plot.pick_row_gpu(&cx, gap)?, None);
     assert_eq!(plot.pick_row(gap), None);
     Ok(())

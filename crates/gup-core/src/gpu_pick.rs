@@ -446,8 +446,8 @@ impl Plot {
     /// # }
     /// ```
     #[cfg(not(target_arch = "wasm32"))]
-    pub fn pick_row_gpu(&mut self, cx: &Context, at: Point) -> Result<Option<RowId>> {
-        let ticket = self.request_pick(cx, at)?;
+    pub fn pick_row_gpu(&mut self, cx: &Context, at: impl Into<Point>) -> Result<Option<RowId>> {
+        let ticket = self.request_pick(cx, at.into())?;
         for wait in [false, true] {
             if wait {
                 cx.wait_idle()?;

@@ -35,10 +35,10 @@ its own events into `Input` values and passes them in:
 | `PointerUp { at, button }`   | A button went up.                        |
 | `Wheel { at, lines }`        | The wheel turned (`lines > 0` zooms in). |
 
-Positions are logical pixels from the chart's top-left corner, the same
-coordinates as the chart's `Layout`. The chart answers with a
-`Response { redraw }`: when `redraw` is true the chart looks different, so the
-host resolves and draws it again.
+Positions are logical pixels from the chart's top-left corner (a plain `(x, y)`
+pair of `f32`s works anywhere a position goes in), the same coordinates as the
+chart's `Layout`. The chart answers with a `Response { redraw }`: when `redraw`
+is true the chart looks different, so the host resolves and draws it again.
 
 Because `handle` takes plain values, you can drive a chart yourself, without a
 window. That is how every block below is tested: it resolves the chart at a
@@ -52,11 +52,10 @@ The data is a handful of New Zealand birds: each has a name, a mass in kilograms
 
 `.tooltip(|row| text)` on a builder gives its marks a tooltip. The text is built
 from the row, and `\n` starts a new line. To point at a mark, the block needs
-its pixel position. The layout lists where its ticks are, and the marks lie on
-the straight lines between them, so `pixel` interpolates:
+its pixel position as `(x, y)`. The layout lists where its ticks are, and the
+marks lie on the straight lines between them, so `pixel` interpolates:
 
 ```rust
-use gup::geom::Point;
 use gup::prelude::*;
 use gup::{Input, Layout, Response};
 
@@ -67,12 +66,12 @@ struct Bird {
 }
 
 /// Where the data point `(x, y)` is drawn, in the chart's pixels.
-fn pixel(layout: &Layout, x: f64, y: f64) -> Point {
+fn pixel(layout: &Layout, x: f64, y: f64) -> (f32, f32) {
     let along = |ticks: &[(f64, f32)], v: f64| {
         let (first, last) = (ticks[0], ticks[ticks.len() - 1]);
         first.1 + ((v - first.0) * f64::from(last.1 - first.1) / (last.0 - first.0)) as f32
     };
-    Point::new(along(&layout.x_ticks, x), along(&layout.y_ticks, y))
+    (along(&layout.x_ticks, x), along(&layout.y_ticks, y))
 }
 
 fn main() -> gup::Result<()> {
@@ -90,7 +89,7 @@ fn main() -> gup::Result<()> {
 
     // Move the pointer onto the Kea.
     let kea = pixel(chart.layout().unwrap(), 0.90, 0.95);
-    let response = chart.handle(Input::PointerMoved { at: kea });
+    let response = chart.handle(Input::pointer_moved(kea));
     assert_eq!(response, Response { redraw: true });
 
     // The next resolve draws the tooltip beside the point.
@@ -98,8 +97,8 @@ fn main() -> gup::Result<()> {
     assert!(chart.layout().unwrap().tooltip.is_some());
 
     // Moving off the point takes it away.
-    let away = Point::new(kea.x + 100.0, kea.y + 100.0);
-    assert!(chart.handle(Input::PointerMoved { at: away }).redraw);
+    let away = (kea.0 + 100.0, kea.1 + 100.0);
+    assert!(chart.handle(Input::pointer_moved(away)).redraw);
     chart.resolve(&cx, 640.0, 400.0)?;
     assert!(chart.layout().unwrap().tooltip.is_none());
     Ok(())
@@ -125,7 +124,6 @@ press and release within a few pixels of each other, with the pointer over a
 row:
 
 ```rust
-use gup::geom::Point;
 use gup::prelude::*;
 use gup::{Button, Event, Input, Layout, RowId};
 use std::sync::{Arc, Mutex};
@@ -136,12 +134,12 @@ struct Bird {
     span: f64,
 }
 
-fn pixel(layout: &Layout, x: f64, y: f64) -> Point {
+fn pixel(layout: &Layout, x: f64, y: f64) -> (f32, f32) {
     let along = |ticks: &[(f64, f32)], v: f64| {
         let (first, last) = (ticks[0], ticks[ticks.len() - 1]);
         first.1 + ((v - first.0) * f64::from(last.1 - first.1) / (last.0 - first.0)) as f32
     };
-    Point::new(along(&layout.x_ticks, x), along(&layout.y_ticks, y))
+    (along(&layout.x_ticks, x), along(&layout.y_ticks, y))
 }
 
 fn main() -> gup::Result<()> {
@@ -162,9 +160,9 @@ fn main() -> gup::Result<()> {
 
     // Hover, press and release on the Takahe.
     let button = Button::Primary;
-    let _ = chart.handle(Input::PointerMoved { at: takahe });
-    let _ = chart.handle(Input::PointerDown { at: takahe, button });
-    let _ = chart.handle(Input::PointerUp { at: takahe, button });
+    let _ = chart.handle(Input::pointer_moved(takahe));
+    let _ = chart.handle(Input::pointer_down(takahe, button));
+    let _ = chart.handle(Input::pointer_up(takahe, button));
 
     let seen = seen.lock().unwrap();
     assert_eq!(
@@ -199,7 +197,6 @@ do nothing until the first `resolve` has fitted the scales.)
 a pixel. Here it shows the view move:
 
 ```rust
-use gup::geom::Point;
 use gup::prelude::*;
 use gup::{Button, Input, ScatterChart};
 
@@ -209,18 +206,18 @@ fn main() -> gup::Result<()> {
 
     let cx = Context::shared()?;
     let plot = chart.resolve(&cx, 640.0, 400.0)?.layout.plot;
-    let middle = Point::new(plot.x + plot.width / 2.0, plot.y + plot.height / 2.0);
+    let middle = (plot.x + plot.width / 2.0, plot.y + plot.height / 2.0);
 
     // The width of the x domain, read at the plot's left and right edges.
     let width = |chart: &mut ScatterChart<(f64, f64)>| {
-        let left = chart.plot_mut().invert(Point::new(plot.left(), middle.y));
-        let right = chart.plot_mut().invert(Point::new(plot.right(), middle.y));
+        let left = chart.plot_mut().invert((plot.left(), middle.1));
+        let right = chart.plot_mut().invert((plot.right(), middle.1));
         right.unwrap().0 - left.unwrap().0
     };
     let full = width(&mut chart);
 
     // One turn of the wheel zooms in about the pointer.
-    let response = chart.handle(Input::Wheel { at: middle, lines: 1.0 });
+    let response = chart.handle(Input::wheel(middle, 1.0));
     assert!(response.redraw);
     let zoomed = width(&mut chart);
     assert!(zoomed < full, "{zoomed} < {full}");
@@ -229,10 +226,10 @@ fn main() -> gup::Result<()> {
     // shows what was further left.
     let before = chart.plot_mut().invert(middle).unwrap().0;
     let button = Button::Primary;
-    let to = Point::new(middle.x + 60.0, middle.y);
-    let _ = chart.handle(Input::PointerDown { at: middle, button });
-    let _ = chart.handle(Input::PointerMoved { at: to });
-    let _ = chart.handle(Input::PointerUp { at: to, button });
+    let to = (middle.0 + 60.0, middle.1);
+    let _ = chart.handle(Input::pointer_down(middle, button));
+    let _ = chart.handle(Input::pointer_moved(to));
+    let _ = chart.handle(Input::pointer_up(to, button));
     assert!(chart.plot_mut().invert(middle).unwrap().0 < before);
     assert!((width(&mut chart) - zoomed).abs() < 1e-9); // panning keeps the zoom
 
@@ -250,7 +247,6 @@ you want for a time series, use `view_axes(Axes::X)` (`Axes::Y` and
 `Axes::Neither` are the others):
 
 ```rust
-use gup::geom::Point;
 use gup::prelude::*;
 use gup::Input;
 
@@ -261,12 +257,12 @@ fn main() -> gup::Result<()> {
 
     let cx = Context::shared()?;
     let plot = chart.resolve(&cx, 640.0, 400.0)?.layout.plot;
-    let middle = Point::new(plot.x + plot.width / 2.0, plot.y + plot.height / 2.0);
+    let middle = (plot.x + plot.width / 2.0, plot.y + plot.height / 2.0);
 
     // The values at the top of the plot, before and after a wheel turn.
-    let top = Point::new(plot.left(), plot.top());
+    let top = (plot.left(), plot.top());
     let (x0, y0) = chart.plot_mut().invert(top).unwrap();
-    let _ = chart.handle(Input::Wheel { at: middle, lines: 2.0 });
+    let _ = chart.handle(Input::wheel(middle, 2.0));
     let (x1, y1) = chart.plot_mut().invert(top).unwrap();
 
     assert_ne!(x0, x1); // x zoomed
@@ -284,7 +280,6 @@ A band or point axis (the categories of a bar chart) is never moved by input.
 rectangle, and on release the view becomes that rectangle:
 
 ```rust
-use gup::geom::Point;
 use gup::prelude::*;
 use gup::{Button, Input};
 
@@ -298,18 +293,18 @@ fn main() -> gup::Result<()> {
 
     // Drag a rectangle over the middle of the plot, and note its corners in
     // data units.
-    let from = Point::new(plot.x + plot.width * 0.25, plot.y + plot.height * 0.25);
-    let to = Point::new(plot.x + plot.width * 0.75, plot.y + plot.height * 0.75);
+    let from = (plot.x + plot.width * 0.25, plot.y + plot.height * 0.25);
+    let to = (plot.x + plot.width * 0.75, plot.y + plot.height * 0.75);
     let corner = chart.plot_mut().invert(from).unwrap();
 
     let button = Button::Primary;
-    let _ = chart.handle(Input::PointerDown { at: from, button });
-    let _ = chart.handle(Input::PointerMoved { at: to });
-    let response = chart.handle(Input::PointerUp { at: to, button });
+    let _ = chart.handle(Input::pointer_down(from, button));
+    let _ = chart.handle(Input::pointer_moved(to));
+    let response = chart.handle(Input::pointer_up(to, button));
     assert!(response.redraw);
 
     // The rectangle's top-left corner is now the plot's.
-    let top_left = Point::new(plot.left(), plot.top());
+    let top_left = (plot.left(), plot.top());
     let (x, y) = chart.plot_mut().invert(top_left).unwrap();
     assert!((x - corner.0).abs() < 1e-6, "{x} {}", corner.0);
     assert!((y - corner.1).abs() < 1e-6, "{y} {}", corner.1);
@@ -330,7 +325,6 @@ A `Brush` holds the rectangle in data units and the selected `RowId`s. Register
 with `None` when the brush is cleared:
 
 ```rust
-use gup::geom::Point;
 use gup::prelude::*;
 use gup::{Button, Input};
 use std::sync::{Arc, Mutex};
@@ -379,12 +373,12 @@ fn main() -> gup::Result<()> {
     // of the plot: five birds are inside.
     let (first, last) = (ticks[0], ticks[ticks.len() - 1]);
     let kea_x = first.1 + ((0.95 - first.0) * f64::from(last.1 - first.1) / (last.0 - first.0)) as f32;
-    let from = Point::new(plot.left() + 1.0, plot.bottom() - 1.0);
-    let to = Point::new(kea_x, plot.top() + 1.0);
+    let from = (plot.left() + 1.0, plot.bottom() - 1.0);
+    let to = (kea_x, plot.top() + 1.0);
     let button = Button::Primary;
-    let _ = chart.handle(Input::PointerDown { at: from, button });
-    let _ = chart.handle(Input::PointerMoved { at: to });
-    let _ = chart.handle(Input::PointerUp { at: to, button });
+    let _ = chart.handle(Input::pointer_down(from, button));
+    let _ = chart.handle(Input::pointer_moved(to));
+    let _ = chart.handle(Input::pointer_up(to, button));
 
     let rows = chart.plot_mut().brush().expect("a brush").rows.clone();
     let mut names: Vec<_> = rows
@@ -421,7 +415,6 @@ and want the row, ask the chart. `pick_row(at)` answers with a `RowId`, and
 `pick::<T>(at)` on a plot (or `pick(at)` on a builder) with the data:
 
 ```rust
-use gup::geom::Point;
 use gup::prelude::*;
 use gup::Layout;
 
@@ -431,12 +424,12 @@ struct Bird {
     span: f64,
 }
 
-fn pixel(layout: &Layout, x: f64, y: f64) -> Point {
+fn pixel(layout: &Layout, x: f64, y: f64) -> (f32, f32) {
     let along = |ticks: &[(f64, f32)], v: f64| {
         let (first, last) = (ticks[0], ticks[ticks.len() - 1]);
         first.1 + ((v - first.0) * f64::from(last.1 - first.1) / (last.0 - first.0)) as f32
     };
-    Point::new(along(&layout.x_ticks, x), along(&layout.y_ticks, y))
+    (along(&layout.x_ticks, x), along(&layout.y_ticks, y))
 }
 
 fn main() -> gup::Result<()> {
@@ -449,11 +442,11 @@ fn main() -> gup::Result<()> {
     let kea = pixel(chart.layout().unwrap(), 0.90, 0.95);
 
     assert_eq!(chart.pick(kea).map(|b| b.name), Some("Kea"));
-    assert!(chart.pick_row(kea).is_some());
+    assert!(chart.plot_mut().pick_row(kea).is_some());
 
     // Empty space, and anywhere outside the plot area, picks nothing.
-    assert!(chart.pick_row(Point::new(kea.x + 60.0, kea.y + 60.0)).is_none());
-    assert!(chart.pick_row(Point::new(2.0, 2.0)).is_none());
+    assert!(chart.plot_mut().pick_row((kea.0 + 60.0, kea.1 + 60.0)).is_none());
+    assert!(chart.plot_mut().pick_row((2.0, 2.0)).is_none());
     Ok(())
 }
 ```
@@ -477,7 +470,6 @@ Passing events to `handle` is the host's job, and you rarely write one.
   `mask wasm-browser` builds and tries it.
 
 ```rust,no_run
-use gup::geom::Point;
 use gup::prelude::*;
 use gup::GupApp;
 
