@@ -43,22 +43,37 @@ impl EdgeAxis {
             out.push((t, h));
         }
     }
+
+    /// `push` for a one-sided candidate: binds if `near - t*span_min > 0`
+    /// or `far - (1-t)*span_min > 0`; NaN extents are dropped.
+    pub(crate) fn push_edge(&self, out: &mut Vec<Edge>, t: f32, near: f32, far: f32) {
+        let inside = (0.0..=1.0).contains(&t);
+        let binds = near - t * self.span_min > 0.0 || far - (1.0 - t) * self.span_min > 0.0;
+        if inside && binds && !near.is_nan() && !far.is_nan() {
+            out.push((t, near, far));
+        }
+    }
 }
 
+/// An edge candidate: normalized position, then the px a mark or label
+/// reaches towards the near end (left, bottom) and the far end.
+pub(crate) type Edge = (f32, f32, f32);
+
 /// Near and far insets (px, the far one without padding) of an axis
-/// `len` px long whose marks are `cands` as `(t, h)`; each at most `cap`.
-pub(crate) fn edge_insets(cands: &[(f32, f32)], len: f32, pad: f32, cap: f32) -> (f32, f32) {
+/// `len` px long whose marks are `cands` as `(t, near, far)`; each at most
+/// `cap`.
+pub(crate) fn edge_insets(cands: &[Edge], len: f32, pad: f32, cap: f32) -> (f32, f32) {
     // GUP-540's span is the smallest possible; every pass only grows it.
     let mut span = len - 2.0 * cap - pad;
     let (mut near, mut far) = (0.0f32, 0.0f32);
     for _ in 0..3 {
         near = cands
             .iter()
-            .fold(0.0f32, |m, &(t, h)| m.max(h - t * span))
+            .fold(0.0f32, |m, &(t, n, _)| m.max(n - t * span))
             .min(cap);
         far = cands
             .iter()
-            .fold(0.0f32, |m, &(t, h)| m.max(h - (1.0 - t) * span))
+            .fold(0.0f32, |m, &(t, _, f)| m.max(f - (1.0 - t) * span))
             .min(cap);
         span = len - near - far - pad;
     }
@@ -71,11 +86,14 @@ mod tests {
 
     #[test]
     fn named_cases() {
-        let e = |c: &[(f32, f32)]| edge_insets(c, 100.0, 4.0, 10.0);
+        let e = |c: &[Edge]| edge_insets(c, 100.0, 4.0, 10.0);
         assert_eq!(e(&[]), (0.0, 0.0));
-        assert_eq!(e(&[(0.0, 5.0)]), (5.0, 0.0));
-        assert_eq!(e(&[(1.0, 5.0)]), (0.0, 5.0));
-        assert_eq!(e(&[(0.5, 5.0)]), (0.0, 0.0));
+        assert_eq!(e(&[(0.0, 5.0, 5.0)]), (5.0, 0.0));
+        assert_eq!(e(&[(1.0, 5.0, 5.0)]), (0.0, 5.0));
+        assert_eq!(e(&[(0.5, 5.0, 5.0)]), (0.0, 0.0));
+        assert_eq!(e(&[(1.0, 0.0, 5.0)]), (0.0, 5.0));
+        assert_eq!(e(&[(0.0, 0.0, 5.0)]), (0.0, 0.0));
+        assert_eq!(e(&[(1.0, 5.0, -3.0)]), (0.0, 0.0));
     }
 
     #[test]
@@ -93,17 +111,17 @@ mod tests {
             // GUP-540's own span must be non-negative: a plot smaller than
             // its two overhangs has no room for any inset to help.
             let cap = next() * 60.0f32.min((len - pad) / 2.0);
-            let cands: Vec<(f32, f32)> = (0..(next() * 8.0) as usize)
-                .map(|_| (next(), next() * cap))
+            let cands: Vec<Edge> = (0..(next() * 8.0) as usize)
+                .map(|_| (next(), next() * cap, next() * cap))
                 .collect();
             let (near, far) = edge_insets(&cands, len, pad, cap);
             let span = len - near - far - pad;
             assert!(near <= cap && far <= cap);
-            for &(t, h) in &cands {
-                assert!(near + t * span >= h - 1e-3, "near {near} {t} {h} {len}");
+            for &(t, n, f) in &cands {
+                assert!(near + t * span >= n - 1e-3, "near {near} {t} {n} {len}");
                 assert!(
-                    far + (1.0 - t) * span >= h - 1e-3,
-                    "far {far} {t} {h} {len}"
+                    far + (1.0 - t) * span >= f - 1e-3,
+                    "far {far} {t} {f} {len}"
                 );
             }
         }

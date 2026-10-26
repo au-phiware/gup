@@ -339,7 +339,7 @@ fn labels_on_the_plot_edge_are_clipped_to_the_plot_rect() {
             .color(Color::hex(0xff0000));
         (plot, x, y)
     };
-    // Labels do not change the layout, so the probe's rect is the plot's.
+    // Labels outside the domain make no room, so the probe's rect is the plot's.
     let (mut probe, x, y) = make(5.0, 5.0);
     let plot_rect = probe.resolve(&cx, W, H).unwrap().layout.plot;
     let (right, top) = (
@@ -390,7 +390,7 @@ fn cities() -> Vec<City> {
         city("Alice Springs", 133.88, -23.70),
         city("Adelaide", 138.60, -34.93),
         city("Hobart", 147.33, -42.88),
-        // On the right end of the x domain: its label is clipped.
+        // On the right end of the x domain: the plot makes room for its label.
         city("Sydney", 151.21, -33.87),
         // Off the chart: neither its disc nor its label is drawn.
         city("Auckland", 174.76, -36.85),
@@ -442,7 +442,7 @@ fn annotated() -> Plot {
 }
 
 /// AC3: the `gup_core/text_annotations` golden: labels above their discs,
-/// Sydney's clipped at the right edge, a threshold annotated at its right
+/// Sydney's whole at the right edge, a threshold annotated at its right
 /// end, none over a tick label.
 #[test]
 fn text_annotations_golden() {
@@ -474,8 +474,9 @@ fn text_annotations_golden() {
         }
     }
     let sydney = label(layout, "Sydney").unwrap();
+    let centre = (sydney.bounds.left() + sydney.bounds.right()) / 2.0;
     assert!(
-        (sydney.bounds.right() - layout.plot.right()).abs() < 0.01,
+        (centre - sydney.run.at.x).abs() < 1.0 && sydney.bounds.right() < layout.plot.right(),
         "Sydney is cut at the right edge: {sydney:?}"
     );
     let image = ImageTarget::new(&cx, w, h)
@@ -580,4 +581,187 @@ fn resolve_cost_of_a_thousand_labels() {
         .render_blocking(&cx, &resolved.scene)
         .unwrap();
     assert_eq!(image.dimensions(), (800, 600));
+}
+
+// GUP-555: labels make room at the plot edge.
+
+type Row = (f64, f64, &'static str);
+
+fn labelled(plot: &mut Plot, rows: &[Row], anchor: Anchor, dx: f32, dy: f32) {
+    plot.text(rows.to_vec())
+        .x(|r: &Row| r.0)
+        .y(|r: &Row| r.1)
+        .text(|r: &Row| r.2)
+        .anchor(anchor)
+        .dx(dx)
+        .dy(dy);
+}
+
+/// The width of `name`'s ink box when placed in the middle of a plot.
+fn mid_width(cx: &Context, name: &'static str, anchor: Anchor, dx: f32, dy: f32) -> f32 {
+    let (mut plot, ..) = plot_with_discs(&[(5.0, 5.0)]);
+    labelled(&mut plot, &[(5.0, 5.0, name)], anchor, dx, dy);
+    let layout = plot.resolve(cx, W, H).unwrap().layout.clone();
+    label(&layout, name).expect("mid-plot label").bounds.width
+}
+
+/// AC2: a label at the far corner of explicit domains insets the far ends
+/// only, by what its ink needs, and is drawn whole.
+#[test]
+fn explicit_domains_are_inset_per_side_for_a_label() {
+    let cx = Context::new_blocking().unwrap();
+    for (anchor, dx, dy) in [(Anchor::BOTTOM, 0.0, -6.0), (Anchor::LEFT, 4.0, 0.0)] {
+        let make = |with_text: bool| {
+            let (mut plot, x, y) = plot_with_discs(&[]);
+            plot.circles([(10.0, 10.0)])
+                .x(|r: &(f64, f64)| r.0)
+                .y(|r: &(f64, f64)| r.1)
+                .radius(Px(4.0));
+            if with_text {
+                labelled(&mut plot, &[(10.0, 10.0, "Sydney")], anchor, dx, dy);
+            }
+            let layout = plot.resolve(&cx, W, H).unwrap().layout.clone();
+            (layout, x, y)
+        };
+        let (_, bx, by) = make(false);
+        let (with, wx, wy) = make(true);
+        let moved_y = wy.read().eval(10.0) - by.read().eval(10.0);
+        let moved_x = wx.read().eval(10.0) - bx.read().eval(10.0);
+        assert!((wy.read().eval(0.0) - by.read().eval(0.0)).abs() < 0.01);
+        assert!((wx.read().eval(0.0) - bx.read().eval(0.0)).abs() < 0.01);
+        let t = label(&with, "Sydney").expect("drawn");
+        if anchor == Anchor::BOTTOM {
+            // y = 10 moves down by the label's height + 6 - the disc's 4.
+            assert!(
+                moved_y >= f64::from(t.bounds.height) + 2.0 - 0.5,
+                "{moved_y}"
+            );
+        } else {
+            assert!(moved_x < -1.0, "x = 10 moves left: {moved_x}");
+        }
+        let width = mid_width(&cx, "Sydney", anchor, dx, dy);
+        assert!((t.bounds.width - width).abs() < 0.01, "{t:?} vs {width}");
+        assert!(
+            with.plot.contains_rect(&t.bounds),
+            "{t:?} in {:?}",
+            with.plot
+        );
+    }
+}
+
+/// AC3: an automatic domain widens only where labels need room.
+#[test]
+fn automatic_domains_widen_per_side_for_labels() {
+    let cx = Context::new_blocking().unwrap();
+    let rows: [Row; 3] = [
+        (1.0, 2.0, "Alpha"),
+        (5.0, 6.0, "Bravo"),
+        (9.0, 10.0, "Charlie"),
+    ];
+    let make = |with_text: bool| {
+        let mut plot = Plot::new();
+        plot.legends(false);
+        let x = plot.x(Linear::new());
+        let y = plot.y(Linear::new());
+        plot.circles(rows.to_vec())
+            .x(|r: &Row| r.0)
+            .y(|r: &Row| r.1)
+            .radius(Px(4.0));
+        if with_text {
+            labelled(&mut plot, &rows, Anchor::BOTTOM, 0.0, -6.0);
+        }
+        let layout = plot.resolve(&cx, W, H).unwrap().layout.clone();
+        (layout, x, y)
+    };
+    let (bare, _, by) = make(false);
+    let (with, _, wy) = make(true);
+    for name in rows.map(|r| r.2) {
+        let t = label(&with, name).expect("drawn");
+        assert!(
+            with.plot.contains_rect(&t.bounds),
+            "{t:?} in {:?}",
+            with.plot
+        );
+        let width = mid_width(&cx, name, Anchor::BOTTOM, 0.0, -6.0);
+        assert!((t.bounds.width - width).abs() < 0.01, "{t:?} vs {width}");
+    }
+    let above = |layout: &Layout, y: &ScaleRef<Linear>, v: f64| {
+        f64::from(layout.plot.bottom()) - y.read().eval(v)
+    };
+    assert!((above(&with, &wy, 2.0) - above(&bare, &by, 2.0)).abs() < 0.01);
+    assert!(
+        wy.read().eval(10.0) > by.read().eval(10.0) + 1.0,
+        "the highest disc is lower with labels"
+    );
+}
+
+/// AC3: a label whose point is outside the domain adds no room.
+#[test]
+fn a_label_outside_the_domain_makes_no_room() {
+    let cx = Context::new_blocking().unwrap();
+    let make = |extra: bool| {
+        let (mut plot, x, y) = plot_with_discs(&[(5.0, 5.0)]);
+        let mut rows = vec![(5.0, 5.0, "Mid")];
+        if extra {
+            rows.push((14.0, 5.0, "Auckland"));
+            rows.push((5.0, -4.0, "Below"));
+        }
+        labelled(&mut plot, &rows, Anchor::BOTTOM, 0.0, -6.0);
+        plot.resolve(&cx, W, H).unwrap();
+        (x, y)
+    };
+    let (ax, ay) = make(false);
+    let (bx, by) = make(true);
+    for v in [0.0, 10.0] {
+        assert!((ax.read().eval(v) - bx.read().eval(v)).abs() < 0.01);
+        assert!((ay.read().eval(v) - by.read().eval(v)).abs() < 0.01);
+    }
+}
+
+/// AC4: labels on a band axis change neither its range nor its bands.
+#[test]
+fn labels_on_a_band_axis_leave_the_bands_alone() {
+    type Day = (&'static str, f64);
+    let cx = Context::new_blocking().unwrap();
+    let days: Vec<Day> = vec![("Mon", 21.0), ("Tue", 25.0), ("Wed", 18.0)];
+    let make = |with_text: bool| {
+        let mut plot = Plot::new();
+        let (x, y) = (plot.x(Band::new()), plot.y(Linear::new().domain(0.0, 30.0)));
+        plot.add(Selection::<Day, Circle>::new(days.clone()))
+            .attr(Circle::X, x.encode_key(|d: &Day| d.0))
+            .attr(Circle::Y, y.encode(|d: &Day| d.1));
+        if with_text {
+            plot.text(days.clone())
+                .x_key(|d: &Day| d.0)
+                .y(|d: &Day| d.1)
+                .text(|d: &Day| format!("{} wide label", d.0))
+                .anchor(Anchor::BOTTOM);
+        }
+        plot.resolve(&cx, W, H).unwrap();
+        x
+    };
+    let (a, b) = (make(false), make(true));
+    for (code, (d, _)) in days.iter().enumerate() {
+        let (pa, pb) = (a.read().eval(code as f64), b.read().eval(code as f64));
+        assert!((pa - pb).abs() < 0.01, "{d}");
+    }
+}
+
+/// AC4: the room a label takes is capped at a quarter of the plot's width;
+/// the label is drawn, clipped.
+#[test]
+fn the_room_for_a_label_is_capped_at_a_quarter_of_the_axis() {
+    let cx = Context::new_blocking().unwrap();
+    let (mut plot, x, _) = plot_with_discs(&[(5.0, 5.0)]);
+    let long: &'static str = Box::leak("w".repeat(200).into_boxed_str());
+    labelled(&mut plot, &[(10.0, 5.0, long)], Anchor::LEFT, 0.0, 0.0);
+    let layout = plot.resolve(&cx, W, H).unwrap().layout.clone();
+    let inset = f64::from(layout.plot.right()) - x.read().eval(10.0);
+    let pad = f64::from(Theme::default().plot_padding.0);
+    assert!(
+        inset <= 0.25 * f64::from(layout.plot.width) + pad + 0.01,
+        "{inset}"
+    );
+    let t = label(&layout, long).expect("still drawn");
+    assert!(layout.plot.contains_rect(&t.bounds));
 }

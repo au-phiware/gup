@@ -750,10 +750,13 @@ impl Plot {
     /// `.x_key(..)`/`.y_key(..)` on a band axis), what it says with
     /// `.text(..)`, and where it sits on its point with `.anchor(..)`.
     ///
-    /// Labels annotate data that other layers draw: they never fit a
-    /// domain or widen an axis, and an offset label is not a data extent.
-    /// They are drawn above the data layers and below the axes, and
-    /// clipped to the plot rect, so a label near its edge is cut off.
+    /// Labels never fit a domain, but the plot makes room for them. An
+    /// automatic axis widens and an explicit one is inset, so a label whose
+    /// point lies in the domain is drawn whole, using up to a quarter of the
+    /// plot's width (height) per side. Labels are drawn above the data
+    /// layers and below the axes, and are clipped to the plot rect: a label
+    /// whose point is outside the domain (or moved there by a zoom or pan)
+    /// or that reaches past the cap is cut off.
     /// The layer is laid out on the CPU, for tens to thousands of labels;
     /// it is not pickable (no hover, tooltip or brush).
     ///
@@ -765,7 +768,7 @@ impl Plot {
     /// let cities = vec![
     ///     City { name: "Perth", lon: 115.9, lat: -31.9 },
     ///     City { name: "Darwin", lon: 130.8, lat: -12.5 },
-    ///     City { name: "Sydney", lon: 151.2, lat: -33.9 },
+    ///     City { name: "Sydney", lon: 150.0, lat: -33.9 },
     /// ];
     /// let mut plot = Plot::new();
     /// plot.circles(cities.clone()).x(|c| c.lon).y(|c| c.lat);
@@ -775,7 +778,15 @@ impl Plot {
     ///     .text(|c| c.name)
     ///     .anchor(Anchor::BOTTOM)
     ///     .dy(-6.0);
-    /// let image = plot.render(&Context::new_blocking()?, 480, 320)?;
+    /// let cx = Context::new_blocking()?;
+    /// // Every label is drawn whole, centred over its point.
+    /// for t in &plot.resolve(&cx, 480.0, 320.0)?.layout.texts {
+    ///     if t.run.role == gup_core::scene::TextRole::Annotation {
+    ///         let centre = (t.bounds.left() + t.bounds.right()) / 2.0;
+    ///         assert!((centre - t.run.at.x).abs() < 1.5, "{t:?}");
+    ///     }
+    /// }
+    /// let image = plot.render(&cx, 480, 320)?;
     /// assert_eq!(image.dimensions(), (480, 320));
     /// # Ok::<(), gup_core::Error>(())
     /// ```
@@ -1917,6 +1928,12 @@ impl Plot {
         let held = self
             .hold
             .filter(|h| (h.width, h.height) == (width.to_bits(), height.to_bits()));
+        let y_count = ((height / th.y_tick_spacing.0) as usize).max(2);
+        let mut counts = (
+            ((width / th.x_tick_spacing.0) as usize).max(2),
+            y_count,
+            y_count,
+        );
         let layout = |counts: (usize, usize, usize)| -> Result<TickLayout> {
             let x_ticks = x.ticks(counts.0);
             let y_ticks = y.ticks(counts.1);
@@ -2006,13 +2023,41 @@ impl Plot {
         let over = |s: &dyn DynPositionScale, ext: f32| {
             if s.reads_keys() { size } else { size.max(ext) }
         };
-        let over = [
+        let mark_over = [
             over(&**x, ext_x),
             over(&**y, ext_y),
             right.map_or(0.0, |r| over(&**r, ext_r)),
         ];
-        let mark_overhang = over.into_iter().fold(0.0, f32::max);
+        let mark_overhang = mark_over.into_iter().fold(0.0, f32::max);
         let pad = th.plot_padding.0;
+        // Labels reach past their points on x and the left y axis, at most
+        // a quarter of the plot (GUP-555). Measured once, with the text
+        // system free again before the layout takes it.
+        let mut lay = layout(counts)?;
+        let mut text_reach = [0.0f32; 2];
+        if !self.annotations.is_empty() {
+            let text = cx.text();
+            for layer in &mut self.annotations {
+                let r = layer.reach(&text, &th);
+                text_reach[0] = text_reach[0].max(r[0]);
+                text_reach[1] = text_reach[1].max(r[1]);
+            }
+        }
+        let lens = [lay.plot.width, lay.plot.height, lay.plot.height];
+        let text_over = [
+            if x.reads_keys() {
+                0.0
+            } else {
+                text_reach[0].min(0.25 * lens[0])
+            },
+            if y.reads_keys() {
+                0.0
+            } else {
+                text_reach[1].min(0.25 * lens[1])
+            },
+            0.0,
+        ];
+        let over = std::array::from_fn::<f32, 3, _>(|i| mark_over[i].max(text_over[i]));
         // A widened axis already holds the inset in its domain, so its
         // range is the whole plot rect. Any other axis insets its far end
         // (right, top) by `far` and padding, and its near end (left,
@@ -2037,14 +2082,7 @@ impl Plot {
                 rs.set_range(Px(r[2].0), Px(r[2].1));
             }
         };
-        let mut insets = over.map(|o| (o, o));
-        let y_count = ((height / th.y_tick_spacing.0) as usize).max(2);
-        let mut counts = (
-            ((width / th.x_tick_spacing.0) as usize).max(2),
-            y_count,
-            y_count,
-        );
-        let mut lay = layout(counts)?;
+        let mut insets = mark_over.map(|o| (o, o));
         // Automatic domains grow in data units to cover the overhang and
         // padding, so the ticks run to both ends of each axis (GUP-435).
         // A zoom keeps the policy its axis had (see `Plot::zoomed`).
@@ -2054,11 +2092,55 @@ impl Plot {
         // Marks that overhang keep `plot_padding` of background between
         // their edge and the axis line; a baseline (no overhang) stays on it.
         let padded = |o: f32| if o > 0.0 { o + th.plot_padding.0 } else { 0.0 };
+        // An automatic axis with labels widens each end by what the labels
+        // there need, solved on the first plot rect with doubled padding
+        // (widening pads both ends) and the smaller span (GUP-555).
+        let mut label_room = [(0.0f32, 0.0f32); 2];
+        {
+            let ends = [
+                (lay.plot.left(), lay.plot.right()),
+                (lay.plot.bottom(), lay.plot.top()),
+            ];
+            let scales: [&dyn DynPositionScale; 2] = [&**x, &**y];
+            let axes: [Option<inset::EdgeAxis>; 2] = std::array::from_fn(|i| {
+                let s = scales[i];
+                (s.is_auto() && !s.reads_keys() && text_reach[i] > 0.0).then(|| {
+                    s.set_range(Px(ends[i].0), Px(ends[i].1));
+                    inset::EdgeAxis {
+                        identity: s.identity(),
+                        range: ends[i],
+                        span_min: lens[i] - 2.0 * over[i] - 2.0 * pad,
+                    }
+                })
+            });
+            if axes.iter().any(Option::is_some) {
+                let mut cands: [Vec<inset::Edge>; 2] = Default::default();
+                for layer in &self.annotations {
+                    layer.edges(&**x, &**y, [axes[0].as_ref(), axes[1].as_ref()], &mut cands);
+                }
+                for i in 0..2 {
+                    if axes[i].is_some() {
+                        label_room[i] = inset::edge_insets(&cands[i], lens[i], 2.0 * pad, over[i]);
+                    }
+                }
+            }
+        }
         let widened = [
-            x.widen(lay.plot.left(), lay.plot.right(), padded(over[0])) || kept(0, &**x),
-            y.widen(lay.plot.bottom(), lay.plot.top(), padded(over[1])) || kept(1, &**y),
+            x.widen(
+                lay.plot.left(),
+                lay.plot.right(),
+                padded(mark_over[0].max(label_room[0].0)),
+                padded(mark_over[0].max(label_room[0].1)),
+            ) || kept(0, &**x),
+            y.widen(
+                lay.plot.bottom(),
+                lay.plot.top(),
+                padded(mark_over[1].max(label_room[1].0)),
+                padded(mark_over[1].max(label_room[1].1)),
+            ) || kept(1, &**y),
             right.is_some_and(|r| {
-                r.widen(lay.plot.bottom(), lay.plot.top(), padded(over[2])) || kept(2, &**r)
+                let o = padded(mark_over[2]);
+                r.widen(lay.plot.bottom(), lay.plot.top(), o, o) || kept(2, &**r)
             }),
         ];
         self.widened = widened;
@@ -2092,11 +2174,21 @@ impl Plot {
                         span_min: lens[i] - 2.0 * over[i] - pad,
                     })
                 });
-                let mut cands: [Vec<(f32, f32)>; 3] = Default::default();
+                let mut marks: [Vec<(f32, f32)>; 3] = Default::default();
                 let mut budget = inset::EDGE_ROW_BUDGET;
                 for layer in &self.layers {
-                    layer.edge_marks(&axes, &mut budget, &mut cands);
+                    layer.edge_marks(&axes, &mut budget, &mut marks);
                 }
+                let mut cands: [Vec<inset::Edge>; 3] =
+                    marks.map(|m| m.into_iter().map(|(t, h)| (t, h, h)).collect());
+                let mut labels: [Vec<inset::Edge>; 2] = Default::default();
+                let label_axes = [axes[0].as_ref(), axes[1].as_ref()];
+                for layer in &self.annotations {
+                    layer.edges(&**x, &**y, label_axes, &mut labels);
+                }
+                let [lx, ly] = labels;
+                cands[0].extend(lx);
+                cands[1].extend(ly);
                 Some((asked, cands))
             } else {
                 None
