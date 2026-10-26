@@ -141,6 +141,11 @@ GUP-535 in turn (they share `src/lib.rs`); GUP-536 after N2's builders.
   chart type with a tested block of at most 20 lines and a golden image. Deps:
   GUP-530 📋, GUP-537 📋, GUP-542 📋, GUP-544 📋, GUP-547 📋, GUP-548 📋,
   GUP-549 📋; GUP-550–554 📋 (soft).
+- [GUP-564](GUP-564_Derive_Role_Message_And_Stale_Gallery.md) 📋 — The
+  `#[derive(Mark)]` role error lists all six roles (with a compile-fail case),
+  the gallery page is regenerated (96 of 101 source links were dead), and
+  `all-check` runs the gallery link check. Edits `maskfile.md`. Deps: GUP-531
+  ✅, GUP-499 ✅.
 
 ## Track N2: Chart Vocabulary
 
@@ -245,6 +250,50 @@ cell labels, error bars, pie charts and facets.
 - [GUP-439](GUP-439_Line_Translucent_Joins.md) 📋 — Translucent lines with even
   opacity at rows, curve pieces and self-crossings (a per-layer coverage pass),
   opaque lines unchanged. Deps: GUP-432 ✅, GUP-550 📋, GUP-551 📋.
+
+Follow-ups from reviewing N1 and N2 (2026-10-26). GUP-560, GUP-561 and GUP-563
+all edit `plot.rs`, so they run one at a time; GUP-562 follows GUP-561 (it
+reuses its `Linear::step`) and edits `encoding.rs`, as GUP-566 does; GUP-565
+touches no hot file and runs beside any of them.
+
+- [GUP-560](GUP-560_Bar_Labels_Follow_The_Plot_Tick_Format.md) 📋 — Bar value
+  labels read the plot's stored tick format through a shared slot, so a format
+  set via `plot_mut()` (before or after a resolve) labels the bars too; the
+  builder's copy is removed. Deps: GUP-544 ✅, GUP-541 ✅.
+- [GUP-561](GUP-561_Axis_Ends_Fit_Bars_And_Bands.md) 📋 — Bar and histogram
+  value axes round out to their own tick step (`PositionScale::nice_to`), so
+  every bar ends at or inside a labelled tick, and band and point axes lose the
+  far-end `plot_padding` that overran heatmap cells. Deps: GUP-543 ✅, GUP-548
+  ✅, GUP-549 ✅.
+- [GUP-562](GUP-562_Integer_Tick_Steps_For_Integer_Data.md) 📋 —
+  `ColumnStats::integral` reaches the scale with the extent, and a `Linear` axis
+  fed only whole numbers (span at least 2) ticks in steps of at least 1:
+  tutorial 6's Week axis reads 0–3. Deps: GUP-561 📋.
+- [GUP-563](GUP-563_Input_Positions_From_Tuples.md) 📋 — `(f32, f32)` into
+  `geom::Point`, `Input::pointer_moved` and friends, and `impl Into<Point>` on
+  `zoom`, `invert` and every `pick`, so tutorials stop importing
+  `gup::geom::Point`. Deps: GUP-532 ✅.
+- [GUP-565](GUP-565_Text_Check_Against_The_Local_Background.md) 📋 — The
+  harness's `text_present` check measures each region against its sampled local
+  background, so labels on coloured fills pass the standard check; the stacked
+  bar golden's workaround is removed. Deps: GUP-544 ✅.
+
+## Track N5: Performance at Scale
+
+Track N5 from the [November 2026 review](../STRATEGIC_REVIEW_2026-11.md):
+columnar input, LOD, GPU sort and the 100M-row demonstration are not written
+yet. These two are measured regressions found in N2; each commits a release
+benchmark, and the orchestrator, not the worker, re-records `PERF_BUDGETS.md`.
+GUP-566 edits `encoding.rs` (not beside GUP-562); GUP-567 edits `selection.rs`.
+
+- [GUP-566](GUP-566_Cheaper_Owned_Category_Keys.md) 📋 — A keyed first-resolve
+  benchmark, then builder keys encoded from a borrowed label (no second
+  allocation) and a `foldhash` dictionary, each kept only if it helps: owned-key
+  overhead from 52 to at most 30 ns per row. Deps: GUP-537 ✅.
+- [GUP-567](GUP-567_Cached_Edge_Extremes_For_Zoom.md) 📋 — Sorted per-chunk
+  values cached for the edge-inset solve, so a programmatic zoom answers by
+  binary search with identical insets: `zoom_culled.cpu` from 1.24 back under
+  0.90 ms. Deps: GUP-528 ✅.
 
 ## Open Backlog
 
