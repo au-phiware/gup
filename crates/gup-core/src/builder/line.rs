@@ -422,7 +422,8 @@ impl<T: Send + Sync + 'static> LineChart<T> {
     }
 
     /// The row at the nearer end of the segment under `at` (logical
-    /// pixels), once the chart has been resolved.
+    /// pixels), once the chart has been resolved. On a step line, the row
+    /// that holds the level under `at` (see [`Curve`]).
     pub fn pick(&mut self, at: Point) -> Option<&T> {
         self.materialise();
         self.plot.pick::<T>(at)
