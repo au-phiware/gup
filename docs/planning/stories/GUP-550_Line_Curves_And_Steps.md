@@ -255,11 +255,19 @@ GUP-551 adds a smooth monotone curve on the same machinery.
 - **CPU**: `Curve::path` gives the segment's 2 to 4 points. `Shape::Step` uses
   it for CPU picks (`pick.rs`), and `MarkKind::Line(Curve)` uses it for SVG
   polylines (`vector.rs`). The curve reaches `build_items` through `Chans`.
-- **Tests**: `crates/gup-core/tests/line_curves.rs` has 8 tests: the glue
-  snapshot against fixtures `line_glue.wgsl` and `line_glue_nulls.wgsl` (written
-  at the first commit), paths and diagonals, log scale, chunks, nulls, CPU and
-  GPU picks, SVG point counts, and the golden. There is also a `Curve::path`
-  unit test, 3 gup-core doctests and 1 `gup` doctest section.
+- **Joints** (after review): each pixel at a joint between two pieces is drawn
+  by one piece. One is butt; the other is butt too where the two are collinear,
+  or keeps the outer half of its round cap at a corner. The layer's stored row
+  count (`enc.row_count`) gives the first and last segments round caps. Step
+  lines add half their width to the x overhang, so the edge risers are whole.
+  This folds in GUP-558, whose story file was deleted.
+- **Tests**: `crates/gup-core/tests/line_curves.rs` has 11 tests (3 added after
+  review: `collinear_pieces_join_without_a_seam`, `corners_are_drawn_once` and
+  `edge_risers_are_drawn_whole`). The first 8: the glue snapshot against
+  fixtures `line_glue.wgsl` and `line_glue_nulls.wgsl` (written at the first
+  commit), paths and diagonals, log scale, chunks, nulls, CPU and GPU picks, SVG
+  point counts, and the golden. There is also a `Curve::path` unit test, 3
+  gup-core doctests and 1 `gup` doctest section.
   `cargo test -p gup-core -- --test-threads=1`: 593 tests ok. Root crate: all
   ok.
 
@@ -272,27 +280,38 @@ GUP-551 adds a smooth monotone curve on the same machinery.
   - Green `Step` turns at the midpoints (0.5, 1.5, …).
   - Legend "curve" with the three entries; title "Step curves".
 
-  Read at 8× zoom: corners square with round outer edges 2.5 px wide, no gap at
-  any corner or row, and the antialiased rim is even along levels and risers.
-  One known nit: where a level runs through a row, both capsules' rims blend
-  there, which leaves one slightly darker rim pixel. Straight lines have the
-  same thing at joins; it is GUP-439's to remove. `StepBefore`'s first riser
-  lies on the plot's left edge and is clipped to half width (follow-up GUP-558).
-  The SVG rasterisation matches the GPU render (`svg_marks::assert_matches`).
+  Re-blessed after the orchestrator's review, and read at full size and at 3×
+  and 8× zoom.
+  - The corners are square, with round outer edges 2.5 px wide, and no corner
+    has a darker rim pixel.
+  - Where Step's green level runs through a row (x = 1 to 6), the stroke is
+    uniform along its length, with no notch.
+  - The x = 0 blue riser and the x = 7 orange riser are drawn whole, inset from
+    the axes, and the line ends are round.
+  - The SVG rasterisation matches the GPU render (`svg_marks::assert_matches`).
 
-- **No other golden changed**, and none was re-blessed.
-- `mask merge-check --dogfood`: PASS for story-ids, doc, gup-core, wasm-size,
-  wasm-browser and dogfood.
-- `mask all-check`: exit 0. `cargo check --examples`: ok. `mask smoke-examples`:
-  ok. `cargo test --doc -p gup`: 51 passed.
-- `scripts/perf_budget.sh --skip-wasm`: every exact counter passes (`zoom.*`
-  bytes and writes, `zoom_culled.draws.median` 14, `zoom_culled.columns.bytes`
-  0). Timings pass: `zoom.gpu_pass.median_ms` 2.694,
-  `zoom_culled.gpu_pass.median_ms` 9.906 (limit 11.880),
-  `pipeline.link_create.median_ms` 1.140. Its 4 WASM rows read "not measured"
-  under `--skip-wasm`; `mask wasm-size` in merge-check passed.
-- **WASM scatter**: 339,448 B gz, against 338,629 B gz at main `514ec9c6`
-  measured the same way: +819 B, under the 4 KB trigger.
+- **No other golden changed.** Only `line_steps.png` was re-blessed.
+- **`mask merge-check --dogfood`**: PASS for story-ids, doc, gup-core,
+  wasm-size, wasm-browser and dogfood, both before review and after the joint
+  fix (HEAD `bdca61d7`).
+- **Other checks**: `mask all-check` exit 0, `cargo check --examples` ok,
+  `mask smoke-examples` ok. `cargo test --doc -p gup`: 51 passed after the fix.
+- **`scripts/perf_budget.sh --skip-wasm`**: every exact counter passes on every
+  run (`zoom.*` bytes and writes, `zoom_culled.draws.median` 14,
+  `zoom_culled.columns.bytes` 0).
+  - Before review, every timing passed. For example, `zoom.gpu_pass.median_ms`
+    was 2.694 and `pipeline.link_create.median_ms` 1.140.
+  - After the fix, three runs under load average 4 to 6 (other agents building)
+    each failed a different timing row. The fails were the CPU medians
+    (`zoom.cpu.median_ms` 0.839 against 0.828, `zoom_culled.cpu.median_ms`) and
+    `pipeline.link_create.median_ms` (1.387, 1.133 and 1.511 against 1.332).
+  - That timing links the reference Circle glue, which this story does not
+    touch. `zoom.gpu_pass.median_ms` passed at 1.758, so I read the fails as
+    noise.
+  - The 4 WASM rows read "not measured" under `--skip-wasm`.
+- **WASM scatter**: 339,778 B gz after the fix (339,448 before it), against
+  338,629 B gz at main `514ec9c6` measured the same way. That is +1,149 B, under
+  the 4 KB trigger.
 
 ## Retrospective
 
@@ -358,8 +377,22 @@ GUP-551 adds a smooth monotone curve on the same machinery.
 - I left `plot.rs`'s `pick_row` docs alone, though they could mention step rows,
   to keep clear of GUP-541's file.
 
+#### Joints drawn once (after review)
+
+- **Challenge**: The orchestrator saw darker rim pixels at normal size: notches
+  where a level runs through a row, and dots at corners. Overlapping round caps
+  blend the antialiased rim twice. A segment's pieces cannot see the neighbour
+  segment, nor whether it exists.
+- **Solution**: Make each pixel near a joint belong to one piece. A butt piece
+  owns the pixels past its joint line, and a piece that keeps its cap drops the
+  cap pixels on the butt side. Who keeps the cap follows from what each side
+  knows. A 0.01 px slack turns rounding into a rare double-blended pixel, never
+  a hole. The layer's row count gives the true ends round caps.
+- **Pattern**: Test both checks against the old behaviour by forcing every joint
+  to round caps; both fail (0.098 along the seam, 0.29 at a corner). Over
+  blending is exact where two straight edges cross at right angles, because
+  their uncovered fractions multiply.
+
 ### Follow-up Stories
 
-1. **GUP-558: Step Risers at the Plot Edge Draw Whole**: a `StepBefore` or
-   `StepAfter` riser on the x domain's end is clipped to half width. Step lines
-   should add half their width to the x overhang.
+None. GUP-558 (edge risers) was folded into this story and its file deleted.

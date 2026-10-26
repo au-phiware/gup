@@ -3818,8 +3818,48 @@ S14 deleted the old render path and made `gup` a facade over `gup-core`
   `step_point(k + 1)`, and its corner is `vertex_index % 6`. The points are
   computed in logical pixels from `(x, y)` and `(x_next, y_next)`, so levels are
   level and verticals plumb under any scale. On a log y scale, every level is
-  drawn on one pixel row within 0.5 px. Consecutive pieces overlap in a disc at
-  each corner, as straight segments do at rows.
+  drawn on one pixel row within 0.5 px.
+- **Joints are drawn once.** At first, consecutive pieces overlapped in a disc
+  at each joint, as straight segments do at rows. An opaque step then blended
+  the antialiased rim twice there. That showed as a darker rim pixel at every
+  corner and, at normal size, as a notch where Step's level runs through a row.
+  Now each pixel near a joint belongs to one piece. One piece is **butt**: it
+  draws only the pixels whose centres lie on its own side of the line through
+  the joint, across its axis. Those pixels get its across-axis coverage, with no
+  cap and no ramp along the axis. The other piece is butt too where the two are
+  collinear. At a corner it **keeps its cap**: it draws its round cap except the
+  pixels past the joint on the butt piece's side, so the corner is rounded
+  outside. At the inner corner the two straight rims cross at right angles. Over
+  blending multiplies their uncovered fractions there, which is the box coverage
+  of the union exactly. Pixels within 0.01 physical px of an ownership line are
+  drawn by both, so rounding never leaves a hole. `Varyings` carries the joint
+  kinds (`joins`, flat `u32`) and the butt neighbour's direction in the piece's
+  frame (`others`, flat `vec4`). A straight line's are 0 (round caps), and its
+  coverage is bit-identical to before.
+  - **Which piece keeps its cap.** Within a segment, the earlier piece keeps it.
+    Between segments, a piece cannot see the neighbour segment's pieces, so the
+    rule follows from what each side knows. It assumes x runs the same way in
+    both segments, as the docs ask (rows sorted by x).
+    - StepAfter's riser keeps its cap, and the next level is butt. The riser
+      knows the level's direction.
+    - StepBefore's next riser keeps its cap, and the level before is butt.
+    - Step's collinear levels are both butt.
+  - **Layer ends.** The glue passes the layer's stored row count
+    (`enc.row_count`, written at every prepare, so appends update it) to
+    `vertex_variant`. The first and last segments end in round caps.
+  - **Null breaks** are not seen. A segment next to a null row draws that end as
+    a joint (butt, or a kept half cap), so the line can stop up to a pixel short
+    there. `line_curves.rs` exempts those ends from its coverage check.
+  - **Evidence.** Along a Step level through a row, every pixel row across the
+    stroke varies by at most 2/255 (widths 2.5, 3 and 6, rows off the pixel
+    grid). Within 1.5 px of every corner, each pixel's ink is within 0.1 of the
+    16×16-sampled coverage of the round-cornered stroke. With every joint forced
+    to round caps, both checks fail: by 0.098 along the seam, and by 0.29 at a
+    corner.
+- **Overhang.** A step line adds half its width to the layer's x overhang, so
+  GUP-528's insets make room. A riser on a row at an end of the x domain (the
+  first riser of StepBefore, the last of StepAfter) is drawn whole, and Step's
+  capped ends are not clipped. Straight lines still start at the axis.
 - **Picks.** `Varyings` gained `side`, an interpolated `f32`. `hit_row` reports
   `row + 1` when `side > 0`. For a straight segment, `side` is the offset along
   the segment from its middle (−1 for a segment of no length), which is the old
@@ -3851,10 +3891,11 @@ S14 deleted the old render path and made `gup` a facade over `gup-core`
   - **GUP-439** (translucent joins) must handle joins between pieces of one
     instance, which the shader can see (it computes both pieces), as well as
     joins between instances at rows.
-- **Known.** Opaque lines still blend twice on the antialiased rim where two
-  capsules meet. A step line's level running through a row shows one slightly
-  darker rim pixel there, as a straight line does at a shallow join. This is
-  GUP-439's to remove.
+- **Known.** Straight lines still blend twice on the antialiased rim where two
+  segments' capsules meet at a row. This is GUP-439's to remove: a segment
+  cannot see its neighbour's direction. Step pieces need no neighbour direction
+  they do not know, which is why their joints could be fixed here. GUP-439 can
+  reuse the `joins` and `others` ownership varyings.
 
 ### Cost
 
