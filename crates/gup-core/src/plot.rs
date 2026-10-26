@@ -913,8 +913,8 @@ impl Plot {
     /// change, so the next [`resolve`](Self::resolve) writes uniforms and
     /// no column bytes. Does nothing before the first resolve has fitted
     /// and ranged the scales.
-    pub fn zoom(&mut self, at: Point, factor: f64) -> Result<()> {
-        self.zoom_axes(at, factor, [true, true, true])
+    pub fn zoom(&mut self, at: impl Into<Point>, factor: f64) -> Result<()> {
+        self.zoom_axes(at.into(), factor, [true, true, true])
     }
 
     /// The axes in the order of the per-axis arrays: x, y, right y.
@@ -1108,7 +1108,8 @@ impl Plot {
     /// assert!(plot.invert(Point::new(r.x - 1.0, c.y)).is_none());
     /// # Ok::<(), gup_core::Error>(())
     /// ```
-    pub fn invert(&self, at: Point) -> Option<(f64, f64)> {
+    pub fn invert(&self, at: impl Into<Point>) -> Option<(f64, f64)> {
+        let at = at.into();
         let plot = self.layout()?.plot;
         let inside = (plot.left()..=plot.right()).contains(&at.x)
             && (plot.top()..=plot.bottom()).contains(&at.y);
@@ -1739,8 +1740,8 @@ impl Plot {
     /// accessors over its rows; with neither (`Retain::GpuOnly` above one
     /// chunk) its rows are not picked. The index is built on the first
     /// pick after a resolve or a zoom.
-    pub fn pick_row(&mut self, at: Point) -> Option<RowId> {
-        self.pick_hit(at).map(|h| h.row)
+    pub fn pick_row(&mut self, at: impl Into<Point>) -> Option<RowId> {
+        self.pick_hit(at.into()).map(|h| h.row)
     }
 
     /// The data of the topmost row drawn under `at` (see
@@ -1777,7 +1778,7 @@ impl Plot {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn pick<T: 'static>(&mut self, at: Point) -> Option<&T> {
+    pub fn pick<T: 'static>(&mut self, at: impl Into<Point>) -> Option<&T> {
         let id = self.pick_row(at)?;
         self.layers
             .get(id.layer)?

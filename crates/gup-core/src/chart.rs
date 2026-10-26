@@ -22,7 +22,6 @@ use std::path::Path;
 ///
 /// ```
 /// use gup_core::prelude::*;
-/// use gup_core::geom::Point;
 /// use gup_core::{Input, Response};
 ///
 /// # fn main() -> gup_core::Result<()> {
@@ -36,11 +35,11 @@ use std::path::Path;
 /// let mut chart: Box<dyn Chart> = Box::new(plot);
 /// let resolved = chart.resolve(&cx, 320.0, 200.0)?;
 /// let rect = resolved.layout.plot;
-/// let at = Point::new(rect.x + rect.width / 2.0, rect.y + rect.height / 2.0);
+/// let at = (rect.x + rect.width / 2.0, rect.y + rect.height / 2.0);
 /// let layout = chart.layout().expect("resolved");
 /// assert_eq!((layout.width, layout.height), (320.0, 200.0));
 /// assert_eq!(
-///     chart.handle(Input::Wheel { at, lines: 1.0 }),
+///     chart.handle(Input::wheel(at, 1.0)),
 ///     Response { redraw: true }
 /// );
 /// let image = chart.render(&cx, 320, 200)?;

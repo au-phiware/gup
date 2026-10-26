@@ -19,6 +19,33 @@ impl Point {
     }
 }
 
+/// A `(x, y)` pair is a point, so methods taking `impl Into<Point>` accept
+/// tuples without naming this type.
+///
+/// ```
+/// use gup_core::geom::Point;
+/// let p: Point = (3.0, 4.0).into();
+/// assert_eq!(p, Point::new(3.0, 4.0));
+/// ```
+impl From<(f32, f32)> for Point {
+    fn from((x, y): (f32, f32)) -> Self {
+        Self { x, y }
+    }
+}
+
+/// An `[x, y]` pair is a point.
+///
+/// ```
+/// use gup_core::geom::Point;
+/// let p: Point = [3.0, 4.0].into();
+/// assert_eq!(p, Point::new(3.0, 4.0));
+/// ```
+impl From<[f32; 2]> for Point {
+    fn from([x, y]: [f32; 2]) -> Self {
+        Self { x, y }
+    }
+}
+
 /// An axis-aligned rectangle in logical pixels.
 #[derive(Copy, Clone, Debug, PartialEq, Default)]
 pub struct Rect {

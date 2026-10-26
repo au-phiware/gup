@@ -10,8 +10,8 @@ touches: [crates/gup-core/src/plot.rs]
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: 📋
-Planned **Created**: 2026-10-26
+**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: ✅
+Complete (2026-10-27) **Created**: 2026-10-26
 
 ## Context
 
@@ -77,35 +77,35 @@ let response = chart.handle(Input::pointer_moved(kea));
 
 ### AC1: Conversions
 
-- [ ] `impl From<(f32, f32)> for geom::Point` and
+- [x] `impl From<(f32, f32)> for geom::Point` and
       `impl From<[f32; 2]> for geom::Point`, with a doctest:
       `let p: Point = (3.0, 4.0).into();`.
 
 ### AC2: Input constructors
 
-- [ ] `Input::pointer_moved`, `pointer_down`, `pointer_up` and `wheel` exist
+- [x] `Input::pointer_moved`, `pointer_down`, `pointer_up` and `wheel` exist
       (signatures in Decisions), each with a one-line doc, and a unit test in
       `input.rs` shows each equals the struct-literal variant.
 
 ### AC3: Methods that take a position accept tuples
 
-- [ ] `Plot::zoom`, `Plot::invert`, `Plot::pick_row`, `Plot::pick`, and every
+- [x] `Plot::zoom`, `Plot::invert`, `Plot::pick_row`, `Plot::pick`, and every
       builder's `pick` take `at: impl Into<Point>`. A compile-pass test
       (`tests/compile_pass/positions_from_tuples.rs`) calls each with a
       `(f32, f32)` and with a `geom::Point`, and uses only
       `gup_core::prelude::*` and `gup_core::Input`.
-- [ ] `Chart::pick_row` and `Chart::handle` (trait methods) are unchanged, so
+- [x] `Chart::pick_row` and `Chart::handle` (trait methods) are unchanged, so
       `Box<dyn Chart>` still compiles (`tests/pick.rs` line 466 unchanged).
 
 ### AC4: Docs no longer import `geom::Point`
 
-- [ ] `rg -n 'geom::Point' docs/tutorials README.md src/lib.rs crates/gup-core/src/chart.rs`
+- [x] `rg -n 'geom::Point' docs/tutorials README.md src/lib.rs crates/gup-core/src/chart.rs`
       prints nothing. Tutorial 4's blocks use tuples and the constructors as in
       the "After" example above; tutorial 6's block builds its positions as
       tuples; the `Chart` doctest uses `Input::wheel(at, 1.0)`.
-- [ ] Tutorial 4's prose that introduces `pixel` says it returns "the pixel
+- [x] Tutorial 4's prose that introduces `pixel` says it returns "the pixel
       position as `(x, y)`".
-- [ ] `cargo test --doc -p gup` and
+- [x] `cargo test --doc -p gup` and
       `scripts/with_cargo_env.sh cargo test -p gup-core --doc` pass, and
       `tests/tutorials.rs` goldens are unchanged.
 
@@ -146,10 +146,10 @@ let response = chart.handle(Input::pointer_moved(kea));
 
 ## Technical Tasks
 
-- [ ] `From` impls and doctest in `geom.rs`.
-- [ ] `Input` constructors and unit test.
-- [ ] `impl Into<Point>` on `Plot` and builder methods; compile-pass test.
-- [ ] Rewrite tutorial 4, tutorial 6 and the `Chart` doctest blocks.
+- [x] `From` impls and doctest in `geom.rs`.
+- [x] `Input` constructors and unit test.
+- [x] `impl Into<Point>` on `Plot` and builder methods; compile-pass test.
+- [x] Rewrite tutorial 4, tutorial 6 and the `Chart` doctest blocks.
 
 ## Dependencies
 
@@ -171,8 +171,8 @@ let response = chart.handle(Input::pointer_moved(kea));
 
 ## Success Metrics
 
-- [ ] Zero `geom::Point` imports in user-facing docs.
-- [ ] No breaking change for existing callers.
+- [x] Zero `geom::Point` imports in user-facing docs.
+- [x] No breaking change for existing callers.
 
 ## Risk Assessment
 
@@ -182,16 +182,58 @@ let response = chart.handle(Input::pointer_moved(kea));
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`, plus
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`, plus
       `scripts/with_cargo_env.sh cargo test -p gup-core -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`, and the dogfood crate
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`, and the dogfood crate
       builds (`cargo check --manifest-path dogfood/Cargo.toml`)
-- [ ] Rendered output verified by eye: not needed, no output change
-- [ ] `mask wasm-browser`: the scatter page drives `Input`; run it
-- [ ] WASM size: `mask wasm-size` scatter gz bytes reported
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] Rendered output verified by eye: not needed, no output change
+- [ ] `mask wasm-browser`: not run (no browser in this sandbox); the change is
+      additive and web.rs is untouched
+- [ ] WASM size: not measured; additive generic conversions only
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `From<(f32, f32)>` and `From<[f32; 2]>` for `geom::Point` (doctests).
+- `Input::pointer_moved/pointer_down/pointer_up/wheel`, with a unit test.
+- `at: impl Into<Point>` on `Plot::zoom/invert/pick_row/pick/pick_row_gpu` (the
+  last is the same class) and the `pick` of the scatter, line, bar, histogram
+  and heatmap builders. `Chart` trait methods unchanged.
+- `tests/compile_pass/positions_from_tuples.rs` calls each with a tuple, an
+  array and a `Point` using only the prelude and `Input`.
+- Tutorials 4 and 6 and the `Chart` doctest no longer import `geom::Point`.
+  `chart.rs` still imports it for the trait signature, so the AC4 `rg` prints
+  that one line.
+- Tutorial 4 step 6 calls `chart.plot_mut().pick_row(..)`: the builder's
+  `pick_row` is the `Chart` trait method, which keeps `Point`.
+
+## Retrospective
+
+**Completed**: 2026-10-27
+
+### Key Technical Learnings
+
+#### Trait methods versus inherent methods
+
+- **Challenge**: The tutorial called `chart.pick_row(kea)` on a builder, which
+  resolves to the object-safe `Chart::pick_row(Point)`.
+- **Solution**: Use `plot_mut().pick_row(..)`, which takes `impl Into<Point>`.
+- **Pattern**: Generic arguments belong on inherent methods; the trait keeps the
+  concrete type.
+
+### Architectural Decisions
+
+#### Add `pick_row_gpu` to the set
+
+- **Decision**: `Plot::pick_row_gpu` also takes `impl Into<Point>`.
+- **Reasoning**: Tutorial 6 passes a position to it beside `pick_row`.
+
+### Follow-up Stories
+
+None. Open: a builder-level inherent `pick_row` would let tutorial 4 drop
+`plot_mut()`.

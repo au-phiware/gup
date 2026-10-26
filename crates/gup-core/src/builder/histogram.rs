@@ -429,7 +429,7 @@ impl<T: Send + Sync + 'static> HistogramChart<T> {
 
     /// The bar under `at` (logical pixels), once the chart has been
     /// resolved.
-    pub fn pick(&mut self, at: Point) -> Option<&HistogramBin> {
+    pub fn pick(&mut self, at: impl Into<Point>) -> Option<&HistogramBin> {
         self.materialise();
         self.plot.pick::<HistogramBin>(at)
     }

@@ -340,7 +340,7 @@ impl<T: Send + Sync + 'static> ScatterChart<T> {
 
     /// The row drawn under `at` (logical pixels), once the chart has been
     /// resolved.
-    pub fn pick(&mut self, at: Point) -> Option<&T> {
+    pub fn pick(&mut self, at: impl Into<Point>) -> Option<&T> {
         self.materialise();
         self.plot.pick::<T>(at)
     }

@@ -933,7 +933,7 @@ impl<T: Send + Sync + 'static, O: Orientation> BarChart<T, O> {
 
     /// The row of the bar under `at` (logical pixels), once the chart has
     /// been resolved.
-    pub fn pick(&mut self, at: Point) -> Option<&T> {
+    pub fn pick(&mut self, at: impl Into<Point>) -> Option<&T> {
         self.materialise();
         self.plot.pick::<T>(at)
     }
