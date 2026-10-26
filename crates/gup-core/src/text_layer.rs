@@ -473,6 +473,9 @@ pub(crate) trait AnnotationLayer: Send + Sync {
         axes: [Option<&EdgeAxis>; 2],
         out: &mut [Vec<Edge>; 2],
     );
+    /// Drop the evaluated labels so the next resolve evaluates them again
+    /// (something they read outside the layer changed).
+    fn invalidate(&mut self);
     /// The layer, to downcast to its row type.
     fn as_any_mut(&mut self) -> &mut dyn Any;
 }
@@ -484,6 +487,10 @@ impl<T: Send + Sync + 'static> AnnotationLayer for TextLayer<T> {
 
     fn z(&self) -> i32 {
         self.z
+    }
+
+    fn invalidate(&mut self) {
+        self.changed();
     }
 
     fn runs(
