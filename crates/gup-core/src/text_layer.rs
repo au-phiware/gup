@@ -10,6 +10,12 @@
 //! functions) once the plot has set their ranges, and hands the plot
 //! [`TextRun`]s, which every target draws like a tick label. It suits tens
 //! to thousands of labels.
+//!
+//! Labels never fit a domain by luck, so the plot makes room for them (see
+//! [`Plot::text`](crate::Plot::text)): a label's ink box relative to its
+//! position is a constant number of pixels, measured once and cached, and
+//! the plot widens an automatic axis or insets an explicit one by the room
+//! each side needs, up to a quarter of the axis.
 
 use crate::Color;
 use crate::channel::Px;
@@ -18,10 +24,11 @@ use crate::encoding::{ColumnValue, Derived};
 use crate::error::{Error, Result};
 use crate::geom::{Point, Rect};
 use crate::plot::PlacedText;
+use crate::plot::inset::{Edge, EdgeAxis};
 use crate::scale::DynPositionScale;
 use crate::scene::{Anchor, TextRole, TextRun, TextStyle, Weight, Z_AXES};
 use crate::theme::Theme;
-use gup_text::TextSystem;
+use gup_text::{Bounds, TextSystem};
 use std::any::Any;
 use std::fmt::Display;
 use std::sync::Arc;
@@ -82,6 +89,29 @@ struct Evaluated {
     color: Option<Vec<Color>>,
     within_x: Option<Vec<(f64, f64)>>,
     within_y: Option<Vec<(f64, f64)>>,
+    /// The labels' ink boxes at the origin; cleared with the rows.
+    measured: Option<Measured>,
+}
+
+/// Each label's ink box with its anchor at `(0, 0)`, at one font size: the
+/// box, and the baseline origin before rounding. `None` for a label with no
+/// ink. Where the label really is, the box is this one shifted by whole
+/// pixels (`shift`), because the layout rounds the origin to whole pixels
+/// and places glyphs on integers from it.
+struct Measured {
+    size: f32,
+    boxes: Vec<Option<(Bounds, [f32; 2])>>,
+}
+
+/// The ink box of a label at `at`, from its box and origin at `(0, 0)`.
+fn shift(b: Bounds, off: [f32; 2], at: Point) -> Bounds {
+    let dx = (at.x + off[0]).round() - off[0].round();
+    let dy = (at.y + off[1]).round() - off[1].round();
+    Bounds {
+        x: b.x + dx,
+        y: b.y + dy,
+        ..b
+    }
 }
 
 /// A layer of labels at data positions: one line of text per row, drawn
@@ -316,7 +346,46 @@ impl<T: Send + Sync + 'static> TextLayer<T> {
             },
             within_x: spans(&self.within_x),
             within_y: spans(&self.within_y),
+            measured: None,
         }
+    }
+
+    /// Evaluate the rows if a setter cleared them, and measure the labels
+    /// if they were not measured at this size. `false` when the layer lacks
+    /// x, y or text.
+    fn prepare(&mut self, text: &TextSystem, theme: &Theme) -> bool {
+        let (Some(px), Some(py), Some(label)) = (&self.x, &self.y, &self.text) else {
+            return false;
+        };
+        if self.evaluated.is_none() {
+            self.evaluated = Some(self.evaluate(px, py, label));
+        }
+        let size = self.size.unwrap_or(theme.tick_size.0);
+        let (anchor, weight) = (self.anchor, self.weight);
+        let ev = self.evaluated.as_mut().expect("evaluated above");
+        if ev.measured.as_ref().is_none_or(|m| m.size != size) {
+            let font = text.font_weight(weight);
+            let boxes = ev
+                .text
+                .iter()
+                .map(|s| {
+                    if s.is_empty() {
+                        return None;
+                    }
+                    let run = gup_text::Run {
+                        text: s,
+                        size,
+                        at: [0.0, 0.0],
+                        anchor,
+                        weight,
+                    };
+                    let b = font.ink_bounds(&run);
+                    (b.width > 0.0 && b.height > 0.0).then(|| (b, font.baseline_origin(&run)))
+                })
+                .collect();
+            ev.measured = Some(Measured { size, boxes });
+        }
+        true
     }
 }
 
@@ -389,6 +458,21 @@ pub(crate) trait AnnotationLayer: Send + Sync {
         plot: Rect,
         theme: &Theme,
     ) -> Result<Vec<PlacedText>>;
+    /// Evaluate and measure (cached), then the largest px any label reaches
+    /// past its position along `[x, y]`, at least 0; `[0, 0]` for a layer
+    /// missing x, y or text, and 0 along an axis placed by keys.
+    fn reach(&mut self, text: &TextSystem, theme: &Theme) -> [f32; 2];
+    /// Push a `(t, near, far)` candidate per label onto `out[0]` (x) and
+    /// `out[1]` (y) for each `Some` axis, mapping positions through `x` and
+    /// `y` at their current (provisional) ranges. Uses the cache `reach`
+    /// filled; pushes nothing if it is empty.
+    fn edges(
+        &self,
+        x: &dyn DynPositionScale,
+        y: &dyn DynPositionScale,
+        axes: [Option<&EdgeAxis>; 2],
+        out: &mut [Vec<Edge>; 2],
+    );
     /// The layer, to downcast to its row type.
     fn as_any_mut(&mut self) -> &mut dyn Any;
 }
@@ -412,13 +496,11 @@ impl<T: Send + Sync + 'static> AnnotationLayer for TextLayer<T> {
     ) -> Result<Vec<PlacedText>> {
         check_axis("x", self.x.as_ref(), x)?;
         check_axis("y", self.y.as_ref(), y)?;
-        let (Some(px), Some(py), Some(label)) = (&self.x, &self.y, &self.text) else {
+        if !self.prepare(text, theme) {
             return Ok(Vec::new());
-        };
-        if self.evaluated.is_none() {
-            self.evaluated = Some(self.evaluate(px, py, label));
         }
-        let ev = self.evaluated.as_ref().expect("evaluated above");
+        let ev = self.evaluated.as_ref().expect("prepared above");
+        let measured = ev.measured.as_ref().expect("prepared above");
         let (dx, dy) = (self.dx.get(), self.dy.get());
         let size = self.size.unwrap_or(theme.tick_size.0);
         let reach = plot.inflate(4.0 * size);
@@ -456,7 +538,10 @@ impl<T: Send + Sync + 'static> AnnotationLayer for TextLayer<T> {
                 },
                 role: TextRole::Annotation,
             };
-            let ink = text.ink_bounds(&run.layout_run());
+            let Some((box0, off)) = measured.boxes[i] else {
+                continue;
+            };
+            let ink = shift(box0, off, at);
             if let (Some(spans), Coords::Values(_)) = (&ev.within_x, &ev.x)
                 && !fits(ink.width, spans[i], x)
             {
@@ -475,9 +560,80 @@ impl<T: Send + Sync + 'static> AnnotationLayer for TextLayer<T> {
         Ok(out)
     }
 
+    fn reach(&mut self, text: &TextSystem, theme: &Theme) -> [f32; 2] {
+        if !self.prepare(text, theme) {
+            return [0.0, 0.0];
+        }
+        let ev = self.evaluated.as_ref().expect("prepared above");
+        let measured = ev.measured.as_ref().expect("prepared above");
+        let (dx, dy) = (self.dx.get(), self.dy.get());
+        let keyed = [
+            self.x.as_ref().is_none_or(Position::is_key),
+            self.y.as_ref().is_none_or(Position::is_key),
+        ];
+        let mut reach = [0.0f32; 2];
+        for (b, off) in measured.boxes.iter().flatten() {
+            let [(xn, xf), (yn, yf)] = extents(b, off, dx, dy);
+            for (i, e) in [xn.max(xf), yn.max(yf)].into_iter().enumerate() {
+                if !keyed[i] && e > reach[i] {
+                    reach[i] = e;
+                }
+            }
+        }
+        reach
+    }
+
+    fn edges(
+        &self,
+        x: &dyn DynPositionScale,
+        y: &dyn DynPositionScale,
+        axes: [Option<&EdgeAxis>; 2],
+        out: &mut [Vec<Edge>; 2],
+    ) {
+        let Some(measured) = self.evaluated.as_ref().and_then(|e| e.measured.as_ref()) else {
+            return;
+        };
+        let ev = self.evaluated.as_ref().expect("measured implies evaluated");
+        let (dx, dy) = (self.dx.get(), self.dy.get());
+        let scales = [x, y];
+        let coords = [&ev.x, &ev.y];
+        for (i, (b, off)) in measured
+            .boxes
+            .iter()
+            .enumerate()
+            .filter_map(|(i, b)| b.as_ref().map(|b| (i, b)))
+        {
+            let ext = extents(b, off, dx, dy);
+            for a in 0..2 {
+                let (Some(axis), Coords::Values(v)) = (axes[a], coords[a]) else {
+                    continue;
+                };
+                if scales[a].reads_keys() {
+                    continue;
+                }
+                if let Some(t) = axis.t(scales[a].eval(v[i])) {
+                    axis.push_edge(&mut out[a], t, ext[a].0, ext[a].1);
+                }
+            }
+        }
+    }
+
     fn as_any_mut(&mut self) -> &mut dyn Any {
         self
     }
+}
+
+/// The px a label with ink box `b` (at the origin, with baseline origin
+/// `off`) reaches past its position, `[(left, right), (bottom, top)]`, with
+/// 1 px for the origin's rounding at the real position.
+fn extents(b: &Bounds, off: &[f32; 2], dx: f32, dy: f32) -> [(f32, f32); 2] {
+    let (rx, ry) = (off[0] - off[0].round(), off[1] - off[1].round());
+    let (left, right) = (b.x + rx, b.x + rx + b.width);
+    let (top, bottom) = (b.y + ry, b.y + ry + b.height);
+    [
+        (-(dx + left) + 1.0, dx + right + 1.0),
+        (dy + bottom + 1.0, -(dy + top) + 1.0),
+    ]
 }
 
 #[cfg(test)]

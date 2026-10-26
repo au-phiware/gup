@@ -376,10 +376,10 @@ pub(crate) trait DynPositionScale: Send + Sync {
     /// Identifies the scale among its clones (they share state).
     fn identity(&self) -> usize;
     /// Grow an automatic, already rounded domain, in data units, so that
-    /// its ends map `overhang` pixels inside the pixel interval `a..b`.
-    /// Returns whether the domain changed; an explicit domain and an
+    /// its near end maps `near` pixels and its far end `far` pixels inside
+    /// the pixel interval `a..b`. Returns whether the domain changed; an explicit domain and an
     /// ordinal scale never change. Ticks stay on the rounded values.
-    fn widen(&self, a: f32, b: f32, overhang: f32) -> bool;
+    fn widen(&self, a: f32, b: f32, near: f32, far: f32) -> bool;
     /// A clone of the scale as an encoding function; it shares state with
     /// the plot's scale (GUP-447).
     fn dyn_encode(&self) -> Box<dyn crate::encoding::DynEncodeFn>;
@@ -510,8 +510,8 @@ impl<S: PositionScale> DynPositionScale for ScaleRef<S> {
         let _ = ShaderFn::fit_domain(&mut this, (value, value));
     }
 
-    fn widen(&self, a: f32, b: f32, overhang: f32) -> bool {
-        if overhang <= 0.0 || !self.read().is_auto() {
+    fn widen(&self, a: f32, b: f32, near: f32, far: f32) -> bool {
+        if (near <= 0.0 && far <= 0.0) || !self.read().is_auto() {
             return false;
         }
         let sign = if b >= a { 1.0 } else { -1.0 };
@@ -519,10 +519,10 @@ impl<S: PositionScale> DynPositionScale for ScaleRef<S> {
         let Some(extent) = scale.current_domain() else {
             return false;
         };
-        // Map the rounded domain `overhang` pixels inside the pixel interval,
+        // Map the rounded domain `near` and `far` pixels inside the pixel interval,
         // then read off what its ends show; a scale that cannot take the
         // domain keeps it.
-        scale.set_range(Px(a + sign * overhang), Px(b - sign * overhang));
+        scale.set_range(Px(a + sign * near), Px(b - sign * far));
         let (lo, hi) = (scale.invert(f64::from(a)), scale.invert(f64::from(b)));
         if !(lo.is_finite() && hi.is_finite()) || (lo == extent.0 && hi == extent.1) {
             return false;

@@ -339,7 +339,7 @@ fn labels_on_the_plot_edge_are_clipped_to_the_plot_rect() {
             .color(Color::hex(0xff0000));
         (plot, x, y)
     };
-    // Labels do not change the layout, so the probe's rect is the plot's.
+    // Labels outside the domain make no room, so the probe's rect is the plot's.
     let (mut probe, x, y) = make(5.0, 5.0);
     let plot_rect = probe.resolve(&cx, W, H).unwrap().layout.plot;
     let (right, top) = (
@@ -390,7 +390,7 @@ fn cities() -> Vec<City> {
         city("Alice Springs", 133.88, -23.70),
         city("Adelaide", 138.60, -34.93),
         city("Hobart", 147.33, -42.88),
-        // On the right end of the x domain: its label is clipped.
+        // On the right end of the x domain: the plot makes room for its label.
         city("Sydney", 151.21, -33.87),
         // Off the chart: neither its disc nor its label is drawn.
         city("Auckland", 174.76, -36.85),
@@ -442,7 +442,7 @@ fn annotated() -> Plot {
 }
 
 /// AC3: the `gup_core/text_annotations` golden: labels above their discs,
-/// Sydney's clipped at the right edge, a threshold annotated at its right
+/// Sydney's whole at the right edge, a threshold annotated at its right
 /// end, none over a tick label.
 #[test]
 fn text_annotations_golden() {
@@ -474,8 +474,9 @@ fn text_annotations_golden() {
         }
     }
     let sydney = label(layout, "Sydney").unwrap();
+    let centre = (sydney.bounds.left() + sydney.bounds.right()) / 2.0;
     assert!(
-        (sydney.bounds.right() - layout.plot.right()).abs() < 0.01,
+        (centre - sydney.run.at.x).abs() < 1.0 && sydney.bounds.right() < layout.plot.right(),
         "Sydney is cut at the right edge: {sydney:?}"
     );
     let image = ImageTarget::new(&cx, w, h)
