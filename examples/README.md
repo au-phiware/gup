@@ -13,5 +13,6 @@ single frame to a PNG instead of opening a window.
 | `composite_mixed_data` | One plot over two row types                     | `cargo run --example composite_mixed_data` |
 
 The examples that used the pre-flip render core were deleted in GUP-488; git
-history keeps them. More builders (area, boxplot, violin, density, heatmap,
-choropleth) return in track N2 (strategic review 2026-11).
+history keeps them. `gup::area` (single, overlapping and stacked) is the first
+of them; more builders (boxplot, violin, density, heatmap, choropleth) return in
+track N2 (strategic review 2026-11).

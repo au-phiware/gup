@@ -10,8 +10,8 @@ touches: [crates/gup-core/src/builder/mod.rs, crates/gup-core/src/lib.rs]
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: 📋
-Planned **Created**: 2026-10-24
+**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: ✅
+Complete (2026-10-27) **Created**: 2026-10-24
 
 ## Context
 
@@ -49,45 +49,45 @@ rows directly.
 
 ### AC1: The builder
 
-- [ ] `gup::area(rows) -> AreaChart<T>` with the methods in Decisions, exported
+- [x] `gup::area(rows) -> AreaChart<T>` with the methods in Decisions, exported
       from the crate root beside `line`; a doctest per mode (single, `color`,
       `stack`) from the `gup` crate.
-- [ ] A single area is byte-identical to the hand-built `Plot` with one `Area`
+- [x] A single area is byte-identical to the hand-built `Plot` with one `Area`
       layer, `y_end` 0, the default fill (test, as the line builder's).
-- [ ] `color(key)`: one area per key in first-seen order, each its palette
+- [x] `color(key)`: one area per key in first-seen order, each its palette
       colour at opacity 0.5 by default, with a legend (test from pixels at known
       points).
 
 ### AC2: Stacking
 
-- [ ] `stack(key)`: series in first-seen order from the bottom; at every x in
+- [x] `stack(key)`: series in first-seen order from the bottom; at every x in
       the union of all series' x values each layer's base is the sum of the
       layers below (positive values upward from 0, negatives downward, as bars);
       a series missing an x contributes 0 there; a null value counts as 0;
       duplicate x within a series sum (unit tests on the stacking function).
-- [ ] Rows of each stacked series are sorted by x; unstacked series keep data
+- [x] Rows of each stacked series are sorted by x; unstacked series keep data
       order (tests).
-- [ ] Pixel test: on a 3-series stack, the pixel just above layer 1's top and
+- [x] Pixel test: on a 3-series stack, the pixel just above layer 1's top and
       just below layer 2's base at the same x is layer 2's and layer 1's colour
       respectively (no gap, no overlap: within 1 px).
 
 ### AC3: Outline, tooltips, picking
 
-- [ ] `outline(px)` adds one `Line` per series along its top edge (stacked: the
+- [x] `outline(px)` adds one `Line` per series along its top edge (stacked: the
       layer's top) in the series colour at opacity 1 (test: the line's pixels
       are the opaque colour).
-- [ ] `tooltip(|r: &T| ..)` and `pick(at) -> Option<&T>` report the user's row
+- [x] `tooltip(|r: &T| ..)` and `pick(at) -> Option<&T>` report the user's row
       nearest the pointer on the series under it; an aligned point that came
       from no user row shows no tooltip and picks `None` (tests).
 
 ### AC4: Visual
 
-- [ ] Golden `gup_core/builder_area_stacked` (640×400): three series over 24
+- [x] Golden `gup_core/builder_area_stacked` (640×400): three series over 24
       months with a legend and `grid(Axes::Y)`; golden `gup_core/builder_area`:
       two overlapping series. The worker reads both: bands meet cleanly, the
       legend lists series in first-seen order (the bottom layer first, as
       stacked bars do), no seams.
-- [ ] The builder module's table of builders and `examples/README.md`'s note on
+- [x] The builder module's table of builders and `examples/README.md`'s note on
       "More builders" mention `area`.
 
 ## Decisions
@@ -167,11 +167,11 @@ rows directly.
 
 ## Technical Tasks
 
-- [ ] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30 min.
-- [ ] `builder/area.rs` with single and `color` modes; byte-identical test;
+- [x] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30 min.
+- [x] `builder/area.rs` with single and `color` modes; byte-identical test;
       commit.
-- [ ] `stack_areas` with unit tests; stacked mode; pixel test; commit.
-- [ ] `outline`, tooltips, `pick`; goldens; docs; commit.
+- [x] `stack_areas` with unit tests; stacked mode; pixel test; commit.
+- [x] `outline`, tooltips, `pick`; goldens; docs; commit.
 
 ## Dependencies
 
@@ -196,7 +196,7 @@ rows directly.
 
 ## Success Metrics
 
-- [ ] Area, overlapping-area and stacked-area charts are one call chain each.
+- [x] Area, overlapping-area and stacked-area charts are one call chain each.
 
 ## Risk Assessment
 
@@ -205,15 +205,82 @@ rows directly.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1` and
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1` and
       `cargo test -p gup-core -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (the two goldens)
-- [ ] `mask wasm-browser`: not needed, builder only
-- [ ] WASM size: `mask wasm-size` scatter gz bytes reported
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye (the two goldens)
+- [x] `mask wasm-browser`: not needed, builder only
+- [x] WASM size: `mask wasm-size` scatter gz bytes reported
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `crates/gup-core/src/builder/area.rs`: `area`, `AreaChart<T>`, `AreaPoint` and
+  the pure `stack_areas` (union of x, signed stacks, nulls as 0, duplicate x
+  summed, `-0.0` normalised). Exported from `builder` and the crate root (lines
+  added only). Setters follow Decisions; `plot_setters!()` gives the title,
+  subtitle, tick-format, theme, grid and legend setters.
+- Layers are `Selection<AreaPoint, Area>`; the builder keeps the rows in an
+  `Arc<[T]>` and tooltips and `pick` map back through `AreaPoint::row`.
+- Tests: 4 unit tests (`stack_areas`), 10 integration tests in
+  `crates/gup-core/tests/builder_area.rs` (byte-identical single area, `color`
+  pixels and legend, stack edges with no gap or overlap, sorting, outline, pick
+  and tooltips, last colour call, goldens), 5 doctests (3 in gup-core, 2 in the
+  `gup` crate root).
+- Goldens: `tests/golden/gup_core/builder_area.png` and
+  `builder_area_stacked.png`, both read: the stacked bands meet with no seam,
+  the baseline is the x axis, the legend lists Web, Mobile, Partner from the
+  bottom layer up, in palette colours; the overlapping chart shows the two
+  translucent areas blending where they overlap, with opaque outlines, and one
+  legend entry per series (the outline layers add none).
+- `mask merge-check --dogfood`: PASS (gup-core 503 s). WASM scatter gz 343472 B
+  (pass), over wgpu 311112 B.
+
+## Retrospective
+
+**Completed**: 2026-10-27
+
+### Key Technical Learnings
+
+#### Stacking that cannot meet in the middle
+
+- **Challenge**: B missing a row at x makes B's band a sliver between its
+  neighbours there, so "the top of the stack at an odd x" is not the sum of the
+  layer values; my first test expectations were wrong, not the builder.
+- **Solution**: the test computes the expected tops from the aligned data
+  (`tops`), mid-way between points.
+- **Pattern**: assert stacked edges from the same alignment rule the builder
+  documents (missing counts 0), never from the raw rows.
+
+#### Layers over a derived row type
+
+- **Challenge**: a layer's rows are `AreaPoint`, so key colouring cannot read
+  the user's key from the row.
+- **Solution**: each layer is one series, so its colour encoding returns that
+  series' label constant; one shared `ScaleRef<Categorical>` keeps the legend to
+  one entry per series even with outline `Line` layers on the same scale.
+- **Pattern**: when rows are derived, encode per layer, not per row.
+
+### Architectural Decisions
+
+#### Missing accessors left to the layer's own error
+
+- **Decision**: with no `x` or `y`, the layers just lack that channel (the
+  points hold NaN), so resolve reports the usual missing-encoding config error.
+- **Reasoning**: matches the other builders' messages without a second check.
+- **Trade-off**: the error names `Area::X`, not the builder method.
+
+### Development Workflow Insights
+
+- Compound shell commands are refused in a worktree-isolated agent; use the edit
+  tools and plain separate commands.
+- The branch was behind main when started (no GUP-546); fast-forwarded.
+
+### Follow-up Stories
+
+None. GUP-576 and GUP-577 are unused.
