@@ -187,6 +187,32 @@ impl<T: Send + Sync + 'static> LineChart<T> {
         })
     }
 
+    /// How each line runs from one row to the next (default
+    /// [`Curve::Linear`]): [`Curve::StepAfter`] for a value that holds
+    /// until the next row changes it. See [`Selection::curve`].
+    ///
+    /// ```
+    /// use gup_core::prelude::*;
+    /// # fn main() -> gup_core::Result<()> {
+    /// struct Price { t: f64, price: f64 }
+    /// let prices = vec![
+    ///     Price { t: 0.0, price: 10.0 },
+    ///     Price { t: 2.0, price: 12.5 },
+    ///     Price { t: 5.0, price: 11.0 },
+    /// ];
+    /// let mut chart = gup_core::line(prices).x(|p| p.t).y(|p| p.price).curve(Curve::StepAfter);
+    /// # let cx = Context::new_blocking()?;
+    /// let image = chart.render(&cx, 320, 200)?;
+    /// assert!(image.pixels().any(|p| p.0 != [255, 255, 255, 255]));
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn curve(self, curve: Curve) -> Self {
+        self.op(move |s| {
+            s.curve(curve);
+        })
+    }
+
     /// How many rows each line keeps as rows are appended (default
     /// [`Window::All`]), per line: with [`color`](Self::color), each key's
     /// layer keeps its own newest `n` rows. A line starts at its first kept
@@ -396,7 +422,8 @@ impl<T: Send + Sync + 'static> LineChart<T> {
     }
 
     /// The row at the nearer end of the segment under `at` (logical
-    /// pixels), once the chart has been resolved.
+    /// pixels), once the chart has been resolved. On a step line, the row
+    /// that holds the level under `at` (see [`Curve`]).
     pub fn pick(&mut self, at: Point) -> Option<&T> {
         self.materialise();
         self.plot.pick::<T>(at)

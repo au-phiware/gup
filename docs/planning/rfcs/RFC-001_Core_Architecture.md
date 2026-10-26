@@ -3776,3 +3776,133 @@ S14 deleted the old render path and made `gup` a facade over `gup-core`
 - **A finding**: a doctest in the `gup` package is a crate named `gup`, so
   `#[gup::wgsl_function]` there needs an explicit `path = "…"`: the macro keeps
   the `gup::` namespace for Gup's own library.
+
+## GUP-550 findings (2026-10-26)
+
+[GUP-550](../stories/GUP-550_Line_Curves_And_Steps.md) added `Curve` to the
+`Line` mark (`Linear`, `Step`, `StepBefore`, `StepAfter`). It is a setter on
+`Selection<T, Line>` and `LineChart`, not a new mark.
+
+### A per-layer variant in the glue
+
+- **The constant is a literal argument.** `GlueSpec` has
+  `variant: Option<(u32, &'static str)>`. With a variant, the vertex entry calls
+  the mark's `vertex_variant(m, vertex_index, row, u_view, <value>u)` instead of
+  `vertex(m, vertex_index, row, u_view)`. The label (`curve step-after`) follows
+  the channel list in the signature, so each curve links its own pipeline.
+  Without a variant the glue is byte-identical to the glue before the story.
+  `tests/fixtures/line_glue.wgsl` and `line_glue_nulls.wgsl` were written at the
+  story's first commit, and `line_curves.rs` compares against them.
+- **Rejected: a generated `const`.** Library modules are flattened at build time
+  and cannot see an item the glue declares, and `#ifdef` is not allowed in them
+  (GUP-406).
+- **Rejected: a WGSL `override`.** The pipeline cache key would need the
+  constant's value, and pipeline constants would add a path through
+  `gup_wgsl::link` and the flattener for one integer. A literal argument gives
+  the same constant folding.
+- **Rejected: a uniform word.** It would add a field to every line's
+  `Encodings`, which changes a straight line's glue (AC2).
+- **Vertex count.** `Selection` stores the count it passes to
+  `LayerUniforms::build`: `Mark::VERTICES_PER_INSTANCE` (6), times
+  `Curve::pieces()` (2 for `StepBefore`/`StepAfter`, 3 for `Step`). The `Mark`
+  trait and the derive are unchanged. A step line's bridges draw with the same
+  count, because every span of a layer draws `0..vertices`.
+- **Generic.** Any library mark can take a variant by defining `vertex_variant`.
+  The mark contract (`Mark` docs) says so. Only `Line` sets one today.
+
+### Step geometry in `line.wgsl`
+
+- `capsule(m, start, stop, corner, row, turn, view)` is the body shared by
+  `vertex` (a straight segment, one capsule) and `vertex_variant`. In
+  `vertex_variant`, piece `k = vertex_index / 6` runs from `step_point(k)` to
+  `step_point(k + 1)`, and its corner is `vertex_index % 6`. The points are
+  computed in logical pixels from `(x, y)` and `(x_next, y_next)`, so levels are
+  level and verticals plumb under any scale. On a log y scale, every level is
+  drawn on one pixel row within 0.5 px.
+- **Joints are drawn once.** At first, consecutive pieces overlapped in a disc
+  at each joint, as straight segments do at rows. An opaque step then blended
+  the antialiased rim twice there. That showed as a darker rim pixel at every
+  corner and, at normal size, as a notch where Step's level runs through a row.
+  Now each pixel near a joint belongs to one piece. One piece is **butt**: it
+  draws only the pixels whose centres lie on its own side of the line through
+  the joint, across its axis. Those pixels get its across-axis coverage, with no
+  cap and no ramp along the axis. The other piece is butt too where the two are
+  collinear. At a corner it **keeps its cap**: it draws its round cap except the
+  pixels past the joint on the butt piece's side, so the corner is rounded
+  outside. At the inner corner the two straight rims cross at right angles. Over
+  blending multiplies their uncovered fractions there, which is the box coverage
+  of the union exactly. Pixels within 0.01 physical px of an ownership line are
+  drawn by both, so rounding never leaves a hole. `Varyings` carries the joint
+  kinds (`joins`, flat `u32`) and the butt neighbour's direction in the piece's
+  frame (`others`, flat `vec4`). A straight line's are 0 (round caps), and its
+  coverage is bit-identical to before.
+  - **Which piece keeps its cap.** Within a segment, the earlier piece keeps it.
+    Between segments, a piece cannot see the neighbour segment's pieces, so the
+    rule follows from what each side knows. It assumes x runs the same way in
+    both segments, as the docs ask (rows sorted by x).
+    - StepAfter's riser keeps its cap, and the next level is butt. The riser
+      knows the level's direction.
+    - StepBefore's next riser keeps its cap, and the level before is butt.
+    - Step's collinear levels are both butt.
+  - **Layer ends.** The glue passes the layer's stored row count
+    (`enc.row_count`, written at every prepare, so appends update it) to
+    `vertex_variant`. The first and last segments end in round caps.
+  - **Null breaks** are not seen. A segment next to a null row draws that end as
+    a joint (butt, or a kept half cap), so the line can stop up to a pixel short
+    there. `line_curves.rs` exempts those ends from its coverage check.
+  - **Evidence.** Along a Step level through a row, every pixel row across the
+    stroke varies by at most 2/255 (widths 2.5, 3 and 6, rows off the pixel
+    grid). Within 1.5 px of every corner, each pixel's ink is within 0.1 of the
+    16×16-sampled coverage of the round-cornered stroke. With every joint forced
+    to round caps, both checks fail: by 0.098 along the seam, and by 0.29 at a
+    corner.
+- **Overhang.** A step line adds half its width to the layer's x overhang, so
+  GUP-528's insets make room. A riser on a row at an end of the x domain (the
+  first riser of StepBefore, the last of StepAfter) is drawn whole, and Step's
+  capped ends are not clipped. Straight lines still start at the axis.
+- **Picks.** `Varyings` gained `side`, an interpolated `f32`. `hit_row` reports
+  `row + 1` when `side > 0`. For a straight segment, `side` is the offset along
+  the segment from its middle (−1 for a segment of no length), which is the old
+  rule. For `Step` it is the fragment's x right of the midpoint, which is exact
+  because the quad's position is affine in screen space. `StepAfter` sets it to
+  −1 (this row) and `StepBefore` to +1 (the next row). On the CPU,
+  `Shape::Step { a, b, h, curve }` is the minimum capsule distance over
+  `Curve::path`'s pieces, and `Curve::picks_next` gives the same row rule. CPU
+  and GPU agree on every sampled point of `line_curves.rs`.
+- **Culling and bridges** are unchanged. A step stays inside its two rows'
+  bounding box, so `cull.rs`'s chunk boxes and pick ranges already cover it.
+- **SVG.** `MarkKind::Line(Curve)` extends a run with the corners of
+  `Curve::path` and then the next row. A step line is still one `<polyline>`.
+
+### Shared polyline geometry, for GUP-551 and GUP-439
+
+- **CPU.** `Curve::path(a, b)` returns a segment's points (2 to 4, ends
+  included). It is the one CPU description of the curve: SVG and CPU picks read
+  it. Area outlines and GUP-439's join geometry should read it too, rather than
+  re-deriving steps.
+- **GPU.** `vertex_variant` plus the vertex count is the mechanism.
+  - **GUP-551** (monotone) adds a variant whose pieces subdivide each segment's
+    cubic, for example 8 pieces and 48 vertices. Its tangents depend on the
+    neighbouring rows, which its story computes on the CPU per row rather than
+    reading more rows in the vertex stage. The variant, the signature label, the
+    vertex count and the per-piece capsule distance carry over unchanged, and
+    `Curve::path` and `Shape::Step` generalise from 4 points to the curve's
+    pieces.
+  - **GUP-439** (translucent joins) must handle joins between pieces of one
+    instance, which the shader can see (it computes both pieces), as well as
+    joins between instances at rows.
+- **Known.** Straight lines still blend twice on the antialiased rim where two
+  segments' capsules meet at a row. This is GUP-439's to remove: a segment
+  cannot see its neighbour's direction. Step pieces need no neighbour direction
+  they do not know, which is why their joints could be fixed here. GUP-439 can
+  reuse the `joins` and `others` ownership varyings.
+
+### Cost
+
+- A straight line's glue, signature, vertex count and pixels are unchanged. The
+  `line_series`, `builder_line` and every other golden pass without re-blessing.
+  `Varyings` gained one `f32` varying (`side`), which changes the linked
+  `line.wgsl` but no glue.
+- A step line draws 12 or 18 vertices per segment instead of 6, with the same
+  bytes, uploads and draw calls.
+- WASM: see the story's Definition of Done (the scatter does not draw a line).

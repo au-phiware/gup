@@ -14,6 +14,7 @@ use crate::encoding::{AxisEncoding, Encoding, IntoEncoding, Resource};
 use crate::error::{Error, Result};
 use crate::geom::Rect;
 use crate::input::{Event, EventInfo};
+use crate::marks::{Curve, Line};
 use crate::order::{DrawEntry, DrawOrder, chunk_spans, draw_entries, polyline_spans};
 use crate::pick::PICK_TOLERANCE;
 use crate::pick::{Chan, Chans, PickItem, build_items};
@@ -222,6 +223,12 @@ pub struct Selection<T, M: Mark> {
     waker: Option<Waker>,
     /// How many appends happened (part of the revision).
     appended: u64,
+    /// A line's curve ([`Linear`](Curve::Linear) for every other mark):
+    /// the glue's variant and the CPU geometry of picks and SVG.
+    curve: Curve,
+    /// The vertices drawn per instance (GUP-550):
+    /// [`Mark::VERTICES_PER_INSTANCE`], times the pieces of a curve.
+    vertices: u32,
     _mark: PhantomData<fn() -> M>,
 }
 
@@ -237,6 +244,40 @@ impl<T, M: Mark> std::fmt::Debug for Selection<T, M> {
             .field("retain", &self.retain)
             .field("encodings", &self.encodings)
             .finish_non_exhaustive()
+    }
+}
+
+impl<T: Send + Sync + 'static> Selection<T, Line> {
+    /// How the line runs from each row to the next (default
+    /// [`Curve::Linear`]). A step curve draws each segment as 2 or 3
+    /// straight pieces, and picks and SVG output follow the pieces. A
+    /// straight line draws exactly as before curves existed.
+    ///
+    /// ```
+    /// use gup_core::prelude::*;
+    ///
+    /// # fn main() -> gup_core::Result<()> {
+    /// let stock = vec![(0.0, 40.0), (3.0, 25.0), (5.0, 60.0), (9.0, 35.0)];
+    ///
+    /// let mut plot = Plot::new();
+    /// let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
+    /// plot.add(Selection::<(f64, f64), Line>::new(stock))
+    ///     .x_with(x.encode(|r: &(f64, f64)| r.0))
+    ///     .y_with(y.encode(|r: &(f64, f64)| r.1))
+    ///     .curve(Curve::StepAfter);
+    /// let cx = Context::new_blocking()?;
+    /// let image = plot.render(&cx, 320, 200)?;
+    /// assert!(image.pixels().any(|p| p.0 != [255, 255, 255, 255]));
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn curve(&mut self, curve: Curve) -> &mut Self {
+        if curve != self.curve {
+            self.curve = curve;
+            self.vertices = Line::VERTICES_PER_INSTANCE * curve.pieces();
+            self.gpu = None;
+        }
+        self
     }
 }
 
@@ -269,6 +310,8 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             feed: None,
             waker: None,
             appended: 0,
+            curve: Curve::Linear,
+            vertices: M::VERTICES_PER_INSTANCE,
             _mark: PhantomData,
         }
     }
@@ -720,6 +763,37 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         gpu.write_brush_bits(cx, &bits);
     }
 
+    /// The widest `width` (logical pixels) the layer draws: a constant's,
+    /// or the image of a column's extent; 0 for a mark without `width`.
+    fn max_width(&self) -> f32 {
+        let mut column = 0;
+        for (d, e) in M::CHANNELS.iter().zip(&self.encodings) {
+            let is_width = d.name == "width";
+            let value = |v: &ConstValue| match v {
+                ConstValue::F32(w) => *w,
+                ConstValue::Vec4(_) => 0.0,
+            };
+            match e {
+                Some(Encoding::Column(c)) => {
+                    column += 1;
+                    if is_width {
+                        return self
+                            .columns
+                            .as_ref()
+                            .and_then(|s| s.stats(column - 1))
+                            .and_then(|s| c.image(s.extent()))
+                            .map_or(0.0, |(lo, hi)| lo.abs().max(hi.abs()) as f32);
+                    }
+                }
+                _ if !is_width => {}
+                Some(Encoding::Const(v)) => return value(v),
+                Some(Encoding::Derived(f)) => return value(&f()),
+                None => return value(&d.default),
+            }
+        }
+        0.0
+    }
+
     fn glue(&self) -> Glue {
         let channels = M::CHANNELS
             .iter()
@@ -745,6 +819,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
                 Unbrushed::Fade(_) => glue::BrushStyle::Fade,
                 Unbrushed::Grey(_) => glue::BrushStyle::Grey,
             }),
+            variant: self.curve.variant(),
         })
     }
 
@@ -1038,7 +1113,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         } else if id == TypeId::of::<Segment>() {
             MarkKind::Segment
         } else if id == TypeId::of::<Line>() {
-            MarkKind::Line
+            MarkKind::Line(self.curve)
         } else if id == TypeId::of::<Area>() {
             MarkKind::Area
         } else {
@@ -1246,6 +1321,12 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
                 _ => &mut overhang.size,
             };
             *slot = slot.max(r);
+        }
+        // A step line's riser can sit on a row at the end of the x domain,
+        // and its ends are capped: it reaches half its width past the row
+        // along x (GUP-550). A straight line still starts at the axis.
+        if self.curve != Curve::Linear {
+            overhang.x = overhang.x.max(self.max_width() * 0.5);
         }
         overhang
     }
@@ -1583,6 +1664,15 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
                 bytemuck::bytes_of(&grey),
             )?;
         }
+        if program.encodings.offset(glue::ROW_COUNT_FIELD).is_some() {
+            let rows = self.columns.as_ref().map_or(0, ColumnStore::rows) as u32;
+            write_field(
+                &mut encodings,
+                &program.encodings,
+                glue::ROW_COUNT_FIELD,
+                bytemuck::bytes_of(&rows),
+            )?;
+        }
         if program.encodings.offset(glue::BRUSH_DIM_FIELD).is_some() {
             write_field(
                 &mut encodings,
@@ -1734,7 +1824,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
                     chunks: chunk_draws(),
                     spans,
                 },
-                M::VERTICES_PER_INSTANCE,
+                self.vertices,
             )?,
         );
         self.write_bits(cx, &gpu);
@@ -1929,6 +2019,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             height: chan("height"),
             x_end: chan("x_end"),
             y_end: chan("y_end"),
+            curve: self.curve,
         };
 
         // Stored rows with their data row (from the first kept row; ids

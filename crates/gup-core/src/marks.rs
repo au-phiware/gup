@@ -249,6 +249,123 @@ impl Line {
     pub const DEFAULT_COLOR: Color = OKABE_ITO[3];
 }
 
+/// How a [`Line`] runs from one row to the next: straight, or in steps
+/// that hold a value until the next row changes it.
+///
+/// A step is drawn exactly in pixel space from the two rows' positions,
+/// under any scale: its horizontal pieces are level and its vertical
+/// pieces plumb, with round corners `width` wide, like a straight line's
+/// joins. A step stays inside its two rows' bounding box. Nulls break a
+/// stepped line as they break a straight one.
+///
+/// ```
+/// use gup_core::prelude::*;
+///
+/// # fn main() -> gup_core::Result<()> {
+/// // A price that holds between changes.
+/// let prices = vec![(0.0, 10.0), (2.0, 12.5), (3.0, 11.0), (6.0, 14.0)];
+///
+/// let mut plot = Plot::new();
+/// let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
+/// plot.add(Selection::<(f64, f64), Line>::new(prices))
+///     .x_with(x.encode(|r: &(f64, f64)| r.0))
+///     .y_with(y.encode(|r: &(f64, f64)| r.1))
+///     .curve(Curve::StepAfter);
+/// let cx = Context::new_blocking()?;
+/// let _ = plot.resolve(&cx, 400.0, 300.0)?;
+/// # Ok(())
+/// # }
+/// ```
+#[non_exhaustive]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub enum Curve {
+    /// A straight segment from each row to the next.
+    #[default]
+    Linear,
+    /// Horizontal to the midpoint between rows, vertical, then horizontal.
+    Step,
+    /// Vertical at each row, then horizontal to the next row.
+    StepBefore,
+    /// Horizontal from each row to the next row's x, then vertical.
+    StepAfter,
+}
+
+impl Curve {
+    /// The straight pieces drawn between two rows: 1, 2 or 3.
+    pub(crate) const fn pieces(self) -> u32 {
+        match self {
+            Curve::Linear => 1,
+            Curve::StepBefore | Curve::StepAfter => 2,
+            Curve::Step => 3,
+        }
+    }
+
+    /// The value `line.wgsl`'s `vertex_variant` reads (its `CURVE_*`
+    /// constants), and the glue signature's label: `None` for
+    /// [`Linear`](Curve::Linear), which keeps the plain `vertex` entry.
+    pub(crate) const fn variant(self) -> Option<(u32, &'static str)> {
+        match self {
+            Curve::Linear => None,
+            Curve::Step => Some((1, "curve step")),
+            Curve::StepBefore => Some((2, "curve step-before")),
+            Curve::StepAfter => Some((3, "curve step-after")),
+        }
+    }
+
+    /// The x where a step turns from row `a`'s level to row `b`'s; `None`
+    /// for [`Linear`](Curve::Linear).
+    fn turn(self, a: [f32; 2], b: [f32; 2]) -> Option<f32> {
+        match self {
+            Curve::Linear => None,
+            Curve::Step => Some((a[0] + b[0]) * 0.5),
+            Curve::StepBefore => Some(a[0]),
+            Curve::StepAfter => Some(b[0]),
+        }
+    }
+
+    /// The path from `a` to `b` (pixels): its `pieces() + 1` points, the
+    /// ends included, in the order `line.wgsl` draws them. Point `k` lies
+    /// at `a`'s x for `k = 0`, `b`'s for the last and the turn's between,
+    /// and at `a`'s level up to the first vertical piece, `b`'s after.
+    /// SVG paths, CPU picks and later outline geometry read it.
+    pub(crate) fn path(self, a: [f32; 2], b: [f32; 2]) -> ([[f32; 2]; 4], usize) {
+        let n = self.pieces() as usize;
+        let Some(turn) = self.turn(a, b) else {
+            return ([a, b, b, b], 2);
+        };
+        // Points at `a`'s level: before StepBefore's first (vertical)
+        // piece, through the first horizontal piece otherwise.
+        let level = usize::from(self != Curve::StepBefore);
+        let mut out = [b; 4];
+        for (k, p) in out.iter_mut().enumerate().take(n + 1) {
+            let x = if k == 0 {
+                a[0]
+            } else if k == n {
+                b[0]
+            } else {
+                turn
+            };
+            *p = [x, if k <= level { a[1] } else { b[1] }];
+        }
+        (out, n + 1)
+    }
+
+    /// Whether a point at `x` on the path from `a` (row `i`) to `b`
+    /// (row `i + 1`) picks row `i + 1`: never for
+    /// [`StepAfter`](Curve::StepAfter), always for
+    /// [`StepBefore`](Curve::StepBefore), right of the midpoint for
+    /// [`Step`](Curve::Step); the nearer end for
+    /// [`Linear`](Curve::Linear) is the caller's.
+    pub(crate) fn picks_next(self, a: [f32; 2], b: [f32; 2], x: f32) -> Option<bool> {
+        match self {
+            Curve::Linear => None,
+            Curve::StepAfter => Some(false),
+            Curve::StepBefore => Some(true),
+            Curve::Step => Some(x - (a[0] + b[0]) * 0.5 > 0.0),
+        }
+    }
+}
+
 /// A filled region between a series and a baseline, in logical pixels: for
 /// each pair of consecutive rows, the trapezoid between the top edge (`y`) and
 /// the baseline (`y_end`; set it, e.g. `.y_end(|_| 0.0)`). For a range, set
@@ -317,6 +434,27 @@ mod tests {
     use super::*;
     use crate::channel::{Antialias, ConstValue, Mark, Role};
     use crate::shader::MARKS_CIRCLE;
+
+    /// Each curve's path, with the pieces and corners `line.wgsl` draws.
+    #[test]
+    fn curve_paths_turn_where_their_names_say() {
+        let (a, b) = ([10.0, 50.0], [30.0, 20.0]);
+        let path = |c: Curve| {
+            let (p, n) = c.path(a, b);
+            assert_eq!(n as u32, c.pieces() + 1, "{c:?}");
+            p[..n].to_vec()
+        };
+        assert_eq!(path(Curve::Linear), vec![a, b]);
+        assert_eq!(path(Curve::StepAfter), vec![a, [30.0, 50.0], b]);
+        assert_eq!(path(Curve::StepBefore), vec![a, [10.0, 20.0], b]);
+        assert_eq!(path(Curve::Step), vec![a, [20.0, 50.0], [20.0, 20.0], b]);
+        assert_eq!(Curve::Linear.variant(), None);
+        assert_eq!(Curve::default(), Curve::Linear);
+        assert_eq!(Curve::Step.picks_next(a, b, 19.0), Some(false));
+        assert_eq!(Curve::Step.picks_next(a, b, 21.0), Some(true));
+        assert_eq!(Curve::StepAfter.picks_next(a, b, 29.0), Some(false));
+        assert_eq!(Curve::StepBefore.picks_next(a, b, 11.0), Some(true));
+    }
 
     /// The derive reproduces the table Circle had when it was hand-written.
     #[test]

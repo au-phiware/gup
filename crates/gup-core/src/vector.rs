@@ -27,6 +27,7 @@ use crate::channel::{ConstValue, Role};
 use crate::column::CpuColumns;
 use crate::encoding::ColumnMirror;
 use crate::geom::Point;
+use crate::marks::Curve;
 use crate::order::DrawEntry;
 use crate::render::Span;
 use std::sync::Arc;
@@ -38,7 +39,8 @@ pub(crate) enum MarkKind {
     Circle,
     Rect,
     Segment,
-    Line,
+    /// A line, its segments drawn as the curve's path.
+    Line(Curve),
     Area,
 }
 
@@ -359,7 +361,7 @@ impl CpuLayer {
                     }
                 }
             }
-            MarkKind::Line => {
+            MarkKind::Line(curve) => {
                 let (x, y, w) = (
                     self.numbers("x", &needed)?,
                     self.numbers("y", &needed)?,
@@ -389,17 +391,21 @@ impl CpuLayer {
                             flush(&mut run, &mut out);
                             continue;
                         }
-                        let (a, b) = (Point::new(p[0], p[1]), Point::new(p[2], p[3]));
+                        let a = Point::new(p[0], p[1]);
+                        // The segment's path after `a`: `b`, or a step's
+                        // corners then `b`.
+                        let (path, k) = curve.path([p[0], p[1]], [p[2], p[3]]);
+                        let rest = path[1..k].iter().map(|q| Point::new(q[0], q[1]));
                         let col = color.at(d);
                         match &mut run {
                             Some((points, width, c))
                                 if points.last() == Some(&a) && *width == p[4] && *c == col =>
                             {
-                                points.push(b);
+                                points.extend(rest);
                             }
                             _ => {
                                 flush(&mut run, &mut out);
-                                run = Some((vec![a, b], p[4], col));
+                                run = Some((std::iter::once(a).chain(rest).collect(), p[4], col));
                             }
                         }
                     }
