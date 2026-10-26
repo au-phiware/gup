@@ -763,6 +763,37 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         gpu.write_brush_bits(cx, &bits);
     }
 
+    /// The widest `width` (logical pixels) the layer draws: a constant's,
+    /// or the image of a column's extent; 0 for a mark without `width`.
+    fn max_width(&self) -> f32 {
+        let mut column = 0;
+        for (d, e) in M::CHANNELS.iter().zip(&self.encodings) {
+            let is_width = d.name == "width";
+            let value = |v: &ConstValue| match v {
+                ConstValue::F32(w) => *w,
+                ConstValue::Vec4(_) => 0.0,
+            };
+            match e {
+                Some(Encoding::Column(c)) => {
+                    column += 1;
+                    if is_width {
+                        return self
+                            .columns
+                            .as_ref()
+                            .and_then(|s| s.stats(column - 1))
+                            .and_then(|s| c.image(s.extent()))
+                            .map_or(0.0, |(lo, hi)| lo.abs().max(hi.abs()) as f32);
+                    }
+                }
+                _ if !is_width => {}
+                Some(Encoding::Const(v)) => return value(v),
+                Some(Encoding::Derived(f)) => return value(&f()),
+                None => return value(&d.default),
+            }
+        }
+        0.0
+    }
+
     fn glue(&self) -> Glue {
         let channels = M::CHANNELS
             .iter()
@@ -1291,6 +1322,12 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             };
             *slot = slot.max(r);
         }
+        // A step line's riser can sit on a row at the end of the x domain,
+        // and its ends are capped: it reaches half its width past the row
+        // along x (GUP-550). A straight line still starts at the axis.
+        if self.curve != Curve::Linear {
+            overhang.x = overhang.x.max(self.max_width() * 0.5);
+        }
         overhang
     }
 
@@ -1625,6 +1662,15 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
                 &program.encodings,
                 glue::BRUSH_GREY_FIELD,
                 bytemuck::bytes_of(&grey),
+            )?;
+        }
+        if program.encodings.offset(glue::ROW_COUNT_FIELD).is_some() {
+            let rows = self.columns.as_ref().map_or(0, ColumnStore::rows) as u32;
+            write_field(
+                &mut encodings,
+                &program.encodings,
+                glue::ROW_COUNT_FIELD,
+                bytemuck::bytes_of(&rows),
             )?;
         }
         if program.encodings.offset(glue::BRUSH_DIM_FIELD).is_some() {

@@ -69,7 +69,8 @@ pub(crate) struct GlueSpec<'a> {
     pub brushed: Option<BrushStyle>,
     /// A per-layer constant the mark's vertex stage reads (GUP-550), and
     /// its label in the signature: the vertex entry calls the mark's
-    /// `vertex_variant(m, vertex_index, row, view, <value>u)` instead of
+    /// `vertex_variant(m, vertex_index, row, view, <value>u, rows)` (`rows`
+    /// the layer's stored row count, [`ROW_COUNT_FIELD`]) instead of
     /// `vertex(m, vertex_index, row, view)`, so each value links its own
     /// pipeline and a layer without one keeps exactly the glue it had. A
     /// line's [`Curve`](crate::Curve) is one.
@@ -272,6 +273,11 @@ impl Expr {
 /// The `Encodings` field that holds the theme's null colour, present
 /// when any channel is an [`Expr::OrNull`].
 pub(crate) const NULL_COLOR_FIELD: &str = "null_color";
+
+/// The `Encodings` field holding the layer's stored row count, which a
+/// variant's `vertex_variant` reads (GUP-550: a step line's first and last
+/// segments end in round caps).
+pub(crate) const ROW_COUNT_FIELD: &str = "row_count";
 
 /// The `Encodings` field holding the opacity of unbrushed rows (1.0 while
 /// the plot has no brush).
@@ -499,6 +505,9 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
     if spec.brushed == Some(BrushStyle::Grey) {
         fields.push((BRUSH_GREY_FIELD.to_string(), "vec4<f32>".to_string(), 16));
     }
+    if spec.variant.is_some() {
+        fields.push((ROW_COUNT_FIELD.to_string(), "u32".to_string(), 4));
+    }
     let brush_binding = spec.brushed.map(|_| next_binding);
     // Validity bits only when the columns have a null (and only numeric
     // columns have bits).
@@ -713,7 +722,7 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
         ),
         Some((value, _)) => format!(
             "{mark_alias}::vertex_variant(m, vertex_index, chunk.row_base + instance_index, \
-             u_view, {value}u)"
+             u_view, {value}u, enc.{ROW_COUNT_FIELD})"
         ),
     };
     let mut drawn = Vec::new();

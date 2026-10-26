@@ -95,7 +95,7 @@ fn a_linear_line_keeps_its_glue() {
         assert!(signature.contains("} curve step"), "{signature}");
         let call = format!(
             "line::vertex_variant(m, vertex_index, chunk.row_base + instance_index, u_view, \
-             {value}u)"
+             {value}u, enc.row_count)"
         );
         assert!(source.contains(&call), "{source}");
         signatures.push(signature);
@@ -204,6 +204,11 @@ fn pieces(d: &Drawn, curve: Curve) -> Vec<((f64, f64), (f64, f64))> {
 /// The least coverage among the pixels under every 0.5 px sample of the
 /// drawn path, and where.
 fn path_min(d: &Drawn, curve: Curve) -> (f64, (f64, f64)) {
+    path_min_except(d, curve, &[])
+}
+
+/// [`path_min`] without the samples within 1 px of the points `except`.
+fn path_min_except(d: &Drawn, curve: Curve, except: &[(f64, f64)]) -> (f64, (f64, f64)) {
     let mut worst = (f64::INFINITY, (0.0, 0.0));
     for (a, b) in pieces(d, curve) {
         let len = (b.0 - a.0).hypot(b.1 - a.1);
@@ -211,6 +216,9 @@ fn path_min(d: &Drawn, curve: Curve) -> (f64, (f64, f64)) {
         for s in 0..=steps {
             let t = s as f64 / steps as f64;
             let p = (a.0 + t * (b.0 - a.0), a.1 + t * (b.1 - a.1));
+            if except.iter().any(|&e| dist(p, e, e) < 1.0) {
+                continue;
+            }
             let c = ink_at(d, p);
             if c < worst.0 {
                 worst = (c, p);
@@ -397,9 +405,12 @@ fn a_null_row_breaks_a_step_line() {
                 ..Opts::new(curve)
             };
             let d = draw(&rows, (0.0, 500.0), (0.0, 400.0), o);
-            let (least, at) = path_min(&d, curve);
-            assert!(least >= 0.9, "{curve:?}: coverage {least} at {at:?}");
             let (b, e) = (d.points[1].unwrap(), d.points[3].unwrap());
+            // The ends at the break are drawn as joints (a step's piece
+            // cannot see that the neighbour segment is missing), so they
+            // may stop up to a pixel short.
+            let (least, at) = path_min_except(&d, curve, &[b, e]);
+            assert!(least >= 0.9, "{curve:?}: coverage {least} at {at:?}");
             let drawn = pieces(&d, curve);
             let near = |p: (f64, f64)| {
                 drawn
@@ -579,4 +590,202 @@ fn line_steps_golden() {
         .assert_ok();
     let svg = svg_marks::assert_matches("gup_core/line_steps", &resolved.scene, &vr, &meta);
     assert_eq!(svg.matches("<polyline ").count(), 3, "one run per series");
+}
+
+/// Two pieces meeting at a row point on one level (Step's levels run
+/// through every row) join with no seam: along each pixel row across the
+/// stroke, from 6 px before the row to 6 px after it, the ink varies by
+/// at most 2/255. A rim pixel blended by both pieces would be darker.
+#[test]
+fn collinear_pieces_join_without_a_seam() {
+    // Rows a fraction of a pixel off the pixel grid, and widths whose rims
+    // fall mid-pixel.
+    let rows = vec![
+        (40.0, 100.0),
+        (163.3, 251.7),
+        (287.6, 140.2),
+        (430.0, 300.0),
+    ];
+    let mut rims = 0;
+    for width in [2.5f32, 3.0, 6.0] {
+        let o = Opts {
+            width,
+            ..Opts::new(Curve::Step)
+        };
+        let d = draw(&rows, (0.0, 500.0), (0.0, 400.0), o);
+        let r = f64::from(width) / 2.0;
+        for row in [1, 2] {
+            let p = d.points[row].unwrap();
+            for py in (p.1 - r - 1.5).floor() as u32..=(p.1 + r + 1.5).ceil() as u32 {
+                let inks: Vec<f64> = ((p.0 - 6.0).floor() as u32..=(p.0 + 6.0).ceil() as u32)
+                    .map(|px| ink(&d.image, px, py))
+                    .collect();
+                let (lo, hi) = inks
+                    .iter()
+                    .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), &k| {
+                        (lo.min(k), hi.max(k))
+                    });
+                assert!(
+                    hi - lo <= 2.0 / 255.0,
+                    "width {width}, row {row}: ink {lo}..{hi} along pixel row {py}: {inks:?}"
+                );
+                if lo > 0.05 && lo < 0.95 {
+                    rims += 1;
+                }
+            }
+        }
+    }
+    assert!(rims >= 4, "only {rims} partly covered rim rows scanned");
+}
+
+/// The coverage of the pixel at `(px, py)` by the union of the stroke
+/// `r` wide around `path` (round joins), from 16 × 16 samples.
+fn union_coverage(path: &[(f64, f64)], r: f64, px: u32, py: u32) -> f64 {
+    let mut inside = 0;
+    for i in 0..16 {
+        for j in 0..16 {
+            let p = (
+                f64::from(px) + (f64::from(i) + 0.5) / 16.0,
+                f64::from(py) + (f64::from(j) + 0.5) / 16.0,
+            );
+            let d = path
+                .windows(2)
+                .map(|w| dist(p, w[0], w[1]))
+                .fold(f64::INFINITY, f64::min);
+            if d <= r {
+                inside += 1;
+            }
+        }
+    }
+    f64::from(inside) / 256.0
+}
+
+/// Every corner, within a segment or at a row between two, is drawn once:
+/// each pixel within 1.5 px of the stroke's outline there has the ink of
+/// the round-cornered stroke's coverage (within 0.1, the analytic ramp's
+/// difference from box coverage). A pixel blended by both pieces is up to
+/// 0.25 darker.
+#[test]
+fn corners_are_drawn_once() {
+    let rows = vec![
+        (40.0, 100.0),
+        (163.3, 251.7),
+        (287.6, 140.2),
+        (430.0, 300.0),
+    ];
+    let width = 3.0f32;
+    let r = f64::from(width) / 2.0;
+    for curve in STEPS {
+        let d = draw(
+            &rows,
+            (0.0, 500.0),
+            (0.0, 400.0),
+            Opts {
+                width,
+                ..Opts::new(curve)
+            },
+        );
+        let pts: Vec<(f64, f64)> = d.points.iter().map(|p| p.unwrap()).collect();
+        let mut path = vec![pts[0]];
+        for w in pts.windows(2) {
+            path.extend(step_path(curve, w[0], w[1]).into_iter().skip(1));
+        }
+        // The corners: interior points of the path where it turns.
+        let corners: Vec<(f64, f64)> = path
+            .windows(3)
+            .filter(|w| {
+                let (u, v) = (
+                    (w[1].0 - w[0].0, w[1].1 - w[0].1),
+                    (w[2].0 - w[1].0, w[2].1 - w[1].1),
+                );
+                (u.0 * v.1 - u.1 * v.0).abs() > 1e-6
+            })
+            .map(|w| w[1])
+            .collect();
+        assert_eq!(
+            corners.len(),
+            if curve == Curve::Step { 6 } else { 5 },
+            "{curve:?}"
+        );
+        let mut worst = (0.0, (0, 0));
+        for c in &corners {
+            for py in (c.1 - r - 2.0) as u32..=(c.1 + r + 2.0) as u32 {
+                for px in (c.0 - r - 2.0) as u32..=(c.0 + r + 2.0) as u32 {
+                    let centre = (f64::from(px) + 0.5, f64::from(py) + 0.5);
+                    let d_path = path
+                        .windows(2)
+                        .map(|w| dist(centre, w[0], w[1]))
+                        .fold(f64::INFINITY, f64::min);
+                    if (d_path - r).abs() > 1.5 {
+                        continue;
+                    }
+                    let err = (ink(&d.image, px, py) - union_coverage(&path, r, px, py)).abs();
+                    if err > worst.0 {
+                        worst = (err, (px, py));
+                    }
+                }
+            }
+        }
+        assert!(
+            worst.0 <= 0.1,
+            "{curve:?}: ink off by {} at {:?}",
+            worst.0,
+            worst.1
+        );
+    }
+}
+
+/// The ink summed across a riser at `x`, along the pixel row `y`: the
+/// riser's width in pixels when it is drawn whole.
+fn riser_ink(image: &image::RgbaImage, x: f64, y: f64, reach: f64) -> f64 {
+    ((x - reach).floor().max(0.0) as u32..=(x + reach).ceil() as u32)
+        .filter(|&px| px < image.width())
+        .map(|px| ink(image, px, y as u32).max(0.0))
+        .sum()
+}
+
+/// A riser on a row at an end of the automatic x domain is drawn whole:
+/// a step line reaches half its width past its rows along x, so the plot
+/// makes room, as for a disc at the edge. `StepBefore` rises at its first
+/// row and `StepAfter` at its last.
+#[test]
+fn edge_risers_are_drawn_whole() {
+    let cx = Context::new_blocking().unwrap();
+    let rows = vec![(0.0, 1.0), (1.0, 3.0), (2.0, 2.0), (3.0, 4.0)];
+    for (curve, edge, inner) in [(Curve::StepBefore, 0, 1), (Curve::StepAfter, 3, 2)] {
+        let mut p = Plot::new();
+        p.legends(false);
+        let x = p.x(Linear::new());
+        let y = p.y(Linear::new());
+        p.add(Selection::<Row, Line>::new(rows.clone()))
+            .x_with(x.encode(|r: &Row| r.0))
+            .y_with(y.encode(|r: &Row| r.1))
+            .width(Px(4.0))
+            .color(RED)
+            .curve(curve);
+        let resolved = p.resolve(&cx, W as f32, H as f32).unwrap();
+        let image = ImageTarget::new(&cx, W, H)
+            .unwrap()
+            .render_blocking(&cx, &resolved.scene)
+            .unwrap();
+        let at = |i: usize| (x.read().eval(rows[i].0), y.read().eval(rows[i].1));
+        // Halfway up each riser: at the row's x, between its level and
+        // the neighbour's.
+        let riser = |i: usize, j: usize| {
+            let (a, b) = (at(i), at(j));
+            riser_ink(&image, a.0, (a.1 + b.1) / 2.0, 5.0)
+        };
+        let (whole, edge_ink) = match curve {
+            Curve::StepBefore => (riser(inner, inner + 1), riser(edge, edge + 1)),
+            _ => (riser(inner + 1, inner), riser(edge, edge - 1)),
+        };
+        assert!(
+            (whole - 4.0).abs() < 0.1,
+            "{curve:?}: inner riser ink {whole}"
+        );
+        assert!(
+            (edge_ink - whole).abs() < 2.0 / 255.0 * 4.0,
+            "{curve:?}: the riser at the edge has ink {edge_ink}, an inner one {whole}"
+        );
+    }
 }

@@ -337,7 +337,8 @@ pub enum HitShape {
 /// Either way every vertex moves to the same point outside the clip volume.
 /// A library mark with per-layer variants (a [`Line`](crate::Line)'s
 /// [`Curve`](crate::Curve)) also defines
-/// `vertex_variant(m, vertex_index, row, view, variant: u32)`, which the glue
+/// `vertex_variant(m, vertex_index, row, view, variant: u32, rows: u32)`
+/// (`rows` the layer's stored row count), which the glue
 /// calls instead of `vertex` for a non-default variant, drawing more
 /// vertices per instance (GUP-550).
 ///

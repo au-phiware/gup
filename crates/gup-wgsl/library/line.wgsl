@@ -9,11 +9,17 @@
 // is drawn twice, which an opaque colour does not show; a translucent one
 // is darker where segments meet.
 //
-// A step curve (GUP-550) draws each instance as 2 or 3 such capsules, the
-// pieces of the step between the two rows, 6 vertices each: the glue calls
-// `vertex_variant` with the layer's curve and the piece is
+// A step curve (GUP-550) draws each instance as 2 or 3 pieces of the step
+// between the two rows, 6 vertices each: the glue calls `vertex_variant`
+// with the layer's curve and its stored row count, and the piece is
 // `vertex_index / 6`. The pieces' ends are computed here, in logical
-// pixels, so a step is level and plumb under any scale.
+// pixels, so a step is level and plumb under any scale. Where two pieces
+// meet, every pixel is drawn by exactly one of them, so no rim pixel is
+// blended twice: one piece ends butt (it draws only the pixels whose
+// centre lies on its own side of the line through the joint, across its
+// axis, with no ramp along it), and the other either ends butt too (the
+// pieces are collinear) or keeps the half of its round cap outside the
+// butt piece (a corner, rounded on the outside).
 #define_import_path gup::marks::line
 
 #import gup::view::{View, px_to_clip}
@@ -43,6 +49,13 @@ struct Varyings {
     // The pick's side, in physical pixels: at or below 0 the fragment
     // reports `row`, above it the next row (`hit_row`).
     @location(4) side: f32,
+    // How each end joins the next piece: `JOIN_*` at the start (bits 0-1)
+    // and at the end (bits 2-3). A straight segment's are 0 (round caps).
+    @location(5) @interpolate(flat) joins: u32,
+    // For a `JOIN_KEEP` end, the butt piece's direction away from the
+    // joint, in the local (along, across) frame: the start's in `xy`, the
+    // end's in `zw`.
+    @location(6) @interpolate(flat) others: vec4<f32>,
 }
 
 // The curve a layer's glue passes to `vertex_variant` (`Curve::variant`).
@@ -50,8 +63,21 @@ const CURVE_STEP: u32 = 1u;
 const CURVE_STEP_BEFORE: u32 = 2u;
 const CURVE_STEP_AFTER: u32 = 3u;
 
+// How a piece's end meets its neighbour.
+// A round cap: the line ends here.
+const JOIN_CAP: u32 = 0u;
+// Butt: the pixels whose centres lie beyond the end are the neighbour's.
+const JOIN_BUTT: u32 = 1u;
+// A round cap less the pixels on the (butt) neighbour's side.
+const JOIN_KEEP: u32 = 2u;
+
+// Pixels within this distance (physical pixels) of the line between two
+// pieces are drawn by both, so a pixel centre that each piece places a
+// rounding error apart is never left out.
+const JOIN_SLACK: f32 = 0.01;
+
 // One capsule from `start` to `stop`, corner `corner` (0..5) of its quad,
-// its `side` the vertex's x right of `turn`.
+// its `side` the vertex's x right of `turn`, with round caps.
 fn capsule(m: LineIn, start: vec2<f32>, stop: vec2<f32>, corner: u32, row: u32, turn: f32, view: View) -> Varyings {
     // The quad spans the capsule: the segment plus a `width / 2` cap at
     // each end.
@@ -69,6 +95,8 @@ fn capsule(m: LineIn, start: vec2<f32>, stop: vec2<f32>, corner: u32, row: u32, 
     out.color = m.color;
     out.row = row;
     out.side = (q.position.x - turn) * view.dpr;
+    out.joins = JOIN_CAP;
+    out.others = vec4<f32>(0.0);
     return out;
 }
 
@@ -97,9 +125,32 @@ fn step_point(curve: u32, a: vec2<f32>, b: vec2<f32>, n: u32, k: u32) -> vec2<f3
     return vec2<f32>(x, select(b.y, a.y, k <= level));
 }
 
+// The unit direction from `p` to `q`, along x when they coincide (as
+// `line_quad` lays out a piece of no length).
+fn direction(p: vec2<f32>, q: vec2<f32>) -> vec2<f32> {
+    let d = q - p;
+    let len = length(d);
+    return select(vec2<f32>(1.0, 0.0), d / len, len > 0.0);
+}
+
+// `u` (logical pixels) in the local frame of a piece along `axis`.
+fn to_local(u: vec2<f32>, axis: vec2<f32>) -> vec2<f32> {
+    return vec2<f32>(dot(u, axis), dot(u, vec2<f32>(-axis.y, axis.x)));
+}
+
 // Vertex `vertex_index` of a segment drawn as `curve`: piece
-// `vertex_index / 6`, corner `vertex_index % 6`.
-fn vertex_variant(m: LineIn, vertex_index: u32, row: u32, view: View, curve: u32) -> Varyings {
+// `vertex_index / 6`, corner `vertex_index % 6`. `rows` is the layer's
+// stored row count: the first and last segments end in round caps.
+//
+// The joints: within a segment the earlier piece keeps its cap and the
+// later is butt. Between segments a step's pieces cannot see the
+// neighbour segment's, so the joint's rule follows from what each side
+// knows, assuming x runs the same way in both segments: StepAfter's
+// riser keeps its cap and the next level is butt, StepBefore's riser
+// (the later piece) keeps its cap and the level before is butt, and
+// Step's collinear levels are both butt. A null row is not seen: the
+// ends either side of it are drawn as joints.
+fn vertex_variant(m: LineIn, vertex_index: u32, row: u32, view: View, curve: u32, rows: u32) -> Varyings {
     let a = vec2<f32>(m.x, m.y);
     let b = vec2<f32>(m.x_next, m.y_next);
     let n = select(2u, 3u, curve == CURVE_STEP);
@@ -113,21 +164,71 @@ fn vertex_variant(m: LineIn, vertex_index: u32, row: u32, view: View, curve: u32
     if (curve != CURVE_STEP) {
         out.side = select(-1.0, 1.0, curve == CURVE_STEP_BEFORE);
     }
+
+    let axis = direction(start, stop);
+    // The x direction of the levels.
+    let run = vec2<f32>(select(1.0, -1.0, b.x < a.x), 0.0);
+    var start_join = JOIN_BUTT;
+    var end_join = JOIN_KEEP;
+    var start_other = vec2<f32>(0.0);
+    // Within the segment, the next piece.
+    var end_other = direction(stop, step_point(curve, a, b, n, min(k + 2u, n)));
+    if (k == 0u) {
+        if (row == 0u) {
+            start_join = JOIN_CAP;
+        } else if (curve == CURVE_STEP_BEFORE) {
+            // The riser keeps its cap; the level before runs back along x.
+            start_join = JOIN_KEEP;
+            start_other = -run;
+        }
+    }
+    if (k + 1u == n) {
+        if (row + 2u >= rows) {
+            end_join = JOIN_CAP;
+        } else if (curve == CURVE_STEP_AFTER) {
+            // The riser keeps its cap; the next level runs on along x.
+            end_other = run;
+        } else {
+            end_join = JOIN_BUTT;
+        }
+    }
+    out.joins = start_join | (end_join << 2u);
+    out.others = vec4<f32>(to_local(start_other, axis), to_local(end_other, axis));
     return out;
 }
 
 // The coverage of the pixel centred on `local` by the capsule of half
 // length `half.x` and radius `half.y`: the box coverage across the
 // segment, taken at the distance from the segment, so the body matches
-// the Segment mark's profile and the caps are round.
-fn capsule_coverage(local: vec2<f32>, half: vec2<f32>) -> f32 {
-    let beyond = max(abs(local.x) - half.x, 0.0);
-    return span(length(vec2<f32>(beyond, local.y)), half.y);
+// the Segment mark's profile and the caps are round. A butt end has no
+// cap and no ramp: the segment runs on past it at full coverage, and the
+// pixels past it are the neighbour's (`owned`).
+fn capsule_coverage(local: vec2<f32>, half: vec2<f32>, joins: u32) -> f32 {
+    let before = select(max(-local.x - half.x, 0.0), 0.0, (joins & 3u) == JOIN_BUTT);
+    let after = select(max(local.x - half.x, 0.0), 0.0, (joins >> 2u) == JOIN_BUTT);
+    return span(length(vec2<f32>(before + after, local.y)), half.y);
+}
+
+// Whether this piece draws the pixel centred on `local`, or its
+// neighbour at a joint does.
+fn owned(v: Varyings) -> bool {
+    let start = vec2<f32>(-v.half.x, 0.0);
+    let end = vec2<f32>(v.half.x, 0.0);
+    let s = v.joins & 3u;
+    let e = v.joins >> 2u;
+    let past_start = v.local.x < -v.half.x;
+    let past_end = v.local.x > v.half.x;
+    return !(
+        (s == JOIN_BUTT && v.local.x < -v.half.x - JOIN_SLACK)
+            || (e == JOIN_BUTT && v.local.x > v.half.x + JOIN_SLACK)
+            || (s == JOIN_KEEP && past_start && dot(v.local - start, v.others.xy) > JOIN_SLACK)
+            || (e == JOIN_KEEP && past_end && dot(v.local - end, v.others.zw) > JOIN_SLACK)
+    );
 }
 
 fn shade(v: Varyings) -> vec4<f32> {
-    let alpha = v.color.a * capsule_coverage(v.local, v.half);
-    if (alpha <= 0.0) {
+    let alpha = v.color.a * capsule_coverage(v.local, v.half, v.joins);
+    if (alpha <= 0.0 || !owned(v)) {
         discard;
     }
     return vec4<f32>(v.color.rgb * alpha, alpha);

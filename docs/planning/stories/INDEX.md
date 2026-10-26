@@ -223,9 +223,6 @@ cell labels, error bars, pie charts and facets.
 - [GUP-551](GUP-551_Monotone_Line_Curves.md) 📋 — `Curve::MonotoneX`: Steffen
   tangents on the CPU as Bezier control columns, tessellated per segment, never
   overshooting. Deps: GUP-550 📋.
-- [GUP-558](GUP-558_Step_Risers_At_The_Plot_Edge.md) 💡 — A `StepBefore` or
-  `StepAfter` riser at the x domain's end draws whole: step lines add half their
-  width to the x overhang; straight lines unchanged. Deps: GUP-550 ✅.
 - [GUP-552](GUP-552_Chart_Subtitle.md) 📋 — `subtitle` on `Plot` and the
   builders, laid out under the title with its own theme size and colour. Deps:
   GUP-541 📋 (soft).
