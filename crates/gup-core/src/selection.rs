@@ -254,9 +254,9 @@ impl<T: Send + Sync + 'static> Selection<T, Line> {
     /// straight line draws exactly as before curves existed.
     ///
     /// ```
-    /// use gup::prelude::*;
+    /// use gup_core::prelude::*;
     ///
-    /// # fn main() -> gup::Result<()> {
+    /// # fn main() -> gup_core::Result<()> {
     /// let stock = vec![(0.0, 40.0), (3.0, 25.0), (5.0, 60.0), (9.0, 35.0)];
     ///
     /// let mut plot = Plot::new();

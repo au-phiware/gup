@@ -192,15 +192,15 @@ impl<T: Send + Sync + 'static> LineChart<T> {
     /// until the next row changes it. See [`Selection::curve`].
     ///
     /// ```
-    /// use gup::prelude::*;
-    /// # fn main() -> gup::Result<()> {
+    /// use gup_core::prelude::*;
+    /// # fn main() -> gup_core::Result<()> {
     /// struct Price { t: f64, price: f64 }
     /// let prices = vec![
     ///     Price { t: 0.0, price: 10.0 },
     ///     Price { t: 2.0, price: 12.5 },
     ///     Price { t: 5.0, price: 11.0 },
     /// ];
-    /// let mut chart = gup::line(prices).x(|p| p.t).y(|p| p.price).curve(Curve::StepAfter);
+    /// let mut chart = gup_core::line(prices).x(|p| p.t).y(|p| p.price).curve(Curve::StepAfter);
     /// # let cx = Context::new_blocking()?;
     /// let image = chart.render(&cx, 320, 200)?;
     /// assert!(image.pixels().any(|p| p.0 != [255, 255, 255, 255]));

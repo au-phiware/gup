@@ -335,6 +335,11 @@ pub enum HitShape {
 /// (validity bits, RFC-001 S4b) and a key-encoded non-colour channel equal
 /// to `NULL_CODE` (RFC-001 S5b; the `geometry_keys` loop in `glue.rs`).
 /// Either way every vertex moves to the same point outside the clip volume.
+/// A library mark with per-layer variants (a [`Line`](crate::Line)'s
+/// [`Curve`](crate::Curve)) also defines
+/// `vertex_variant(m, vertex_index, row, view, variant: u32)`, which the glue
+/// calls instead of `vertex` for a non-default variant, drawing more
+/// vertices per instance (GUP-550).
 ///
 /// Implement it with `#[derive(Mark)]` (RFC-001 S6), which also checks the
 /// module's input struct against the channels at compile time.

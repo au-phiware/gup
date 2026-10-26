@@ -259,9 +259,9 @@ impl Line {
 /// stepped line as they break a straight one.
 ///
 /// ```
-/// use gup::prelude::*;
+/// use gup_core::prelude::*;
 ///
-/// # fn main() -> gup::Result<()> {
+/// # fn main() -> gup_core::Result<()> {
 /// // A price that holds between changes.
 /// let prices = vec![(0.0, 10.0), (2.0, 12.5), (3.0, 11.0), (6.0, 14.0)];
 ///
@@ -434,6 +434,27 @@ mod tests {
     use super::*;
     use crate::channel::{Antialias, ConstValue, Mark, Role};
     use crate::shader::MARKS_CIRCLE;
+
+    /// Each curve's path, with the pieces and corners `line.wgsl` draws.
+    #[test]
+    fn curve_paths_turn_where_their_names_say() {
+        let (a, b) = ([10.0, 50.0], [30.0, 20.0]);
+        let path = |c: Curve| {
+            let (p, n) = c.path(a, b);
+            assert_eq!(n as u32, c.pieces() + 1, "{c:?}");
+            p[..n].to_vec()
+        };
+        assert_eq!(path(Curve::Linear), vec![a, b]);
+        assert_eq!(path(Curve::StepAfter), vec![a, [30.0, 50.0], b]);
+        assert_eq!(path(Curve::StepBefore), vec![a, [10.0, 20.0], b]);
+        assert_eq!(path(Curve::Step), vec![a, [20.0, 50.0], [20.0, 20.0], b]);
+        assert_eq!(Curve::Linear.variant(), None);
+        assert_eq!(Curve::default(), Curve::Linear);
+        assert_eq!(Curve::Step.picks_next(a, b, 19.0), Some(false));
+        assert_eq!(Curve::Step.picks_next(a, b, 21.0), Some(true));
+        assert_eq!(Curve::StepAfter.picks_next(a, b, 29.0), Some(false));
+        assert_eq!(Curve::StepBefore.picks_next(a, b, 11.0), Some(true));
+    }
 
     /// The derive reproduces the table Circle had when it was hand-written.
     #[test]

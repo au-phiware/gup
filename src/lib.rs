@@ -49,6 +49,39 @@
 //! # Ok::<(), gup::Error>(())
 //! ```
 //!
+//! ## Step lines
+//!
+//! A price set at times holds until it changes: [`Curve::StepAfter`] draws
+//! it level from each row to the next row's x, then upright. The same
+//! setter is on a line layer ([`Selection::curve`]).
+//!
+//! ```
+//! use gup::prelude::*;
+//!
+//! struct Price { t: f64, price: f64 }
+//! let prices = vec![
+//!     Price { t: 0.0, price: 10.0 },
+//!     Price { t: 2.0, price: 12.5 },
+//!     Price { t: 3.0, price: 11.0 },
+//!     Price { t: 6.0, price: 14.0 },
+//! ];
+//!
+//! let mut chart = gup::line(prices).x(|p| p.t).y(|p| p.price).curve(Curve::StepAfter);
+//! let image = chart.render(&Context::shared()?, 480, 320)?;
+//! assert_eq!(image.dimensions(), (480, 320));
+//!
+//! // A layer of a plot takes the same setter.
+//! let mut plot = Plot::new();
+//! let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
+//! plot.add(Selection::<(f64, f64), Line>::new(vec![(0.0, 1.0), (1.0, 3.0), (2.0, 2.0)]))
+//!     .x_with(x.encode(|r: &(f64, f64)| r.0))
+//!     .y_with(y.encode(|r: &(f64, f64)| r.1))
+//!     .curve(Curve::Step);
+//! let (image, _) = plot.render_resolved(&Context::shared()?, 320, 200)?;
+//! assert!(image.pixels().any(|p| p.0 != [255, 255, 255, 255]));
+//! # Ok::<(), gup::Error>(())
+//! ```
+//!
 //! ## Labels at data positions
 //!
 //! `plot.text(rows)` adds a layer of labels, placed through the plot's
