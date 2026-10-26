@@ -269,7 +269,7 @@ touches no hot file and runs beside any of them.
   `ColumnStats::integral` reaches the scale with the extent, and a `Linear` axis
   fed only whole numbers (span at least 2) ticks in steps of at least 1:
   tutorial 6's Week axis reads 0–3. Deps: GUP-561 📋.
-- [GUP-563](GUP-563_Input_Positions_From_Tuples.md) 📋 — `(f32, f32)` into
+- [GUP-563](GUP-563_Input_Positions_From_Tuples.md) 🚧 — `(f32, f32)` into
   `geom::Point`, `Input::pointer_moved` and friends, and `impl Into<Point>` on
   `zoom`, `invert` and every `pick`, so tutorials stop importing
   `gup::geom::Point`. Deps: GUP-532 ✅.
