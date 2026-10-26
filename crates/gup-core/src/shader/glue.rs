@@ -75,7 +75,20 @@ pub(crate) struct GlueSpec<'a> {
     /// pipeline and a layer without one keeps exactly the glue it had. A
     /// line's [`Curve`](crate::Curve) is one.
     pub variant: Option<(u32, &'static str)>,
+    /// A polyline's control columns (GUP-551): the index of the channel
+    /// they are read through. Two more vertex columns follow the channels'
+    /// ([`CONTROL_COLUMNS`]), stored in that channel's format; each passes
+    /// through the channel's chain like the channel's own column (with its
+    /// own chunk base), and the vertex entry calls
+    /// `vertex_controls(m, controls, vertex_index, row, view, <value>u,
+    /// rows)` with the two results as `controls`. Needs a variant.
+    pub controls: Option<usize>,
 }
+
+/// The names of a polyline's two control columns (see
+/// [`GlueSpec::controls`]), after the channel's name: the control value
+/// leaving each row and the one entering the next row.
+pub(crate) const CONTROL_COLUMNS: [&str; 2] = ["out", "in"];
 
 /// How the brushed glue draws rows outside the brush (GUP-477).
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -116,6 +129,9 @@ pub(crate) struct ChunkBase {
     /// (`<channel>_next_base`): the next chunk's origin in a bridge
     /// entry, the chunk's own elsewhere.
     pub next: bool,
+    /// For a control column's base, which control column (0 or 1, see
+    /// [`GlueSpec::controls`]): its origin is that column's in the chunk.
+    pub control: Option<usize>,
 }
 
 /// The generated top-level module and how to bind it.
@@ -134,6 +150,9 @@ pub(crate) struct Glue {
     /// `columns`: each an index into `columns`, whose column it reads one
     /// row on.
     pub successors: Vec<usize>,
+    /// Whether the last two of `columns` are control columns (see
+    /// [`GlueSpec::controls`]), bound like the channels' columns.
+    pub controls: bool,
     /// Whether the glue is a polyline's (see [`GlueSpec::polyline`]).
     /// With validity, group 2 binds the next row's validity bits at
     /// binding 2 and the `Chunk` uniform holds `valid_offset` and
@@ -245,13 +264,20 @@ impl Expr {
     /// successor, GUP-432). Uniforms, LUTs and later links' bases are
     /// shared.
     fn at_next_row(&self, name: &str) -> Expr {
+        self.reading(name, "next")
+    }
+
+    /// The same expression reading column `name_suffix` with chunk base
+    /// `name_suffix_base` in place of column `name` and its base.
+    /// Uniforms, LUTs and later links' bases are shared.
+    fn reading(&self, name: &str, suffix: &str) -> Expr {
         match self {
-            Expr::Column(n) if n == name => Expr::Column(format!("{n}_next")),
+            Expr::Column(n) if n == name => Expr::Column(format!("{n}_{suffix}")),
             Expr::ChunkBase { field, pair } if field == name => Expr::ChunkBase {
-                field: format!("{field}_next"),
+                field: format!("{field}_{suffix}"),
                 pair: *pair,
             },
-            Expr::Pair(e) => Expr::Pair(Box::new(e.at_next_row(name))),
+            Expr::Pair(e) => Expr::Pair(Box::new(e.reading(name, suffix))),
             Expr::Call {
                 alias,
                 function,
@@ -259,10 +285,10 @@ impl Expr {
             } => Expr::Call {
                 alias: alias.clone(),
                 function,
-                args: args.iter().map(|a| a.at_next_row(name)).collect(),
+                args: args.iter().map(|a| a.reading(name, suffix)).collect(),
             },
             Expr::OrNull { expr, plane } => Expr::OrNull {
-                expr: Box::new(expr.at_next_row(name)),
+                expr: Box::new(expr.reading(name, suffix)),
                 plane: *plane,
             },
             other => other.clone(),
@@ -309,6 +335,7 @@ const RESERVED: &[&str] = &[
     "next_group",
     "next_bit",
     "out",
+    "controls",
 ];
 
 /// Import aliases: the last path segment, de-duplicated.
@@ -430,6 +457,7 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
                             format: input_format,
                             member: format!("{field}_base"),
                             next: false,
+                            control: None,
                         });
                         if spec.polyline && position(ch) && k == 0 {
                             next_bases.push(ChunkBase {
@@ -438,6 +466,7 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
                                 format: input_format,
                                 member: format!("{field}_next_base"),
                                 next: true,
+                                control: None,
                             });
                         }
                         args.push(Expr::ChunkBase {
@@ -494,6 +523,45 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
             }
         }
     }
+    // A polyline's control columns: after the channels' columns, each
+    // read through the channel's chain with its own chunk base.
+    let mut column_names: Vec<String> = columns
+        .iter()
+        .map(|&(i, _)| spec.channels[i].name.to_string())
+        .collect();
+    let mut control_exprs = Vec::new();
+    let mut control_bases = Vec::new();
+    if let Some(ci) = spec.controls {
+        assert!(spec.variant.is_some(), "control columns need a variant");
+        let ch = &spec.channels[ci];
+        let ChannelSource::Column(links) = &ch.source else {
+            panic!("{}: control columns read through a column channel", ch.name)
+        };
+        let format = links[0].input_format();
+        let expr = &exprs
+            .iter()
+            .find(|(n, _)| *n == ch.name)
+            .expect("every channel has an expression")
+            .1;
+        for (k, suffix) in CONTROL_COLUMNS.iter().enumerate() {
+            columns.push((ci, format));
+            column_names.push(format!("{}_{suffix}", ch.name));
+            if format.has_validity() {
+                planes += 1;
+            }
+            if format.is_relative() {
+                control_bases.push(ChunkBase {
+                    channel: ci,
+                    link: 0,
+                    format,
+                    member: format!("{}_{suffix}_base", ch.name),
+                    next: false,
+                    control: Some(k),
+                });
+            }
+            control_exprs.push(expr.reading(ch.name, suffix));
+        }
+    }
     // A null colour input reads the theme's colour from a uniform field,
     // so the source never depends on the colour.
     if exprs.iter().any(|(_, e)| matches!(e, Expr::OrNull { .. })) {
@@ -512,8 +580,10 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
     // Validity bits only when the columns have a null (and only numeric
     // columns have bits).
     let validity = spec.validity && planes > 0;
-    // The next-row bases follow every other base in `Chunk`.
+    // The next-row bases, then the control columns', follow every other
+    // base in `Chunk`.
     relative.extend(next_bases);
+    relative.extend(control_bases);
     let mut signature = format!("{} {{{}}}", spec.mark_name, signature_parts.join(", "));
     if let Some((_, label)) = spec.variant {
         signature.push(' ');
@@ -632,13 +702,8 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
         ""
     } else {
         let _ = writeln!(w, "\nstruct Columns {{");
-        for (loc, (i, format)) in columns.iter().enumerate() {
-            let _ = writeln!(
-                w,
-                "    @location({loc}) {}: {},",
-                spec.channels[*i].name,
-                format.wgsl_type()
-            );
+        for (loc, ((_, format), name)) in columns.iter().zip(&column_names).enumerate() {
+            let _ = writeln!(w, "    @location({loc}) {name}: {},", format.wgsl_type());
         }
         for (j, &c) in successors.iter().enumerate() {
             let (i, format) = columns[c];
@@ -689,6 +754,9 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
     for (name, expr) in &next_exprs {
         let _ = writeln!(w, "    m.{name} = {expr};");
     }
+    if let [out, into] = control_exprs.as_slice() {
+        let _ = writeln!(w, "    let controls = vec2<f32>({out}, {into});");
+    }
     let body_end = w.len();
     if let Some(style) = spec.brushed {
         // Rows outside the brush fade: the colour channels' alpha takes
@@ -719,6 +787,10 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
     let vertex = match spec.variant {
         None => format!(
             "{mark_alias}::vertex(m, vertex_index, chunk.row_base + instance_index, u_view)"
+        ),
+        Some((value, _)) if spec.controls.is_some() => format!(
+            "{mark_alias}::vertex_controls(m, controls, vertex_index, chunk.row_base + \
+             instance_index, u_view, {value}u, enc.{ROW_COUNT_FIELD})"
         ),
         Some((value, _)) => format!(
             "{mark_alias}::vertex_variant(m, vertex_index, chunk.row_base + instance_index, \
@@ -794,6 +866,7 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
         modules,
         columns,
         successors,
+        controls: spec.controls.is_some(),
         polyline: spec.polyline,
         validity,
         relative,

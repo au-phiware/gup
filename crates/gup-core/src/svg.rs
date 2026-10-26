@@ -534,6 +534,33 @@ fn write_layer(
                     opacity("stroke-opacity", *color)
                 )?;
             }
+            VectorMark::Cubic {
+                start,
+                segments,
+                width,
+                color,
+            } => {
+                write!(s, r#"<path d="M{},{}"#, num2(start.x), num2(start.y))?;
+                for [k1, k2, b] in segments {
+                    write!(
+                        s,
+                        " C{},{} {},{} {},{}",
+                        num2(k1.x),
+                        num2(k1.y),
+                        num2(k2.x),
+                        num2(k2.y),
+                        num2(b.x),
+                        num2(b.y)
+                    )?;
+                }
+                writeln!(
+                    s,
+                    r#"" fill="none" stroke="{}" stroke-width="{}" stroke-linejoin="round" stroke-linecap="round"{}/>"#,
+                    hex(*color),
+                    num2(*width),
+                    opacity("stroke-opacity", *color)
+                )?;
+            }
             VectorMark::Area { top, base, fill } => {
                 // The top edge, then the baseline back: the default nonzero
                 // rule fills both lobes where the edge crosses the baseline.

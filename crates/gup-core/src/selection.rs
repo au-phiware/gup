@@ -7,7 +7,7 @@
 
 use crate::append::{Appender, FeedRx};
 use crate::channel::{Channel, ChannelDesc, ConstValue, Geometry, HitShape, Mark, Role, Visual};
-use crate::column::{ColumnFormat, ColumnStore};
+use crate::column::{ColumnData, ColumnFormat, ColumnStore};
 use crate::context::Context;
 use crate::cull::{self, PixelBox};
 use crate::encoding::{AxisEncoding, Encoding, IntoEncoding, Resource};
@@ -229,7 +229,38 @@ pub struct Selection<T, M: Mark> {
     /// The vertices drawn per instance (GUP-550):
     /// [`Mark::VERTICES_PER_INSTANCE`], times the pieces of a curve.
     vertices: u32,
+    /// For a curve with control values ([`Curve::MonotoneX`]), the x and y
+    /// (data units) of the last three stored rows: an append recomputes
+    /// the control values of the two rows before its first row from them
+    /// (GUP-551).
+    tail: Vec<[f64; 2]>,
     _mark: PhantomData<fn() -> M>,
+}
+
+/// Where a line's control values come from (GUP-551): the column indices
+/// of its x and y.
+#[derive(Copy, Clone, Debug)]
+struct ControlSource {
+    x: usize,
+    y: usize,
+}
+
+/// The numbers of an evaluated numeric column.
+fn numbers(data: &ColumnData) -> &[f64] {
+    match data {
+        ColumnData::Values(v) => v,
+        ColumnData::Codes(_) => unreachable!("control sources are numeric columns"),
+    }
+}
+
+/// The last three of `x`, `y`'s rows, after `tail`'s.
+fn tail_of(tail: &[[f64; 2]], x: &[f64], y: &[f64]) -> Vec<[f64; 2]> {
+    let rows: Vec<[f64; 2]> = tail
+        .iter()
+        .copied()
+        .chain(x.iter().zip(y).map(|(&x, &y)| [x, y]))
+        .collect();
+    rows[rows.len().saturating_sub(3)..].to_vec()
 }
 
 impl<T, M: Mark> std::fmt::Debug for Selection<T, M> {
@@ -250,8 +281,12 @@ impl<T, M: Mark> std::fmt::Debug for Selection<T, M> {
 impl<T: Send + Sync + 'static> Selection<T, Line> {
     /// How the line runs from each row to the next (default
     /// [`Curve::Linear`]). A step curve draws each segment as 2 or 3
-    /// straight pieces, and picks and SVG output follow the pieces. A
-    /// straight line draws exactly as before curves existed.
+    /// straight pieces, and a monotone curve as 16 pieces of a cubic;
+    /// picks and SVG output follow the same path. A straight line draws
+    /// exactly as before curves existed. Switching to or from
+    /// [`Curve::MonotoneX`] evaluates the columns again at the next
+    /// resolve (its control values are two more columns), which needs the
+    /// rows (see [`Retain`]).
     ///
     /// ```
     /// use gup_core::prelude::*;
@@ -273,6 +308,9 @@ impl<T: Send + Sync + 'static> Selection<T, Line> {
     /// ```
     pub fn curve(&mut self, curve: Curve) -> &mut Self {
         if curve != self.curve {
+            if curve.has_controls() != self.curve.has_controls() {
+                self.columns = None;
+            }
             self.curve = curve;
             self.vertices = Line::VERTICES_PER_INSTANCE * curve.pieces();
             self.gpu = None;
@@ -312,6 +350,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             appended: 0,
             curve: Curve::Linear,
             vertices: M::VERTICES_PER_INSTANCE,
+            tail: Vec::new(),
             _mark: PhantomData,
         }
     }
@@ -349,6 +388,10 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         self.appended = self.appended.wrapping_add(1);
         let start = self.rows.len();
         self.rows.extend(rows);
+        let controls = match self.columns {
+            Some(_) => self.control_source()?,
+            None => None,
+        };
         if let Some(store) = &mut self.columns {
             let new = &self.rows[start..];
             // The same columns, in the same order, as `column_encodings`.
@@ -364,7 +407,40 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
                 let runs = runs(self.window, store, new.len());
                 order.push_runs(&mut values, &runs);
             }
+            // A monotone line's control values: the new rows', computed
+            // with the last stored rows before them, which also gives the
+            // new values of the two rows before the first new row (their
+            // tangents see the new rows; a row's tangent depends on the
+            // rows within two of it).
+            let mut rewrite = Vec::new();
+            if let Some(c) = controls {
+                let (xs, ys) = (numbers(&values[c.x]), numbers(&values[c.y]));
+                let t = self.tail.len();
+                let wx: Vec<f64> = self
+                    .tail
+                    .iter()
+                    .map(|p| p[0])
+                    .chain(xs.iter().copied())
+                    .collect();
+                let wy: Vec<f64> = self
+                    .tail
+                    .iter()
+                    .map(|p| p[1])
+                    .chain(ys.iter().copied())
+                    .collect();
+                let (c1, c2) = crate::monotone::controls(&wx, &wy);
+                let base = store.rows() - t as u64;
+                rewrite.extend((t.saturating_sub(2)..t).map(|k| (base + k as u64, c1[k], c2[k])));
+                self.tail = tail_of(&self.tail, xs, ys);
+                values.push(ColumnData::Values(c1[t..].to_vec()));
+                values.push(ColumnData::Values(c2[t..].to_vec()));
+            }
             store.append(new.len(), &values)?;
+            let k = store.formats().len() - 2;
+            for (row, c1, c2) in rewrite {
+                store.rewrite(row, k, c1);
+                store.rewrite(row, k + 1, c2);
+            }
             // Appends interleaved with the stored rows into many draws:
             // evaluate every row again, in one sorted run (while the rows
             // are kept).
@@ -589,18 +665,57 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             })
     }
 
+    /// Where the curve's control values come from, if it has them
+    /// ([`Curve::MonotoneX`]): x and y must be numeric columns.
+    fn control_source(&self) -> Result<Option<ControlSource>> {
+        if !self.curve.has_controls() {
+            return Ok(None);
+        }
+        let (mut x, mut y) = (None, None);
+        for (k, (slot, c)) in self.column_encodings().enumerate() {
+            if !c.links()[0].input_format().has_validity() {
+                continue;
+            }
+            match M::CHANNELS[slot].name {
+                "x" => x = Some(k),
+                "y" => y = Some(k),
+                _ => {}
+            }
+        }
+        match (x, y) {
+            (Some(x), Some(y)) => Ok(Some(ControlSource { x, y })),
+            _ => Err(Error::config(
+                "curve",
+                format!(
+                    "{} layer: Curve::MonotoneX computes its tangents from the rows' x and y, \
+                     so both must be encoded from numeric columns (not constants or keys)",
+                    M::NAME
+                ),
+            )),
+        }
+    }
+
     /// Run the accessors (once) into a column store chunked for `cx`'s
-    /// device.
+    /// device. A monotone line's store has two more columns after the
+    /// channels': each row's control values ([`crate::monotone`]), in y's
+    /// format.
     fn evaluate(&mut self, cx: &Context) -> Result<&mut ColumnStore> {
-        let formats: Vec<_> = self
+        let controls = self.control_source()?;
+        let mut formats: Vec<_> = self
             .column_encodings()
             .map(|(_, c)| c.links()[0].input_format())
             .collect();
+        if let Some(c) = controls {
+            formats.extend([formats[c.y]; 2]);
+        }
         let chunk_rows = ColumnStore::chunk_rows_for(&cx.caps().limits, &formats)
             .min(self.window.chunk_cap())
             .min(self.max_chunk_rows.unwrap_or(u32::MAX));
         let stale = match &self.columns {
-            None => Some("a channel was encoded, or `max_chunk_rows` changed"),
+            None => Some(
+                "a channel was encoded, `max_chunk_rows` changed, or the curve now reads control \
+                 values",
+            ),
             Some(c) if c.chunk_rows() != chunk_rows => Some(
                 "this device (or the window, or `max_chunk_rows`) needs a different chunk size",
             ),
@@ -635,6 +750,13 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
                 })
                 .collect::<Result<Vec<_>>>()?;
             self.order = self.size_order(&values);
+            if let Some(c) = controls {
+                let (xs, ys) = (numbers(&values[c.x]), numbers(&values[c.y]));
+                let (c1, c2) = crate::monotone::controls(xs, ys);
+                self.tail = tail_of(&[], xs, ys);
+                values.push(ColumnData::Values(c1));
+                values.push(ColumnData::Values(c2));
+            }
             let mut store = ColumnStore::new(formats, chunk_rows)?;
             if let Some(order) = &mut self.order {
                 order.push_runs(&mut values, &runs(self.window, &store, self.rows.len()));
@@ -820,6 +942,12 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
                 Unbrushed::Grey(_) => glue::BrushStyle::Grey,
             }),
             variant: self.curve.variant(),
+            controls: self.curve.has_controls().then(|| {
+                M::CHANNELS
+                    .iter()
+                    .position(|d| d.name == "y")
+                    .expect("a mark with control values has y")
+            }),
         })
     }
 
@@ -840,7 +968,9 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             Error::config("layer", "prepare called before the columns were evaluated")
         })?;
         let entries = draw_entries(M::GEOMETRY, store.chunks());
-        // (base, column index, link function) per relative link.
+        let channel_columns = self.column_encodings().count();
+        // (base, column index, link function) per relative link; a control
+        // column's base is its own column's origin.
         let relative: Vec<_> = relative
             .iter()
             .map(|b| {
@@ -849,6 +979,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
                     .enumerate()
                     .find(|(_, (i, _))| *i == b.channel)
                     .expect("relative bases belong to column channels");
+                let col = b.control.map_or(col, |k| channel_columns + k);
                 (b, col, c.links()[b.link])
             })
             .collect();
@@ -1151,7 +1282,26 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
                 };
                 (desc.name, desc.role, chan)
             })
-            .collect();
+            .collect::<Vec<_>>();
+        // A monotone line's control columns, through y's mirror.
+        let mut chans = chans;
+        if self.curve.has_controls()
+            && let Some(Some(Encoding::Column(c))) = M::CHANNELS
+                .iter()
+                .position(|d| d.name == "y")
+                .map(|s| &self.encodings[s])
+        {
+            for (k, name) in crate::vector::CONTROLS.iter().enumerate() {
+                chans.push((
+                    *name,
+                    None,
+                    VChan::Column {
+                        column: column + k,
+                        mirror: c.mirror(),
+                    },
+                ));
+            }
+        }
         LayerVector::Cpu(Arc::new(CpuLayer {
             kind,
             cols,
@@ -1325,7 +1475,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         // A step line's riser can sit on a row at the end of the x domain,
         // and its ends are capped: it reaches half its width past the row
         // along x (GUP-550). A straight line still starts at the axis.
-        if self.curve != Curve::Linear {
+        if !matches!(self.curve, Curve::Linear | Curve::MonotoneX) {
             overhang.x = overhang.x.max(self.max_width() * 0.5);
         }
         overhang
@@ -1713,17 +1863,23 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         // buffer (RFC-001 §12 risk 7).
         let slots = glue.columns.len() + glue.successors.len();
         if slots > limits.max_vertex_buffers as usize {
+            let controls = if glue.controls { 2 } else { 0 };
             return Err(Error::config(
                 "layer",
                 format!(
-                    "{}: {slots} vertex columns ({} channels read from columns{}), and this \
+                    "{}: {slots} vertex columns ({} channels read from columns{}{}), and this \
                      device has {} vertex buffer slots; make some channels constants",
                     M::NAME,
-                    glue.columns.len(),
+                    glue.columns.len() - controls,
                     if glue.successors.is_empty() {
                         String::new()
                     } else {
                         format!(", {} read again at the next row", glue.successors.len())
+                    },
+                    if glue.controls {
+                        ", 2 control columns of the monotone curve"
+                    } else {
+                        ""
                     },
                     limits.max_vertex_buffers
                 ),
@@ -1936,6 +2092,17 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             .iter()
             .map(|&(_, k)| store.cpu_values_where(k, |c| chunk_needed[c]))
             .collect();
+        // A monotone line's control values by data row (a polyline's
+        // stored rows are its data rows): the stored columns, or computed
+        // from the rows' x and y below.
+        let mut controls: Option<[Vec<f64>; 2]> = None;
+        if self.curve.has_controls() && from_store.is_some() {
+            let k = store.formats().len() - 2;
+            let column = |k| store.cpu_values_where(k, |c| chunk_needed[c]);
+            if let (Some(c1), Some(c2)) = (column(k), column(k + 1)) {
+                controls = Some([c1, c2]);
+            }
+        }
         if let Some(stored) = from_store {
             for v in stored {
                 raw.push(match &self.order {
@@ -1970,6 +2137,16 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
                         })
                         .collect(),
                 });
+            }
+            if self.curve.has_controls() {
+                let at = |name| {
+                    let slot = slot_of(name).expect("a line has x and y");
+                    needed.iter().position(|&(s, _)| s == slot)
+                };
+                if let (Some(x), Some(y)) = (at("x"), at("y")) {
+                    let (c1, c2) = crate::monotone::controls(&raw[x], &raw[y]);
+                    controls = Some([c1, c2]);
+                }
             }
         } else {
             return Ok(());
@@ -2012,6 +2189,23 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
                 }
             }
         };
+        // The control values in pixels, through y's encoding.
+        let ctrl = match (controls, slot_of("y").map(|s| &self.encodings[s])) {
+            (Some(values), Some(Some(Encoding::Column(c)))) => values.map(|v| {
+                Chan::Col(
+                    v.into_iter()
+                        .map(|v| {
+                            if v.is_nan() {
+                                f64::NAN
+                            } else {
+                                c.cpu_eval(v).unwrap_or(f64::NAN)
+                            }
+                        })
+                        .collect(),
+                )
+            }),
+            _ => [Chan::Unused, Chan::Unused],
+        };
         let chans = Chans {
             x: chan("x"),
             y: chan("y"),
@@ -2021,6 +2215,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             x_end: chan("x_end"),
             y_end: chan("y_end"),
             curve: self.curve,
+            ctrl,
         };
 
         // Stored rows with their data row (from the first kept row; ids
@@ -2664,6 +2859,7 @@ mod tests {
                 format: ColumnFormat::F32Relative,
                 member: "x_base".into(),
                 next: false,
+                control: None,
             }]
         );
         check_fixture("scatter_glue.wgsl", &glue.source);

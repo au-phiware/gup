@@ -52,12 +52,14 @@ pub(crate) enum Shape {
         b: [f32; 2],
         h: f32,
     },
-    /// A step from the row's point `a` to the next row's `b`: a capsule
-    /// along each piece of `curve`'s path ([`Curve::path`]), which also
-    /// decides the row a point picks ([`Curve::picks_next`]).
-    Step {
+    /// A step or curve from the row's point `a` to the next row's `b`
+    /// (its control values `ctrl`, for a monotone curve): a capsule along
+    /// each piece of `curve`'s path ([`Curve::path`]), which also decides
+    /// the row a point picks ([`Curve::picks_next`]).
+    Path {
         a: [f32; 2],
         b: [f32; 2],
+        ctrl: [f32; 2],
         h: f32,
         curve: Curve,
     },
@@ -144,8 +146,14 @@ impl Shape {
                 hypot(q[0].max(0.0), q[1].max(0.0)) + q[0].max(q[1]).min(0.0)
             }
             Shape::Capsule { a, b, h } => segment_distance(p, a, b) - h,
-            Shape::Step { a, b, h, curve } => {
-                let (path, n) = curve.path(a, b);
+            Shape::Path {
+                a,
+                b,
+                ctrl,
+                h,
+                curve,
+            } => {
+                let (path, n) = curve.path(a, b, ctrl);
                 path[..n]
                     .windows(2)
                     .map(|s| segment_distance(p, s[0], s[1]))
@@ -191,7 +199,7 @@ impl Shape {
                     (next(row), at(b))
                 }
             }
-            Shape::Step { a, b, curve, .. } => {
+            Shape::Path { a, b, curve, .. } => {
                 if curve.picks_next(a, b, p[0]) == Some(true) {
                     (next(row), at(b))
                 } else {
@@ -226,7 +234,7 @@ impl Shape {
                 [a[0].min(b[0]), a[1].min(b[1]).min(a0[1]).min(b0[1])],
                 [a[0].max(b[0]), a[1].max(b[1]).max(a0[1]).max(b0[1])],
             ),
-            Shape::Capsule { a, b, h } | Shape::Step { a, b, h, .. } => (
+            Shape::Capsule { a, b, h } | Shape::Path { a, b, h, .. } => (
                 [a[0].min(b[0]) - h, a[1].min(b[1]) - h],
                 [a[0].max(b[0]) + h, a[1].max(b[1]) + h],
             ),
@@ -281,9 +289,12 @@ pub(crate) struct Chans {
     pub height: Chan,
     pub x_end: Chan,
     pub y_end: Chan,
-    /// How a `Polyline` runs between rows: a step is a [`Shape::Step`]. (An
-    /// `Area` is always straight.)
+    /// How a `Polyline` runs between rows: a step or curve is a
+    /// [`Shape::Path`]. (An `Area` is always straight.)
     pub curve: Curve,
+    /// A monotone curve's control values, in pixels (see
+    /// [`crate::monotone`]); unused otherwise.
+    pub ctrl: [Chan; 2],
 }
 
 /// The items of one layer of `slots.len()` stored rows. `slots` lists, per
@@ -404,7 +415,13 @@ pub(crate) fn build_items(
             for pair in slots.windows(2) {
                 let ((d, rank), (e, _)) = (pair[0], pair[1]);
                 let v = [c.x.at(d), c.y.at(d), c.x.at(e), c.y.at(e), c.width.at(d)];
-                if finite(&v) && v[4] >= 0.0 {
+                // A monotone curve's control values (a null y's are null).
+                let ctrl = if c.curve.has_controls() {
+                    [c.ctrl[0].at(d), c.ctrl[1].at(d)]
+                } else {
+                    [0.0; 2]
+                };
+                if finite(&v) && finite(&ctrl) && v[4] >= 0.0 {
                     let (a, b, h) = ([v[0], v[1]], [v[2], v[3]], v[4] / 2.0);
                     push(
                         d,
@@ -412,9 +429,10 @@ pub(crate) fn build_items(
                         if c.curve == Curve::Linear {
                             Shape::Capsule { a, b, h }
                         } else {
-                            Shape::Step {
+                            Shape::Path {
                                 a,
                                 b,
+                                ctrl,
                                 h,
                                 curve: c.curve,
                             }
@@ -563,7 +581,7 @@ impl PickIndex {
                             }
                         }
                         Shape::Capsule { a, b, .. }
-                        | Shape::Step { a, b, .. }
+                        | Shape::Path { a, b, .. }
                         | Shape::Area { a, b, .. } => {
                             if inside(a) {
                                 out.push(item.row);
@@ -617,7 +635,7 @@ impl PickIndex {
             }
             match item.shape {
                 Shape::Capsule { a, b, .. }
-                | Shape::Step { a, b, .. }
+                | Shape::Path { a, b, .. }
                 | Shape::Area { a, b, .. } => {
                     let q = if item.row.row == row.row {
                         a

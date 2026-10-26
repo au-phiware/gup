@@ -44,6 +44,11 @@ pub(crate) enum MarkKind {
     Area,
 }
 
+/// The names of a monotone line's control channels in
+/// [`CpuLayer::chans`]: the control values leaving each row and entering
+/// the next, read through the y channel's mirror.
+pub(crate) const CONTROLS: [&str; 2] = ["y_out", "y_in"];
+
 /// What a batch carries for vector targets.
 #[derive(Clone)]
 pub(crate) enum LayerVector {
@@ -112,6 +117,14 @@ pub(crate) enum VectorMark {
     /// Consecutive segments of one width and colour.
     Polyline {
         points: Vec<Point>,
+        width: f32,
+        color: Color,
+    },
+    /// Consecutive cubic Bezier segments of one width and colour, from
+    /// `start`: each segment's two control points, then its end.
+    Cubic {
+        start: Point,
+        segments: Vec<[Point; 3]>,
         width: f32,
         color: Color,
     },
@@ -361,6 +374,73 @@ impl CpuLayer {
                     }
                 }
             }
+            MarkKind::Line(Curve::MonotoneX) => {
+                let (x, y, w) = (
+                    self.numbers("x", &needed)?,
+                    self.numbers("y", &needed)?,
+                    self.numbers("width", &needed)?,
+                );
+                let (c1, c2) = (
+                    self.numbers(CONTROLS[0], &needed)?,
+                    self.numbers(CONTROLS[1], &needed)?,
+                );
+                let color = self.colors("color", &needed)?;
+                // The open run: its start, its segments, and their width
+                // and colour (taken from each segment's first row).
+                type Run = (Point, Vec<[Point; 3]>, f32, Color);
+                let mut run: Option<Run> = None;
+                let flush = |run: &mut Option<Run>, out: &mut Vec<VectorMark>| {
+                    if let Some((start, segments, width, color)) = run.take() {
+                        out.push(VectorMark::Cubic {
+                            start,
+                            segments,
+                            width,
+                            color,
+                        });
+                    }
+                };
+                for s in spans {
+                    let e = &self.entries[s.chunk as usize];
+                    for i in s.rows.clone() {
+                        let (d, nx) = (row(e.this, e.first + i), row(e.next, e.next_first + i));
+                        let ok = d < n && nx < n && valid[d] && valid[nx];
+                        let p = [
+                            f(x.at(d)),
+                            f(y.at(d)),
+                            f(x.at(nx)),
+                            f(y.at(nx)),
+                            f(w.at(d)),
+                            f(c1.at(d)),
+                            f(c2.at(d)),
+                        ];
+                        if !(ok && p.iter().all(|v| v.is_finite()) && p[4] >= 0.0) {
+                            flush(&mut run, &mut out);
+                            continue;
+                        }
+                        let q = crate::monotone::control_points(
+                            [p[0], p[1]],
+                            [p[2], p[3]],
+                            [p[5], p[6]],
+                        );
+                        let [a, k1, k2, b] = q.map(|q| Point::new(q[0], q[1]));
+                        let col = color.at(d);
+                        match &mut run {
+                            Some((start, segments, width, c))
+                                if segments.last().map_or(*start, |s| s[2]) == a
+                                    && *width == p[4]
+                                    && *c == col =>
+                            {
+                                segments.push([k1, k2, b]);
+                            }
+                            _ => {
+                                flush(&mut run, &mut out);
+                                run = Some((a, vec![[k1, k2, b]], p[4], col));
+                            }
+                        }
+                    }
+                }
+                flush(&mut run, &mut out);
+            }
             MarkKind::Line(curve) => {
                 let (x, y, w) = (
                     self.numbers("x", &needed)?,
@@ -394,7 +474,7 @@ impl CpuLayer {
                         let a = Point::new(p[0], p[1]);
                         // The segment's path after `a`: `b`, or a step's
                         // corners then `b`.
-                        let (path, k) = curve.path([p[0], p[1]], [p[2], p[3]]);
+                        let (path, k) = curve.path([p[0], p[1]], [p[2], p[3]], [0.0; 2]);
                         let rest = path[1..k].iter().map(|q| Point::new(q[0], q[1]));
                         let col = color.at(d);
                         match &mut run {

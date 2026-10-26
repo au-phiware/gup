@@ -249,14 +249,16 @@ impl Line {
     pub const DEFAULT_COLOR: Color = OKABE_ITO[3];
 }
 
-/// How a [`Line`] runs from one row to the next: straight, or in steps
-/// that hold a value until the next row changes it.
+/// How a [`Line`] runs from one row to the next: straight, in steps that
+/// hold a value until the next row changes it, or along a smooth curve
+/// that never overshoots the data ([`MonotoneX`](Curve::MonotoneX)).
 ///
 /// A step is drawn exactly in pixel space from the two rows' positions,
 /// under any scale: its horizontal pieces are level and its vertical
 /// pieces plumb, with round corners `width` wide, like a straight line's
-/// joins. A step stays inside its two rows' bounding box. Nulls break a
-/// stepped line as they break a straight one.
+/// joins. A step, and a monotone curve, stays inside its two rows'
+/// bounding box. Nulls break a stepped or curved line as they break a
+/// straight one.
 ///
 /// ```
 /// use gup_core::prelude::*;
@@ -288,16 +290,69 @@ pub enum Curve {
     StepBefore,
     /// Horizontal from each row to the next row's x, then vertical.
     StepAfter,
+    /// A monotone cubic in x through every row; never overshoots.
+    ///
+    /// Each segment is a cubic Bezier from one row to the next, with its
+    /// tangents chosen by Steffen's method (1990) over each run of rows
+    /// whose x strictly increases: between two rows the curve rises or
+    /// falls with the data and stays within the two rows' values, so it
+    /// never invents a peak or a dip. A local extremum, or a flat stretch,
+    /// has a level tangent. Rows must be sorted by x: a segment whose x
+    /// does not increase is drawn straight, and starts a new run, as a
+    /// null does. x and y must be numbers, not keys.
+    ///
+    /// The control values are computed on the CPU when the layer's
+    /// columns are evaluated, and stored as two more columns read through
+    /// the y scale, so the curve passes through every row under any y
+    /// scale (on a log scale it stays within each segment's pixel range).
+    /// Appending rows rewrites the two rows before the first new row, so
+    /// the curve after an append is the curve of all the rows at once.
+    /// The line draws 16 pieces per segment.
+    ///
+    /// ```
+    /// use gup_core::prelude::*;
+    ///
+    /// # fn main() -> gup_core::Result<()> {
+    /// let rainfall = vec![(1.0, 82.0), (2.0, 64.0), (3.0, 71.0), (4.0, 30.0), (5.0, 33.0)];
+    ///
+    /// let mut plot = Plot::new();
+    /// let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
+    /// plot.add(Selection::<(f64, f64), Line>::new(rainfall))
+    ///     .x_with(x.encode(|r: &(f64, f64)| r.0))
+    ///     .y_with(y.encode(|r: &(f64, f64)| r.1))
+    ///     .curve(Curve::MonotoneX);
+    /// let cx = Context::new_blocking()?;
+    /// let image = plot.render(&cx, 320, 200)?;
+    /// assert!(image.pixels().any(|p| p.0 != [255, 255, 255, 255]));
+    /// # Ok(())
+    /// # }
+    /// ```
+    MonotoneX,
 }
 
+/// The most points [`Curve::path`] returns: a monotone curve's 16 pieces.
+pub(crate) const PATH_POINTS: usize = MONOTONE_PIECES as usize + 1;
+
+/// The pieces a [`Curve::MonotoneX`] segment is drawn as (`line.wgsl`'s
+/// `MONOTONE_PIECES`).
+pub(crate) const MONOTONE_PIECES: u32 = 16;
+
 impl Curve {
-    /// The straight pieces drawn between two rows: 1, 2 or 3.
+    /// The straight pieces drawn between two rows: 1, 2 or 3 (16 for a
+    /// monotone curve).
     pub(crate) const fn pieces(self) -> u32 {
         match self {
             Curve::Linear => 1,
             Curve::StepBefore | Curve::StepAfter => 2,
             Curve::Step => 3,
+            Curve::MonotoneX => MONOTONE_PIECES,
         }
+    }
+
+    /// Whether the curve reads per-row control values (two columns after
+    /// the channels', see [`crate::monotone`]).
+    pub(crate) const fn has_controls(self) -> bool {
+        matches!(self, Curve::MonotoneX)
     }
 
     /// The value `line.wgsl`'s `vertex_variant` reads (its `CURVE_*`
@@ -309,6 +364,7 @@ impl Curve {
             Curve::Step => Some((1, "curve step")),
             Curve::StepBefore => Some((2, "curve step-before")),
             Curve::StepAfter => Some((3, "curve step-after")),
+            Curve::MonotoneX => Some((4, "curve monotone-x")),
         }
     }
 
@@ -316,7 +372,7 @@ impl Curve {
     /// for [`Linear`](Curve::Linear).
     fn turn(self, a: [f32; 2], b: [f32; 2]) -> Option<f32> {
         match self {
-            Curve::Linear => None,
+            Curve::Linear | Curve::MonotoneX => None,
             Curve::Step => Some((a[0] + b[0]) * 0.5),
             Curve::StepBefore => Some(a[0]),
             Curve::StepAfter => Some(b[0]),
@@ -324,19 +380,38 @@ impl Curve {
     }
 
     /// The path from `a` to `b` (pixels): its `pieces() + 1` points, the
-    /// ends included, in the order `line.wgsl` draws them. Point `k` lies
-    /// at `a`'s x for `k = 0`, `b`'s for the last and the turn's between,
-    /// and at `a`'s level up to the first vertical piece, `b`'s after.
-    /// SVG paths, CPU picks and later outline geometry read it.
-    pub(crate) fn path(self, a: [f32; 2], b: [f32; 2]) -> ([[f32; 2]; 4], usize) {
+    /// ends included, in the order `line.wgsl` draws them. For a step,
+    /// point `k` lies at `a`'s x for `k = 0`, `b`'s for the last and the
+    /// turn's between, and at `a`'s level up to the first vertical piece,
+    /// `b`'s after. For a monotone curve, point `k` is the segment's cubic
+    /// at `k / 16`, its control values `ctrl` (pixels; ignored by other
+    /// curves). SVG paths, CPU picks and later outline geometry read it.
+    pub(crate) fn path(
+        self,
+        a: [f32; 2],
+        b: [f32; 2],
+        ctrl: [f32; 2],
+    ) -> ([[f32; 2]; PATH_POINTS], usize) {
         let n = self.pieces() as usize;
+        if self == Curve::MonotoneX {
+            let p = crate::monotone::control_points(a, b, ctrl);
+            let mut out = [b; PATH_POINTS];
+            for (k, q) in out.iter_mut().enumerate() {
+                *q = crate::monotone::bezier(p, k as f32 / MONOTONE_PIECES as f32);
+            }
+            // The ends exactly.
+            (out[0], out[n]) = (a, b);
+            return (out, n + 1);
+        }
         let Some(turn) = self.turn(a, b) else {
-            return ([a, b, b, b], 2);
+            let mut out = [b; PATH_POINTS];
+            out[0] = a;
+            return (out, 2);
         };
         // Points at `a`'s level: before StepBefore's first (vertical)
         // piece, through the first horizontal piece otherwise.
         let level = usize::from(self != Curve::StepBefore);
-        let mut out = [b; 4];
+        let mut out = [b; PATH_POINTS];
         for (k, p) in out.iter_mut().enumerate().take(n + 1) {
             let x = if k == 0 {
                 a[0]
@@ -354,11 +429,13 @@ impl Curve {
     /// (row `i + 1`) picks row `i + 1`: never for
     /// [`StepAfter`](Curve::StepAfter), always for
     /// [`StepBefore`](Curve::StepBefore), right of the midpoint for
-    /// [`Step`](Curve::Step); the nearer end for
+    /// [`Step`](Curve::Step), and for [`MonotoneX`](Curve::MonotoneX) the
+    /// row nearer in x (past the midpoint towards `b`); the nearer end for
     /// [`Linear`](Curve::Linear) is the caller's.
     pub(crate) fn picks_next(self, a: [f32; 2], b: [f32; 2], x: f32) -> Option<bool> {
         match self {
             Curve::Linear => None,
+            Curve::MonotoneX => Some((x - (a[0] + b[0]) * 0.5) * (b[0] - a[0]) > 0.0),
             Curve::StepAfter => Some(false),
             Curve::StepBefore => Some(true),
             Curve::Step => Some(x - (a[0] + b[0]) * 0.5 > 0.0),
@@ -447,7 +524,7 @@ mod tests {
     fn curve_paths_turn_where_their_names_say() {
         let (a, b) = ([10.0, 50.0], [30.0, 20.0]);
         let path = |c: Curve| {
-            let (p, n) = c.path(a, b);
+            let (p, n) = c.path(a, b, [0.0; 2]);
             assert_eq!(n as u32, c.pieces() + 1, "{c:?}");
             p[..n].to_vec()
         };
@@ -461,6 +538,23 @@ mod tests {
         assert_eq!(Curve::Step.picks_next(a, b, 21.0), Some(true));
         assert_eq!(Curve::StepAfter.picks_next(a, b, 29.0), Some(false));
         assert_eq!(Curve::StepBefore.picks_next(a, b, 11.0), Some(true));
+
+        // A monotone curve: 17 points on the cubic, from `a` to `b`, x
+        // evenly spaced (the controls lie at thirds in x).
+        let (p, n) = Curve::MonotoneX.path(a, b, [45.0, 25.0]);
+        assert_eq!(n, 17);
+        assert_eq!((p[0], p[16]), (a, b));
+        for (k, q) in p[..n].iter().enumerate() {
+            assert!(
+                (q[0] - (10.0 + 20.0 * k as f32 / 16.0)).abs() < 1e-4,
+                "{k}: {q:?}"
+            );
+            assert!((20.0..=50.0).contains(&q[1]), "{k}: {q:?}");
+        }
+        assert!(p[..n].windows(2).all(|w| w[1][1] <= w[0][1]), "{p:?}");
+        assert_eq!(Curve::MonotoneX.picks_next(a, b, 19.0), Some(false));
+        assert_eq!(Curve::MonotoneX.picks_next(a, b, 21.0), Some(true));
+        assert_eq!(Curve::MonotoneX.picks_next(b, a, 21.0), Some(false));
     }
 
     /// The derive reproduces the table Circle had when it was hand-written.
