@@ -195,7 +195,8 @@ pub use error::{Error, Result};
 pub use gpu_pick::{GpuPick, PickTicket};
 pub use input::{Axes, Brush, Button, Drag, Event, EventInfo, Input, Response};
 pub use marks::{
-    Area, AreaAttrs, Circle, CircleAttrs, Line, LineAttrs, Rect, RectAttrs, Segment, SegmentAttrs,
+    Area, AreaAttrs, Circle, CircleAttrs, Curve, Line, LineAttrs, Rect, RectAttrs, Segment,
+    SegmentAttrs,
 };
 pub use pick::{PICK_TOLERANCE, RowId};
 pub use plot::{Layout, PlacedText, Plot, Resolved};
@@ -354,10 +355,10 @@ pub mod prelude {
     pub use crate::scene::Anchor;
     pub use crate::{
         Area, AreaAttrs, Axes, Band, Bins, Categorical, Chart, ChartExt, Circle, CircleAttrs,
-        Color, ColorScale, Context, CpuMirror, Derived, Diverging, Drag, EncodeFn, Event, Line,
-        LineAttrs, Linear, Log, Mark, Offset, Plot, Point, PositionScale, Pow, Px, Rect, RectAttrs,
-        Retain, ScaleRef, Segment, SegmentAttrs, Selection, Sequential, ShaderFn, Symlog, Theme,
-        Time, Unbrushed, Unit, Window, wgsl_function,
+        Color, ColorScale, Context, CpuMirror, Curve, Derived, Diverging, Drag, EncodeFn, Event,
+        Line, LineAttrs, Linear, Log, Mark, Offset, Plot, Point, PositionScale, Pow, Px, Rect,
+        RectAttrs, Retain, ScaleRef, Segment, SegmentAttrs, Selection, Sequential, ShaderFn,
+        Symlog, Theme, Time, Unbrushed, Unit, Window, wgsl_function,
     };
 }
 

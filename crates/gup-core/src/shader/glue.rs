@@ -67,6 +67,13 @@ pub(crate) struct GlueSpec<'a> {
     /// colour channel's alpha by `enc.brush_dim` for rows whose bit is
     /// clear. `Grey` also reads `enc.brush_grey` and replaces the colour.
     pub brushed: Option<BrushStyle>,
+    /// A per-layer constant the mark's vertex stage reads (GUP-550), and
+    /// its label in the signature: the vertex entry calls the mark's
+    /// `vertex_variant(m, vertex_index, row, view, <value>u)` instead of
+    /// `vertex(m, vertex_index, row, view)`, so each value links its own
+    /// pipeline and a layer without one keeps exactly the glue it had. A
+    /// line's [`Curve`](crate::Curve) is one.
+    pub variant: Option<(u32, &'static str)>,
 }
 
 /// How the brushed glue draws rows outside the brush (GUP-477).
@@ -499,6 +506,10 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
     // The next-row bases follow every other base in `Chunk`.
     relative.extend(next_bases);
     let mut signature = format!("{} {{{}}}", spec.mark_name, signature_parts.join(", "));
+    if let Some((_, label)) = spec.variant {
+        signature.push(' ');
+        signature.push_str(label);
+    }
     if validity {
         signature.push_str(" with nulls");
     }
@@ -696,8 +707,15 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
             }
         }
     }
-    let vertex =
-        format!("{mark_alias}::vertex(m, vertex_index, chunk.row_base + instance_index, u_view)");
+    let vertex = match spec.variant {
+        None => format!(
+            "{mark_alias}::vertex(m, vertex_index, chunk.row_base + instance_index, u_view)"
+        ),
+        Some((value, _)) => format!(
+            "{mark_alias}::vertex_variant(m, vertex_index, chunk.row_base + instance_index, \
+             u_view, {value}u)"
+        ),
+    };
     let mut drawn = Vec::new();
     if validity && !geometry_planes.is_empty() {
         let words = geometry_planes

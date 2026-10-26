@@ -14,6 +14,7 @@ use crate::encoding::{AxisEncoding, Encoding, IntoEncoding, Resource};
 use crate::error::{Error, Result};
 use crate::geom::Rect;
 use crate::input::{Event, EventInfo};
+use crate::marks::{Curve, Line};
 use crate::order::{DrawEntry, DrawOrder, chunk_spans, draw_entries, polyline_spans};
 use crate::pick::PICK_TOLERANCE;
 use crate::pick::{Chan, Chans, PickItem, build_items};
@@ -222,6 +223,12 @@ pub struct Selection<T, M: Mark> {
     waker: Option<Waker>,
     /// How many appends happened (part of the revision).
     appended: u64,
+    /// A line's curve ([`Linear`](Curve::Linear) for every other mark):
+    /// the glue's variant and the CPU geometry of picks and SVG.
+    curve: Curve,
+    /// The vertices drawn per instance (GUP-550):
+    /// [`Mark::VERTICES_PER_INSTANCE`], times the pieces of a curve.
+    vertices: u32,
     _mark: PhantomData<fn() -> M>,
 }
 
@@ -237,6 +244,40 @@ impl<T, M: Mark> std::fmt::Debug for Selection<T, M> {
             .field("retain", &self.retain)
             .field("encodings", &self.encodings)
             .finish_non_exhaustive()
+    }
+}
+
+impl<T: Send + Sync + 'static> Selection<T, Line> {
+    /// How the line runs from each row to the next (default
+    /// [`Curve::Linear`]). A step curve draws each segment as 2 or 3
+    /// straight pieces, and picks and SVG output follow the pieces. A
+    /// straight line draws exactly as before curves existed.
+    ///
+    /// ```
+    /// use gup::prelude::*;
+    ///
+    /// # fn main() -> gup::Result<()> {
+    /// let stock = vec![(0.0, 40.0), (3.0, 25.0), (5.0, 60.0), (9.0, 35.0)];
+    ///
+    /// let mut plot = Plot::new();
+    /// let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
+    /// plot.add(Selection::<(f64, f64), Line>::new(stock))
+    ///     .x_with(x.encode(|r: &(f64, f64)| r.0))
+    ///     .y_with(y.encode(|r: &(f64, f64)| r.1))
+    ///     .curve(Curve::StepAfter);
+    /// let cx = Context::new_blocking()?;
+    /// let image = plot.render(&cx, 320, 200)?;
+    /// assert!(image.pixels().any(|p| p.0 != [255, 255, 255, 255]));
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn curve(&mut self, curve: Curve) -> &mut Self {
+        if curve != self.curve {
+            self.curve = curve;
+            self.vertices = Line::VERTICES_PER_INSTANCE * curve.pieces();
+            self.gpu = None;
+        }
+        self
     }
 }
 
@@ -269,6 +310,8 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             feed: None,
             waker: None,
             appended: 0,
+            curve: Curve::Linear,
+            vertices: M::VERTICES_PER_INSTANCE,
             _mark: PhantomData,
         }
     }
@@ -745,6 +788,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
                 Unbrushed::Fade(_) => glue::BrushStyle::Fade,
                 Unbrushed::Grey(_) => glue::BrushStyle::Grey,
             }),
+            variant: self.curve.variant(),
         })
     }
 
@@ -1038,7 +1082,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         } else if id == TypeId::of::<Segment>() {
             MarkKind::Segment
         } else if id == TypeId::of::<Line>() {
-            MarkKind::Line
+            MarkKind::Line(self.curve)
         } else if id == TypeId::of::<Area>() {
             MarkKind::Area
         } else {
@@ -1734,7 +1778,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
                     chunks: chunk_draws(),
                     spans,
                 },
-                M::VERTICES_PER_INSTANCE,
+                self.vertices,
             )?,
         );
         self.write_bits(cx, &gpu);
@@ -1929,6 +1973,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             height: chan("height"),
             x_end: chan("x_end"),
             y_end: chan("y_end"),
+            curve: self.curve,
         };
 
         // Stored rows with their data row (from the first kept row; ids

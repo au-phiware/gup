@@ -120,7 +120,7 @@
 //! | `.stroke_width(..)` / `.stroke_width_px(px)` (line) | `.width(px)` |
 //! | `.connect_nulls(false)` | default: nulls (`None`, NaN) break the line |
 //! | `.connect_nulls(true)` / `.sort_x()` | dropped: filter or sort the rows |
-//! | `.interpolate`, `.smooth`, `.monotone`, `.step` | dropped: straight segments only |
+//! | `.interpolate`, `.step` | `.curve(Curve::StepAfter)` (also `Step`, `StepBefore`); `.smooth`, `.monotone`: straight segments until GUP-551 |
 //! | (no old histogram) | `gup_core::histogram(rows).x(\|d\| d.v).bins(Bins::Width(5.0))` |
 //! | `.group_by(..)` / `.stack_by(..)` / `.stack(..)` | `.group(\|d\| d.k.clone())` / `.stack(\|d\| d.k.clone())` |
 //! | `.gap(g)` / `.bar_width(..)` | `.padding(p)` / dropped: the band decides |
