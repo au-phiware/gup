@@ -109,6 +109,20 @@ pub(crate) fn controls(x: &[f64], y: &[f64]) -> (Vec<f64>, Vec<f64>) {
     (c1, c2)
 }
 
+/// The cubic's parameter at joint `j` (0 to 16) of a segment's pieces:
+/// the Chebyshev node `(1 - cos(pi j / 16)) / 2`, as `line.wgsl`'s
+/// `monotone_point`. The pieces are shortest at the rows, where a
+/// monotone cubic bends most (a level tangent at an extremum), so the
+/// pieces either side of a row both leave it along its tangent.
+pub(crate) fn joint(j: u32) -> f32 {
+    let n = crate::marks::MONOTONE_PIECES;
+    match j {
+        0 => 0.0,
+        j if j >= n => 1.0,
+        j => 0.5 - 0.5 * (std::f32::consts::PI * j as f32 / n as f32).cos(),
+    }
+}
+
 /// The cubic Bezier through `p0`..`p3` at `t`, evaluated as `line.wgsl`'s
 /// `bezier` does.
 pub(crate) fn bezier(p: [[f32; 2]; 4], t: f32) -> [f32; 2] {

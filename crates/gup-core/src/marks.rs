@@ -384,8 +384,9 @@ impl Curve {
     /// point `k` lies at `a`'s x for `k = 0`, `b`'s for the last and the
     /// turn's between, and at `a`'s level up to the first vertical piece,
     /// `b`'s after. For a monotone curve, point `k` is the segment's cubic
-    /// at `k / 16`, its control values `ctrl` (pixels; ignored by other
-    /// curves). SVG paths, CPU picks and later outline geometry read it.
+    /// at [`monotone::joint`](crate::monotone::joint)`(k)`, its control
+    /// values `ctrl` (pixels; ignored by other curves). SVG paths, CPU
+    /// picks and later outline geometry read it.
     pub(crate) fn path(
         self,
         a: [f32; 2],
@@ -397,7 +398,7 @@ impl Curve {
             let p = crate::monotone::control_points(a, b, ctrl);
             let mut out = [b; PATH_POINTS];
             for (k, q) in out.iter_mut().enumerate() {
-                *q = crate::monotone::bezier(p, k as f32 / MONOTONE_PIECES as f32);
+                *q = crate::monotone::bezier(p, crate::monotone::joint(k as u32));
             }
             // The ends exactly.
             (out[0], out[n]) = (a, b);
@@ -539,14 +540,15 @@ mod tests {
         assert_eq!(Curve::StepAfter.picks_next(a, b, 29.0), Some(false));
         assert_eq!(Curve::StepBefore.picks_next(a, b, 11.0), Some(true));
 
-        // A monotone curve: 17 points on the cubic, from `a` to `b`, x
-        // evenly spaced (the controls lie at thirds in x).
+        // A monotone curve: 17 points on the cubic, from `a` to `b`, x at
+        // the Chebyshev nodes (the controls lie at thirds in x, so x is
+        // linear in the cubic's parameter).
         let (p, n) = Curve::MonotoneX.path(a, b, [45.0, 25.0]);
         assert_eq!(n, 17);
         assert_eq!((p[0], p[16]), (a, b));
         for (k, q) in p[..n].iter().enumerate() {
             assert!(
-                (q[0] - (10.0 + 20.0 * k as f32 / 16.0)).abs() < 1e-4,
+                (q[0] - (10.0 + 20.0 * crate::monotone::joint(k as u32))).abs() < 1e-4,
                 "{k}: {q:?}"
             );
             assert!((20.0..=50.0).contains(&q[1]), "{k}: {q:?}");
