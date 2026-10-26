@@ -12,6 +12,7 @@ use super::{DRAWN, Key, erase_key, plot_setters};
 use crate::column::DictionaryKey;
 use crate::geom::Point;
 use crate::prelude::*;
+use crate::scene::{HAlign, VAlign};
 use crate::{ColumnValue, Context, Input, Layout, Resolved, Response, Result, RowId};
 
 type Value<T> = Arc<dyn Fn(&T) -> f64 + Send + Sync>;
@@ -53,6 +54,78 @@ enum ColorSpec<T> {
     Default,
     Fill(Color),
     Key(Key<T>),
+}
+
+/// Formats a bar's value as label text.
+type Format = Arc<dyn Fn(f64) -> String + Send + Sync>;
+
+/// Whether, and how, bars print their values (GUP-544).
+enum LabelSpec {
+    Off,
+    /// The value axis's tick format, else [`default_label`].
+    Default,
+    With(Format),
+}
+
+/// One bar's (or stacked segment's) label: its category, its summed
+/// value, the data span it covers and, for a stack, its stack key.
+struct BarLabel {
+    key: Arc<str>,
+    value: f64,
+    base: f64,
+    top: f64,
+    stack: Option<Arc<str>>,
+}
+
+/// The default value label: two decimals at most, trailing zeros and
+/// point trimmed, the minus written as U+2212; no thousands separators.
+fn default_label(v: f64) -> String {
+    let s = format!("{v:.2}");
+    let s = if s.contains('.') {
+        s.trim_end_matches('0').trim_end_matches('.')
+    } else {
+        &s
+    };
+    if s == "-0" {
+        return "0".into();
+    }
+    s.replace('-', &crate::scale::MINUS.to_string())
+}
+
+/// The relative luminance of a colour (WCAG 2).
+fn luminance(c: Color) -> f64 {
+    let lin = |v: f32| {
+        let v = f64::from(v);
+        if v <= 0.04045 {
+            v / 12.92
+        } else {
+            ((v + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b)
+}
+
+/// White or `#111111`, whichever contrasts more (WCAG 2 ratio) with `fill`.
+fn contrast_text(fill: Color) -> Color {
+    let dark = Color::hex(0x11_11_11);
+    let ratio = |a: Color, b: Color| {
+        let (la, lb) = (luminance(a), luminance(b));
+        (la.max(lb) + 0.05) / (la.min(lb) + 0.05)
+    };
+    if ratio(fill, Color::WHITE) >= ratio(fill, dark) {
+        Color::WHITE
+    } else {
+        dark
+    }
+}
+
+/// What fills a stack's segments, which decides its label colour.
+enum Fill {
+    /// The colour scale, by stack key.
+    Scale(ScaleRef<Categorical>),
+    Const(Color),
+    /// Overridden by `.color(key)`: the theme's label colour.
+    Theme,
 }
 
 enum Arrange<T> {
@@ -154,6 +227,9 @@ pub struct BarChart<T, O: Orientation = Vertical> {
     color_scale: Categorical,
     legend_title: Option<String>,
     group_padding: f64,
+    labels: LabelSpec,
+    /// The value axis's tick format, if the builder set one.
+    value_format: Option<Format>,
     orientation: PhantomData<O>,
 }
 
@@ -212,7 +288,10 @@ impl<T: Send + Sync + 'static> BarChart<T, Vertical> {
     /// `f` receives the tick value and returns its label. The category axis
     /// is labelled by its keys.
     pub fn y_tick_format(mut self, f: impl Fn(f64) -> String + Send + Sync + 'static) -> Self {
-        self.plot.y_tick_format(f);
+        let f: Format = Arc::new(f);
+        let shared = Arc::clone(&f);
+        self.plot.y_tick_format(move |v| shared(v));
+        self.value_format = Some(f);
         self
     }
 }
@@ -243,7 +322,10 @@ impl<T: Send + Sync + 'static> BarChart<T, Horizontal> {
     /// `f` receives the tick value and returns its label. The category axis
     /// is labelled by its keys.
     pub fn x_tick_format(mut self, f: impl Fn(f64) -> String + Send + Sync + 'static) -> Self {
-        self.plot.x_tick_format(f);
+        let f: Format = Arc::new(f);
+        let shared = Arc::clone(&f);
+        self.plot.x_tick_format(move |v| shared(v));
+        self.value_format = Some(f);
         self
     }
 }
@@ -270,6 +352,8 @@ impl<T: Send + Sync + 'static, O: Orientation> BarChart<T, O> {
             color_scale: Categorical::okabe_ito(),
             legend_title: None,
             group_padding: DEFAULT_GROUP_PADDING,
+            labels: LabelSpec::Off,
+            value_format: None,
             orientation: PhantomData,
         }
     }
@@ -411,6 +495,61 @@ impl<T: Send + Sync + 'static, O: Orientation> BarChart<T, O> {
         self
     }
 
+    /// Print each bar's value at its end: above a non-negative vertical bar,
+    /// below a negative one, right of (left of) a horizontal one, and
+    /// centred in each segment of a [`stack`](Self::stack) (a segment too
+    /// short to hold its label has none). The text is the value axis's tick
+    /// format (`y_tick_format` on [`bar`], `x_tick_format` on [`barh`]) if
+    /// one is set, else the value to two decimals at most. An automatic
+    /// value axis makes room for the labels. The last of this and
+    /// [`value_labels_with`](Self::value_labels_with) wins.
+    ///
+    /// ```
+    /// use gup_core::scene::TextRole;
+    /// use gup_core::{ChartExt, Context};
+    /// # fn main() -> gup_core::Result<()> {
+    /// let mut chart = gup_core::bar([("Q1", 3.0), ("Q2", 5.25), ("Q3", -1.5)])
+    ///     .x(|r| r.0)
+    ///     .y(|r| r.1)
+    ///     .value_labels();
+    /// # let cx = Context::new_blocking()?;
+    /// let (_, layout) = chart.render_resolved(&cx, 320, 200)?;
+    /// let mut labels: Vec<&str> = layout
+    ///     .texts
+    ///     .iter()
+    ///     .filter(|t| t.run.role == TextRole::Annotation)
+    ///     .map(|t| &*t.run.text)
+    ///     .collect();
+    /// labels.sort();
+    /// assert_eq!(labels, ["3", "5.25", "\u{2212}1.5"]);
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn value_labels(mut self) -> Self {
+        self.check_open();
+        self.labels = LabelSpec::Default;
+        self
+    }
+
+    /// Like [`value_labels`](Self::value_labels), with the text from `format`
+    /// (given the bar's value, or a segment's summed value).
+    ///
+    /// ```
+    /// let chart = gup_core::bar([("Q1", 3.0), ("Q2", 5.25)])
+    ///     .x(|r| r.0)
+    ///     .y(|r| r.1)
+    ///     .value_labels_with(|v| format!("${v:.1}M"));
+    /// # let _ = chart;
+    /// ```
+    pub fn value_labels_with(
+        mut self,
+        format: impl Fn(f64) -> String + Send + Sync + 'static,
+    ) -> Self {
+        self.check_open();
+        self.labels = LabelSpec::With(Arc::new(format));
+        self
+    }
+
     /// The fill opacity.
     ///
     /// # Panics
@@ -521,6 +660,7 @@ impl<T: Send + Sync + 'static, O: Orientation> BarChart<T, O> {
 
         let colours = ScaleRef::new(self.color_scale.clone());
         for (i, part) in parts.into_iter().enumerate() {
+            let label_rows = self.label_rows(&part, tables.as_ref().map(|t| &t[i]), &categories);
             let sel = self.plot.rects(part);
             if let Some(xk) = &self.cat_key {
                 let xk = Arc::clone(xk);
@@ -614,8 +754,167 @@ impl<T: Send + Sync + 'static, O: Orientation> BarChart<T, O> {
                     sel.legend_title(Rect::FILL, title.clone());
                 }
             }
+            if !label_rows.is_empty() {
+                let slot = if O::HORIZONTAL {
+                    count - 1 - i as u32
+                } else {
+                    i as u32
+                };
+                let stack = stacked.then(|| match &self.color {
+                    ColorSpec::Default => Fill::Scale(colours.clone()),
+                    ColorSpec::Fill(c) => Fill::Const(*c),
+                    ColorSpec::Key(_) => Fill::Theme,
+                });
+                self.add_value_labels(label_rows, slot, count, stack);
+            }
         }
         self.ops.clear();
+    }
+
+    /// The label rows of one bar layer: per row for simple and grouped
+    /// bars, per category (summed) for a stack. Empty if labels are off.
+    fn label_rows(
+        &self,
+        part: &[T],
+        table: Option<&HashMap<Arc<str>, (f64, f64)>>,
+        categories: &[Arc<str>],
+    ) -> Vec<BarLabel> {
+        let (Some(xk), Some(y), true) = (
+            &self.cat_key,
+            &self.value,
+            !matches!(self.labels, LabelSpec::Off),
+        ) else {
+            return Vec::new();
+        };
+        if let Some(table) = table {
+            let stack = match &self.arrange {
+                Arrange::Stack(k) => part.first().map(|r| k(r)),
+                _ => None,
+            };
+            return categories
+                .iter()
+                .filter_map(|c| {
+                    let &(base, top) = table.get(c)?;
+                    Some(BarLabel {
+                        key: Arc::clone(c),
+                        value: top - base,
+                        base,
+                        top,
+                        stack: stack.clone(),
+                    })
+                })
+                .collect();
+        }
+        part.iter()
+            .filter_map(|r| {
+                let v = y(r);
+                v.is_finite().then(|| BarLabel {
+                    key: xk(r),
+                    value: v,
+                    base: 0.0,
+                    top: v,
+                    stack: None,
+                })
+            })
+            .collect()
+    }
+
+    /// Add the text layers that print `rows`; `stack` is `Some` for a
+    /// stack layer, with what fills its segments.
+    fn add_value_labels(
+        &mut self,
+        rows: Vec<BarLabel>,
+        slot: u32,
+        count: u32,
+        stack: Option<Fill>,
+    ) {
+        let format: Format = match &self.labels {
+            LabelSpec::Off => return,
+            LabelSpec::With(f) => Arc::clone(f),
+            LabelSpec::Default => self
+                .value_format
+                .clone()
+                .unwrap_or_else(|| Arc::new(default_label)),
+        };
+        let text_of = move |l: &BarLabel| format(l.value);
+        if let Some(fill) = stack {
+            let layer = self.plot.text(rows);
+            let mid = |l: &BarLabel| (l.base + l.top) / 2.0;
+            if O::HORIZONTAL {
+                layer
+                    .y_key(|l| Arc::clone(&l.key))
+                    .x(mid)
+                    .within_x(|l| (l.base, l.top));
+            } else {
+                layer
+                    .x_key(|l| Arc::clone(&l.key))
+                    .y(mid)
+                    .within_y(|l| (l.base, l.top));
+            }
+            layer.text(text_of).anchor(Anchor::CENTER);
+            match fill {
+                Fill::Theme => {}
+                Fill::Const(c) => {
+                    layer.color(contrast_text(c));
+                }
+                Fill::Scale(colours) => {
+                    layer.color_by(move |l| {
+                        let scale = colours.read();
+                        let code = l
+                            .stack
+                            .as_ref()
+                            .and_then(|k| scale.keys().iter().position(|s| s == k));
+                        contrast_text(scale.eval(code.map_or(f64::NAN, |c| c as f64)))
+                    });
+                }
+            }
+            return;
+        }
+        let offset = matches!(self.arrange, Arrange::Group(_)).then(|| {
+            let band = self.band.clone();
+            // The offset of `sub_band(slot, count)`.
+            Derived::new(move || {
+                let w = band.read().band_width();
+                Px((((f64::from(slot) + 0.5) / f64::from(count) - 0.5) * w) as f32)
+            })
+        });
+        let (positive, negative): (Vec<_>, Vec<_>) = rows.into_iter().partition(|l| l.value >= 0.0);
+        let text_of = Arc::new(text_of);
+        for (rows, after) in [(positive, true), (negative, false)] {
+            if rows.is_empty() {
+                continue;
+            }
+            let text_of = Arc::clone(&text_of);
+            let layer = self.plot.text(rows);
+            layer.text(move |l| text_of(l));
+            if O::HORIZONTAL {
+                layer.y_key(|l| Arc::clone(&l.key)).x(|l| l.top);
+                if after {
+                    layer.anchor(Anchor::LEFT).dx(4.0);
+                } else {
+                    layer.anchor(Anchor::RIGHT).dx(-4.0);
+                }
+                if let Some(o) = &offset {
+                    layer.dy_with(o.clone());
+                }
+            } else {
+                layer.x_key(|l| Arc::clone(&l.key)).y(|l| l.top);
+                if after {
+                    // The baseline, not the descender line (`Anchor::BOTTOM`): the
+                    // digits' ink (which sits a little above or below it, snapped to whole
+                    // pixels) then ends
+                    // 4 px above the bar.
+                    layer
+                        .anchor(Anchor::new(HAlign::Middle, VAlign::Baseline))
+                        .dy(-4.5);
+                } else {
+                    layer.anchor(Anchor::TOP).dy(4.0);
+                }
+                if let Some(o) = &offset {
+                    layer.dx_with(o.clone());
+                }
+            }
+        }
     }
 
     /// The bar layers, one per group or stack key in first-seen order (one
@@ -712,5 +1011,30 @@ mod tests {
         assert!(!t[1].contains_key("A"));
         assert_eq!(t[2]["A"], (1.0, 2.0));
         assert_eq!(t[1]["B"], (0.0, 2.0));
+    }
+
+    #[test]
+    fn the_default_label_trims_and_uses_the_minus_sign() {
+        for (v, want) in [
+            (3.0, "3"),
+            (3.25, "3.25"),
+            (3.256, "3.26"),
+            (-1.5, "\u{2212}1.5"),
+            (1_234_567.0, "1234567"),
+            (-0.001, "0"),
+            (10.0, "10"),
+        ] {
+            assert_eq!(default_label(v), want, "{v}");
+        }
+    }
+
+    #[test]
+    fn stacked_label_text_contrasts_with_its_fill() {
+        // Okabe-Ito yellow takes dark text, blue takes white.
+        assert_eq!(
+            contrast_text(Color::hex(0xF0_E4_42)),
+            Color::hex(0x11_11_11)
+        );
+        assert_eq!(contrast_text(Color::hex(0x00_72_B2)), Color::WHITE);
     }
 }
