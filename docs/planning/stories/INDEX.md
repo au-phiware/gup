@@ -183,7 +183,7 @@ cell labels, error bars, pie charts and facets.
   CPU-laid-out `TextLayer` at data or band positions with anchors, offsets and
   `within` spans, clipped, in every target and SVG. Deps: GUP-540 📋, GUP-541 📋
   (soft, `plot.rs`), GUP-537 📋 (soft).
-- [GUP-555](GUP-555_Text_Labels_Make_Room_At_The_Plot_Edge.md) 🚧 — Text layers
+- [GUP-555](GUP-555_Text_Labels_Make_Room_At_The_Plot_Edge.md) ✅ — Text layers
   report per-side label extents, so automatic axes widen and explicit ones inset
   only where labels reach (capped at a quarter of the axis) and edge labels are
   drawn whole; label boxes measured once and cached. Not beside GUP-541 or
