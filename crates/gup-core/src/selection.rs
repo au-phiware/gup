@@ -1887,6 +1887,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             HitShape::AlignedBox => &["x", "y", "width", "height", "x_end", "y_end"],
             HitShape::Segment => &["x", "y", "x_end", "y_end", "width"],
             HitShape::Polyline => &["x", "y", "width"],
+            HitShape::Area => &["x", "y", "y_end"],
         };
         // The stored rows of the visible draw entries (RFC-001 S9f). A
         // polyline's ranges are read in pairs of consecutive rows.

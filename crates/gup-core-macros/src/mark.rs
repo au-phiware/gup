@@ -237,10 +237,11 @@ pub fn expand(input: &DeriveInput) -> syn::Result<TokenStream2> {
                 "AlignedBox" => (&["x", "y", "width", "height", "x_end", "y_end"], false),
                 "Segment" => (&["x", "y", "x_end", "y_end", "width"], false),
                 "Polyline" => (&["x", "y", "width"], true),
+                "Area" => (&["x", "y", "y_end"], true),
                 _ => {
                     return Err(syn::Error::new(
                         h.span(),
-                        "`hit` is `Unpickable`, `Disc`, `AlignedBox`, `Segment` or `Polyline`",
+                        "`hit` is `Unpickable`, `Disc`, `AlignedBox`, `Segment`, `Polyline` or `Area`",
                     ));
                 }
             };

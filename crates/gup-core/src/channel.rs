@@ -320,6 +320,10 @@ pub enum HitShape {
     Segment,
     /// Capsules from each row to the next, `width` wide (`Geometry::Polyline`).
     Polyline,
+    /// The trapezoid from each row to the next, between `y` and `y_end`
+    /// (`Geometry::Polyline`): the region the area mark fills, the two
+    /// triangles either side of a crossing included.
+    Area,
 }
 
 /// A mark: a WGSL module implementing the mark contract plus its channels.
@@ -365,7 +369,7 @@ pub enum HitShape {
 /// | `path` | `"my_crate::square"` | The import path of your module (identifiers joined by `::`, outside the `gup::` namespace). Only with `wgsl` or `file`. Default: your crate's name and the struct's name in snake case. |
 /// | `geometry` | `Quad`, `Polyline` | One quad per row, or one per pair of consecutive rows ([`Geometry`]); the input struct then ends with `<channel>_next` members. |
 /// | `antialias` | `Analytic`, `Msaa` | Whether the shader computes its own edge coverage (the default) or relies on MSAA ([`Antialias`]). |
-/// | `hit` | `Unpickable`, `Disc`, `AlignedBox`, `Segment`, `Polyline` | The CPU hit shape ([`HitShape`]). Each reads channels by name, which must be `Px`: `Disc` reads `x`, `y`, `radius`; `AlignedBox` `x`, `y`, `width`, `height`, `x_end`, `y_end`; `Segment` `x`, `y`, `x_end`, `y_end`, `width`; `Polyline` `x`, `y`, `width`. `Polyline` needs `geometry = Polyline`, the others `Quad`. Default: unpickable. |
+/// | `hit` | `Unpickable`, `Disc`, `AlignedBox`, `Segment`, `Polyline`, `Area` | The CPU hit shape ([`HitShape`]). Each reads channels by name, which must be `Px`: `Disc` reads `x`, `y`, `radius`; `AlignedBox` `x`, `y`, `width`, `height`, `x_end`, `y_end`; `Segment` `x`, `y`, `x_end`, `y_end`, `width`; `Polyline` `x`, `y`, `width`; `Area` `x`, `y`, `y_end`. `Polyline` and `Area` need `geometry = Polyline`, the others `Quad`. Default: unpickable. |
 /// | `gpu_pick` | (a flag) | The module defines `fn hit_distance(v: Varyings) -> f32` and `fn hit_row(v: Varyings) -> u32`, and the GPU pick draws the mark ([`Mark::GPU_PICK`]). |
 ///
 /// `#[channel(..)]` on a field (both keys are optional):

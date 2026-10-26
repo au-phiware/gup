@@ -378,6 +378,13 @@ impl Curve {
 /// touching it is drawn. The fill comes from a segment's first row. Rows with
 /// a column split across buffers (chunks) join as if they were one.
 ///
+/// A pointer inside a segment's region picks the row nearer in x (the first at
+/// or before the segment's middle, else the next); the tooltip attaches to that
+/// row's top point, and a brush selects rows by their top points. The GPU pick
+/// draws the region unchanged, so unlike the other marks it has no margin: the
+/// CPU pick also hits within [`PICK_TOLERANCE`](crate::PICK_TOLERANCE) outside
+/// the region.
+///
 /// An area draws with 4 samples (`Antialias::Msaa`). A host that draws in its
 /// own pass (`Prepared::draw`, egui, Bevy) chooses the sample count; at 1
 /// sample the edges alias.
@@ -405,7 +412,7 @@ impl Curve {
 /// # }
 /// ```
 #[derive(Debug, gup_core_macros::Mark)]
-#[mark(module = "gup::marks::area", geometry = Polyline, antialias = Msaa)]
+#[mark(module = "gup::marks::area", geometry = Polyline, hit = Area, gpu_pick, antialias = Msaa)]
 pub struct Area {
     /// x (logical pixels).
     #[channel(role = X)]

@@ -1,0 +1,5 @@
+error: `hit = Area` reads channels `x`, `y`, `y_end`; this mark has no `y_end`
+ --> tests/derive_mark_fail/hit_area_missing_channel.rs:8:64
+  |
+8 | #[mark(module = "gup::marks::line", geometry = Polyline, hit = Area)]
+  |                                                                ^^^^
