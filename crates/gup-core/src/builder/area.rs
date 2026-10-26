@@ -530,7 +530,7 @@ impl<T: Send + Sync + 'static> AreaChart<T> {
     /// The row nearest the pointer on the area under `at` (logical pixels),
     /// once the chart has been resolved; `None` over a point stacking
     /// inserted. See [`Area`] for which row an area picks.
-    pub fn pick(&mut self, at: Point) -> Option<&T> {
+    pub fn pick(&mut self, at: impl Into<Point>) -> Option<&T> {
         self.materialise();
         let row = self.plot.pick::<AreaPoint>(at)?.row?;
         self.data.as_ref()?.get(row)
