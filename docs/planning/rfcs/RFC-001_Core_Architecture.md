@@ -3841,13 +3841,13 @@ S14 deleted the old render path and made `gup` a facade over `gup-core`
   it. Area outlines and GUP-439's join geometry should read it too, rather than
   re-deriving steps.
 - **GPU.** `vertex_variant` plus the vertex count is the mechanism.
-  - **GUP-551** (monotone) adds a variant whose pieces subdivide the cubic, for
-    example 8 pieces and 48 vertices. It needs the tangents at both rows, so it
-    also reads rows `i − 1` and `i + 2`: a polyline geometry extension that adds
-    previous and second-next reads, with its slot cost (GUP-432's rejected
-    alternative 3). The variant, the signature label, the vertex count and
-    `Shape::Step`'s per-piece distance carry over unchanged. `Shape::Step`
-    generalises to any `Curve::path`.
+  - **GUP-551** (monotone) adds a variant whose pieces subdivide each segment's
+    cubic, for example 8 pieces and 48 vertices. Its tangents depend on the
+    neighbouring rows, which its story computes on the CPU per row rather than
+    reading more rows in the vertex stage. The variant, the signature label, the
+    vertex count and the per-piece capsule distance carry over unchanged, and
+    `Curve::path` and `Shape::Step` generalise from 4 points to the curve's
+    pieces.
   - **GUP-439** (translucent joins) must handle joins between pieces of one
     instance, which the shader can see (it computes both pieces), as well as
     joins between instances at rows.
