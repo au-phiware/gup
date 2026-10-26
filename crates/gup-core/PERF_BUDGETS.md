@@ -80,8 +80,8 @@ X) or `info` (printed, never fails).
 | `pipeline.link_create.cold_ms`     | 1.04      | <= 10     | `pipeline_timings`, its first run                   |
 | `pipeline.link_create.max_ms`      | 1.06      | info      | `pipeline_timings`                                  |
 | `wasm.wgpu.gz_bytes`               | 32,360    | info      | `scripts/wasm_size.sh`, bare wgpu                   |
-| `wasm.scatter.gz_bytes`            | 337,974   | +2%       | `scripts/wasm_size.sh`, the reference scatter       |
-| `wasm.over_wgpu.gz_bytes`          | 305,614   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10         |
+| `wasm.scatter.gz_bytes`            | 341,760   | +2%       | `scripts/wasm_size.sh`, the reference scatter       |
+| `wasm.over_wgpu.gz_bytes`          | 309,400   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10         |
 | `wasm.per_row_type.gz_bytes`       | 1,730     | <= 2600   | `scripts/wasm_size.sh`, one more Selection row type |
 
 A legitimate change that moves a number (a new guide, a bigger feature) records
@@ -508,3 +508,10 @@ seeded violation (GUP-417 retrospective).
   touch the axis lines. The slightly wider domains add guide ticks:
   `zoom.instances.bytes` 6,360,720 to 6,362,952 (measured at the merge), and
   `tests/zoom_uploads.rs`'s guide budget 1,503,048 to 1,506,360 B.
+- **N2 merges to GUP-550 (2026-10-26, orchestrator)**: GUP-529 (axis gap), 537,
+  541 (tick formats), 542 (text layer), 544 (bar value labels), 548 (histogram),
+  549 (heatmap), 553 (dark theme), 555 (label room) and 550 (curves and step
+  lines, +1,149 measured by its worker) take the WASM scatter from 337,974 to
+  341,760 B gz (+3,786, +1.1%), and over bare wgpu from 305,614 to 309,400 (90
+  KB of headroom under the 400,000 cap). Re-recorded so the +2% tolerance keeps
+  catching single-story jumps.
