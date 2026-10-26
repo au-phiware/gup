@@ -10,8 +10,8 @@ touches: [crates/gup-core/src/plot.rs]
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: 🚧
-Planned **Created**: 2026-10-26
+**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: ✅
+Complete (2026-10-27) Planned **Created**: 2026-10-26
 
 ## Context
 
@@ -60,35 +60,35 @@ format re-evaluates the plot's text layers.
 
 ### AC1: A format set through `plot_mut()` reaches the labels
 
-- [ ] New test in `crates/gup-core/tests/bar_value_labels.rs`: `gup_core::bar`
+- [x] New test in `crates/gup-core/tests/bar_value_labels.rs`: `gup_core::bar`
       over three rows (3.0, 5.25, −1.5) with `.value_labels()`, then
       `chart.plot_mut().y_tick_format(|v| format!("{v:.0}%"))`; after
       `render_resolved`, the sorted Annotation texts are exactly
       `["-2%", "3%", "5%"]` (the closure's own output, ASCII minus) and every y
       tick label ends in `%`.
-- [ ] The same for `gup_core::barh` with `plot_mut().x_tick_format(..)`.
-- [ ] A stacked chart (`.stack(..)`) with `plot_mut().y_tick_format(..)`: every
+- [x] The same for `gup_core::barh` with `plot_mut().x_tick_format(..)`.
+- [x] A stacked chart (`.stack(..)`) with `plot_mut().y_tick_format(..)`: every
       in-segment label uses the format.
 
 ### AC2: A format changed after a resolve is picked up
 
-- [ ] New test: resolve a chart with `.value_labels()` and no format (labels
+- [x] New test: resolve a chart with `.value_labels()` and no format (labels
       read `3`, `5.25`), then
       `chart.plot_mut().y_tick_format(|v| format!("{v} u"))` and resolve again:
       the labels read `3 u`, `5.25 u`.
 
 ### AC3: Existing behaviour holds
 
-- [ ] The builder's own `y_tick_format`/`x_tick_format` still label both ticks
+- [x] The builder's own `y_tick_format`/`x_tick_format` still label both ticks
       and bars (the existing GUP-544 tests pass unchanged).
-- [ ] `value_labels_with(f)` still wins over any axis format (existing test).
-- [ ] `rg -n 'value_format' crates/gup-core/src/builder/bar.rs` prints nothing.
-- [ ] Every golden passes unchanged (no rendered output changes):
+- [x] `value_labels_with(f)` still wins over any axis format (existing test).
+- [x] `rg -n 'value_format' crates/gup-core/src/builder/bar.rs` prints nothing.
+- [x] Every golden passes unchanged (no rendered output changes):
       `scripts/with_cargo_env.sh cargo test -p gup-core -- --test-threads=1`.
 
 ### AC4: Docs
 
-- [ ] `BarChart::value_labels`' doc says the text is "the value axis's tick
+- [x] `BarChart::value_labels`' doc says the text is "the value axis's tick
       format, however it was set (on the builder or through `plot_mut()`)", and
       its doctest is unchanged.
 
@@ -146,12 +146,12 @@ format re-evaluates the plot's text layers.
 
 ## Technical Tasks
 
-- [ ] Add `AxisFormat` and `Plot::axis_format`; switch `formats` and its three
+- [x] Add `AxisFormat` and `Plot::axis_format`; switch `formats` and its three
       readers (`set_format`, `apply_format`, the key-scale check).
-- [ ] Add `AnnotationLayer::invalidate` and call it from `set_format`.
-- [ ] Remove `value_format` from `BarChart`; read the slot in
+- [x] Add `AnnotationLayer::invalidate` and call it from `set_format`.
+- [x] Remove `value_format` from `BarChart`; read the slot in
       `add_value_labels`.
-- [ ] Tests for AC1 and AC2; doc line for AC4.
+- [x] Tests for AC1 and AC2; doc line for AC4.
 
 ## Dependencies
 
@@ -173,8 +173,8 @@ None directly.
 
 ## Success Metrics
 
-- [ ] One stored copy of each axis's format (`value_format` gone).
-- [ ] AC1's three orientations/arrangements and AC2 pass.
+- [x] One stored copy of each axis's format (`value_format` gone).
+- [x] AC1's three orientations/arrangements and AC2 pass.
 
 ## Risk Assessment
 
@@ -184,15 +184,56 @@ None directly.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`, plus
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`, plus
       `scripts/with_cargo_env.sh cargo test -p gup-core -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye: not needed, no golden changes (AC3)
-- [ ] `mask wasm-browser` not needed: no layout, input or wasm code changes
-- [ ] WASM size: `mask wasm-size` scatter gz bytes reported
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye: not needed, no golden changes (AC3)
+- [x] `mask wasm-browser` not needed: no layout, input or wasm code changes
+- [x] WASM size: `mask wasm-size` scatter gz bytes reported
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+`AxisFormat` (shared `Arc<RwLock<Option<TickFormat>>>`) replaces
+`Plot::formats`; `Plot::axis_format` hands the slot out. `set_format`
+invalidates every text layer through the new `AnnotationLayer::invalidate`.
+`BarChart::value_format` is gone; default labels read the slot at evaluation.
+Files: `plot.rs`, `text_layer.rs`, `builder/bar.rs`, `tests/bar_value_labels.rs`
+(4 new tests; 14 in the file pass). Full `gup-core` suite, `mask merge-check`
+and `cargo test --doc -p gup` pass; no golden changed. `mask wasm-size`: scatter
+gz 342158 bytes (limit 344733).
+
+## Retrospective
+
+**Completed**: 2026-10-27
+
+### Key Technical Learnings
+
+#### One shared slot beats two copies
+
+- **Challenge**: Labels captured the format at materialise, too early for
+  `plot_mut()` changes.
+- **Solution**: Capture the slot, not the value; read it at evaluation, and
+  invalidate text layers on set.
+- **Pattern**: Share the mutable source of truth and invalidate caches on write.
+
+### Architectural Decisions
+
+#### Invalidate every text layer on a format change
+
+- **Decision**: As the story specified.
+- **Trade-off**: One extra re-evaluation per layer; formats are set at build
+  time.
+
+### Development Workflow Insights
+
+- No resolve-cache test was affected.
+
+### Follow-up Stories
+
+None.

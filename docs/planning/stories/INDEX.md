@@ -256,7 +256,7 @@ all edit `plot.rs`, so they run one at a time; GUP-562 follows GUP-561 (it
 reuses its `Linear::step`) and edits `encoding.rs`, as GUP-566 does; GUP-565
 touches no hot file and runs beside any of them.
 
-- [GUP-560](GUP-560_Bar_Labels_Follow_The_Plot_Tick_Format.md) 🚧 — Bar value
+- [GUP-560](GUP-560_Bar_Labels_Follow_The_Plot_Tick_Format.md) ✅ — Bar value
   labels read the plot's stored tick format through a shared slot, so a format
   set via `plot_mut()` (before or after a resolve) labels the bars too; the
   builder's copy is removed. Deps: GUP-544 ✅, GUP-541 ✅.
