@@ -377,3 +377,69 @@ fn golden_stacked_horizontal_bars_with_a_hidden_thin_segment() {
         true,
     );
 }
+
+/// GUP-560: the sorted annotation texts.
+fn sorted_labels(layout: &Layout) -> Vec<String> {
+    let mut v: Vec<String> = labels(layout).iter().map(|(t, _)| t.to_string()).collect();
+    v.sort();
+    v
+}
+
+/// The axis (non-annotation) texts that are not category keys.
+fn tick_texts<'a>(layout: &'a Layout, keys: &[&str]) -> Vec<&'a str> {
+    layout
+        .texts
+        .iter()
+        .filter(|t| t.run.role != TextRole::Annotation)
+        .map(|t| &*t.run.text)
+        .filter(|t| !keys.contains(t))
+        .collect()
+}
+
+fn three() -> Vec<(&'static str, f64)> {
+    vec![("Q1", 3.0), ("Q2", 5.25), ("Q3", -1.5)]
+}
+
+#[test]
+fn a_format_set_through_plot_mut_labels_the_bars_too() {
+    let mut chart = gup_core::bar(three()).x(|r| r.0).y(|r| r.1).value_labels();
+    chart.plot_mut().y_tick_format(|v| format!("{v:.0}%"));
+    let (_, l) = render(&mut chart, 640, 400);
+    assert_eq!(sorted_labels(&l), ["-2%", "3%", "5%"]);
+    let ticks = tick_texts(&l, &["Q1", "Q2", "Q3"]);
+    assert!(!ticks.is_empty());
+    assert!(ticks.iter().all(|t| t.ends_with('%')), "{ticks:?}");
+}
+
+#[test]
+fn a_horizontal_format_set_through_plot_mut_labels_the_bars_too() {
+    let mut chart = gup_core::barh(three()).y(|r| r.0).x(|r| r.1).value_labels();
+    chart.plot_mut().x_tick_format(|v| format!("{v:.0}%"));
+    let (_, l) = render(&mut chart, 640, 400);
+    assert_eq!(sorted_labels(&l), ["-2%", "3%", "5%"]);
+    let ticks = tick_texts(&l, &["Q1", "Q2", "Q3"]);
+    assert!(!ticks.is_empty());
+    assert!(ticks.iter().all(|t| t.ends_with('%')), "{ticks:?}");
+}
+
+#[test]
+fn a_stacked_format_set_through_plot_mut_labels_every_segment() {
+    let mut chart = gup_core::bar(stacked_rows())
+        .x(|r| r.cat)
+        .y(|r| r.v)
+        .stack(|r| r.key)
+        .value_labels();
+    chart.plot_mut().y_tick_format(|v| format!("{v:.0}%"));
+    let (_, l) = render(&mut chart, 640, 400);
+    assert_eq!(sorted_labels(&l), ["10%", "12%", "15%", "18%", "20%"]);
+}
+
+#[test]
+fn a_format_changed_after_a_resolve_is_picked_up() {
+    let mut chart = gup_core::bar(three()).x(|r| r.0).y(|r| r.1).value_labels();
+    let (_, l) = render(&mut chart, 640, 400);
+    assert_eq!(sorted_labels(&l), ["3", "5.25", "\u{2212}1.5"]);
+    chart.plot_mut().y_tick_format(|v| format!("{v} u"));
+    let (_, l) = render(&mut chart, 640, 400);
+    assert_eq!(sorted_labels(&l), ["-1.5 u", "3 u", "5.25 u"]);
+}

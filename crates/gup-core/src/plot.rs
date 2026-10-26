@@ -31,7 +31,7 @@ use crate::selection::{Layer, Selection};
 use crate::text_layer::{AnnotationLayer, TextLayer};
 use crate::theme::Theme;
 use gup_text::TextSystem;
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 
 pub(crate) mod inset;
 
@@ -84,6 +84,21 @@ pub struct Resolved {
     pub layout: Layout,
     /// What to draw.
     pub scene: Scene,
+}
+
+/// An axis's tick format as the plot stores it, shared with what formats
+/// values the way the axis does (bar value labels).
+#[derive(Clone, Default)]
+pub(crate) struct AxisFormat(Arc<RwLock<Option<TickFormat>>>);
+
+impl AxisFormat {
+    pub(crate) fn get(&self) -> Option<TickFormat> {
+        self.0.read().unwrap_or_else(|p| p.into_inner()).clone()
+    }
+
+    fn set(&self, format: TickFormat) {
+        *self.0.write().unwrap_or_else(|p| p.into_inner()) = Some(format);
+    }
 }
 
 /// A chart with shared x/y position scales, data layers, axes and an
@@ -169,7 +184,7 @@ pub struct Plot {
     y_right_title: Option<String>,
     /// The tick label format set through `x_tick_format` and friends, per
     /// axis (x, y, right y); written to each scale installed on the axis.
-    formats: [Option<TickFormat>; 3],
+    formats: [AxisFormat; 3],
     theme: Theme,
     /// Set by `legends(false)`.
     legends_off: bool,
@@ -444,7 +459,7 @@ impl Plot {
             x_title: None,
             y_title: None,
             y_right_title: None,
-            formats: [None, None, None],
+            formats: Default::default(),
             theme: Theme::default(),
             legends_off: false,
             revision: 0,
@@ -676,6 +691,11 @@ impl Plot {
         self.set_format(2, f)
     }
 
+    /// The stored tick format slot of axis `axis` (0 x, 1 y, 2 right y).
+    pub(crate) fn axis_format(&self, axis: usize) -> AxisFormat {
+        self.formats[axis].clone()
+    }
+
     /// Store the format of axis `axis` and write it to the current scale.
     fn set_format(
         &mut self,
@@ -683,15 +703,19 @@ impl Plot {
         f: impl Fn(f64) -> String + Send + Sync + 'static,
     ) -> &mut Self {
         self.revision = self.revision.wrapping_add(1);
-        self.formats[axis] = Some(TickFormat::new(f));
+        self.formats[axis].set(TickFormat::new(f));
         self.apply_format(axis);
+        // Labels evaluated earlier may have read the old format.
+        for layer in &mut self.annotations {
+            layer.invalidate();
+        }
         self
     }
 
     /// Write the stored format of axis `axis` to its scale. A key scale is
     /// left alone (its `ticks` would relabel codes); resolve reports it.
     fn apply_format(&self, axis: usize) {
-        let Some(format) = &self.formats[axis] else {
+        let Some(format) = self.formats[axis].get() else {
             return;
         };
         let scale = match axis {
@@ -700,7 +724,7 @@ impl Plot {
             _ => self.y_right.as_ref(),
         };
         if let Some(scale) = scale.filter(|s| !s.reads_keys()) {
-            scale.set_tick_format(format.clone());
+            scale.set_tick_format(format);
         }
     }
 
@@ -1817,7 +1841,7 @@ impl Plot {
                 1 => Some(&self.y),
                 _ => self.y_right.as_ref(),
             };
-            if self.formats[axis].is_some() && scale.is_some_and(|s| s.reads_keys()) {
+            if self.formats[axis].get().is_some() && scale.is_some_and(|s| s.reads_keys()) {
                 return Err(Error::config(
                     name,
                     "band and point axes are labelled by their keys; \

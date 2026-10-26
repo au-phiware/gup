@@ -228,8 +228,6 @@ pub struct BarChart<T, O: Orientation = Vertical> {
     legend_title: Option<String>,
     group_padding: f64,
     labels: LabelSpec,
-    /// The value axis's tick format, if the builder set one.
-    value_format: Option<Format>,
     orientation: PhantomData<O>,
 }
 
@@ -288,10 +286,7 @@ impl<T: Send + Sync + 'static> BarChart<T, Vertical> {
     /// `f` receives the tick value and returns its label. The category axis
     /// is labelled by its keys.
     pub fn y_tick_format(mut self, f: impl Fn(f64) -> String + Send + Sync + 'static) -> Self {
-        let f: Format = Arc::new(f);
-        let shared = Arc::clone(&f);
-        self.plot.y_tick_format(move |v| shared(v));
-        self.value_format = Some(f);
+        self.plot.y_tick_format(f);
         self
     }
 }
@@ -322,10 +317,7 @@ impl<T: Send + Sync + 'static> BarChart<T, Horizontal> {
     /// `f` receives the tick value and returns its label. The category axis
     /// is labelled by its keys.
     pub fn x_tick_format(mut self, f: impl Fn(f64) -> String + Send + Sync + 'static) -> Self {
-        let f: Format = Arc::new(f);
-        let shared = Arc::clone(&f);
-        self.plot.x_tick_format(move |v| shared(v));
-        self.value_format = Some(f);
+        self.plot.x_tick_format(f);
         self
     }
 }
@@ -353,7 +345,6 @@ impl<T: Send + Sync + 'static, O: Orientation> BarChart<T, O> {
             legend_title: None,
             group_padding: DEFAULT_GROUP_PADDING,
             labels: LabelSpec::Off,
-            value_format: None,
             orientation: PhantomData,
         }
     }
@@ -499,8 +490,10 @@ impl<T: Send + Sync + 'static, O: Orientation> BarChart<T, O> {
     /// below a negative one, right of (left of) a horizontal one, and
     /// centred in each segment of a [`stack`](Self::stack) (a segment too
     /// short to hold its label has none). The text is the value axis's tick
-    /// format (`y_tick_format` on [`bar`], `x_tick_format` on [`barh`]) if
-    /// one is set, else the value to two decimals at most. An automatic
+    /// format, however it was set (on the builder or through `plot_mut()`),
+    /// if one is set, else the value to two decimals at most. A format set
+    /// only with `ScaleRef::tick_format` on a scale handle is not seen. An
+    /// automatic
     /// value axis makes room for the labels. The last of this and
     /// [`value_labels_with`](Self::value_labels_with) wins.
     ///
@@ -831,10 +824,11 @@ impl<T: Send + Sync + 'static, O: Orientation> BarChart<T, O> {
         let format: Format = match &self.labels {
             LabelSpec::Off => return,
             LabelSpec::With(f) => Arc::clone(f),
-            LabelSpec::Default => self
-                .value_format
-                .clone()
-                .unwrap_or_else(|| Arc::new(default_label)),
+            LabelSpec::Default => {
+                // Read at evaluation, so a format set later still applies.
+                let slot = self.plot.axis_format(usize::from(!O::HORIZONTAL));
+                Arc::new(move |v| slot.get().map_or_else(|| default_label(v), |f| f.apply(v)))
+            }
         };
         let text_of = move |l: &BarLabel| format(l.value);
         if let Some(fill) = stack {
