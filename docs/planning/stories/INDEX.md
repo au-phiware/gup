@@ -212,7 +212,7 @@ cell labels, error bars, pie charts and facets.
   baseline, seam-free when translucent, written to SVG as paths.
 - [GUP-546](GUP-546_Area_Picking.md) ✅ — `HitShape::Area` on the CPU and GPU,
   so areas get hover, tooltips and brushing. Deps: GUP-545 📋.
-- [GUP-547](GUP-547_Area_Builder_And_Stacked_Areas.md) 🚧 — `gup::area` with
+- [GUP-547](GUP-547_Area_Builder_And_Stacked_Areas.md) ✅ — `gup::area` with
   overlapping series, stacking aligned on the union of x values, `outline` and
   tooltips. Deps: GUP-545 📋, GUP-546 📋, GUP-537 📋.
 - [GUP-548](GUP-548_Histogram_Builder_And_Bin_Transform.md) ✅ —
