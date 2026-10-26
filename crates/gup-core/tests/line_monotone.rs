@@ -325,6 +325,34 @@ fn worst_coverage(image: &image::RgbaImage, path: &[Px2], width: f64) -> (f64, (
     worst
 }
 
+/// AC1: the worst case, a monotone line with column x, y, width and
+/// colour, binds 8 vertex columns (4 channels, 2 control columns, 2
+/// next-row columns) and draws.
+#[test]
+fn the_worst_case_binds_eight_vertex_columns() {
+    let cx = Context::new_blocking().unwrap();
+    let mut p = Plot::new();
+    let x = p.x(Linear::new());
+    let y = p.y(Linear::new());
+    p.add(Selection::<Row, Line>::new(monthly()))
+        .x_with(x.encode(|r: &Row| r.0))
+        .y_with(y.encode(|r: &Row| r.1))
+        .attr(
+            Line::WIDTH,
+            Linear::new()
+                .domain(0.0, 10.0)
+                .range(Px(1.0), Px(4.0))
+                .encode(|r: &Row| r.1),
+        )
+        .attr(Line::COLOR, Sequential::viridis().encode(|r: &Row| r.1))
+        .curve(Curve::MonotoneX);
+    let image = p.render(&cx, 320, 200).unwrap();
+    assert!(image.pixels().any(|q| q.0 != [255, 255, 255, 255]));
+    let (_, source) = p.glue_sources().remove(0);
+    assert!(source.contains("@location(7) y_next: f32"), "{source}");
+    assert!(!source.contains("@location(8)"), "{source}");
+}
+
 /// AC2: the glue of a monotone line reads two control columns through
 /// the y scale and calls `vertex_controls`, in its own pipeline.
 #[test]
