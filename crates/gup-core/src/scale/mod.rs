@@ -389,6 +389,9 @@ pub(crate) trait DynPositionScale: Send + Sync {
     /// [`reads_keys`](Self::reads_keys); `None` for a numeric scale or a
     /// key not in the domain.
     fn key_position(&self, key: &str) -> Option<f64>;
+    /// Label the scale's ticks with `format`: the shared slot of
+    /// [`ScaleRef::tick_format`], and a write for the caches.
+    fn set_tick_format(&self, format: TickFormat);
 
     /// Zoom by `factor` about pixel `anchor`: the domain becomes the values
     /// now drawn at the range ends pulled towards (`factor < 1`) or pushed
@@ -423,6 +426,11 @@ impl<S: PositionScale> DynPositionScale for ScaleRef<S> {
 
     fn dyn_encode(&self) -> Box<dyn crate::encoding::DynEncodeFn> {
         Box::new(self.clone())
+    }
+
+    fn set_tick_format(&self, format: TickFormat) {
+        *self.0.format.write().unwrap_or_else(|p| p.into_inner()) = Some(format);
+        self.0.revision.fetch_add(1, Ordering::Relaxed);
     }
 
     fn reads_keys(&self) -> bool {

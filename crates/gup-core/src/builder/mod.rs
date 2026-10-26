@@ -130,7 +130,7 @@
 //! | `.width(w)` / `.height(h)` (canvas) | the size argument of `save_png`, `render` or `GupApp::size` |
 //! | `.show_axes(true)` | always on |
 //! | `.grid()` / `.horizontal_grid()` | `.grid(Axes::Both)` / `.grid(Axes::Y)` |
-//! | `.x_tick_format(..)` | dropped: `Time` gives calendar labels |
+//! | `.x_tick_format(..)` | `.x_tick_format(\|v\| ..)`: the closure gets the tick value and returns its label |
 //! | `.hover_reveal(..)` / `.tooltip_config(..)` | `.tooltip(\|d\| format!(..))` |
 //! | `export_png(path, w, h)` | `chart.save_png(&cx, path, w, h)` |
 //! | `render_to_rgba(w, h)` | `chart.render(&cx, w, h)` |
@@ -188,6 +188,35 @@ pub(crate) const DRAWN: &str =
 /// The plot-level setters every builder shares, delegating to `self.plot`.
 macro_rules! plot_setters {
     () => {
+        $crate::builder::plot_setters!(titles);
+
+        /// Label the x axis ticks with `f` instead of the default labels.
+        /// `f` receives the tick value in the scale's domain units (Unix
+        /// seconds on a [`Time`](crate::Time) axis) and returns its label.
+        /// It works before or after `x_scale`; the last format set wins.
+        /// A band or point axis is labelled by its keys, so drawing
+        /// fails with a config error.
+        ///
+        /// ```no_run
+        /// # use gup_core::prelude::*;
+        /// let chart = gup_core::scatter([(1200.0, 2.0), (45000.0, 3.0)])
+        ///     .x(|p| p.0)
+        ///     .x_scale(Log::new())
+        ///     .x_tick_format(|v| format!("${:.0}k", v / 1000.0))
+        ///     .y(|p| p.1);
+        /// ```
+        pub fn x_tick_format(mut self, f: impl Fn(f64) -> String + Send + Sync + 'static) -> Self {
+            self.plot.x_tick_format(f);
+            self
+        }
+
+        /// Label the y axis ticks with `f`; see `x_tick_format`.
+        pub fn y_tick_format(mut self, f: impl Fn(f64) -> String + Send + Sync + 'static) -> Self {
+            self.plot.y_tick_format(f);
+            self
+        }
+    };
+    (titles) => {
         /// Set the chart title.
         pub fn title(mut self, title: impl Into<String>) -> Self {
             self.plot.title(title);

@@ -95,8 +95,9 @@ from CSV, with a date axis, legend and title, exported to PNG.
   with an explicit palette, `.width(1.5)`, `.grid(Axes::Y)` and a title. No
   hand-computed domain, plot rect, legend or SVG workaround.
 - Works: title, date ticks, legend at the right, grid, exact series colours.
-- Dropped: the old task's `%Y-%m` tick format (the time scale chooses its own
-  ticks).
+- `.x_tick_format(..)` labels the time axis `%Y-%m` with `chrono`
+  (`DateTime::from_timestamp`). The task also writes `t1.svg`, and an `SvgText`
+  check needs at least three labels of that shape.
 
 ### Task 2: `t2_bars`
 
@@ -117,7 +118,8 @@ axis.
   ticks and grid render. Categorical colours follow first-seen order, so the
   manifest labels colours, not segments. The SVG is a full-scene `SvgTarget`
   render and has all 200k `<circle>` marks (GUP-467).
-- Dropped: the old `$Nk` x tick format.
+- `.x_tick_format(|v| format!("${:.0}k", v / 1000.0))` labels the log x axis; an
+  `SvgText` check needs at least three `$..k` labels in the SVG.
 - `t3_scatter_window`: the same chart with `.tooltip(..)` in `gup::show`. With
   `DOGFOOD_AUTO=1` it resolves headless, takes a row's `pick_anchor`, and sets
   `GUP_SCREENSHOT_*` so the window hovers there. The window check recognises a

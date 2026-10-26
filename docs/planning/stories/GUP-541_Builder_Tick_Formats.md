@@ -16,8 +16,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: 📋
-Planned **Created**: 2026-10-24
+**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: ✅
+Complete (2026-10-26) **Created**: 2026-10-24
 
 ## Context
 
@@ -58,41 +58,41 @@ dogfood formats.
 
 ### AC1: `Plot` setters
 
-- [ ] `Plot::x_tick_format`, `Plot::y_tick_format` and
+- [x] `Plot::x_tick_format`, `Plot::y_tick_format` and
       `Plot::y_right_tick_format` exist with the signatures in Decisions, each
       with a doctest.
-- [ ] The format survives replacing the scale: `plot.x_tick_format(f)` then
+- [x] The format survives replacing the scale: `plot.x_tick_format(f)` then
       `plot.x(Log::new())` labels the log axis with `f` (test).
-- [ ] The last writer wins between `ScaleRef::tick_format` on the handle
+- [x] The last writer wins between `ScaleRef::tick_format` on the handle
       `plot.x(..)` returned and `Plot::x_tick_format` (test both orders).
-- [ ] On a band or point axis, `Plot::resolve` returns `Error::Config` whose
+- [x] On a band or point axis, `Plot::resolve` returns `Error::Config` whose
       message names the axis and says band and point axes are labelled by their
       keys (test).
 
 ### AC2: Every builder
 
-- [ ] `plot_setters!` gains `x_tick_format` and `y_tick_format`, so
+- [x] `plot_setters!` gains `x_tick_format` and `y_tick_format`, so
       `ScatterChart`, `LineChart` and `BarChart` have them, documented, and work
       before or after `x_scale`/`y_scale` (test on the scatter).
-- [ ] `crates/gup-core/tests/tick_format.rs` gains a builder test: a scatter
+- [x] `crates/gup-core/tests/tick_format.rs` gains a builder test: a scatter
       with `.y_tick_format(|v| format!("{v:.0}%"))` has every y tick label
       ending in `%` (from `Layout::texts`).
-- [ ] The builder module's migration table row for `.x_tick_format(..)` says
+- [x] The builder module's migration table row for `.x_tick_format(..)` says
       `.x_tick_format(|v| ..)` instead of "dropped".
 
 ### AC3: Dogfood formats restored
 
-- [ ] `t1_timeseries` labels its time axis `%Y-%m` with `chrono`
+- [x] `t1_timeseries` labels its time axis `%Y-%m` with `chrono`
       (`DateTime::from_timestamp(v as i64, 0)`), and also writes `t1.svg`
       (`SvgTarget`, as t3 does).
-- [ ] `t3_scatter_png` labels its log x axis with
+- [x] `t3_scatter_png` labels its log x axis with
       `format!("${:.0}k", v / 1000.0)`.
-- [ ] `Measure` gains
+- [x] `Measure` gains
       `SvgText { what: &'static str, matches: fn(&str) -> bool, min: usize }`
       ("at least `min` `<text>` elements whose content `matches`"); t1 checks
       `matches` = "7 characters, `-` at index 4" (min 3) on `t1.svg`, t3 checks
       "starts with `$` and ends with `k`" (min 3) on `t3_scatter.svg`.
-- [ ] `dogfood/README.md`'s two "Dropped" lines are replaced by what the tasks
+- [x] `dogfood/README.md`'s two "Dropped" lines are replaced by what the tasks
       now do. `./dogfood/run_all.sh` reports 10 PASS; the worker reads `t1.png`
       and `t3_scatter.png` and records the labels seen.
 
@@ -149,11 +149,11 @@ dogfood formats.
 
 ## Technical Tasks
 
-- [ ] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30 min.
-- [ ] Add `set_tick_format` and the three `Plot` setters with tests; commit.
-- [ ] Add the builder setters, the builder test and the migration-table row;
+- [x] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30 min.
+- [x] Add `set_tick_format` and the three `Plot` setters with tests; commit.
+- [x] Add the builder setters, the builder test and the migration-table row;
       commit.
-- [ ] Restore the dogfood formats, add `SvgText`, run dogfood; commit.
+- [x] Restore the dogfood formats, add `SvgText`, run dogfood; commit.
 
 ## Dependencies
 
@@ -172,7 +172,7 @@ dogfood formats.
 
 ## Success Metrics
 
-- [ ] Every builder can format its numeric axes in one call; both dogfood
+- [x] Every builder can format its numeric axes in one call; both dogfood
       formats are back and checked.
 
 ## Risk Assessment
@@ -183,15 +183,71 @@ dogfood formats.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1` and
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1` and
       `cargo test -p gup-core -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (`t1.png`, `t3_scatter.png`)
-- [ ] `mask wasm-browser`: not needed, labels only (no layout rule change)
-- [ ] WASM size: `mask wasm-size` scatter gz bytes reported
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye (`t1.png`, `t3_scatter.png`)
+- [x] `mask wasm-browser`: not needed, labels only (no layout rule change)
+- [x] WASM size: `mask wasm-size` scatter gz bytes reported
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `Plot::{x,y,y_right}_tick_format` store a `TickFormat` per axis
+  (`formats: [Option<TickFormat>; 3]`) and write it through the new
+  `DynPositionScale::set_tick_format`; `Plot::x`/`y`/`y_right` re-apply it to a
+  replacement scale. `resolve_full` returns `Error::Config` for a stored format
+  on a key (band/point) axis; the format is never written to a key scale.
+- Builders: `plot_setters!()` now includes `x_tick_format`/`y_tick_format`
+  (scatter, line, histogram); `plot_setters!(titles)` is the old set. Coverage:
+  scatter, line, histogram (both axes); `bar` (`y_tick_format` only) and `barh`
+  (`x_tick_format` only), the value axis, because the other axis is a band.
+  `heatmap` has two band axes and gets none. Migration-table row updated.
+- Dogfood: t1 `%Y-%m` (chrono) and writes `t1.svg`; t3 `$Nk`; `Measure::SvgText`
+  with checks (t1: 11 matching labels, t3: 13). `run_all.sh`: "Tasks: 10 pass, 0
+  pass with tracked gaps (XFAIL), 0 FAIL, 0 XPASS, 0 skipped".
+- Tests: 5 new in `tests/tick_format.rs` (`setters` module) plus 5 doctests.
+  Seen by eye: `t1.png` x labels `2020-01 … 2025-01`; `t3_scatter.png` x labels
+  `$1k $2k $5k $10k … $10000k`.
+- WASM scatter gz: 338047 B (budget pass).
+
+## Retrospective
+
+**Completed**: 2026-10-26
+
+### Key Technical Learnings
+
+#### Key scales and the stored format
+
+- **Challenge**: the format must outlive a scale replacement but must never
+  reach a band or point scale.
+- **Solution**: the plot stores the format and guards both writes
+  (`apply_format`) with `reads_keys()`; resolve reports the misuse.
+- **Pattern**: store intent on the owner, push it to replaceable children.
+
+### Architectural Decisions
+
+#### Value-axis-only setters on bar and barh
+
+- **Decision**: `BarChart<Vertical>` has only `y_tick_format`, `Horizontal` only
+  `x_tick_format`; heatmap has none (`plot_setters!(titles)`).
+- **Reasoning**: a setter that can only fail at resolve is a trap; the story's
+  "every builder" meant every numeric axis.
+- **Trade-off**: `plot_setters!` has two arms.
+
+### Development Workflow Insights
+
+- A worktree-isolated agent's shell refuses compound commands with heredocs,
+  runtime variables in `sed` and chained cargo calls; use Edit and plain
+  commands.
+- `merge-check` doc step catches broken intra-doc links in macro-expanded and
+  plain docs; run `cargo doc` with `-D warnings` before it.
+
+### Follow-up Stories
+
+None.

@@ -112,6 +112,44 @@ pub enum Measure {
     Tooltip { region: Region, lines: usize },
     /// An SVG file contains at least `min` `<tag` elements.
     SvgElements { tag: &'static str, min: usize },
+    /// An SVG file contains at least `min` `<text>` elements whose content
+    /// satisfies `matches` (e.g. a custom tick label format). `what` names
+    /// the pattern in reports.
+    SvgText {
+        what: &'static str,
+        matches: fn(&str) -> bool,
+        min: usize,
+    },
+}
+
+/// The text content of every `<text ...>..</text>` element of `svg`, with
+/// any nested tags removed.
+fn svg_texts(svg: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut rest = svg;
+    while let Some(start) = rest.find("<text") {
+        let after = &rest[start..];
+        let Some(open_end) = after.find('>') else {
+            break;
+        };
+        let Some(close) = after.find("</text>") else {
+            break;
+        };
+        let inner = after.get(open_end + 1..close).unwrap_or("");
+        let mut plain = String::new();
+        let mut in_tag = false;
+        for c in inner.chars() {
+            match c {
+                '<' => in_tag = true,
+                '>' => in_tag = false,
+                _ if !in_tag => plain.push(c),
+                _ => {}
+            }
+        }
+        out.push(plain.trim().to_string());
+        rest = &after[close + "</text>".len()..];
+    }
+    out
 }
 
 /// One check on one output file.
@@ -163,6 +201,23 @@ impl Measure {
                     Measured {
                         passed: n >= min,
                         detail: format!("{n} <{tag}> elements (need >= {min})"),
+                    }
+                }
+                Err(e) => fail(e.to_string()),
+            };
+        }
+        if let Measure::SvgText { what, matches, min } = *self {
+            return match std::fs::read_to_string(path) {
+                Ok(svg) => {
+                    let texts = svg_texts(&svg);
+                    let found: Vec<&String> = texts.iter().filter(|t| matches(t)).collect();
+                    let shown: Vec<&str> = found.iter().take(4).map(|t| t.as_str()).collect();
+                    Measured {
+                        passed: found.len() >= min,
+                        detail: format!(
+                            "{} <text> elements {what} (need >= {min}), e.g. {shown:?}",
+                            found.len()
+                        ),
                     }
                 }
                 Err(e) => fail(e.to_string()),
@@ -287,9 +342,9 @@ impl Measure {
                     ),
                 }
             }
-            Measure::SvgElements { .. } => Measured {
+            Measure::SvgElements { .. } | Measure::SvgText { .. } => Measured {
                 passed: false,
-                detail: "SvgElements must be evaluated on a file".into(),
+                detail: "SVG measures must be evaluated on a file".into(),
             },
         }
     }
@@ -489,7 +544,7 @@ fn ref_export_png() -> Task {
 }
 
 fn t1() -> Task {
-    let png = "t1.png";
+    let (png, svg) = ("t1.png", "t1.svg");
     // The plot rect of a fresh render's `Layout` (1000x500): the legend sits
     // at the right, so the plot ends at 0.913 instead of 0.96.
     let plot = Region::new(0.044, 0.084, 0.913, 0.934);
@@ -575,6 +630,15 @@ fn t1() -> Task {
                 Measure::Grey {
                     region: Region::new(0.5, 0.1, 0.9, 0.4),
                     min_px: 300,
+                },
+            ),
+            check(
+                svg,
+                "date tick labels use the `%Y-%m` format",
+                Measure::SvgText {
+                    what: "have 7 characters with `-` at index 4",
+                    matches: |t| t.len() == 7 && t.as_bytes()[4] == b'-',
+                    min: 3,
                 },
             ),
         ],
@@ -779,6 +843,15 @@ fn t3_png() -> Task {
                 Measure::SvgElements {
                     tag: "circle",
                     min: 1000,
+                },
+            ),
+            check(
+                svg,
+                "x tick labels use the `$Nk` format",
+                Measure::SvgText {
+                    what: "start with `$` and end with `k`",
+                    matches: |t| t.starts_with('$') && t.ends_with('k'),
+                    min: 3,
                 },
             ),
         ],

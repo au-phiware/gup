@@ -3,8 +3,9 @@
 
 //! Task 1: multi-line time series from CSV with date axis, legend, title, PNG.
 
-use chrono::NaiveDate;
+use chrono::{DateTime, NaiveDate};
 use gup::prelude::*;
+use gup::{SvgTarget, VectorTarget};
 
 struct Row {
     /// Unix seconds.
@@ -38,16 +39,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
     let rows = load("/tmp/gup-dogfood/prices.csv")?;
     let cx = Context::new_blocking()?;
-    gup::line(rows)
+    let mut chart = gup::line(rows)
         .x(|r| r.t)
         .x_scale(Time::new())
+        .x_tick_format(|v| {
+            DateTime::from_timestamp(v as i64, 0)
+                .map(|d| d.format("%Y-%m").to_string())
+                .unwrap_or_default()
+        })
         .y(|r| r.price)
         .color(|r| r.ticker.clone())
         .color_scale(Categorical::from_palette(PALETTE.map(Color::hex)))
         .width(1.5)
         .grid(Axes::Y)
-        .title("Daily close, 2020-2024")
-        .save_png(&cx, "/tmp/gup-dogfood/t1.png", 1000, 500)?;
+        .title("Daily close, 2020-2024");
+    chart.save_png(&cx, "/tmp/gup-dogfood/t1.png", 1000, 500)?;
     println!("wrote t1.png");
+    let resolved = chart.resolve(&cx, 1000.0, 500.0)?;
+    let mut svg = SvgTarget::new();
+    svg.render(&resolved.scene)?;
+    std::fs::write("/tmp/gup-dogfood/t1.svg", svg.svg())?;
+    println!("wrote t1.svg");
     Ok(())
 }

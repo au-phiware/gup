@@ -175,7 +175,7 @@ cell labels, error bars, pie charts and facets.
   automatic scales (tutorial 2: `plot.line` + a raw `Selection`, `Px(6.0)`
   radius) are clipped at the plot edges: find why widening is lost and fix it.
   Deps: GUP-530 ✅. Runs after GUP-528 (both edit `plot.rs`).
-- [GUP-541](GUP-541_Builder_Tick_Formats.md) 📋 — `x_tick_format`/
+- [GUP-541](GUP-541_Builder_Tick_Formats.md) ✅ — `x_tick_format`/
   `y_tick_format` on `Plot` and every builder, surviving a scale change, and the
   dogfood `%Y-%m` and `$Nk` formats restored with SVG text checks. Deps: GUP-474
   ✅.
