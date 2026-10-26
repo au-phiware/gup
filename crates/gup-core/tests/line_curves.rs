@@ -247,20 +247,21 @@ fn steps_ink_their_path_and_not_the_diagonal() {
         let d = draw(&steps_rows(), (0.0, 500.0), (0.0, 400.0), Opts::new(curve));
         let (least, at) = path_min(&d, curve);
         assert!(least >= 0.9, "{curve:?}: coverage {least} at {at:?}");
-        for w in d.points.windows(2) {
+        for (i, w) in d.points.windows(2).enumerate() {
             let (a, b) = (w[0].unwrap(), w[1].unwrap());
             let mid = ((a.0 + b.0) / 2.0, (a.1 + b.1) / 2.0);
             let quarter = (a.0 + (b.0 - a.0) / 4.0, a.1 + (b.1 - a.1) / 4.0);
             match curve {
                 // The diagonal's midpoint and the other step's corner are
-                // off the path.
+                // off the path (the corner only on the outer segments,
+                // where no neighbour's vertical runs through it).
                 Curve::StepAfter | Curve::StepBefore => {
                     let other = if curve == Curve::StepAfter {
-                        (a.0, b.1)
+                        (i == 0).then_some((a.0, b.1))
                     } else {
-                        (b.0, a.1)
+                        (i + 2 == d.points.len()).then_some((b.0, a.1))
                     };
-                    for p in [mid, quarter, other] {
+                    for p in [Some(mid), Some(quarter), other].into_iter().flatten() {
                         let k = ink_at(&d, p);
                         assert!(k < clear, "{curve:?}: ink {k} at {p:?}");
                     }
@@ -284,8 +285,8 @@ fn steps_ink_their_path_and_not_the_diagonal() {
         let r = 1.5 + 1.5;
         let outside = match curve {
             Curve::StepAfter => (b.0 + r, a.1),
-            Curve::StepBefore => (a.0, b.1 + r),
-            _ => ((a.0 + b.0) / 2.0 + r, a.1 - r),
+            Curve::StepBefore => (a.0, b.1 + r * (b.1 - a.1).signum()),
+            _ => ((a.0 + b.0) / 2.0 + r, a.1),
         };
         let k = ink_at(&d, outside);
         assert!(
