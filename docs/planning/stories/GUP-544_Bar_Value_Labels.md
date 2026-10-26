@@ -50,25 +50,25 @@ to hold it. The Decisions fix this.
 
 ### AC1: The API
 
-- [ ] `BarChart::value_labels()` and `BarChart::value_labels_with(f)` exist for
+- [x] `BarChart::value_labels()` and `BarChart::value_labels_with(f)` exist for
       both orientations (signatures in Decisions), documented with a doctest
       that asserts the labels' text from `Layout::texts`
       (`TextRole::Annotation`).
 
 ### AC2: Placement
 
-- [ ] Simple and grouped vertical bars: a non-negative bar's label is centred
+- [x] Simple and grouped vertical bars: a non-negative bar's label is centred
       over the bar with its ink bottom 4 px (±1) above the bar's top; a negative
       bar's label is centred under it, ink top 4 px below the bar's end (tests,
       from `PlacedText::bounds` and the bar's pixel edges).
-- [ ] Grouped bars: each label is centred on its own slot, not the band (test:
+- [x] Grouped bars: each label is centred on its own slot, not the band (test:
       label centre x within 1 px of the bar's centre).
-- [ ] Horizontal bars: the label sits right of a positive bar's end (ink left 4
+- [x] Horizontal bars: the label sits right of a positive bar's end (ink left 4
       px past it), left of a negative one's, vertically centred on the bar.
-- [ ] Stacked bars: each segment's label (its summed value) is centred in the
+- [x] Stacked bars: each segment's label (its summed value) is centred in the
       segment, and a segment shorter (narrower, horizontal) than its label's ink
       plus 2 px has no label (test with one 3 px segment).
-- [ ] Headroom (from GUP-555, no builder code): with an automatic value axis,
+- [x] Headroom (from GUP-555, no builder code): with an automatic value axis,
       the tallest positive bar's label lies wholly inside `Layout::plot` (and
       the most negative bar's, for negative data), for plot heights 160 and 400,
       and for all-positive data the bars' baseline stays on the axis line (the
@@ -76,14 +76,14 @@ to hold it. The Decisions fix this.
 
 ### AC3: Text and colour
 
-- [ ] Default text: the plot-level tick format of the value axis (GUP-541) if
+- [x] Default text: the plot-level tick format of the value axis (GUP-541) if
       one is set, else the default format in Decisions (unit test: `3.0 → "3"`,
       `3.25 → "3.25"`, `3.256 → "3.26"`, `-1.5 → "−1.5"` with U+2212,
       `1234567.0 → "1234567"`).
-- [ ] Stacked labels use white or `#111111`, whichever has the higher WCAG
+- [x] Stacked labels use white or `#111111`, whichever has the higher WCAG
       contrast ratio with the segment's fill (unit test on Okabe-Ito yellow →
       `#111111`, Okabe-Ito blue → white).
-- [ ] Golden `gup_core/bar_value_labels` (640×400): grouped vertical bars with
+- [x] Golden `gup_core/bar_value_labels` (640×400): grouped vertical bars with
       labels, including one negative bar. Golden
       `gup_core/bar_value_labels_stacked`: stacked horizontal bars with
       in-segment labels and one hidden thin segment. The worker reads both:
@@ -155,11 +155,11 @@ to hold it. The Decisions fix this.
 
 ## Technical Tasks
 
-- [ ] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30 min.
-- [ ] Label rows and text layers for simple and grouped vertical bars; tests;
+- [x] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30 min.
+- [x] Label rows and text layers for simple and grouped vertical bars; tests;
       commit.
-- [ ] Headroom tests at both heights (GUP-555 makes the room); commit.
-- [ ] Stacked and horizontal placement, contrast colours; goldens; commit.
+- [x] Headroom tests at both heights (GUP-555 makes the room); commit.
+- [x] Stacked and horizontal placement, contrast colours; goldens; commit.
 
 ## Dependencies
 
@@ -186,7 +186,7 @@ to hold it. The Decisions fix this.
 
 ## Success Metrics
 
-- [ ] `.value_labels()` labels every bar of every bar chart variant legibly.
+- [x] `.value_labels()` labels every bar of every bar chart variant legibly.
 
 ## Risk Assessment
 
@@ -195,15 +195,84 @@ to hold it. The Decisions fix this.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1` and
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1` and
       `cargo test -p gup-core -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (the two goldens)
-- [ ] `mask wasm-browser`: not needed, builder only
-- [ ] WASM size: `mask wasm-size` scatter gz bytes reported
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye (the two goldens)
+- [x] `mask wasm-browser`: not needed, builder only
+- [x] WASM size: `mask wasm-size` scatter gz bytes reported
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+`BarChart::value_labels()` / `value_labels_with(f)` (both orientations) in
+`crates/gup-core/src/builder/bar.rs`: label rows per bar (per category and key,
+summed, for stacks), two text layers per simple or grouped layer (sign split),
+one `within_*` layer per stack layer, colours by WCAG contrast. Room at the plot
+edge comes from GUP-555 with no builder code. Tests:
+`crates/gup-core/tests/bar_value_labels.rs` (10) plus 2 unit tests in `bar.rs`
+and 2 doctests. Goldens `gup_core/bar_value_labels` and
+`gup_core/bar_value_labels_stacked`, both read: labels legible and whole (the
+`51.25` at the top and `−12.5` at the bottom included), no overlap with bar
+edges, minus written as U+2212 as on the axis; the stacked one hides the 0.4
+segment's label and puts dark text on the orange, blue and green fills.
+
+Evidence: `mask merge-check` PASS (gup-core 444 s, doc, wasm-size,
+wasm-browser); `cargo test --doc -p gup` 51 + 4 pass; WASM scatter 341020 gz
+bytes (budget 344733, pass), over wgpu 308660 B.
+
+Deviations: see the retrospective (baseline anchor, `dy(-4.5)`, adapter metadata
+for in-fill labels).
+
+## Retrospective
+
+**Completed**: 2026-10-26
+
+### Key Technical Learnings
+
+#### `Anchor::BOTTOM` is the descender line
+
+- **Challenge**: Decisions fixed `Anchor::BOTTOM` + `dy(-4.0)`; measured, the
+  ink ended 5.9 px above the bar (AC: 4 ± 1) because BOTTOM sits at the
+  descender line.
+- **Solution**: anchor on the baseline (`Anchor::new(Middle, Baseline)`) with
+  `dy(-4.5)`. A scan of 40 bars showed the ink gap spans 2.8..4.2 px at `dy(-4)`
+  (baseline and glyph boxes snap to whole pixels), so -4.5 centres it at
+  3.3..4.7, inside ±1. Negative bars (`TOP`, `dy(4)`) and horizontal ones
+  (`LEFT`/`RIGHT`) met the AC as specified.
+- **Pattern**: measure ink gaps with `PlacedText::bounds` over many values; the
+  1 px snapping, not the anchor, sets the tolerance.
+
+#### The harness text check assumes text on the background
+
+- **Challenge**: `text_present` counts glyph pixels against the background
+  colour, so in-segment labels (dark on orange) fail with 2..7 px.
+- **Solution**: the stacked golden's adapter drops Annotation texts from the
+  metadata and the test checks each label's box for at least 5 white or
+  `#111111` pixels itself. Flagged to the orchestrator: this is an adapter
+  choice, not a tolerance change; a harness that takes a per-region background
+  would be the fix.
+
+### Architectural Decisions
+
+#### The builder keeps its own copy of the value tick format
+
+- **Decision**: `y_tick_format`/`x_tick_format` store the closure in the builder
+  as well as the plot (the plot's `formats` is private; `plot.rs` is out of this
+  story's `touches`).
+- **Trade-off**: a format set through `plot_mut()` is not seen by the labels.
+
+### Development Workflow Insights
+
+- The worktree was cut before GUP-555 merged; labels were dropped at the plot
+  edge until `git merge main`. Check `git log` against the dependencies first.
+
+### Follow-up Stories
+
+None. (A per-region background in the harness's text check is a small harness
+change, noted above.)

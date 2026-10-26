@@ -197,7 +197,7 @@ cell labels, error bars, pie charts and facets.
 - [GUP-543](GUP-543_Horizontal_Bars_And_Group_Padding.md) ✅ — `gup::barh`
   (`BarChart<T, Horizontal>`, categories top to bottom) and
   `BarChart::group_padding`. Deps: GUP-537 📋.
-- [GUP-544](GUP-544_Bar_Value_Labels.md) 🚧 — `value_labels()` and
+- [GUP-544](GUP-544_Bar_Value_Labels.md) ✅ — `value_labels()` and
   `value_labels_with(f)` on every bar variant: above or beside bar ends with
   room from GUP-555, centred and contrast-coloured in stacks, hidden where they
   do not fit. Deps: GUP-542 ✅, GUP-543 ✅, GUP-555 📋, GUP-541 📋 (soft),
