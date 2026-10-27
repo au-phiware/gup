@@ -225,9 +225,12 @@ cell labels, error bars, pie charts and facets.
 - [GUP-550](GUP-550_Line_Curves_And_Steps.md) ✅ — `Curve` and
   `.curve(Curve::StepAfter)` on lines: step pieces drawn exactly in the shader
   through a per-layer vertex count and glue constant, straight lines unchanged.
-- [GUP-551](GUP-551_Monotone_Line_Curves.md) 📋 — `Curve::MonotoneX`: Steffen
+- [GUP-551](GUP-551_Monotone_Line_Curves.md) ✅ — `Curve::MonotoneX`: Steffen
   tangents on the CPU as Bezier control columns, tessellated per segment, never
   overshooting. Deps: GUP-550 📋.
+- [GUP-576](GUP-576_Monotone_Piece_Count_From_Density.md) 💡 — Monotone curves
+  choose their piece count from pixel density, so 100K-row curves cost about
+  what straight lines cost (16 pieces cost 18x today). Deps: GUP-551 ✅.
 - [GUP-552](GUP-552_Chart_Subtitle.md) ✅ — `subtitle` on `Plot` and the
   builders, laid out under the title with its own theme size and colour. Deps:
   GUP-541 📋 (soft).

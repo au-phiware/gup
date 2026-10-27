@@ -189,7 +189,9 @@ impl<T: Send + Sync + 'static> LineChart<T> {
 
     /// How each line runs from one row to the next (default
     /// [`Curve::Linear`]): [`Curve::StepAfter`] for a value that holds
-    /// until the next row changes it. See [`Selection::curve`].
+    /// until the next row changes it, [`Curve::MonotoneX`] for a smooth
+    /// curve through every row that never overshoots it. See
+    /// [`Selection::curve`].
     ///
     /// ```
     /// use gup_core::prelude::*;

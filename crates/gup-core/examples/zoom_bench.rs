@@ -22,6 +22,10 @@
 //!   --chunk-rows N                    at most N rows per column chunk, so
 //!                                      the layer draws several instanced
 //!                                      draws (default: the device's size)
+//!   --line linear|monotone             draw a random walk of --points rows
+//!                                      as one Line (x the row index, y on
+//!                                      the log scale) with that curve,
+//!                                      instead of the scatter (GUP-551)
 //!   --sorted                           sort the rows by x before building, so
 //!                                      chunks are spatially coherent and
 //!                                      culling has something to skip
@@ -69,6 +73,7 @@ struct Options {
     size: Option<(u32, u32)>,
     uncapped: bool,
     time: bool,
+    line: Option<Curve>,
     sorted: bool,
     cull: bool,
     prefix: String,
@@ -86,6 +91,7 @@ fn options() -> Options {
         size: None,
         uncapped: false,
         time: false,
+        line: None,
         sorted: false,
         cull: true,
         prefix: "zoom".to_owned(),
@@ -113,6 +119,13 @@ fn options() -> Options {
             }
             "--uncapped" => o.uncapped = true,
             "--time" => o.time = true,
+            "--line" => {
+                o.line = Some(match value().as_str() {
+                    "linear" => Curve::Linear,
+                    "monotone" => Curve::MonotoneX,
+                    other => panic!("unknown curve {other}"),
+                });
+            }
             "--sorted" => o.sorted = true,
             "--no-cull" => o.cull = false,
             "--metric-prefix" => o.prefix = value().clone(),
@@ -619,7 +632,10 @@ fn main() {
     if o.sorted {
         rows.sort_by(|a, b| a.gdp_per_capita.total_cmp(&b.gdp_per_capita));
     }
-    let (mut plot, x, y) = if o.time {
+    let (mut plot, x, y) = if let Some(curve) = o.line {
+        let (plot, x, y) = line_plot(o.points, curve, o.chunk_rows);
+        (plot, XScale::Linear(x), y)
+    } else if o.time {
         let (plot, x, y) = time_plot(rows, Px(o.radius), o.chunk_rows);
         (plot, XScale::Time(x), y)
     } else {
@@ -634,10 +650,12 @@ fn main() {
     );
     println!(
         "x scale: {}",
-        if o.time {
-            "Time (hi/lo F32x2Relative column)"
+        if let Some(curve) = o.line {
+            format!("Linear (F32Relative column), one {curve:?} line")
+        } else if o.time {
+            "Time (hi/lo F32x2Relative column)".to_owned()
         } else {
-            "Linear (F32Relative column)"
+            "Linear (F32Relative column)".to_owned()
         }
     );
     let frames = o.frames;
@@ -715,6 +733,41 @@ fn time_plot(
             heat.encode(|c: &scatter::Country| c.life_expectancy),
         )
         .attr(Circle::RADIUS, radius);
+    if let Some(rows) = max_chunk_rows {
+        layer.max_chunk_rows(rows);
+    }
+    (plot, x, y)
+}
+
+/// `--line`: a random walk of `n` rows drawn as one line, 1.5 px wide, x
+/// the row index and y (positive) on the log scale, with `curve`.
+fn line_plot(
+    n: usize,
+    curve: Curve,
+    max_chunk_rows: Option<u32>,
+) -> (Plot, ScaleRef<Linear>, ScaleRef<Log>) {
+    // xorshift64: the same walk every run.
+    let mut seed = 0x2545_f491_4f6c_dd1d_u64;
+    let mut v = 0.0f64;
+    let rows: Vec<(f64, f64)> = (0..n)
+        .map(|i| {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            v += ((seed >> 11) as f64 / (1u64 << 53) as f64 - 0.5) * 0.05;
+            (i as f64, 1e6 * v.exp())
+        })
+        .collect();
+    let mut plot = Plot::new();
+    let (x, y) = (plot.x(Linear::new()), plot.y(Log::new()));
+    let layer = plot
+        .title("Random walk")
+        .add(Selection::<(f64, f64), Line>::new(rows));
+    layer
+        .x_with(x.encode(|r: &(f64, f64)| r.0))
+        .y_with(y.encode(|r: &(f64, f64)| r.1))
+        .width(Px(1.5))
+        .curve(curve);
     if let Some(rows) = max_chunk_rows {
         layer.max_chunk_rows(rows);
     }
