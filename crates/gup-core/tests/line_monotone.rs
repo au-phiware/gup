@@ -21,6 +21,8 @@ type Px2 = (f64, f64);
 const RED: Color = Color::hex(0xff0000);
 const W: u32 = 500;
 const H: u32 = 400;
+/// The pieces each segment is drawn as (`marks::MONOTONE_PIECES`).
+const PIECES: u32 = 16;
 
 /// Steffen's tangents of one run (finite rows, x increasing), written out
 /// independently of the crate's.
@@ -469,12 +471,12 @@ fn the_curve_passes_through_every_row_without_overshoot() {
 /// The most a polyline of 16 pieces per segment (as drawn) strays from
 /// the cubic, in pixels: sampled at 64 points per piece.
 fn tessellation_error(e: &Expected) -> f64 {
-    let pieces = e.polyline(16);
+    let pieces = e.polyline(PIECES);
     let mut worst = 0.0f64;
     for i in 0..e.segments.len() {
-        for k in 0..16 * 64 {
-            let p = e.at(i, f64::from(k) / 1024.0);
-            let near = pieces[i * 16..=i * 16 + 16]
+        for k in 0..PIECES * 64 {
+            let p = e.at(i, f64::from(k) / f64::from(PIECES * 64));
+            let near = pieces[i * PIECES as usize..=(i + 1) * PIECES as usize]
                 .windows(2)
                 .map(|s| dist(p, s[0], s[1]))
                 .fold(f64::INFINITY, f64::min);
@@ -507,9 +509,9 @@ fn joints_are_seamless() {
             let image = f.image();
             let expected = f.expected(&rows);
             let t = tessellation_error(&expected);
-            assert!(t < 0.25, "the pieces stray {t} px from the cubic");
-            let path = expected.polyline(16);
+            let path = expected.polyline(PIECES);
             let (e, at) = worst_coverage(&image, &path, f64::from(width));
+            assert!(t < 0.25, "the pieces stray {t} px from the cubic");
             assert!(e <= 0.08, "width {width}: ink off by {e} at {at:?}");
         }
     }
@@ -536,7 +538,7 @@ fn on_a_log_scale_the_curve_stays_between_its_rows() {
     // The two segments at a row each cut their pieces at the normal of
     // their own tangent there, which a log scale bends apart; no seam
     // shows (measured 0.004 on 2026-10-27).
-    let (worst, at) = worst_coverage(&image, &e.polyline(16), 3.0);
+    let (worst, at) = worst_coverage(&image, &e.polyline(PIECES), 3.0);
     assert!(worst <= 0.08, "ink off by {worst} at {at:?}");
     let pts = e.rows();
     for i in 0..pts.len() - 1 {
