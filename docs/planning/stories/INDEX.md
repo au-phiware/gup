@@ -260,7 +260,7 @@ touches no hot file and runs beside any of them.
   labels read the plot's stored tick format through a shared slot, so a format
   set via `plot_mut()` (before or after a resolve) labels the bars too; the
   builder's copy is removed. Deps: GUP-544 ✅, GUP-541 ✅.
-- [GUP-561](GUP-561_Axis_Ends_Fit_Bars_And_Bands.md) 🚧 — Bar and histogram
+- [GUP-561](GUP-561_Axis_Ends_Fit_Bars_And_Bands.md) ✅ — Bar and histogram
   value axes round out to their own tick step (`PositionScale::nice_to`), so
   every bar ends at or inside a labelled tick, and band and point axes lose the
   far-end `plot_padding` that overran heatmap cells. Deps: GUP-543 ✅, GUP-548
