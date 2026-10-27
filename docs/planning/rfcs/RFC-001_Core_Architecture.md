@@ -3906,3 +3906,95 @@ S14 deleted the old render path and made `gup` a facade over `gup-core`
 - A step line draws 12 or 18 vertices per segment instead of 6, with the same
   bytes, uploads and draw calls.
 - WASM: see the story's Definition of Done (the scatter does not draw a line).
+
+## GUP-551 findings (2026-10-27)
+
+[GUP-551](../stories/GUP-551_Monotone_Line_Curves.md) added `Curve::MonotoneX`:
+Steffen tangents per run of rows (finite, x strictly increasing), each segment a
+cubic Bezier with control points at one and two thirds of the segment in x.
+
+### Mechanism: rule (A), control columns
+
+- **Rule (A) applied**: no change to the column store's public API or to
+  `Selection`'s. When a monotone layer's columns are evaluated, `Selection`
+  computes `c1`, `c2` (`crate::monotone::controls`, `f64`, data order) from the
+  evaluated x and y and appends them to the store as two more columns in y's
+  format. Straight and step layers neither allocate nor bind them. Switching to
+  or from `MonotoneX` evaluates the columns again.
+- **Glue**: `GlueSpec::controls` names the channel the columns are read through
+  (y). They are vertex columns `y_out` and `y_in` after the channels' columns,
+  each read through y's whole chain with its own chunk base (`y_out_base`,
+  `y_in_base`; `ChunkBase::control`). The vertex entry calls
+  `vertex_controls(m, controls, vertex_index, row, view, 4u, rows)`. The label
+  `curve monotone-x` gives the pipeline. Straight-line glue is byte-identical
+  (`line_glue.wgsl`, `line_glue_nulls.wgsl` still pass); step glue unchanged.
+- **Slots, worst case** (column x, y, width, colour): 4 columns + 2 control
+  columns + 2 next-row columns = **8**, the WebGPU default `max_vertex_buffers`.
+  A test draws it. Validity planes count the control columns, which are finite
+  exactly when their row's y is (a row with no segment stores its own y), so
+  they add no nulls.
+- **Appends**: a row's tangent depends on the rows within two of it. The layer
+  keeps the last three rows' (x, y) (`tail`), computes the new rows' controls
+  from them, and rewrites the controls of the two rows before the first new row
+  with `ColumnStore::rewrite` (crate-private). A rewrite updates the CPU copy if
+  kept and queues a one-row GPU patch if the row is uploaded, so it also works
+  on chunks `Retain` released. The curve after appends equals the curve of all
+  rows at once (test, with `Retain::Auto` and `GpuOnly`, 4-row chunks).
+
+### Drawing: 16 pieces, Chebyshev nodes, plane joints
+
+- Each segment is drawn as 16 capsules (96 vertices) between points of the
+  pixel-space cubic at the Chebyshev nodes `t_j = (1 - cos(pi j/16)) / 2`. They
+  are shortest at the rows, where a monotone cubic bends most (level tangent at
+  an extremum). Against uniform spacing this halves the tessellation error (0.19
+  px against 0.36 px at the sharpest knee tested), and the end piece leaves a
+  row within 4-6 degrees of the tangent (21-33 for uniform).
+- **Joints**: every joint is a `JOIN_PLANE`. Each piece draws its own round
+  capsule, but only the pixels on its side of a plane through the joint. Within
+  a segment, the plane bisects the two pieces (both compute it from the same
+  points), so each side's own capsule is the nearer one and the union is exactly
+  a round-joined polyline. At a row, the plane is perpendicular to the curve's
+  tangent, which both segments compute alike under linear and time y scales.
+  **No slack band**: GUP-550's 0.01 px band double-drew about one rim pixel in
+  fifty joints, which is visible with 16 joints per segment. Every pixel near
+  the curve is within 0.004 of a round-joined stroke along the pieces (widths
+  1.5, 3, 6), except 0.065 on the inner side of a valley that bends tighter than
+  the stroke's half width. On a log scale it is also within 0.004.
+- **Known**: at a row where x does not increase (unsorted rows, drawn straight),
+  the two sides' planes differ, so the corner shows a small notch or spike. Ends
+  next to a null are cut flat at the row.
+- **Picks**: `side` is the fragment's x past the midpoint, times the sign of the
+  segment's x direction. The CPU mirror is `Curve::picks_next`. `Shape::Path`
+  (formerly `Shape::Step`) measures the distance to `Curve::path`'s 17 points,
+  using the stored control columns (or ones computed from the rows when the CPU
+  columns are released).
+- **SVG**: `VectorMark::Cubic`, a `<path>` of `C` commands with the same control
+  points.
+
+### Cost (AC4), not met as written
+
+`zoom_bench --line linear|monotone` draws a 100K-row random walk (log y) in a
+1600x1000 window, Mailbox uncapped, release, on the Intel HD 630:
+
+| Line               | GPU pass median | Ratio |
+| ------------------ | --------------- | ----- |
+| `Linear`           | 1.45-1.59 ms    | 1x    |
+| `MonotoneX`, 16    | 28.7 ms         | 18x   |
+| `MonotoneX`, 8     | 14.0 ms         | 8.8x  |
+| 16, adaptive count | 25.7 ms         | 17x   |
+
+- The cost is the vertex count (96 against 6 per row). Collapsing flat segments
+  to one piece, with the other vertices sent outside the clip volume, saved
+  under 10%.
+- With 8 pieces (the story's fallback), the golden visibly facets at normal
+  size. The tessellation error is 0.68 px, and the drawn curve is up to 1.5 px
+  from the cubic.
+- The story keeps 16 pieces, a decision taken with the orchestrator and recorded
+  in the story. A per-layer piece count chosen from the data's pixel density is
+  the follow-up, GUP-576.
+
+### Areas
+
+`gup::area` and stacked areas have no curve setter. Curved areas stay out of
+scope. When they come, they must build the region from `Curve::path` (with the
+control values) and pick with `Curve::picks_next`.
