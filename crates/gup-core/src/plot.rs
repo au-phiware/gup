@@ -1951,7 +1951,7 @@ impl Plot {
             let Some(s) = s else { continue };
             if s.is_auto() {
                 if self.tick_ends[i] {
-                    s.nice_to([counts.0, counts.1, counts.2][i]);
+                    s.nice_to([counts.0, counts.1, counts.2][i], true);
                 } else {
                     s.nice();
                 }
@@ -2236,7 +2236,8 @@ impl Plot {
         ];
         self.widened = widened;
         // Widening can change the step the ticks use; grow a rounded axis
-        // back to ticks at both ends. Only grows, so the room is kept.
+        // back to ticks at both ends. Only grows, so the room (and the
+        // step past the data end) is kept.
         let tick_ends = self.tick_ends;
         let round_out = |counts: (usize, usize, usize), only: [bool; 3]| {
             let counts = [counts.0, counts.1, counts.2];
@@ -2246,7 +2247,7 @@ impl Plot {
                     && only[i]
                     && s.is_auto()
                 {
-                    s.nice_to(counts[i]);
+                    s.nice_to(counts[i], false);
                 }
             }
         };

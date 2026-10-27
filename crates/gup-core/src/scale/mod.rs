@@ -134,8 +134,10 @@ pub trait PositionScale: ShaderFn<Out = Px> + EncodeFn<Output = Px> + CpuMirror 
     /// Extend the domain to round values.
     fn nice(&mut self);
     /// Extend the domain to multiples of the step `ticks(count)` uses, so
-    /// both ends are ticks. Defaults to [`nice`](Self::nice).
-    fn nice_to(&mut self, _count: usize) {
+    /// both ends are ticks. With `strict`, an end that is the domain's own
+    /// nonzero end moves out to the next tick, so nothing drawn at the data
+    /// end touches the plot edge. Defaults to [`nice`](Self::nice).
+    fn nice_to(&mut self, _count: usize, _strict: bool) {
         self.nice();
     }
     /// About `count` ticks inside the domain.
@@ -368,7 +370,7 @@ pub(crate) trait DynPositionScale: Send + Sync {
     fn revision(&self) -> u64;
     fn is_auto(&self) -> bool;
     fn nice(&self);
-    fn nice_to(&self, count: usize);
+    fn nice_to(&self, count: usize, strict: bool);
     fn set_range(&self, r0: Px, r1: Px);
     fn ticks(&self, count: usize) -> Ticks;
     fn eval(&self, x: f64) -> f64;
@@ -458,8 +460,8 @@ impl<S: PositionScale> DynPositionScale for ScaleRef<S> {
         self.write().nice();
     }
 
-    fn nice_to(&self, count: usize) {
-        self.write().nice_to(count);
+    fn nice_to(&self, count: usize, strict: bool) {
+        self.write().nice_to(count, strict);
     }
 
     fn set_range(&self, r0: Px, r1: Px) {

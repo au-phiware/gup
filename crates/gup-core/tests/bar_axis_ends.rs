@@ -70,14 +70,14 @@ fn check(name: &str, layout: &Layout, vertical: bool, (lo, hi): (f64, f64)) {
     let first = ticks.first().expect("ticks").0;
     let last = ticks.last().expect("ticks").0;
     let eps = 1e-9 * (hi - lo).abs();
+    // Strictly inside, so no bar touches the plot edge.
     assert!(
-        hi <= last + eps,
-        "{name}: bar end {hi} past last tick {last}: {ticks:?} plot {:?}",
-        layout.plot
+        hi <= 0.0 || hi < last - eps,
+        "{name}: bar end {hi} not below last tick {last}: {ticks:?}"
     );
     assert!(
-        lo >= first - eps,
-        "{name}: bar end {lo} before first tick {first}"
+        lo >= 0.0 || lo > first + eps,
+        "{name}: bar end {lo} not above first tick {first}"
     );
     assert!(
         ticks.iter().any(|t| t.0.abs() <= eps),

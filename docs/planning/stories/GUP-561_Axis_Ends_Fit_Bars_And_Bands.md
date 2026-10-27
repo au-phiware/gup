@@ -285,6 +285,19 @@ Results: `mask merge-check --dogfood` PASS (incl. wasm-browser, dogfood);
 +2%, pass). `perf_budget --skip-wasm`: exact rows unchanged; first run
 `zoom.cpu.median_ms` 0.839 vs 0.828 (noise), second run clean.
 
+### Amendment: strict far end (2026-10-27)
+
+A bar ending exactly on the last tick ran to the plot edge and looked cut off.
+`nice_to(count, strict)`: with `strict` (the first rounding of a bar axis), a
+nonzero data end that is already a tick moves out one step; the zero baseline
+stays. Re-rounds after widening or thinning are not strict (they only grow).
+AC1/AC2 tests assert the strict rule (tallest bar strictly below the last tick),
+plus a unit case with the max exactly on a tick. Re-blessed again:
+`tutorials/01_grouped_bars` (axis 0-8, Q3 South 7 below it) and
+`builder_owned_keys` (axis 0-70, 60 below it). `rect_bars` is hand-built rects,
+not a bar builder, so its May bar (60) still touches the top. The builders.rs
+hand-built reference now adds a zero-height rect at the rounded end.
+
 ## Retrospective
 
 **Completed**: 2026-10-27
