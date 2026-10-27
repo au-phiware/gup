@@ -389,7 +389,8 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         let start = self.rows.len();
         self.rows.extend(rows);
         let controls = match self.columns {
-            Some(_) => self.control_source()?,
+            Some(_) if self.controlled() => self.control_source()?,
+            Some(_) => None,
             None => None,
         };
         if let Some(store) = &mut self.columns {
@@ -665,10 +666,18 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             })
     }
 
+    /// Whether the layer reads control columns (a [`Curve::MonotoneX`]
+    /// line). Constant `false` for a mark that is not a polyline, so its
+    /// code drops the control paths.
+    #[inline]
+    fn controlled(&self) -> bool {
+        M::GEOMETRY == Geometry::Polyline && self.curve.has_controls()
+    }
+
     /// Where the curve's control values come from, if it has them
     /// ([`Curve::MonotoneX`]): x and y must be numeric columns.
     fn control_source(&self) -> Result<Option<ControlSource>> {
-        if !self.curve.has_controls() {
+        if !self.controlled() {
             return Ok(None);
         }
         let (mut x, mut y) = (None, None);
@@ -700,7 +709,11 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
     /// channels': each row's control values ([`crate::monotone`]), in y's
     /// format.
     fn evaluate(&mut self, cx: &Context) -> Result<&mut ColumnStore> {
-        let controls = self.control_source()?;
+        let controls = if self.controlled() {
+            self.control_source()?
+        } else {
+            None
+        };
         let mut formats: Vec<_> = self
             .column_encodings()
             .map(|(_, c)| c.links()[0].input_format())
@@ -942,7 +955,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
                 Unbrushed::Grey(_) => glue::BrushStyle::Grey,
             }),
             variant: self.curve.variant(),
-            controls: self.curve.has_controls().then(|| {
+            controls: self.controlled().then(|| {
                 M::CHANNELS
                     .iter()
                     .position(|d| d.name == "y")
@@ -1285,7 +1298,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             .collect::<Vec<_>>();
         // A monotone line's control columns, through y's mirror.
         let mut chans = chans;
-        if self.curve.has_controls()
+        if self.controlled()
             && let Some(Some(Encoding::Column(c))) = M::CHANNELS
                 .iter()
                 .position(|d| d.name == "y")
@@ -2096,7 +2109,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         // stored rows are its data rows): the stored columns, or computed
         // from the rows' x and y below.
         let mut controls: Option<[Vec<f64>; 2]> = None;
-        if self.curve.has_controls() && from_store.is_some() {
+        if self.controlled() && from_store.is_some() {
             let k = store.formats().len() - 2;
             let column = |k| store.cpu_values_where(k, |c| chunk_needed[c]);
             if let (Some(c1), Some(c2)) = (column(k), column(k + 1)) {
@@ -2138,7 +2151,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
                         .collect(),
                 });
             }
-            if self.curve.has_controls() {
+            if self.controlled() {
                 let at = |name| {
                     let slot = slot_of(name).expect("a line has x and y");
                     needed.iter().position(|&(s, _)| s == slot)
