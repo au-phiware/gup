@@ -195,13 +195,43 @@ impl PositionScale for Linear {
         self.domain = Some((lo, hi));
     }
 
+    fn nice_to(&mut self, count: usize, strict: bool) {
+        let (mut lo, mut hi) = self.resolved_domain();
+        if lo == hi {
+            let pad = if lo == 0.0 { 1.0 } else { lo.abs() * 0.1 };
+            (lo, hi) = (lo - pad, hi + pad);
+        }
+        for pass in 0..4 {
+            let step = self.step(lo, hi, count);
+            let (a, b) = (lo / step, hi / step);
+            // Only the first pass moves the data's own ends; later passes
+            // only grow the domain, which keeps that step.
+            let strict = strict && pass == 0;
+            // A strict end (nonzero) lies a whole step past an extent that
+            // is already on a tick; zero is a baseline and stays.
+            let near = if strict && lo < 0.0 {
+                (a - 1e-9).ceil() - 1.0
+            } else {
+                (a + 1e-9).floor()
+            };
+            let far = if strict && hi > 0.0 {
+                (b + 1e-9).floor() + 1.0
+            } else {
+                (b - 1e-9).ceil()
+            };
+            let next = (step_value(near, step), step_value(far, step));
+            if next == (lo, hi) {
+                break;
+            }
+            (lo, hi) = next;
+        }
+        self.domain = Some((lo, hi));
+    }
+
     fn ticks(&self, count: usize) -> Ticks {
         let (d0, d1) = self.resolved_domain();
         let (lo, hi) = (d0.min(d1), d0.max(d1));
-        let mut step = tick_step(lo, hi, count);
-        if let Some(unit) = self.tick_unit {
-            step = unit * nearest_125(step / unit);
-        }
+        let step = self.step(lo, hi, count);
         let (start, end) = ((lo / step - 1e-9).ceil(), (hi / step + 1e-9).floor());
         let values: Vec<f64> = (0..=((end - start).max(-1.0) as i64))
             .map(|i| step_value(start + i as f64, step))
@@ -212,6 +242,18 @@ impl PositionScale for Linear {
             .map(|&v| format_with_step(v, step, grouped))
             .collect();
         Ticks::new(values, labels)
+    }
+}
+
+impl Linear {
+    /// The step `ticks(count)` uses over `lo..hi`: [`tick_step`], then the
+    /// `tick_unit` rounding.
+    fn step(&self, lo: f64, hi: f64, count: usize) -> f64 {
+        let step = tick_step(lo, hi, count);
+        match self.tick_unit {
+            Some(unit) => unit * nearest_125(step / unit),
+            None => step,
+        }
     }
 }
 
@@ -246,6 +288,83 @@ mod tests {
         // 5 would be the default step: the nearest multiple of 2 is 4.
         let ticks = s.ticks(5);
         assert_eq!(ticks.values[1] - ticks.values[0], 4.0);
+    }
+
+    /// A seeded xorshift in 0..1.
+    fn unit_rand(state: &mut u64) -> f64 {
+        *state ^= *state << 13;
+        *state ^= *state >> 7;
+        *state ^= *state << 17;
+        (*state >> 11) as f64 / (1u64 << 53) as f64
+    }
+
+    fn check_nice_to(mut s: Linear, lo: f64, hi: f64, count: usize, strict: bool) {
+        s.nice_to(count, strict);
+        let (d0, d1) = s.resolved_domain();
+        let tol = 1e-9 * (hi - lo).abs().max(1e-300);
+        assert!(d0 <= lo + tol && d1 >= hi - tol, "{lo}..{hi} -> {d0}..{d1}");
+        if strict {
+            // A nonzero data end is never the domain's end.
+            assert!(hi <= 0.0 || d1 > hi + tol, "{lo}..{hi} -> {d0}..{d1}");
+            assert!(lo >= 0.0 || d0 < lo - tol, "{lo}..{hi} -> {d0}..{d1}");
+        }
+        let ticks = s.ticks(count);
+        let first = *ticks.values.first().expect("ticks");
+        let last = *ticks.values.last().expect("ticks");
+        let rel = |a: f64, b: f64| (a - b).abs() <= 1e-9 * (d1 - d0).abs().max(a.abs());
+        assert!(
+            rel(first, d0) && rel(last, d1),
+            "{lo}..{hi} count {count}: domain {d0}..{d1}, ticks {first}..{last}"
+        );
+    }
+
+    #[test]
+    fn nice_to_makes_both_ends_ticks() {
+        let mut state = 0x9e37_79b9_7f4a_7c15u64;
+        for i in 0..10_000 {
+            let lo = if i % 10 == 0 {
+                0.0
+            } else {
+                unit_rand(&mut state) * 2000.0 - 1000.0
+            };
+            let span = 10f64.powf(unit_rand(&mut state) * 9.0 - 3.0);
+            let hi = lo + span;
+            for count in 2..=12 {
+                let unit = [1.0, 0.5, 2.0, 10.0][i % 4];
+                for strict in [false, true] {
+                    check_nice_to(Linear::new().domain(lo, hi), lo, hi, count, strict);
+                    let s = Linear::new().domain(lo, hi).tick_unit(unit);
+                    check_nice_to(s, lo, hi, count, strict);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_strict_nice_to_moves_a_data_end_on_a_tick_out_a_step() {
+        // 0..7 at count 7 has step 1: 7 is a tick, so the end becomes 8.
+        let mut s = Linear::new().domain(0.0, 7.0);
+        s.nice_to(7, true);
+        assert_eq!(s.resolved_domain(), (0.0, 8.0));
+        // The baseline stays; the other end moves.
+        let mut s = Linear::new().domain(-60.0, 0.0);
+        s.nice_to(6, true);
+        let (lo, hi) = s.resolved_domain();
+        assert!(lo < -60.0 && hi == 0.0, "{lo}..{hi}");
+        // Not strict: the end stays.
+        let mut s = Linear::new().domain(0.0, 7.0);
+        s.nice_to(7, false);
+        assert_eq!(s.resolved_domain(), (0.0, 7.0));
+    }
+
+    #[test]
+    fn nice_to_pads_a_zero_width_domain_like_nice() {
+        let mut a = Linear::new().domain(0.0, 0.0);
+        let mut b = a.clone();
+        a.nice();
+        b.nice_to(5, false);
+        assert_eq!(a.resolved_domain(), (-1.0, 1.0));
+        assert_eq!(b.resolved_domain(), (-1.0, 1.0));
     }
 
     #[test]

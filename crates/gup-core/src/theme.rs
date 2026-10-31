@@ -80,8 +80,9 @@ pub struct Theme {
     pub tick_len: Px,
     /// Gap between a tick and its label, and between labels and titles.
     pub label_gap: Px,
-    /// Inset of the axis ranges, so marks on the domain edge stay off the
-    /// plot rect's edge.
+    /// Inset of a numeric axis's far end (right, top), so marks on the
+    /// domain edge stay off the plot rect's edge. A band or point axis makes
+    /// its own room with its outer padding.
     pub plot_padding: Px,
     /// Margin around the chart.
     pub pad: Px,

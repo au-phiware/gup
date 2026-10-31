@@ -327,9 +327,11 @@ impl<T: Send + Sync + 'static, O: Orientation> BarChart<T, O> {
         let mut plot = Plot::new();
         let band = if O::HORIZONTAL {
             plot.x(Linear::new());
+            plot.round_to_ticks(0);
             plot.y(Band::new())
         } else {
             plot.y(Linear::new());
+            plot.round_to_ticks(1);
             plot.x(Band::new())
         };
         BarChart {
