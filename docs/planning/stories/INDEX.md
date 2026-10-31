@@ -85,6 +85,15 @@ may run together; GUP-397 touches only `dogfood/` and the harness crate. Run
   restore the `attr` form of `borrowing_accessor` with a seeded-stable snapshot.
   Deps: GUP-511 ✅.
 
+Unparked 2026-11-01 when the shared build directory filled the disk (184 GB).
+GUP-428 edits only `scripts/`, `maskfile.md` and `CLAUDE.md`.
+
+- [GUP-428](GUP-428_Prune_Superseded_Shared_Units.md) 📋 — Rule 5 for
+  `prune_build_dir.sh`: an 80 GB cap on the build directory, enforced by
+  evicting least recently used units (last use propagated through the dependency
+  graph in cargo's fingerprints), plus `--report` and a seeded bound test across
+  removed worktrees. Deps: GUP-427 ✅.
+
 Backlog triage for later tracks (notes only; their stories are not written):
 
 - **N2, bars**: end-bar padding on numeric axes, `group_padding`, horizontal
@@ -99,8 +108,6 @@ Backlog triage for later tracks (notes only; their stories are not written):
   restore the formats in that story.
 - **N5**: GUP-492 (windowed size-order draws), through a GPU sort or an index
   buffer.
-- **Parked**: GUP-428 until the next toolchain or `Cargo.lock` bump, or a disk
-  alert.
 - **N3 after N0**: release 0.1's minimal accessibility (`Plot::describe()`, an
   SVG title and description, a canvas `aria-label`) starts from the docs GUP-499
   archives; full N4 follows the release.
@@ -322,11 +329,6 @@ will pick each up.
   per-checkout member `codegen-units` is worth its disk, and if so add it to
   `scripts/cargo_env.sh`. Deps: GUP-411 ✅. Related to GUP-427 (disk growth),
   not superseded by it. No track; keep.
-- [GUP-428](GUP-428_Prune_Superseded_Shared_Units.md) 💡 — Prune dependency and
-  clippy units nobody can use any more (left by `Cargo.lock` or toolchain bumps,
-  deleted targets, pre-GUP-427 checkouts), which GUP-427's owner-based prune
-  never touches. Deps: GUP-427 ✅. Parked until the next toolchain or
-  `Cargo.lock` bump, or a disk alert.
 - [GUP-492](GUP-492_Windowed_Size_Order_Draws.md) 💡 — bounded draw calls for a
   windowed layer sized by a column whose sizes do not follow data order
   (per-chunk sort runs draw about one instance per draw today). Deps: GUP-482
