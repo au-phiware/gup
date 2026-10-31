@@ -246,9 +246,48 @@ pub fn check_marks_present(
     Ok(())
 }
 
+/// The colour behind a text region's text, sampled from the image: the most
+/// frequent exact colour over the region's span, skipping guide pixels and
+/// pixels near the text's own solid colour. Ties go to `layout.background`
+/// if it is among them, else to the smallest `(r, g, b, a)`; a region with
+/// no candidate pixel uses `layout.background`.
+fn local_background(
+    img: &RgbaImage,
+    region: &crate::layout::TextRegion,
+    layout: &LayoutMetadata,
+    tol: &Tolerances,
+) -> Rgba8 {
+    let Some((x0, y0, x1, y1)) = region.rect.pixel_span(img.width(), img.height()) else {
+        return layout.background;
+    };
+    let solid_text = region.color.over(layout.background);
+    let mut counts: std::collections::HashMap<Rgba8, usize> = std::collections::HashMap::new();
+    for y in y0..y1 {
+        for x in x0..x1 {
+            let c = img.pixel(x, y);
+            if !layout.in_guide(x, y) && c.delta_e(solid_text) > tol.text_blend_delta_e {
+                *counts.entry(c).or_default() += 1;
+            }
+        }
+    }
+    let Some(&max) = counts.values().max() else {
+        return layout.background;
+    };
+    if counts.get(&layout.background) == Some(&max) {
+        return layout.background;
+    }
+    counts
+        .into_iter()
+        .filter(|&(_, n)| n == max)
+        .map(|(c, _)| c)
+        .min_by_key(|c| (c.r, c.g, c.b, c.a))
+        .unwrap_or(layout.background)
+}
+
 /// Fail if any expected text region has fewer than
 /// [`Tolerances::min_text_ink_pixels`] glyph pixels (pixels that look like
-/// the region's text colour over the background) outside guide regions.
+/// the region's text colour over the region's local background, see
+/// `local_background`) outside guide regions.
 pub fn check_text_present(
     img: &RgbaImage,
     layout: &LayoutMetadata,
@@ -257,20 +296,24 @@ pub fn check_text_present(
     let mut missing = Vec::new();
     for region in &layout.text_regions {
         let mut ink = 0usize;
+        let bg = local_background(img, region, layout, tol);
         if let Some((x0, y0, x1, y1)) = region.rect.pixel_span(img.width(), img.height()) {
             for y in y0..y1 {
                 for x in x0..x1 {
-                    if !layout.in_guide(x, y)
-                        && is_glyph(img.pixel(x, y), region.color, layout.background, tol)
-                    {
+                    if !layout.in_guide(x, y) && is_glyph(img.pixel(x, y), region.color, bg, tol) {
                         ink += 1;
                     }
                 }
             }
         }
         if ink < tol.min_text_ink_pixels {
+            let on = if bg == layout.background {
+                String::new()
+            } else {
+                format!(" on #{:02x}{:02x}{:02x}", bg.r, bg.g, bg.b)
+            };
             missing.push(format!(
-                "{:?} {:?} at {} ({ink} glyph px of {:?})",
+                "{:?} {:?} at {} ({ink} glyph px of {:?}{on})",
                 region.role,
                 region.text,
                 fmt_rect(&region.rect),
@@ -482,6 +525,56 @@ mod tests {
         // A saturated mark colour is not text either.
         img.fill_rect(PxRect::new(80.0, 0.0, 60.0, 9.0), BLUE);
         assert!(check_text_present(&img, &layout, &tol()).is_err());
+    }
+
+    const ORANGE: Rgba8 = Rgba8::rgb(0xe6, 0x9f, 0x00);
+    const DARK: Rgba8 = Rgba8::rgb(0x11, 0x11, 0x11);
+
+    /// The synthetic chart with its title region on `fill`, text colour
+    /// `text`, and glyphs (solid and 50% blends) drawn when `glyphs`.
+    fn title_on(fill: Rgba8, text: Rgba8, glyphs: bool) -> (RgbaImage, LayoutMetadata) {
+        let (mut img, mut layout) = synthetic();
+        let title = PxRect::new(80.0, 0.0, 60.0, 9.0);
+        img.fill_rect(title, fill);
+        if glyphs {
+            img.fill_rect(PxRect::new(85.0, 2.0, 30.0, 2.0), text);
+            let half = Rgba8::rgb(
+                ((u16::from(text.r) + u16::from(fill.r)) / 2) as u8,
+                ((u16::from(text.g) + u16::from(fill.g)) / 2) as u8,
+                ((u16::from(text.b) + u16::from(fill.b)) / 2) as u8,
+            );
+            img.fill_rect(PxRect::new(85.0, 4.0, 30.0, 2.0), half);
+        }
+        layout.text_regions[0].color = text;
+        (img, layout)
+    }
+
+    #[test]
+    fn dark_text_on_a_coloured_fill_is_text() {
+        let (img, layout) = title_on(ORANGE, DARK, true);
+        check_text_present(&img, &layout, &tol()).unwrap();
+    }
+
+    #[test]
+    fn a_coloured_fill_without_text_is_not_text_and_names_the_fill() {
+        let (img, layout) = title_on(ORANGE, DARK, false);
+        let err = check_text_present(&img, &layout, &tol()).unwrap_err();
+        assert!(err.message.contains("Title"), "{err}");
+        assert!(err.message.contains("on #e69f00"), "{err}");
+    }
+
+    #[test]
+    fn text_in_the_wrong_colour_on_a_fill_is_not_text() {
+        // Seeded failure: white glyphs drawn where dark text is expected.
+        let (mut img, layout) = title_on(ORANGE, DARK, false);
+        img.fill_rect(PxRect::new(85.0, 2.0, 30.0, 4.0), Rgba8::WHITE);
+        assert!(check_text_present(&img, &layout, &tol()).is_err());
+    }
+
+    #[test]
+    fn white_text_on_blue_is_text() {
+        let (img, layout) = title_on(Rgba8::rgb(0x00, 0x72, 0xb2), Rgba8::WHITE, true);
+        check_text_present(&img, &layout, &tol()).unwrap();
     }
 
     #[test]

@@ -293,29 +293,9 @@ fn golden<T: Send + Sync + 'static, O: gup_core::builder::Orientation>(
     name: &str,
     chart: &mut BarChart<T, O>,
     colours: &[Color],
-    in_fill: bool,
 ) {
     let (image, layout) = render(chart, 640, 400);
-    let mut plain = layout.clone();
-    if in_fill {
-        // The harness's text check models text over the background; a label
-        // inside a segment sits on its fill. Check those here instead: each
-        // label's box holds enough pixels of white or `#111111`.
-        plain.texts.retain(|t| t.run.role != TextRole::Annotation);
-        for (text, b) in labels(&layout) {
-            let ink = (b.y as u32..b.bottom() as u32)
-                .flat_map(|y| (b.x as u32..b.right() as u32).map(move |x| (x, y)))
-                .filter(|&(x, y)| {
-                    let p = image.get_pixel(x, y).0;
-                    [[255u8; 3], [17; 3]]
-                        .iter()
-                        .any(|t| (0..3).all(|c| (i32::from(p[c]) - i32::from(t[c])).abs() <= 40))
-                })
-                .count();
-            assert!(ink >= 5, "label {text:?} has {ink} text pixels in {b:?}");
-        }
-    }
-    let mut meta = layout_metadata(&plain);
+    let mut meta = layout_metadata(&layout);
     for (i, c) in colours.iter().enumerate() {
         meta = meta.with_expected_color(format!("fill {i}"), rgba8(*c));
     }
@@ -343,12 +323,7 @@ fn golden_grouped_bars_with_a_negative_value() {
         .legend_title("Region")
         .y_title("Sales")
         .value_labels();
-    golden(
-        "gup_core/bar_value_labels",
-        &mut chart,
-        &OKABE_ITO[..3],
-        false,
-    );
+    golden("gup_core/bar_value_labels", &mut chart, &OKABE_ITO[..3]);
 }
 
 #[test]
@@ -374,7 +349,6 @@ fn golden_stacked_horizontal_bars_with_a_hidden_thin_segment() {
         "gup_core/bar_value_labels_stacked",
         &mut chart,
         &OKABE_ITO[..3],
-        true,
     );
 }
 

@@ -10,8 +10,8 @@ touches: []
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: 📋
-Planned **Created**: 2026-10-26
+**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: ✅
+Complete (2026-10-31) Planned **Created**: 2026-10-26
 
 ## Context
 
@@ -55,35 +55,35 @@ standard check.
 
 ### AC1: The local background
 
-- [ ] A private `fn local_background(img, region, layout, tol) -> Rgba8` in
+- [x] A private `fn local_background(img, region, layout, tol) -> Rgba8` in
       `checks.rs` implements the rule in Decisions, and `check_text_present`
       passes its result to `is_glyph` in place of `layout.background`.
-- [ ] The failure message names the background it used when it differs from the
+- [x] The failure message names the background it used when it differs from the
       layout's (e.g. `… (5 glyph px of #111111 on #e69f00)`).
 
 ### AC2: Unit tests
 
-- [ ] New test: on the synthetic image, fill the title region with `#e69f00` and
+- [x] New test: on the synthetic image, fill the title region with `#e69f00` and
       draw dark (`#111111`) glyph pixels (a few solid and a few 50% blends)
       inside it; with the region's colour `#111111` the check passes.
-- [ ] New test: the same orange region with no glyph pixels fails and names the
+- [x] New test: the same orange region with no glyph pixels fails and names the
       region.
-- [ ] New test: white text (`#ffffff`) on `#0072b2` passes (the white-text case
+- [x] New test: white text (`#ffffff`) on `#0072b2` passes (the white-text case
       of contrast-coloured labels).
-- [ ] Every existing test in `checks.rs` and `harness.rs` passes unchanged,
+- [x] Every existing test in `checks.rs` and `harness.rs` passes unchanged,
       including `mark_fill_flooding_a_text_region_is_not_text` (a flooded region
       with no text still fails: its local background is the flood).
 
 ### AC3: The stacked golden uses the standard check
 
-- [ ] In `tests/bar_value_labels.rs`, `golden` loses its `in_fill` parameter,
+- [x] In `tests/bar_value_labels.rs`, `golden` loses its `in_fill` parameter,
       the `plain.texts.retain(..)` filter and the hand-written pixel count; the
       stacked golden passes with every Annotation text in the metadata.
-- [ ] The golden image itself is unchanged (no re-bless).
+- [x] The golden image itself is unchanged (no re-bless).
 
 ### AC4: Nothing else changes status
 
-- [ ] `scripts/with_cargo_env.sh cargo test -p gup-core -- --test-threads=1`,
+- [x] `scripts/with_cargo_env.sh cargo test -p gup-core -- --test-threads=1`,
       `cargo test -p gup-visual-regression`, `cargo test --test tutorials` and
       `./dogfood/run_all.sh` pass;
       `tests/visual_regression/expected_failures.toml` stays without entries.
@@ -119,10 +119,10 @@ standard check.
 
 ## Technical Tasks
 
-- [ ] `local_background` and its use in `check_text_present`; message.
-- [ ] AC2 unit tests.
-- [ ] Simplify `golden` in `tests/bar_value_labels.rs`.
-- [ ] Run AC4's suites.
+- [x] `local_background` and its use in `check_text_present`; message.
+- [x] AC2 unit tests.
+- [x] Simplify `golden` in `tests/bar_value_labels.rs`.
+- [x] Run AC4's suites.
 
 ## Dependencies
 
@@ -143,8 +143,8 @@ standard check.
 
 ## Success Metrics
 
-- [ ] The stacked golden's adapter has no special case.
-- [ ] Zero status changes elsewhere.
+- [x] The stacked golden's adapter has no special case.
+- [x] Zero status changes elsewhere.
 
 ## Risk Assessment
 
@@ -154,16 +154,65 @@ standard check.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`, plus
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`, plus
       `scripts/with_cargo_env.sh cargo test -p gup-core -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye: not applicable (the harness changes, no
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye: not applicable (the harness changes, no
       image does)
-- [ ] `mask wasm-browser` not needed: no layout, input or wasm code changes
-- [ ] WASM size: unchanged, no library code change (test harness only)
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] `mask wasm-browser` not needed: no layout, input or wasm code changes
+- [x] WASM size: unchanged, no library code change (test harness only)
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+`local_background` in `crates/gup-visual-regression/src/checks.rs` samples the
+mode colour of each text region (skipping guide pixels and pixels near the
+text's own solid colour) and `check_text_present` measures glyphs against it;
+the message appends `on #rrggbb` when it differs from the layout background.
+Four new unit tests (dark on orange, orange without text, white on blue, white
+glyphs where dark expected on orange). `golden` in
+`crates/gup-core/tests/bar_value_labels.rs` lost `in_fill` and its hand-written
+count; the stacked golden passes with every Annotation text and is not
+re-blessed. Harness: 54 unit tests; gup-core, tutorials and dogfood pass;
+`expected_failures.toml` unchanged.
+
+## Retrospective
+
+**Completed**: 2026-10-31
+
+### Key Technical Learnings
+
+#### Mode-of-region as the reference colour
+
+- **Challenge**: text on fills is off the white-to-text blend line.
+- **Solution**: take the most frequent exact colour outside the text's own solid
+  pixels; flat fills are exact, glyph edges are spread.
+- **Pattern**: sample the reference from the image rather than adding adapter
+  metadata.
+
+#### Known limitation
+
+- A label whose colour equals its fill leaves no candidate pixels, so the region
+  falls back to the layout background and the flood passes (it did before too:
+  no status change). Such text is invisible anyway; the seeded failure test uses
+  wrong-coloured (white) glyphs on orange instead.
+
+### Architectural Decisions
+
+#### No new TextRegion field
+
+- **Decision**: automatic sampling, per the story. **Trade-off**: the
+  equal-colour case above. **Future**: heatmap cell labels need no adapter work.
+
+### Development Workflow Insights
+
+- `mask all-fix` plus gup-core tests exceed 10 minutes cold; run in background.
+
+### Follow-up Stories
+
+None.
