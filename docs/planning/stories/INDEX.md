@@ -276,7 +276,7 @@ touches no hot file and runs beside any of them.
   `geom::Point`, `Input::pointer_moved` and friends, and `impl Into<Point>` on
   `zoom`, `invert` and every `pick`, so tutorials stop importing
   `gup::geom::Point`. Deps: GUP-532 ✅.
-- [GUP-565](GUP-565_Text_Check_Against_The_Local_Background.md) 🚧 — The
+- [GUP-565](GUP-565_Text_Check_Against_The_Local_Background.md) ✅ — The
   harness's `text_present` check measures each region against its sampled local
   background, so labels on coloured fills pass the standard check; the stacked
   bar golden's workaround is removed. Deps: GUP-544 ✅.
