@@ -221,3 +221,37 @@ None directly.
 - [ ] WASM size: `mask wasm-size` scatter gz bytes reported (AC5)
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
+
+## Blocked (2026-10-31)
+
+**Question**: AC5 growth is +1,419 B gz on the scatter, above the 1,000 B
+escalation limit; keep `foldhash` (F2) anyway, or revert it?
+
+**Evidence** (`mask wasm-size`, `wasm.scatter.gz_bytes`): parent `ee9ca921`
+345,684; F1 only 345,694 (+10); F1+F2 347,103 (+1,419). `foldhash` is all of the
+growth (+1,409 B). Within the perf-budget table it passes (+2% limit 352,595
+against recorded 345,682), but the story's own limit is 1,000 B.
+
+**Measurements** (release, 1M rows, 8 String keys, alternating binaries, median
+of 15, load average median 5.5, max 8.6; first resolve ms):
+
+| metric                 | parent | F1 only | F2 only | F1+F2 |
+| ---------------------- | ------ | ------- | ------- | ----- |
+| `borrowed`             | 60.3   | 61.0    | 45.6    | 47.1  |
+| `owned_plot`           | 73.5   | 71.8    | 60.3    | 60.9  |
+| `builder`              | 108.5  | 88.6    | 92.9    | 74.4  |
+| dict `borrowed` ns/row | 26.1   | 29.7    | 12.4    | 14.9  |
+| dict `owned` ns/row    | 40.8   | 40.9    | 28.9    | 29.2  |
+| dict `builder` ns/row  | 67.8   | 41.1    | 28.8    | 28.8  |
+
+AC4: F1 on top of F2 lowers `builder` 92.9 to 74.4 (-20%); F2 on top of F1
+lowers 88.6 to 74.4 (-16%); both kept. Target: `builder - borrowed` = 27.3 ms
+(at most 30), `builder` is 31% below parent. Met.
+
+**Options**: (a) keep `foldhash`, accept +1.4 KB (0.4%) for -31% builder time
+and about 14 ms off every keyed resolve; (b) revert F2: builder 88.6 ms, target
+`builder - borrowed` 27.6 ms still met, `builder` -18% (misses the 20% rule).
+
+**Recommendation**: (a), and raise the AC5 limit to 1,500 B; the budget table
+already tolerates it. Code is committed (F1 + F2); remaining: doc tests,
+`mask merge-check`, story completion and retrospective.
