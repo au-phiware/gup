@@ -281,7 +281,7 @@ touches no hot file and runs beside any of them.
   every bar ends at or inside a labelled tick, and band and point axes lose the
   far-end `plot_padding` that overran heatmap cells. Deps: GUP-543 ✅, GUP-548
   ✅, GUP-549 ✅.
-- [GUP-562](GUP-562_Integer_Tick_Steps_For_Integer_Data.md) 📋 —
+- [GUP-562](GUP-562_Integer_Tick_Steps_For_Integer_Data.md) ✅ —
   `ColumnStats::integral` reaches the scale with the extent, and a `Linear` axis
   fed only whole numbers (span at least 2) ticks in steps of at least 1:
   tutorial 6's Week axis reads 0–3. Deps: GUP-561 📋.

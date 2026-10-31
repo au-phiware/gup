@@ -80,8 +80,8 @@ X) or `info` (printed, never fails).
 | `pipeline.link_create.cold_ms`     | 1.04      | <= 10     | `pipeline_timings`, its first run                   |
 | `pipeline.link_create.max_ms`      | 1.06      | info      | `pipeline_timings`                                  |
 | `wasm.wgpu.gz_bytes`               | 32,360    | info      | `scripts/wasm_size.sh`, bare wgpu                   |
-| `wasm.scatter.gz_bytes`            | 341,760   | +2%       | `scripts/wasm_size.sh`, the reference scatter       |
-| `wasm.over_wgpu.gz_bytes`          | 309,400   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10         |
+| `wasm.scatter.gz_bytes`            | 345,682   | +2%       | `scripts/wasm_size.sh`, the reference scatter       |
+| `wasm.over_wgpu.gz_bytes`          | 313,322   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10         |
 | `wasm.per_row_type.gz_bytes`       | 1,730     | <= 2600   | `scripts/wasm_size.sh`, one more Selection row type |
 
 A legitimate change that moves a number (a new guide, a bigger feature) records
@@ -515,3 +515,9 @@ seeded violation (GUP-417 retrospective).
   341,760 B gz (+3,786, +1.1%), and over bare wgpu from 305,614 to 309,400 (90
   KB of headroom under the 400,000 cap). Re-recorded so the +2% tolerance keeps
   catching single-story jumps.
+- **N2 merges to GUP-565 (2026-10-31, orchestrator)**: GUP-552 (subtitle), 546
+  (area picking), 560, 547 (stacked areas), 563 (tuple positions), 551 (monotone
+  curves, gated to line marks), 561 (axis ends), 554 (box plot) and 565 take the
+  WASM scatter from 341,760 to 345,682 B gz (+3,922, +1.1%), and over bare wgpu
+  from 309,400 to 313,322 (87 KB of headroom). Re-recorded before GUP-405
+  (kerning, budgeted at +6,000) so its own cost is measured.
