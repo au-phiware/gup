@@ -302,7 +302,7 @@ yet. These two are measured regressions found in N2; each commits a release
 benchmark, and the orchestrator, not the worker, re-records `PERF_BUDGETS.md`.
 GUP-566 edits `encoding.rs` (not beside GUP-562); GUP-567 edits `selection.rs`.
 
-- [GUP-566](GUP-566_Cheaper_Owned_Category_Keys.md) 🚧 — A keyed first-resolve
+- [GUP-566](GUP-566_Cheaper_Owned_Category_Keys.md) ✅ — A keyed first-resolve
   benchmark, then builder keys encoded from a borrowed label (no second
   allocation) and a `foldhash` dictionary, each kept only if it helps: owned-key
   overhead from 52 to at most 30 ns per row. Deps: GUP-537 ✅.
