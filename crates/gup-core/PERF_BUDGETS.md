@@ -74,7 +74,7 @@ X) or `info` (printed, never fails).
 | `zoom_culled.draws.median`         | 14        | exact     | `zoom_bench` on 4M sorted rows, 64 chunks (GUP-457) |
 | `zoom_culled.gpu_clock.median_mhz` | 350       | info      | `scripts/perf_budget.sh` (i915 sysfs)               |
 | `zoom_culled.gpu_pass.median_ms`   | 9.90      | +20%      | `zoom_bench` on 4M sorted rows, 64 chunks           |
-| `zoom_culled.cpu.median_ms`        | 1.24      | +20%      | `zoom_bench` on 4M sorted rows, 64 chunks           |
+| `zoom_culled.cpu.median_ms`        | 1.07      | +20%      | `zoom_bench` on 4M sorted rows, 64 chunks           |
 | `zoom_culled.columns.bytes`        | 0         | exact     | `zoom_bench` on 4M sorted rows, 64 chunks           |
 | `pipeline.link_create.median_ms`   | 1.11      | +20%      | `pipeline_timings`, 20 runs, fresh cache each       |
 | `pipeline.link_create.cold_ms`     | 1.04      | <= 10     | `pipeline_timings`, its first run                   |
@@ -528,3 +528,10 @@ seeded violation (GUP-417 retrospective).
   to 354,964 B gz, over bare wgpu from 313,322 to 322,604 (77 KB of headroom
   under the 400,000 cap). `tests/zoom_uploads.rs`'s guide budget goes from
   1,506,360 to 1,508,952 B: kerned tick labels change the glyph instances.
+- **GUP-567 merged (2026-11-01, orchestrator)**: per-chunk sorted edge extremes
+  cut the explicit-domain inset solve from 0.676 to 0.019 ms per frame (worker's
+  `edge_inset_bench`). `zoom_culled.cpu.median_ms` reads 1.085, 1.069 and 1.071
+  at the merge on three runs (load 2–4), re-recorded from 1.24 to 1.07; the
+  worker measured 0.80–0.89 at load 3–7 and 1.99 at the parent.
+  `zoom.cpu.median_ms` read 0.849, 0.878 and 0.590 in the same session (0.829 at
+  the parent): machine drift, not re-recorded.
