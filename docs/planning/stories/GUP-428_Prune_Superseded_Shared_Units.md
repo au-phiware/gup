@@ -11,7 +11,7 @@ touches: [scripts/, maskfile.md, CLAUDE.md]
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (Track N0) **Status**: 📋 Planned
+**Initiative**: Strategic Review 2026-11 (Track N0) **Status**: 🚧 In Progress
 **Created**: 2026-10-16 (rewritten 2026-11-01, after the disk incident)
 
 ## Context
