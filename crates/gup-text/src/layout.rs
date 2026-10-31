@@ -538,4 +538,29 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn fallback_glyphs_sit_on_the_primary_baseline() {
+        let jp = Font::from_bytes(
+            "Noto Sans JP",
+            include_bytes!("../tests/fonts/NotoSansJP-Test.ttf"),
+        )
+        .unwrap();
+        let font = Font::inter().with_fallbacks(&[Font::inter_full(), jp]);
+        let r = run(
+            "Київ — 東京 — Zürich",
+            Anchor::new(HAlign::Start, VAlign::Baseline),
+        );
+        let mut bottoms = Vec::new();
+        let mut faces = std::collections::HashSet::new();
+        font.walk(&r, 1.0, |g| {
+            faces.insert(g.face.id);
+            if matches!(g.c, 'Z' | 'К' | '東') {
+                bottoms.push((g.c, g.y + g.metrics.height as f32 + g.metrics.ymin as f32));
+            }
+        });
+        assert_eq!(bottoms.len(), 3);
+        assert!(bottoms.iter().all(|b| b.1 == bottoms[0].1), "{bottoms:?}");
+        assert_eq!(faces.len(), 3);
+    }
 }
