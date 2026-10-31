@@ -299,10 +299,18 @@ impl SvgTarget {
                 ItemKind::Rules(rules) => {
                     for r in rules {
                         // Square caps: the GPU extends each rule by half its
-                        // width at both ends.
+                        // width at both ends. An axis-aligned rule is crisp
+                        // there (no anti-aliasing), so say so here: a
+                        // rasteriser that anti-aliases a long hairline can
+                        // leave a stray half-covered pixel on it.
+                        let crisp = if r.p0.x == r.p1.x || r.p0.y == r.p1.y {
+                            r#" shape-rendering="crispEdges""#
+                        } else {
+                            ""
+                        };
                         writeln!(
                             s,
-                            r#"<line x1="{}" y1="{}" x2="{}" y2="{}" stroke="{}" stroke-width="{}" stroke-linecap="square"{}/>"#,
+                            r#"<line x1="{}" y1="{}" x2="{}" y2="{}" stroke="{}" stroke-width="{}" stroke-linecap="square"{crisp}{}/>"#,
                             num(r.p0.x),
                             num(r.p0.y),
                             num(r.p1.x),
