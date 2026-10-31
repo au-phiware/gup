@@ -180,6 +180,7 @@ pub use builder::{
     AreaChart, AreaPoint, BarChart, HeatmapChart, HistogramBin, HistogramChart, LineChart,
     ScatterChart, area, bar, barh, heatmap, histogram, line, scatter,
 };
+pub use builder::{BoxPlotChart, BoxSummary, boxplot};
 pub use channel::{
     Antialias, Channel, ChannelDesc, Color, ConstValue, Geometry, GpuType, HitShape, Mark, Px,
     Role, Unit, Visual,

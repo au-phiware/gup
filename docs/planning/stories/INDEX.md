@@ -237,7 +237,7 @@ cell labels, error bars, pie charts and facets.
 - [GUP-524](GUP-524_Svg_Unbrushed_Dimming.md) 💡 — `SvgTarget` dims unbrushed
   rows as the GPU does, so brushed goldens get the SVG parity check. Deps:
   GUP-553 ✅.
-- [GUP-554](GUP-554_Box_Plot_Builder.md) 📋 — `transform::box_stats` (type-7
+- [GUP-554](GUP-554_Box_Plot_Builder.md) 🚧 — `transform::box_stats` (type-7
   quartiles, 1.5 IQR whiskers) and `gup::boxplot` with outliers and tooltips.
   Deps: GUP-537 📋, GUP-548 📋.
 - [GUP-405](GUP-405_Gup_Text_OpenType_Shaping.md) 📋 — Shape `gup-text` runs

@@ -10,8 +10,8 @@ touches: [crates/gup-core/src/builder/mod.rs, crates/gup-core/src/lib.rs]
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: 📋
-Planned **Created**: 2026-10-24
+**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: 🚧 In
+Progress **Created**: 2026-10-24
 
 ## Context
 

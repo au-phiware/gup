@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! Data transforms that run before drawing: [`bin`] counts values into
-//! [`Bin`]s, the rows of a histogram.
+//! [`Bin`]s, the rows of a histogram, and [`box_stats`] summarises values as
+//! the [`BoxStats`] of a box plot.
 //!
 //! ```
 //! use gup_core::transform::{Bins, bin};
@@ -151,6 +152,79 @@ pub(crate) fn index_of(edges: &[f64], v: f64) -> Option<usize> {
     Some(above.saturating_sub(1).min(edges.len() - 2))
 }
 
+/// The summary a box plot draws (Tukey's definition).
+///
+/// Quartiles are linear interpolations between order statistics (the
+/// default "type 7" of R and NumPy's `percentile`); the whiskers reach the
+/// most extreme values within 1.5 × IQR of the box.
+#[derive(Clone, Debug, PartialEq)]
+pub struct BoxStats {
+    /// How many values were summarised.
+    pub n: usize,
+    /// The first quartile.
+    pub q1: f64,
+    /// The median.
+    pub median: f64,
+    /// The third quartile.
+    pub q3: f64,
+    /// The smallest value at or above q1 − 1.5 IQR, and the largest at or
+    /// below q3 + 1.5 IQR.
+    pub whisker_lo: f64,
+    /// See `whisker_lo`: the largest value at or below q3 + 1.5 IQR.
+    pub whisker_hi: f64,
+    /// Values outside the whiskers, ascending.
+    pub outliers: Vec<f64>,
+}
+
+/// The quantile `p` (in `0..=1`) of `sorted`, interpolating linearly
+/// between order statistics: `h = (n − 1) p`.
+fn quantile(sorted: &[f64], p: f64) -> f64 {
+    let h = (sorted.len() - 1) as f64 * p;
+    let i = h.floor() as usize;
+    match sorted.get(i + 1) {
+        Some(next) => sorted[i] + (h - i as f64) * (next - sorted[i]),
+        None => sorted[i],
+    }
+}
+
+/// Summarise `values` as a box plot does. NaN and infinite values are
+/// dropped; no values give `None`.
+///
+/// ```
+/// use gup_core::transform::box_stats;
+///
+/// let s = box_stats([1.0, 2.0, 3.0, 4.0]).unwrap();
+/// assert_eq!((s.q1, s.median, s.q3), (1.75, 2.5, 3.25));
+///
+/// // 100 is more than 1.5 IQR above the box: an outlier, not a whisker.
+/// let s = box_stats((1..=9).map(f64::from).chain([100.0])).unwrap();
+/// assert_eq!((s.whisker_hi, s.outliers), (9.0, vec![100.0]));
+/// ```
+pub fn box_stats(values: impl IntoIterator<Item = f64>) -> Option<BoxStats> {
+    let mut v: Vec<f64> = values.into_iter().filter(|v| v.is_finite()).collect();
+    if v.is_empty() {
+        return None;
+    }
+    v.sort_by(f64::total_cmp);
+    let (q1, median, q3) = (quantile(&v, 0.25), quantile(&v, 0.5), quantile(&v, 0.75));
+    let iqr = q3 - q1;
+    let (fence_lo, fence_hi) = (q1 - 1.5 * iqr, q3 + 1.5 * iqr);
+    let first = v.partition_point(|&x| x < fence_lo);
+    let last = v.partition_point(|&x| x <= fence_hi);
+    // The fences lie outside the quartiles, so at least the middle values
+    // are inside them: `first < last`.
+    let outliers = v[..first].iter().chain(&v[last..]).copied().collect();
+    Some(BoxStats {
+        n: v.len(),
+        q1,
+        median,
+        q3,
+        whisker_lo: v[first],
+        whisker_hi: v[last - 1],
+        outliers,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -253,5 +327,56 @@ mod tests {
     #[should_panic(expected = "Bins::Width")]
     fn a_zero_width_panics() {
         bin([1.0], &Bins::Width(0.0));
+    }
+
+    #[test]
+    fn quartiles_interpolate_as_numpy_does() {
+        let s = box_stats([4.0, 1.0, 3.0, 2.0]).unwrap();
+        assert_eq!((s.n, s.q1, s.median, s.q3), (4, 1.75, 2.5, 3.25));
+        assert_eq!((s.whisker_lo, s.whisker_hi), (1.0, 4.0));
+        assert!(s.outliers.is_empty());
+        // np.percentile([1, 2, 3, 4, 5], [25, 50, 75]) = 2, 3, 4
+        let s = box_stats((1..=5).map(f64::from)).unwrap();
+        assert_eq!((s.q1, s.median, s.q3), (2.0, 3.0, 4.0));
+        // np.percentile([1, 2, 4, 8, 16, 32], 25) = 2.5, 75 = 14
+        let s = box_stats([1.0, 2.0, 4.0, 8.0, 16.0, 32.0]).unwrap();
+        assert_eq!((s.q1, s.median, s.q3), (2.5, 6.0, 14.0));
+    }
+
+    #[test]
+    fn a_far_value_is_an_outlier_and_the_whisker_stops_at_the_data() {
+        let s = box_stats((1..=9).map(f64::from).chain([100.0])).unwrap();
+        assert_eq!(s.outliers, [100.0]);
+        assert_eq!((s.whisker_lo, s.whisker_hi), (1.0, 9.0));
+        let s = box_stats([-50.0, 1.0, 2.0, 3.0, 4.0, 5.0, 60.0]).unwrap();
+        assert_eq!(s.outliers, [-50.0, 60.0]);
+        assert_eq!((s.whisker_lo, s.whisker_hi), (1.0, 5.0));
+    }
+
+    #[test]
+    fn a_value_on_the_fence_is_not_an_outlier() {
+        // q1 = 2, q3 = 4 (IQR 2): the upper fence is 7.
+        let s = box_stats([0.0, 2.0, 2.0, 2.0, 4.0, 4.0, 4.0, 7.0]).unwrap();
+        assert_eq!((s.q1, s.q3), (2.0, 4.0));
+        assert!(s.outliers.is_empty());
+        assert_eq!(s.whisker_hi, 7.0);
+    }
+
+    #[test]
+    fn one_value_gives_it_for_every_statistic() {
+        let s = box_stats([3.5]).unwrap();
+        assert_eq!(s.n, 1);
+        for v in [s.q1, s.median, s.q3, s.whisker_lo, s.whisker_hi] {
+            assert_eq!(v, 3.5);
+        }
+        assert!(s.outliers.is_empty());
+    }
+
+    #[test]
+    fn non_finite_values_are_dropped_and_nothing_gives_none() {
+        let s = box_stats([1.0, f64::NAN, f64::INFINITY, 3.0]).unwrap();
+        assert_eq!((s.n, s.median), (2, 2.0));
+        assert!(box_stats(std::iter::empty()).is_none());
+        assert!(box_stats([f64::NAN]).is_none());
     }
 }
