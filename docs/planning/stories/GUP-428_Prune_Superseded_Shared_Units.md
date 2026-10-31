@@ -11,8 +11,9 @@ touches: [scripts/, maskfile.md, CLAUDE.md]
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (Track N0) **Status**: 🚧 In Progress
-**Created**: 2026-10-16 (rewritten 2026-11-01, after the disk incident)
+**Initiative**: Strategic Review 2026-11 (Track N0) **Status**: ✅ Complete
+(2026-11-01) **Created**: 2026-10-16 (rewritten 2026-11-01, after the disk
+incident)
 
 ## Context
 
@@ -356,3 +357,84 @@ where the space is. atime cannot measure use here: the dataset is mounted
 - [ ] WASM size: unchanged: no library code change
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
+
+## Implementation Summary
+
+- `scripts/prune_build_dir.sh`: rule 5 (`prune_lru`, `evict`), `--report`, and
+  the fingerprint graph (`inventory`, `unit_graph`, `units`). Knobs
+  `GUP_PRUNE_CAP_MB` (81920) and `GUP_PRUNE_KEEP_MINUTES` (60). Header,
+  `CLAUDE.md` (Pruning, Bound) and `maskfile.md` (`prune-build`) updated.
+- `scripts/test_prune_build_dir.sh`: control, keep window, four bound rounds,
+  Liveness (`Fresh a`, `dep`, `inner`) and zero-cap safety cases. All pass, in
+  the hook and standalone (about 5 minutes).
+- Deviations from Decisions, all private to the implementation: unit sizes come
+  from one bulk `find -printf` inventory instead of `du -skc` per unit (the
+  per-unit forks made the over-cap dry run 30 s); a dry run takes no lock in
+  rule 5; the total is `du` minus what rules 1-4 freed (see the ZFS note).
+
+## Retrospective
+
+**Completed**: 2026-11-01
+
+### Key Technical Learnings
+
+#### ZFS `du` lags after `sync -f`
+
+- **Challenge**: D1 relies on `sync -f` to make `du` see the last write. On this
+  ZFS (lz4) it does not: a 30 MB file showed 1 KB until the next transaction
+  group (up to 5 s); neither `sync -f`, `sync`, `sync -d` nor `sync FILE`
+  changed that. Deletes lag the same way.
+- **Solution**: production tolerates the lag (a few seconds of work against an
+  80 GB cap) and subtracts what rules 1-4 freed from the `du` reading. The test
+  sleeps 6 s on ZFS (`settle`) before each prune and measurement.
+- **Pattern**: never assert on `du` right after a write on ZFS.
+
+#### Path dependencies are built incrementally
+
+- **Challenge**: the story's `depw<n>` path crates left 9 MB of
+  `incremental/depw<n>-*` each, unowned and not units, so the cap could not be
+  met by evicting units.
+- **Solution**: the test serves `depw<n>` from a directory source (vendored, so
+  non-incremental), with 3 MB of random bytes as a `const` so both the rlib and
+  clippy's rmeta are over 3 MB on disk despite lz4.
+- **Pattern**: in production this is rare (outside-workspace path deps), but
+  incremental caches of unowned crates count toward `du` and rule 5 never evicts
+  them: see GUP-577.
+
+#### Backdating fingerprints makes path units stale
+
+- Cargo compares source mtimes with the fingerprint, so the test sets `dep` and
+  `inner` sources 10 days old before backdating fingerprints 2 days.
+
+### Evidence (live `~/.cache/gup/build`, read-only, other agents building)
+
+```text
+prune report: /home/corin/.cache/gup/build (on disk 36.7 GB, cap 80.0 GB)
+  owned units, live checkouts        17.4 GB  277 units
+  owned units, gone checkouts        0.0 GB  0 units
+  unowned units (deps, clippy, runs) 10.5 GB  5610 units
+  incremental caches                 8.7 GB
+  checkouts' own files               0.0 GB
+  other                              0.0 GB
+  by last use: <1h 2.6, <1d 25.3, <3d 0.0, <7d 0.0, older 0.0 GB
+  edges resolved: 35661 of 35691
+  rule 5 would evict: 0 units, 0.0 GB
+```
+
+- `--report`: 9.9 s wall. Edges resolved 99.9% (both D3 vectors implied: about
+  half of all values are above 2^63).
+- Hook dry run under the cap: 16.6 s wall on a busy machine (rules 1-4 dominate;
+  a rules-1-4-only run measured 10.4 s earlier, so rule 5 adds a `sync -f`, a
+  `du`, and nothing else). Not measured against the pre-change script on a quiet
+  machine.
+- Over-cap dry run (`GUP_PRUNE_CAP_MB=1 GUP_PRUNE_KEEP_MINUTES=0`,
+  `GUP_PRUNE_WAIT=1`): 14.3 s wall, 5738 units, 28.4 GB; the 8.7 GB of
+  incremental caches keep it "still over". An earlier run with the default wait
+  took 5 minutes because it waited for busy locks; hence no locks in a dry run.
+- The first pre-commit hook run of this story ran the new script for real on the
+  live directory, below the cap, so only rules 1-4 acted.
+
+### Follow-up Stories
+
+1. **GUP-577**: incremental caches of unowned crates count toward the cap but
+   are never evicted by it.

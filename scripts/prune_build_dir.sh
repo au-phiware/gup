@@ -255,13 +255,13 @@ trap cleanup_work EXIT
 # of work; that is noise against a cap of tens of GB.
 disk_kb() {
   sync -f "$build" 2>/dev/null || true
-  du -sk -- "$build" | cut -f1
+  { du -sk -- "$build" 2>/dev/null || true; } | cut -f1
 }
 
 # inventory: $work/sizes ("<profile>|<hash> <kb>", on disk, hard links once),
 # $work/owned ("<profile>|<hash>") and $work/cats (the kb of the rest).
 inventory() {
-  find "$build" -type f -printf '%i %n %k %p\n' | awk -v build="$build" -v work="$work" '
+  { find "$build" -type f -printf '%i %n %k %p\n' 2>/dev/null || true; } | awk -v build="$build" -v work="$work" '
     BEGIN {
       hex = ""
       for (i = 0; i < 16; i++) hex = hex "[0-9a-f]"
@@ -319,9 +319,9 @@ unit_graph() {
   for profile in "${profiles[@]}"; do
     [[ -d $profile/.fingerprint ]] || continue
     find "$profile/.fingerprint" -mindepth 2 -maxdepth 2 -type f \
-      -printf '%h %T@\n' >>"$work/own"
+      -printf '%h %T@\n' 2>/dev/null >>"$work/own" || true
     find "$profile/.fingerprint" -mindepth 2 -maxdepth 2 -type f \
-      -name '*.json' >>"$work/jsons"
+      -name '*.json' 2>/dev/null >>"$work/jsons" || true
   done
   # Fingerprint value (decimal) -> directory.
   sed 's/\.json$//' "$work/jsons" |
@@ -459,7 +459,7 @@ load_links() {
   [[ -d $build/checkouts ]] || return 0
   while read -r ino path; do
     links[$ino]+="$path"$'\n'
-  done < <(find "$build/checkouts" -type f -links +1 -printf '%i %p\n')
+  done < <(find "$build/checkouts" -type f -links +1 -printf '%i %p\n' 2>/dev/null || true)
 }
 
 # evict DIR KB: deletes the unit whose fingerprint directory is DIR (D2),
@@ -512,6 +512,10 @@ prune_lru() {
   total=$(($(disk_kb) - freed_kb))
   [[ $total -gt $total_cap_kb ]] || return 0
   for profile in "${profiles[@]}"; do
+    if [[ $dry_run -eq 1 ]]; then
+      held[$profile]=1 # nothing is deleted, so nothing needs a lock
+      continue
+    fi
     exec {fd}<"$profile/.cargo-lock"
     if flock -w "$wait_secs" "$fd"; then
       held[$profile]=1

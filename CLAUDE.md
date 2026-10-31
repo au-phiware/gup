@@ -116,16 +116,21 @@ one build directory (GUP-411):
   for 3 days, and the least recently compiled caches over 8 GB per profile. It
   holds cargo's build-directory lock while it works and skips a directory
   another build holds for more than 10 s. A deleted cache costs one
-  non-incremental compile; a live checkout's artifacts are never touched.
+  non-incremental compile; a live checkout's artifacts are never touched by
+  rules 1–4. Rule 5 (GUP-428) caps the whole directory at 80 GB
+  (`GUP_PRUNE_CAP_MB`): over it, the least recently used units (dependencies and
+  clippy's too; last use comes from cargo's fingerprint graph) are evicted,
+  except those used in the last hour. `mask prune-build --report` shows where
+  the space is.
 - **Bound**: measured on this repository (2026-10-11), a warm hook run with a
   root-crate change grows the build directory by 0–35 MB after the prune
   (without it, the second run doubled every incremental cache: +1.7 GB). An
   agent worktree that runs `cargo test -p gup` adds 21.8 GB of its own (tests,
   examples, caches); once the worktree is removed, the next prune reclaims all
-  of it (9.5 s). Remove finished worktrees promptly. Units built before GUP-427
-  have no owner record and are never pruned; delete the build directory once,
-  when nothing is building, to drop them. `scripts/test_prune_build_dir.sh` (in
-  `mask all-check`) proves the bound on a seeded multi-commit history.
+  of it (9.5 s). Remove finished worktrees promptly. The bound is the 80 GB cap
+  of rule 5, whatever the dependency or toolchain history.
+  `scripts/test_prune_build_dir.sh` (in `mask all-check`) proves the bound on a
+  seeded multi-commit history.
 - A commit older than GUP-411 has no `.cargo/config.toml`. In a worktree nested
   inside a checkout that has one, cargo uses the outer checkout's and the build
   stops with an explanation. Elsewhere, give it its own build directory.
