@@ -397,15 +397,16 @@ is not committed. Its procedure is the Oracle test below.
 ## Resolved (2026-10-31)
 
 The orchestrator accepted the WASM growth: `wasm.scatter.gz_bytes` 345,620
-(Start tree) to 353,691 B gz, +8,071 B, against the +6,000 B limit (headroom
+(Start tree) to 353,617 B gz, +7,997 B, against the +6,000 B limit (headroom
 under the 400 KB cap over bare wgpu remains about 79 KB: 321,331 B over wgpu).
 Holding the parsed face instead of re-parsing on a cache miss saved only 67 B
-(353,625 to 353,558) but was kept; `crispEdges` on rules added 133 B. The
-pair-cache and `tnum` data structures were not the cost (a sorted `Vec` and a
-direct-mapped cache made it 442 B worse and were reverted). `LayoutTable::parse`
-is `pub(crate)` in ttf-parser 0.21, so the GPOS/GSUB walk needs the full
-`Face::parse`. The orchestrator re-records the scatter row and the
-`zoom_uploads` guide budget (1,506,360 to 1,508,952 B).
+(353,625 to 353,558) and about 2 us a frame, and was reverted (see the
+retrospective); `crispEdges` on rules added 133 B. The pair-cache and `tnum`
+data structures were not the cost (a sorted `Vec` and a direct-mapped cache made
+it 442 B worse and were reverted). `LayoutTable::parse` is `pub(crate)` in
+ttf-parser 0.21, so the GPOS/GSUB walk needs the full `Face::parse`. The
+orchestrator re-records the scatter row and the `zoom_uploads` guide budget
+(1,506,360 to 1,508,952 B).
 
 ## Implementation Summary
 
@@ -466,12 +467,14 @@ is `pub(crate)` in ttf-parser 0.21, so the GPOS/GSUB walk needs the full
 
 ### Architectural Decisions
 
-#### `unsafe` to hold the parsed face
+#### No `unsafe`: re-parse on a pair-cache miss
 
-- **Decision**: `OtLayout::parse` is `unsafe` and extends the font bytes to
-  `'static`; `Font` keeps the bytes and the layout in one `Face`.
-- **Trade-off**: one small `unsafe` block for 67 B gz and no re-parse on a
-  pair-cache miss. Orchestrator-approved experiment.
+- **Decision**: `OtLayout::kern` parses the face again on a cache miss (3-7 us,
+  once per distinct glyph pair).
+- **Reasoning**: holding the parsed face needed a `'static` transmute of the
+  font bytes, a self-referential borrow whose drop order (`data` before
+  `layout`) is wrong. It saved 67 B gz and about 2 us a frame, so it was
+  reverted and `gup-text` has no `unsafe`.
 
 ### Development Workflow Insights
 
