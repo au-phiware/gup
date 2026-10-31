@@ -374,7 +374,9 @@ impl Acc {
         if v.is_finite() {
             self.min = self.min.min(v);
             self.max = self.max.max(v);
-            self.integral &= is_whole(v);
+            if self.integral {
+                self.integral = is_whole(v);
+            }
         } else {
             self.non_finite += 1;
         }
