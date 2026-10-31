@@ -313,7 +313,7 @@ GUP-566 edits `encoding.rs` (not beside GUP-562); GUP-567 edits `selection.rs`.
   benchmark, then builder keys encoded from a borrowed label (no second
   allocation) and a `foldhash` dictionary, each kept only if it helps: owned-key
   overhead from 52 to at most 30 ns per row. Deps: GUP-537 ✅.
-- [GUP-567](GUP-567_Cached_Edge_Extremes_For_Zoom.md) 📋 — Sorted per-chunk
+- [GUP-567](GUP-567_Cached_Edge_Extremes_For_Zoom.md) ✅ — Sorted per-chunk
   values cached for the edge-inset solve, so a programmatic zoom answers by
   binary search with identical insets: `zoom_culled.cpu` from 1.24 back under
   0.90 ms. Deps: GUP-528 ✅.

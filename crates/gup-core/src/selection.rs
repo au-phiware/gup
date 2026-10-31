@@ -30,7 +30,7 @@ use crate::theme::{Theme, Unbrushed};
 use crate::vector::{CpuLayer, LayerVector, MarkKind, VChan};
 use std::any::Any;
 use std::marker::PhantomData;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::task::Waker;
 
 type Handler<T> = Box<dyn FnMut(&EventInfo, &T) + Send + Sync>;
@@ -179,6 +179,9 @@ pub struct Selection<T, M: Mark> {
     /// Bumped whenever stored rows are renumbered (an eviction, or the
     /// columns evaluated again), so a GPU pick drawn before it is dropped.
     epoch: u64,
+    /// Finite values of decoded chunk columns, sorted ascending, for the
+    /// edge solve (GUP-567). Keyed by (epoch, chunk, column, chunk rows).
+    edge_cache: Mutex<EdgeCache>,
     /// Whether the brushed-row bits must be written whole at the next
     /// prepare (the stored rows were renumbered).
     bits_stale: bool,
@@ -328,6 +331,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             released: 0,
             evicted: 0,
             epoch: 0,
+            edge_cache: Mutex::new(EdgeCache::default()),
             bits_stale: false,
             window: Window::All,
             retain: Retain::Auto,
@@ -1695,26 +1699,30 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
                 // Only the axes the statistics say may bind are decoded.
                 let live: Vec<_> = positions.iter().filter(|p| !stat[p.0].is_empty()).collect();
                 done = (|| -> Option<()> {
+                    if size_cols.is_empty() {
+                        // Every row reaches `fixed`, so only the two rows
+                        // nearest the ends can bind: binary search the
+                        // chunk's cached sorted values (GUP-567).
+                        let mut cache = self.edge_cache.lock().ok()?;
+                        for &&(a, col, c) in &live {
+                            let axis = axes[a].as_ref()?;
+                            chunk.columns()[col].stats()?;
+                            let sorted = cache.sorted(self.epoch, k, col, chunk.rows(), || {
+                                store.chunk_values(k, col)
+                            })?;
+                            let (lo, hi) = sorted_extremes(sorted, axis, c)?;
+                            for t in [lo, hi].into_iter().flatten() {
+                                axis.push(&mut tmp[a], t, fixed[a]);
+                            }
+                        }
+                        return Some(());
+                    }
                     let mut decoded: Vec<Option<Vec<f64>>> = vec![None; store.formats().len()];
                     for &&(_, col, _) in &live {
                         decoded[col] = Some(store.chunk_values(k, col)?);
                     }
                     for &(col, _) in &size_cols {
                         decoded[col] = Some(store.chunk_values(k, col)?);
-                    }
-                    if size_cols.is_empty() {
-                        // Every row reaches `fixed`, so only the two rows
-                        // nearest the ends can bind.
-                        for &&(a, col, c) in &live {
-                            let axis = axes[a].as_ref()?;
-                            let stats = chunk.columns()[col].stats()?;
-                            let values = decoded[col].as_ref()?;
-                            let (lo, hi) = in_domain_extremes(values, axis, c, stats.extent())?;
-                            for t in [lo, hi].into_iter().flatten() {
-                                axis.push(&mut tmp[a], t, fixed[a]);
-                            }
-                        }
-                        return Some(());
                     }
                     for r in 0..rows {
                         let mut reach = 0.0f64;
@@ -2362,12 +2370,132 @@ fn chunk_validity<'c>(
     reads.then(|| chunk.validity_buffer(cx).expect("uploaded above"))
 }
 
+/// Finite values of decoded chunk columns, sorted ascending, for the edge
+/// solve (GUP-567): the nearest in-domain values to each end are found by
+/// binary search instead of decoding and scanning the chunk every frame.
+#[derive(Default)]
+struct EdgeCache {
+    epoch: u64,
+    /// Oldest first.
+    entries: Vec<SortedChunk>,
+}
+
+struct SortedChunk {
+    chunk: usize,
+    column: usize,
+    rows: u32,
+    /// Finite only, sorted with `total_cmp`.
+    values: Vec<f64>,
+}
+
+impl EdgeCache {
+    /// The most values kept: two decoded chunks at the edge budget.
+    const CAP: usize = 2 * crate::plot::inset::EDGE_ROW_BUDGET;
+
+    /// The sorted finite values of column `column` of chunk `chunk`
+    /// (`rows` rows), decoded by `decode` on a miss. The entries are
+    /// dropped when the layer's stored rows were renumbered (`epoch`); an
+    /// append grows the last chunk's `rows`, so it misses.
+    fn sorted(
+        &mut self,
+        epoch: u64,
+        chunk: usize,
+        column: usize,
+        rows: u32,
+        decode: impl FnOnce() -> Option<Vec<f64>>,
+    ) -> Option<&[f64]> {
+        if self.epoch != epoch {
+            self.epoch = epoch;
+            self.entries.clear();
+        }
+        let at = match self
+            .entries
+            .iter()
+            .position(|e| e.chunk == chunk && e.column == column && e.rows == rows)
+        {
+            Some(at) => at,
+            None => {
+                let mut values = decode()?;
+                values.retain(|v| v.is_finite());
+                values.sort_unstable_by(f64::total_cmp);
+                self.entries
+                    .retain(|e| !(e.chunk == chunk && e.column == column));
+                // Drop the oldest entries until the new one fits.
+                let total = values.len();
+                let mut held: usize = self.entries.iter().map(|e| e.values.len()).sum();
+                let mut drop = 0;
+                while drop < self.entries.len() && held + total > Self::CAP {
+                    held -= self.entries[drop].values.len();
+                    drop += 1;
+                }
+                self.entries.drain(..drop);
+                self.entries.push(SortedChunk {
+                    chunk,
+                    column,
+                    rows,
+                    values,
+                });
+                self.entries.len() - 1
+            }
+        };
+        Some(&self.entries[at].values)
+    }
+}
+
+/// [`in_domain_extremes`] on a chunk's sorted finite values: the smallest
+/// and largest normalized position among the values that lie in the domain
+/// (`0..=1`), found by binary search, with the same result as the scan
+/// (every library scale is monotonic). `None` if `c` has no CPU mirror.
+fn sorted_extremes<T>(
+    sorted: &[f64],
+    axis: &EdgeAxis,
+    c: &dyn crate::encoding::DynColumnEncoding<T>,
+) -> Option<(Option<f32>, Option<f32>)> {
+    let (Some(&first), Some(&last)) = (sorted.first(), sorted.last()) else {
+        return Some((None, None));
+    };
+    let failed = std::cell::Cell::new(false);
+    let t_of = |v: f64| axis.t(c.cpu_eval(v)?);
+    let t_or_flag = |v: f64| {
+        t_of(v).unwrap_or_else(|| {
+            failed.set(true);
+            f32::NAN
+        })
+    };
+    let (t0, t1) = (t_of(first)?, t_of(last)?);
+    if t0 == t1 {
+        // A constant column, or a degenerate range: one row decides.
+        let t = (0.0..=1.0).contains(&t0).then_some(t0);
+        return Some((t, t));
+    }
+    let found = if t1 > t0 {
+        // Ascending values have ascending positions: the first with
+        // `t >= 0` and the last with `t <= 1`.
+        let i = sorted.partition_point(|&v| t_or_flag(v) < 0.0);
+        let j = sorted.partition_point(|&v| t_or_flag(v) <= 1.0);
+        (i < j).then(|| (sorted[i], sorted[j - 1]))
+    } else {
+        // Ascending values have descending positions.
+        let i = sorted.partition_point(|&v| t_or_flag(v) > 1.0);
+        let j = sorted.partition_point(|&v| t_or_flag(v) >= 0.0);
+        (i < j).then(|| (sorted[j - 1], sorted[i]))
+    };
+    if failed.get() {
+        return None;
+    }
+    Some(match found {
+        Some((lo, hi)) => (Some(t_of(lo)?), Some(t_of(hi)?)),
+        None => (None, None),
+    })
+}
+
 /// The smallest and largest normalized position among the rows of
 /// `values` that lie in the domain (`0..=1`), where `c` maps a value to
 /// pixels and `extent` is the values' (min, max). Every library scale is
 /// monotonic, so a row between two rows already seen in the domain cannot
 /// be an extreme, and one beyond a row seen outside cannot be inside: only
 /// a few rows are evaluated. `None` if `c` has no CPU mirror.
+#[cfg(test)]
 fn in_domain_extremes<T>(
     values: &[f64],
     axis: &EdgeAxis,
@@ -3382,5 +3510,214 @@ mod timings {
             "metric pipeline.link_create.max_ms {:.3}",
             ms(total[total.len() - 1])
         );
+    }
+}
+
+/// GUP-567: the edge solve's sorted-value cache gives the scan's answer.
+#[cfg(test)]
+mod edge_cache_tests {
+    use super::*;
+    use crate::channel::Px;
+    use crate::encoding::{CpuMirror, DynColumnEncoding, EncodeFn, Encoding, IntoEncoding};
+    use crate::marks::Circle;
+    use crate::scale::{Linear, Log, ScaleRef};
+    use crate::{Context, Plot};
+
+    /// xorshift64: the same cases every run.
+    struct Rng(u64);
+
+    impl Rng {
+        fn next(&mut self) -> f64 {
+            self.0 ^= self.0 << 13;
+            self.0 ^= self.0 >> 7;
+            self.0 ^= self.0 << 17;
+            (self.0 >> 11) as f64 / (1u64 << 53) as f64
+        }
+    }
+
+    /// The column encoding an `encode` call makes, over `f64` rows.
+    fn column<E, K>(e: E) -> Box<dyn DynColumnEncoding<f64>>
+    where
+        E: IntoEncoding<f64, Px, K>,
+    {
+        match e.into_encoding() {
+            Encoding::Column(c) => c,
+            _ => unreachable!("a scale encodes to a column"),
+        }
+    }
+
+    #[test]
+    fn binary_search_matches_the_scan() {
+        let mut rng = Rng(0x9e37_79b9_7f4a_7c15);
+        for case in 0..2_000 {
+            let n = 100 + (rng.next() * 4_900.0) as usize;
+            let log = case % 2 == 1;
+            let (lo, hi): (f64, f64) = if log { (0.5, 5_000.0) } else { (-50.0, 150.0) };
+            let mut values: Vec<f64> = (0..n)
+                .map(|_| {
+                    // Some repeats, so ties occur.
+                    let u = rng.next();
+                    let u = if rng.next() < 0.2 {
+                        (u * 8.0).floor() / 8.0
+                    } else {
+                        u
+                    };
+                    if log {
+                        lo * (hi / lo).powf(u)
+                    } else {
+                        lo + (hi - lo) * u
+                    }
+                })
+                .collect();
+            for v in &mut values {
+                if rng.next() < 0.03 {
+                    *v = f64::NAN;
+                }
+            }
+            if case % 50 == 0 {
+                // A constant column.
+                let first = values.iter().copied().find(|v| !v.is_nan());
+                values.fill(first.unwrap_or(1.0));
+            }
+            let encoding = if log {
+                column(
+                    Log::new()
+                        .domain(lo, hi)
+                        .range(Px(0.0), Px(1000.0))
+                        .encode(|v: &f64| *v),
+                )
+            } else {
+                column(
+                    Linear::new()
+                        .domain(lo, hi)
+                        .range(Px(0.0), Px(1000.0))
+                        .encode(|v: &f64| *v),
+                )
+            };
+            // A pixel range inside, straddling or outside the data's;
+            // forward or reversed.
+            let a = -1_500.0 + rng.next() * 4_000.0;
+            let len = (50.0 + rng.next() * 2_500.0) * if rng.next() < 0.5 { 1.0 } else { -1.0 };
+            let axis = EdgeAxis {
+                identity: 0,
+                range: (a as f32, (a + len) as f32),
+                span_min: 100.0,
+            };
+            let mut sorted: Vec<f64> = values.iter().copied().filter(|v| v.is_finite()).collect();
+            sorted.sort_unstable_by(f64::total_cmp);
+            let extent = match (sorted.first(), sorted.last()) {
+                (Some(&p), Some(&q)) => (p, q),
+                _ => continue,
+            };
+            let scan = in_domain_extremes(&values, &axis, encoding.as_ref(), extent);
+            let search = sorted_extremes(&sorted, &axis, encoding.as_ref());
+            let bits = |r: Option<(Option<f32>, Option<f32>)>| {
+                r.map(|(p, q)| (p.map(f32::to_bits), q.map(f32::to_bits)))
+            };
+            assert_eq!(
+                bits(search),
+                bits(scan),
+                "case {case}: n {n}, log {log}, range {:?}",
+                axis.range
+            );
+        }
+    }
+
+    fn edge_plot(
+        rows: Vec<(f64, f64)>,
+        window: Window,
+    ) -> (Plot, ScaleRef<Linear>, ScaleRef<Linear>) {
+        let mut plot = Plot::new();
+        let x = plot.x(Linear::new().domain(0.0, 10.0));
+        let y = plot.y(Linear::new().domain(0.0, 10.0));
+        plot.legends(false);
+        plot.add(Selection::<(f64, f64), Circle>::new(rows))
+            .attr(Circle::X, x.encode(|r: &(f64, f64)| r.0))
+            .attr(Circle::Y, y.encode(|r: &(f64, f64)| r.1))
+            .attr(Circle::RADIUS, Px(25.0))
+            .max_chunk_rows(4)
+            .window(window);
+        (plot, x, y)
+    }
+
+    /// The bits of where the domain ends fall: the insets, exactly.
+    fn ends(plot: &mut Plot, cx: &Context, x: &ScaleRef<Linear>, y: &ScaleRef<Linear>) -> [u64; 4] {
+        plot.resolve(cx, 480.0, 320.0).unwrap();
+        let (x, y) = (x.read(), y.read());
+        [x.eval(0.0), x.eval(10.0), y.eval(0.0), y.eval(10.0)].map(f64::to_bits)
+    }
+
+    fn layer(plot: &mut Plot) -> &mut Selection<(f64, f64), Circle> {
+        plot.layer_mut::<(f64, f64), Circle>().unwrap()
+    }
+
+    /// Rows every chunk of which has one near each x end.
+    fn rows(range: std::ops::Range<usize>) -> Vec<(f64, f64)> {
+        range
+            .map(|i| match i % 4 {
+                0 => (0.4 + (i / 4) as f64 * 0.01, 5.0),
+                2 => (9.6 - (i / 4) as f64 * 0.01, 5.0),
+                _ => (5.0, 5.0),
+            })
+            .collect()
+    }
+
+    /// The solve after `change` is the cold solve's, and `change` moved it.
+    fn check(
+        mut plot: Plot,
+        x: ScaleRef<Linear>,
+        y: ScaleRef<Linear>,
+        change: impl FnOnce(&mut Selection<(f64, f64), Circle>),
+    ) {
+        let cx = Context::new_blocking().unwrap();
+        let before = ends(&mut plot, &cx, &x, &y);
+        assert!(
+            !layer(&mut plot)
+                .edge_cache
+                .lock()
+                .unwrap()
+                .entries
+                .is_empty(),
+            "the first solve filled the cache"
+        );
+        change(layer(&mut plot));
+        let warm = ends(&mut plot, &cx, &x, &y);
+        *layer(&mut plot).edge_cache.lock().unwrap() = EdgeCache::default();
+        let cold = ends(&mut plot, &cx, &x, &y);
+        assert_eq!(warm, cold, "a stale cache changed the insets");
+        assert_ne!(before, cold, "the change did not move the insets");
+    }
+
+    #[test]
+    fn an_append_to_the_last_chunk_misses() {
+        let (plot, x, y) = edge_plot(rows(0..10), Window::All);
+        check(plot, x, y, |s| {
+            // The last chunk holds two rows; the new nearest rows join it.
+            s.append([(0.05, 5.0), (9.99, 5.0)]).unwrap();
+        });
+    }
+
+    #[test]
+    fn an_eviction_renumbers_the_chunks() {
+        let (plot, x, y) = edge_plot(rows(0..8), Window::LastRows(8));
+        check(plot, x, y, |s| {
+            // Chunk 0 is a different chunk, of the same size, afterwards.
+            s.append((0..8).map(|i| match i % 4 {
+                0 => (0.2, 5.0),
+                2 => (9.8, 5.0),
+                _ => (5.0, 5.0),
+            }))
+            .unwrap();
+        });
+    }
+
+    #[test]
+    fn evaluating_the_columns_again_misses() {
+        let (plot, x, y) = edge_plot(rows(0..8), Window::All);
+        let again = x.clone();
+        check(plot, x, y, move |s| {
+            // Same rows and chunks, other values.
+            s.attr(Circle::X, again.encode(|r: &(f64, f64)| r.0 + 0.1));
+        });
     }
 }
