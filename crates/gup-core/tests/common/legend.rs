@@ -113,6 +113,7 @@ pub fn legend_metadata(s: &LegendScene) -> LayoutMetadata {
             at: [run.at.x, run.at.y],
             anchor: run.anchor,
             weight: run.style.weight,
+            features: gup_text::Features::default(),
         });
         meta = meta.with_text(
             role(run.role),

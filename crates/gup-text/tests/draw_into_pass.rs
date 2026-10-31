@@ -6,7 +6,8 @@
 //! into a render pass the test opened itself, and read the pixels back.
 
 use gup_text::{
-    Anchor, DrawTarget, GlyphBuffer, Glyphs, HAlign, Run, TextSystem, Uploader, VAlign, Weight,
+    Anchor, DrawTarget, Features, GlyphBuffer, Glyphs, HAlign, Run, TextSystem, Uploader, VAlign,
+    Weight,
 };
 use std::cell::Cell;
 
@@ -148,6 +149,7 @@ fn measures_and_draws_a_run_into_a_callers_pass() {
         at: [WIDTH as f32 / 2.0, 16.0],
         anchor: Anchor::new(HAlign::Middle, VAlign::Top),
         weight: Weight::Regular,
+        features: Features::default(),
     };
     let metrics = text.measure(run.text, run.size);
     assert!(metrics.width > 60.0 && metrics.width < 200.0, "{metrics:?}");
@@ -236,6 +238,7 @@ fn semibold_text_is_wider_and_has_its_own_glyphs() {
         at: [0.0, 0.0],
         anchor: Anchor::new(HAlign::Start, VAlign::Top),
         weight: Weight::Regular,
+        features: Features::default(),
     };
     let mut glyphs = Glyphs::new(1.0);
     text.layout(&run, [0.0; 4], &mut glyphs).unwrap();
@@ -259,6 +262,7 @@ fn a_device_pixel_ratio_of_two_draws_twice_the_size() {
         at: [10.0, 10.0],
         anchor: Anchor::new(HAlign::Start, VAlign::Top),
         weight: Weight::Regular,
+        features: Features::default(),
     };
     let ink = |g: &Glyphs| {
         g.rects()

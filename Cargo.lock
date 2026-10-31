@@ -2744,7 +2744,9 @@ dependencies = [
  "bytemuck",
  "fontdue",
  "pollster 0.3.0",
+ "rustybuzz",
  "thiserror 2.0.18",
+ "ttf-parser 0.21.1",
  "wgpu",
 ]
 
