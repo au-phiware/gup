@@ -179,10 +179,9 @@ impl Font {
         };
         let glyphs = fontdue::Font::from_bytes(data.bytes(), fontdue::FontSettings::default())
             .map_err(|reason| font_error(reason.to_owned()))?;
-        // SAFETY: the layout and the bytes live in one `Face`, whose bytes are
-        // a `&'static` slice or a heap `Arc<[u8]>` that is never replaced.
-        let layout =
-            unsafe { OtLayout::parse(data.bytes()) }.map_err(|e| font_error(e.to_string()))?;
+        let layout = OtLayout::parse(
+            &ttf_parser::Face::parse(data.bytes(), 0).map_err(|e| font_error(e.to_string()))?,
+        );
         Ok(Self {
             name: name.into(),
             face: Arc::new(Face {

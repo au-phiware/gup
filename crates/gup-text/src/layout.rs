@@ -320,7 +320,7 @@ impl Font {
             let kern = match prev {
                 Some((pface, p)) if features.contains(Features::KERN) && pface.id == face.id => {
                     if face.layout.has_gpos_kern() {
-                        face.layout.kern(p, glyph, px)
+                        face.layout.kern(face.data.bytes(), p, glyph, px)
                     } else {
                         face.glyphs
                             .horizontal_kern_indexed(p, glyph, px)
