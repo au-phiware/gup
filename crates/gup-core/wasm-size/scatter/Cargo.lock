@@ -486,6 +486,7 @@ dependencies = [
  "bytemuck",
  "fontdue",
  "thiserror 2.0.18",
+ "ttf-parser",
  "wgpu",
 ]
 

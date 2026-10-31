@@ -391,3 +391,34 @@ is not committed. Its procedure is the Oracle test below.
 - [ ] WASM size: `mask wasm-size` scatter gz bytes before and after
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
+
+## Blocked (2026-10-31)
+
+Implementation and goldens are done (55 goldens blessed, oracle test passes on
+all 36,100+ strings, `Features::NONE` leaves every gup-core test and golden
+unchanged). Two escalation triggers fired:
+
+1. **WASM size.** `mask wasm-size` scatter: Start tree 345,620 B gz (recorded
+   then 341,760); now 353,625 B gz. That is +8,005 B, over the +6,000 limit
+   (harness lock gains only `ttf-parser` in gup-text's list, as required).
+   `mask wasm-attrib`: `gup_text::font::Font::parse` 14,234 B raw (inlines
+   `OtLayout::parse`), `OtLayout::kern` 5,729 B (re-parses the face on a cache
+   miss), `ttf_parser` 43,206 B raw in all (was already partly linked by
+   fontdue). Replacing the two `HashMap`s by a sorted `Vec` and a direct-mapped
+   cache made it worse (354,067 B), so that was reverted. `LayoutTable::parse`
+   is `pub(crate)` in ttf-parser 0.21, so `RawFace` cannot replace
+   `Face::parse`. Options: (a) accept +8 KB (re-record the row at 353,625); (b)
+   drop the pair re-parse by holding the parsed `Face` (needs
+   `unsafe`/self-reference or leaking), saving perhaps 1-2 KB; (c) drop `tnum`
+   GSUB walk until GUP-579 (saves roughly 2-3 KB, unmeasured). Recommend (a) or
+   (c).
+2. **Parity/budget tests that changed.** `svg.rs::guides_svg_matches_the_png`
+   now has one stray pixel outside text (340,417, the x axis at the 30,000 tick,
+   max ΔE 17.4): a rule/tick sub-pixel difference between resvg and the GPU,
+   exposed because kerned labels move the plot rect by 1 px. Not text. Also
+   `zoom_uploads.rs` guide instance budget rose 1,506,360 to 1,508,952 B (I
+   changed the constants in the test; `PERF_BUDGETS.md` is untouched), and
+   `tests/fixtures/msaa_guides.svg` moved by 1 px (updated).
+
+Layout cost (`layout_cost`, release): Start ~26.6-31 us/frame, now ~35.5
+us/frame (+5 to +9 us, within +30).
