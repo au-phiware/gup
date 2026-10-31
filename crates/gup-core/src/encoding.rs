@@ -758,7 +758,7 @@ impl DictionarySlot {
 }
 
 impl<K: KeySource, S: EncodeFn> KeyEncoded<K, S> {
-    fn new(key: K, func: S) -> Self {
+    pub(crate) fn new(key: K, func: S) -> Self {
         let slot = func.links().first().and_then(|l| l.dictionary_slot());
         let (dictionary, mismatch) = match slot.map(DictionarySlot::get_or_insert::<K::Key>) {
             Some(Ok(d)) => (d, None),
@@ -891,6 +891,30 @@ where
 {
     fn code(&self, row: &T, dictionary: &mut Dictionary) -> Result<u32> {
         dictionary.encode_borrowed((self.0)(row))
+    }
+}
+
+/// A builder's category key (GUP-566): the row's label is handed to the
+/// dictionary as a borrowed `&str`, copied only when the key is new.
+pub(crate) struct LabelKey<T>(pub(crate) crate::builder::Key<T>);
+
+impl<T> Clone for LabelKey<T> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+impl<T: 'static> KeySource for LabelKey<T> {
+    type Key = Arc<str>;
+}
+
+impl<T: 'static> KeyAccessor<T> for LabelKey<T> {
+    fn code(&self, row: &T, dictionary: &mut Dictionary) -> Result<u32> {
+        let mut code = None;
+        self.0.visit(row, &mut |label| {
+            code = Some(dictionary.encode_borrowed(label))
+        });
+        code.expect("Key::visit calls its callback once")
     }
 }
 

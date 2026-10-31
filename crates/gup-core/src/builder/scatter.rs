@@ -9,6 +9,7 @@ use std::sync::Arc;
 use super::{DRAWN, Key, erase_key, plot_setters};
 use crate::Appender;
 use crate::column::DictionaryKey;
+use crate::encoding::{KeyEncoded, LabelKey};
 use crate::geom::Point;
 use crate::prelude::*;
 use crate::scale::ColorValueScale;
@@ -265,9 +266,9 @@ impl<T: Send + Sync + 'static> ScatterChart<T> {
                 sel.fill(*c);
             }
             ColorSpec::Key(key) => {
-                let key = Arc::clone(key);
+                let key = key.clone();
                 let scale = ScaleRef::new(self.color_scale.clone());
-                sel.fill(scale.encode_owned_key(move |r: &T| key(r)));
+                sel.fill(KeyEncoded::new(LabelKey(key), scale));
             }
             ColorSpec::Value(f) => {
                 let f = Arc::clone(f);

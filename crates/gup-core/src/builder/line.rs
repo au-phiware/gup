@@ -11,6 +11,7 @@ use std::task::Waker;
 use super::{DRAWN, Key, erase_key, plot_setters};
 use crate::append::{Appender, FeedRx};
 use crate::column::DictionaryKey;
+use crate::encoding::{KeyEncoded, LabelKey};
 use crate::geom::Point;
 use crate::prelude::*;
 use crate::{ColumnValue, Context, Input, Layout, Resolved, Response, Result, RowId};
@@ -269,7 +270,7 @@ impl<T: Send + Sync + 'static> LineChart<T> {
         let slots: Vec<usize> = rows
             .iter()
             .map(|r| {
-                let k = key(r);
+                let k = key.label(r);
                 if let Some(&i) = index.get(&k) {
                     i
                 } else {
@@ -298,9 +299,9 @@ impl<T: Send + Sync + 'static> LineChart<T> {
                 sel.color(*c);
             }
             ColorSpec::Key(key) => {
-                let key = Arc::clone(key);
+                let key = key.clone();
                 let scale = self.scale.as_ref().expect("the colour scale is made first");
-                sel.color(scale.encode_owned_key(move |r: &T| key(r)));
+                sel.color(KeyEncoded::new(LabelKey(key), scale.clone()));
             }
         }
         if let Some(title) = &self.legend_title {
@@ -315,12 +316,12 @@ impl<T: Send + Sync + 'static> LineChart<T> {
         };
         self.scale = Some(ScaleRef::new(self.color_scale.clone()));
         let key = match &self.color {
-            ColorSpec::Key(key) => Some(Arc::clone(key)),
+            ColorSpec::Key(key) => Some(key.clone()),
             _ => None,
         };
         for series in Self::split(rows, key.as_ref()) {
             if let Some(key) = &key {
-                let name = key(&series[0]);
+                let name = key.label(&series[0]);
                 let index = self.keys.len();
                 self.keys.insert(name, index);
             }
@@ -338,13 +339,13 @@ impl<T: Send + Sync + 'static> LineChart<T> {
         }
         let rows = feed.drain();
         let Some(key) = (match &self.color {
-            ColorSpec::Key(key) => Some(Arc::clone(key)),
+            ColorSpec::Key(key) => Some(key.clone()),
             _ => None,
         }) else {
             return Ok(());
         };
         for series in Self::split(rows, Some(&key)) {
-            let name = key(&series[0]);
+            let name = key.label(&series[0]);
             if let Some(&i) = self.keys.get(&name) {
                 let layer = self
                     .plot

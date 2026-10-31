@@ -386,7 +386,7 @@ impl<T: Send + Sync + 'static> AreaChart<T> {
         let mut index: HashMap<Arc<str>, usize> = HashMap::new();
         let mut series: Vec<(Arc<str>, Vec<usize>)> = Vec::new();
         for (i, r) in rows.iter().enumerate() {
-            let k = key(r);
+            let k = key.label(r);
             let slot = *index.entry(Arc::clone(&k)).or_insert_with(|| {
                 series.push((k, Vec::new()));
                 series.len() - 1

@@ -231,9 +231,9 @@ impl<T: Send + Sync + 'static> BoxPlotChart<T> {
         let mut index: HashMap<Arc<str>, usize> = HashMap::new();
         let mut groups: Vec<(Arc<str>, Arc<str>, Vec<f64>)> = Vec::new();
         for r in rows {
-            let key = xk(r);
+            let key = xk.label(r);
             let i = *index.entry(Arc::clone(&key)).or_insert_with(|| {
-                let color = color_of.map_or_else(|| Arc::clone(&key), |c| c(r));
+                let color = color_of.map_or_else(|| Arc::clone(&key), |c| c.label(r));
                 groups.push((Arc::clone(&key), color, Vec::new()));
                 groups.len() - 1
             });
