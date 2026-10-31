@@ -441,6 +441,7 @@ version = "0.1.0"
 dependencies = [
  "bytemuck",
  "encase",
+ "foldhash 0.2.0",
  "futures-channel",
  "gup-core-macros",
  "gup-text",

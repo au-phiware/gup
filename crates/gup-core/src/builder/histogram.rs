@@ -164,7 +164,7 @@ fn tally<T>(
                 continue;
             }
             let layer = key.map_or(0, |key| {
-                let k = key(r);
+                let k = key.label(r);
                 *index.entry(Arc::clone(&k)).or_insert_with(|| {
                     keys.push(k);
                     keys.len() - 1
@@ -327,7 +327,7 @@ impl<T: Send + Sync + 'static> HistogramChart<T> {
             return;
         };
         let key_of = match &self.color {
-            ColorSpec::Key(k) => Some(Arc::clone(k)),
+            ColorSpec::Key(k) => Some(k.clone()),
             _ => None,
         };
         let tallied = tally(
@@ -492,7 +492,7 @@ mod tests {
     fn stacking_by_key_keeps_the_bin_totals() {
         let rows = rows();
         let v: Value<(&str, f64)> = Arc::new(value);
-        let k: Key<(&str, f64)> = Arc::new(|r| Arc::from(r.0));
+        let k = erase_key(|r: &(&str, f64)| Arc::<str>::from(r.0));
         let plain = tally(&rows, Some(&v), None, &Bins::Auto, None);
         let keyed = tally(&rows, Some(&v), Some(&k), &Bins::Auto, None);
         assert_eq!(plain.edges, keyed.edges);

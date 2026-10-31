@@ -11,7 +11,7 @@ touches: [crates/gup-core/src/encoding.rs, crates/gup-core/src/builder/]
 ## Story Overview
 
 **Initiative**: Strategic Review 2026-11 (N5 Performance at Scale) **Status**:
-📋 Planned **Created**: 2026-10-26
+✅ Complete (2026-11-01) **Created**: 2026-10-26
 
 ## Context
 
@@ -57,7 +57,7 @@ only if it measurably helps, and states a target.
 
 ### AC1: A committed benchmark (measure first)
 
-- [ ] `crates/gup-core/examples/keyed_resolve_bench.rs` (copyright header), run
+- [x] `crates/gup-core/examples/keyed_resolve_bench.rs` (copyright header), run
       with
       `scripts/with_cargo_env.sh cargo run -p gup-core --release --example keyed_resolve_bench`.
       It builds 1,000,000 rows `{ x: f64, y: f64, key: String }` with 8 distinct
@@ -69,41 +69,41 @@ only if it measurably helps, and states a target.
       `Circle::FILL`), `owned_plot` (the same with
       `encode_owned_key(|r: &Row| r.key.clone())`) and `builder`
       (`gup_core::scatter(rows).x(..).y(..).color(|r| r.key.clone())`).
-- [ ] It also prints `metric keyed.dict.<path>.ns_per_row <v>` for 1,000,000 key
+- [x] It also prints `metric keyed.dict.<path>.ns_per_row <v>` for 1,000,000 key
       encodes without the GPU: `borrowed` (`encode_borrowed(&str)`), `owned`
       (`Dictionary<String>::encode` of a clone), and `builder` (the builder's
       own path, as it is at each commit).
-- [ ] The Implementation Summary records every metric at the parent commit (the
+- [x] The Implementation Summary records every metric at the parent commit (the
       example applied there uncommitted) and after.
 
 ### AC2: No second allocation on the builder path (change F1)
 
-- [ ] The builders encode keys through a crate-private `LabelKey` accessor
+- [x] The builders encode keys through a crate-private `LabelKey` accessor
       (Decisions) that hands the dictionary a borrowed `&str`; a key is copied
       into the dictionary only when it is new.
-- [ ] Unit tests in `builder/mod.rs`: `Key::label` and `Key::visit` give the
+- [x] Unit tests in `builder/mod.rs`: `Key::label` and `Key::visit` give the
       same text for a `String`, a `&'static str`, an `Arc<str>`, a `u32` and an
       enum with `Display`.
 
 ### AC3: A faster dictionary hash (change F2)
 
-- [ ] `Dictionary`'s map uses `foldhash::fast::RandomState` (direct dependency
+- [x] `Dictionary`'s map uses `foldhash::fast::RandomState` (direct dependency
       `foldhash = "0.2"`, already in `Cargo.lock` through wgpu's hashbrown).
 
 ### AC4: Keep only what helps, and the target
 
-- [ ] Each of F1 and F2 is kept only if, alone on top of the other, it lowers
+- [x] Each of F1 and F2 is kept only if, alone on top of the other, it lowers
       `keyed.builder.first_resolve_ms` by at least 5%; a change that does not is
       reverted and its numbers recorded.
-- [ ] Target: `builder − borrowed` at most 30 ms (30 ns per row, from 52), both
+- [x] Target: `builder − borrowed` at most 30 ms (30 ns per row, from 52), both
       measured in the same run after the change, and `builder` at least 20%
       below its parent value.
-- [ ] Behaviour unchanged: every test passes, including GUP-537's owned-key
+- [x] Behaviour unchanged: every test passes, including GUP-537's owned-key
       tests and the `builder_owned_keys` golden, with no golden re-blessed.
 
 ### AC5: Size
 
-- [ ] `mask wasm-size`: the scatter gz bytes are reported; growth above 1,000 B
+- [x] `mask wasm-size`: the scatter gz bytes are reported; growth above 1,000 B
       is an escalation.
 
 ## Decisions
@@ -168,11 +168,11 @@ only if it measurably helps, and states a target.
 
 ## Technical Tasks
 
-- [ ] AC1 benchmark; run it at the parent commit and record.
-- [ ] F1: `Key<T>` struct, `LabelKey`, builder call sites; tests.
-- [ ] F2: `foldhash` dependency and the map's hasher.
-- [ ] Measure each change alone and together (AC4); revert what does not help.
-- [ ] `mask wasm-size`.
+- [x] AC1 benchmark; run it at the parent commit and record.
+- [x] F1: `Key<T>` struct, `LabelKey`, builder call sites; tests.
+- [x] F2: `foldhash` dependency and the map's hasher.
+- [x] Measure each change alone and together (AC4); revert what does not help.
+- [x] `mask wasm-size`.
 
 ## Dependencies
 
@@ -192,8 +192,8 @@ None directly.
 
 ## Success Metrics
 
-- [ ] Owned-key overhead at most 30 ns per row (from 52).
-- [ ] No visible change.
+- [x] Owned-key overhead at most 30 ns per row (from 52).
+- [x] No visible change.
 
 ## Risk Assessment
 
@@ -207,17 +207,99 @@ None directly.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`, plus
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`, plus
       `scripts/with_cargo_env.sh cargo test -p gup-core -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye: not needed, no output change (goldens
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye: not needed, no output change (goldens
       pass unchanged)
-- [ ] `mask wasm-browser` not needed: no layout, input or wasm code changes
+- [x] `mask wasm-browser` not needed: no layout, input or wasm code changes
       beyond the hasher, which `mask wasm-size` builds
-- [ ] WASM size: `mask wasm-size` scatter gz bytes reported (AC5)
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] WASM size: `mask wasm-size` scatter gz bytes reported (AC5)
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Resolved (2026-10-31)
+
+**Resolved**: orchestrator kept foldhash; AC5 limit raised to 1,500 B for this
+story. Original question: AC5 growth is +1,419 B gz on the scatter, above the
+1,000 B escalation limit; keep `foldhash` (F2) anyway, or revert it?
+
+**Evidence** (`mask wasm-size`, `wasm.scatter.gz_bytes`): parent `ee9ca921`
+345,684; F1 only 345,694 (+10); F1+F2 347,103 (+1,419). `foldhash` is all of the
+growth (+1,409 B). Within the perf-budget table it passes (+2% limit 352,595
+against recorded 345,682), but the story's own limit is 1,000 B.
+
+**Measurements** (release, 1M rows, 8 String keys, alternating binaries, median
+of 15, load average median 5.5, max 8.6; first resolve ms):
+
+| metric                 | parent | F1 only | F2 only | F1+F2 |
+| ---------------------- | ------ | ------- | ------- | ----- |
+| `borrowed`             | 60.3   | 61.0    | 45.6    | 47.1  |
+| `owned_plot`           | 73.5   | 71.8    | 60.3    | 60.9  |
+| `builder`              | 108.5  | 88.6    | 92.9    | 74.4  |
+| dict `borrowed` ns/row | 26.1   | 29.7    | 12.4    | 14.9  |
+| dict `owned` ns/row    | 40.8   | 40.9    | 28.9    | 29.2  |
+| dict `builder` ns/row  | 67.8   | 41.1    | 28.8    | 28.8  |
+
+AC4: F1 on top of F2 lowers `builder` 92.9 to 74.4 (-20%); F2 on top of F1
+lowers 88.6 to 74.4 (-16%); both kept. Target: `builder - borrowed` = 27.3 ms
+(at most 30), `builder` is 31% below parent. Met.
+
+**Options**: (a) keep `foldhash`, accept +1.4 KB (0.4%) for -31% builder time
+and about 14 ms off every keyed resolve; (b) revert F2: builder 88.6 ms, target
+`builder - borrowed` 27.6 ms still met, `builder` -18% (misses the 20% rule).
+
+**Recommendation**: (a), and raise the AC5 limit to 1,500 B; the budget table
+already tolerates it. Code is committed (F1 + F2); remaining: doc tests,
+`mask merge-check`, story completion and retrospective.
+
+## Implementation Summary
+
+- `crates/gup-core/examples/keyed_resolve_bench.rs` (AC1).
+- F1: `builder::Key<T>` is a struct with `visit` and `label`; `LabelKey` in
+  `encoding.rs` hands the dictionary a borrowed `&str`; every builder's
+  `encode_owned_key` call became `KeyEncoded::new(LabelKey(..), scale)`. Unit
+  tests for `visit`/`label` agreement and a re-entrant `Display`.
+- F2: `foldhash =0.2.0`, `Dictionary` map uses `foldhash::fast::RandomState`.
+- Numbers: see the table under "Resolved" (release, 1M rows, 8 keys, median of
+  15, load median 5.5). `builder` 108.5 to 74.4 ms (-31%); `builder` minus
+  `borrowed` 27.3 ms; `borrowed` itself 60.3 to 47.1 ms.
+- WASM scatter gz: 345,684 to 347,103 (+1,419; foldhash +1,409, F1 +10).
+- Evidence: `cargo test -p gup-core -- --test-threads=1` 54 suites, 719 passed,
+  0 failed, 7 ignored; `cargo test --doc -p gup` 56 + 4 passed;
+  `mask merge-check` PASS (dogfood skipped); no golden changed.
+
+## Retrospective
+
+**Completed**: 2026-11-01
+
+### Key Technical Learnings
+
+#### The second allocation was not the whole cost
+
+- **Challenge**: GUP-537's label cache did not help.
+- **Solution**: F1 and F2 each give 16-20% on top of the other; hashing is as
+  large as the allocation.
+- **Pattern**: measure variants alone and together; alternate binaries.
+
+### Architectural Decisions
+
+#### foldhash costs 1.4 KB gz
+
+- **Decision**: kept (orchestrator), AC5 limit raised to 1,500 B.
+- **Trade-off**: +0.4% WASM for about 25% on every key path.
+
+### Development Workflow Insights
+
+- A worktree-isolated agent's shell refuses compound commands (loops, `cd`,
+  heredocs); use Write/Edit and plain commands.
+- The benchmark's `builder` dictionary row models the builder path through
+  public API; it cannot call crate-private code from an example.
+
+### Follow-up Stories
+
+None.

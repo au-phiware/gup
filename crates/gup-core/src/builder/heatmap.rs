@@ -10,6 +10,7 @@ use std::sync::Arc;
 use super::{DRAWN, Key, erase_key, plot_setters};
 use crate::column::DictionaryKey;
 use crate::encoding::Derived;
+use crate::encoding::{KeyEncoded, LabelKey};
 use crate::geom::Point;
 use crate::prelude::*;
 use crate::scale::ColorValueScale;
@@ -116,7 +117,7 @@ fn domain<T>(rows: &[T], key: &Option<Key<T>>) -> Vec<Arc<str>> {
     let mut keys = Vec::new();
     if let Some(key) = key {
         for r in rows {
-            let k = key(r);
+            let k = key.label(r);
             if seen.insert(Arc::clone(&k)) {
                 keys.push(k);
             }
@@ -204,13 +205,13 @@ impl<T: Send + Sync + 'static> HeatmapChart<T> {
         let ops = std::mem::take(&mut self.ops);
         let sel = self.plot.rects(rows);
         if let Some(key) = &self.x_key {
-            let key = Arc::clone(key);
-            sel.x_with(self.x.encode_owned_key(move |r: &T| key(r)).domain(xs))
+            let key = key.clone();
+            sel.x_with(KeyEncoded::new(LabelKey(key), self.x.clone()).domain(xs))
                 .width(cell_size(&self.x));
         }
         if let Some(key) = &self.y_key {
-            let key = Arc::clone(key);
-            sel.y_with(self.y.encode_owned_key(move |r: &T| key(r)).domain(ys))
+            let key = key.clone();
+            sel.y_with(KeyEncoded::new(LabelKey(key), self.y.clone()).domain(ys))
                 .height(cell_size(&self.y));
         }
         for op in ops {

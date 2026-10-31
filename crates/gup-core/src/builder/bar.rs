@@ -10,6 +10,7 @@ use std::sync::Arc;
 
 use super::{DRAWN, Key, erase_key, plot_setters};
 use crate::column::DictionaryKey;
+use crate::encoding::{KeyEncoded, LabelKey};
 use crate::geom::Point;
 use crate::prelude::*;
 use crate::scene::{HAlign, VAlign};
@@ -585,7 +586,7 @@ impl<T: Send + Sync + 'static, O: Orientation> BarChart<T, O> {
         let slots: Vec<usize> = rows
             .iter()
             .map(|r| {
-                let k = key(r);
+                let k = key.label(r);
                 if let Some(&i) = index.get(&k) {
                     i
                 } else {
@@ -613,7 +614,7 @@ impl<T: Send + Sync + 'static, O: Orientation> BarChart<T, O> {
         if let Some(xk) = &self.cat_key {
             let mut seen = std::collections::HashSet::new();
             for r in &rows {
-                let k = xk(r);
+                let k = xk.label(r);
                 if seen.insert(Arc::clone(&k)) {
                     categories.push(k);
                 }
@@ -626,8 +627,8 @@ impl<T: Send + Sync + 'static, O: Orientation> BarChart<T, O> {
         }
         let (part_key, stacked) = match &self.arrange {
             Arrange::Simple => (None, false),
-            Arrange::Group(k) => (Some(Arc::clone(k)), false),
-            Arrange::Stack(k) => (Some(Arc::clone(k)), true),
+            Arrange::Group(k) => (Some(k.clone()), false),
+            Arrange::Stack(k) => (Some(k.clone()), true),
         };
         let parts = Self::split(rows, part_key.as_ref());
         let count = parts.len().max(1) as u32;
@@ -641,7 +642,7 @@ impl<T: Send + Sync + 'static, O: Orientation> BarChart<T, O> {
                         for r in part {
                             let v = y(r);
                             if v.is_finite() {
-                                *sum.entry(xk(r)).or_insert(0.0) += v;
+                                *sum.entry(xk.label(r)).or_insert(0.0) += v;
                             }
                         }
                     }
@@ -658,10 +659,9 @@ impl<T: Send + Sync + 'static, O: Orientation> BarChart<T, O> {
             let label_rows = self.label_rows(&part, tables.as_ref().map(|t| &t[i]), &categories);
             let sel = self.plot.rects(part);
             if let Some(xk) = &self.cat_key {
-                let xk = Arc::clone(xk);
+                let xk = xk.clone();
                 let enc = |s: &mut Selection<T, Rect>| {
-                    let xk = Arc::clone(&xk);
-                    let key = move |r: &T| xk(r);
+                    let key = LabelKey(xk.clone());
                     let grouped = matches!(self.arrange, Arrange::Group(_));
                     // The first key takes the topmost bar of a horizontal band.
                     let slot = if O::HORIZONTAL {
@@ -673,29 +673,29 @@ impl<T: Send + Sync + 'static, O: Orientation> BarChart<T, O> {
                     match (O::HORIZONTAL, grouped) {
                         (false, true) => {
                             s.x_with(
-                                self.band
-                                    .sub_band(slot, count)
-                                    .encode_owned_key(key)
+                                KeyEncoded::new(key.clone(), self.band.sub_band(slot, count))
                                     .domain(domain),
                             )
                             .width(self.band.sub_band_width_px(count, self.group_padding));
                         }
                         (true, true) => {
                             s.y_with(
-                                self.band
-                                    .sub_band(slot, count)
-                                    .encode_owned_key(key)
+                                KeyEncoded::new(key.clone(), self.band.sub_band(slot, count))
                                     .domain(domain),
                             )
                             .height(self.band.sub_band_width_px(count, self.group_padding));
                         }
                         (false, false) => {
-                            s.x_with(self.band.encode_owned_key(key).domain(domain))
-                                .width(self.band.band_width_px());
+                            s.x_with(
+                                KeyEncoded::new(key.clone(), self.band.clone()).domain(domain),
+                            )
+                            .width(self.band.band_width_px());
                         }
                         (true, false) => {
-                            s.y_with(self.band.encode_owned_key(key).domain(domain))
-                                .height(self.band.band_width_px());
+                            s.y_with(
+                                KeyEncoded::new(key.clone(), self.band.clone()).domain(domain),
+                            )
+                            .height(self.band.band_width_px());
                         }
                     }
                 };
@@ -710,13 +710,13 @@ impl<T: Send + Sync + 'static, O: Orientation> BarChart<T, O> {
                     (
                         Arc::new(move |r: &T| match &xt {
                             Some(xk) if yt(r).is_finite() => {
-                                top.get(&xk(r)).map_or(f64::NAN, |&(_, t)| t)
+                                top.get(&xk.label(r)).map_or(f64::NAN, |&(_, t)| t)
                             }
                             _ => f64::NAN,
                         }),
                         Arc::new(move |r: &T| match &xb {
                             Some(xk) if yb(r).is_finite() => {
-                                base.get(&xk(r)).map_or(f64::NAN, |&(b, _)| b)
+                                base.get(&xk.label(r)).map_or(f64::NAN, |&(b, _)| b)
                             }
                             _ => f64::NAN,
                         }),
@@ -740,11 +740,11 @@ impl<T: Send + Sync + 'static, O: Orientation> BarChart<T, O> {
                     sel.fill(*c);
                     None
                 }
-                (ColorSpec::Key(k), _) => Some(Arc::clone(k)),
+                (ColorSpec::Key(k), _) => Some(k.clone()),
                 (ColorSpec::Default, k) => k.clone(),
             };
             if let Some(key) = key {
-                sel.fill(colours.encode_owned_key(move |r: &T| key(r)));
+                sel.fill(KeyEncoded::new(LabelKey(key), colours.clone()));
                 if let Some(title) = &self.legend_title {
                     sel.legend_title(Rect::FILL, title.clone());
                 }
@@ -783,7 +783,7 @@ impl<T: Send + Sync + 'static, O: Orientation> BarChart<T, O> {
         };
         if let Some(table) = table {
             let stack = match &self.arrange {
-                Arrange::Stack(k) => part.first().map(|r| k(r)),
+                Arrange::Stack(k) => part.first().map(|r| k.label(r)),
                 _ => None,
             };
             return categories
@@ -804,7 +804,7 @@ impl<T: Send + Sync + 'static, O: Orientation> BarChart<T, O> {
             .filter_map(|r| {
                 let v = y(r);
                 v.is_finite().then(|| BarLabel {
-                    key: xk(r),
+                    key: xk.label(r),
                     value: v,
                     base: 0.0,
                     top: v,

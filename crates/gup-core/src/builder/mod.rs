@@ -140,6 +140,7 @@
 //! | `.layer_with_y2(..)` | `Plot::y_right` (RFC-001 S11) |
 
 use std::any::Any;
+use std::cell::RefCell;
 use std::sync::Arc;
 
 use crate::column::DictionaryKey;
@@ -160,28 +161,68 @@ pub use histogram::{HistogramBin, HistogramChart, histogram};
 pub use line::{LineChart, line};
 pub use scatter::{ScatterChart, scatter};
 
+type VisitFn<T> = dyn Fn(&T, &mut dyn FnMut(&str)) + Send + Sync;
+
 /// A category key accessor, erased to the key's label.
-pub(crate) type Key<T> = Arc<dyn Fn(&T) -> Arc<str> + Send + Sync>;
+pub(crate) struct Key<T>(Arc<VisitFn<T>>);
+
+impl<T> Clone for Key<T> {
+    fn clone(&self) -> Self {
+        Self(Arc::clone(&self.0))
+    }
+}
+
+impl<T> Key<T> {
+    /// Call `f` with the row's label: no allocation for `String`,
+    /// `&'static str` and `Arc<str>` keys; anything else is formatted
+    /// into a reused thread-local `String`.
+    pub(crate) fn visit(&self, row: &T, f: &mut dyn FnMut(&str)) {
+        (self.0)(row, f);
+    }
+
+    /// The label as an `Arc<str>` (allocates), for the builders' own CPU
+    /// passes (stack sums, categories, label rows).
+    pub(crate) fn label(&self, row: &T) -> Arc<str> {
+        let mut out = None;
+        self.visit(row, &mut |s| out = Some(Arc::from(s)));
+        out.expect("visit calls its callback once")
+    }
+}
 
 /// Erase an owned key accessor to one returning the key's label.
 pub(crate) fn erase_key<T, K: DictionaryKey>(
     key: impl Fn(&T) -> K + Send + Sync + 'static,
 ) -> Key<T> {
-    Arc::new(move |row| label(key(row)))
+    Key(Arc::new(move |row, f| visit_label(&key(row), f)))
 }
 
-/// A key's label: an `Arc<str>` key itself, a `String` or `&'static str`
-/// copied once into an `Arc<str>`, anything else through `to_string()`.
-pub(crate) fn label<K: DictionaryKey>(key: K) -> Arc<str> {
-    let any = &key as &dyn Any;
-    if let Some(label) = any.downcast_ref::<Arc<str>>() {
-        Arc::clone(label)
+thread_local! {
+    /// Where keys without a string form are formatted.
+    static LABEL_BUF: RefCell<String> = const { RefCell::new(String::new()) };
+}
+
+/// Call `f` with a key's label: borrowed for `Arc<str>`, `String` and
+/// `&'static str`, formatted through `Display` otherwise.
+fn visit_label<K: DictionaryKey>(key: &K, f: &mut dyn FnMut(&str)) {
+    let any = key as &dyn Any;
+    if let Some(s) = any.downcast_ref::<Arc<str>>() {
+        f(s);
     } else if let Some(s) = any.downcast_ref::<String>() {
-        Arc::from(&**s)
+        f(s);
     } else if let Some(s) = any.downcast_ref::<&'static str>() {
-        Arc::from(*s)
+        f(s);
     } else {
-        Arc::from(key.to_string())
+        // A `Display` that re-enters (formats another key) finds the buffer
+        // taken and falls back to a fresh string.
+        LABEL_BUF.with(|buf| match buf.try_borrow_mut() {
+            Ok(mut buf) => {
+                use std::fmt::Write;
+                buf.clear();
+                let _ = write!(buf, "{key}");
+                f(&buf);
+            }
+            Err(_) => f(&key.to_string()),
+        });
     }
 }
 
@@ -289,19 +330,54 @@ mod send_sync {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fmt;
 
-    #[test]
-    fn label_of_an_arc_str_is_the_same_allocation() {
-        let key: Arc<str> = Arc::from("north");
-        let l = label(Arc::clone(&key));
-        assert!(Arc::ptr_eq(&key, &l));
+    #[derive(Clone, PartialEq, Eq, Hash)]
+    enum Region {
+        North,
+    }
+
+    impl fmt::Display for Region {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            f.write_str(match self {
+                Self::North => "Northern",
+            })
+        }
+    }
+
+    /// A key whose `Display` formats another key through the same buffer.
+    #[derive(Clone, PartialEq, Eq, Hash)]
+    struct Nested(u32);
+
+    impl fmt::Display for Nested {
+        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+            let inner = erase_key(|n: &u32| *n);
+            inner.visit(&self.0, &mut |s| {
+                let _ = write!(f, "<{s}>");
+            });
+            Ok(())
+        }
+    }
+
+    fn agree<K: DictionaryKey>(key: K, want: &str) {
+        let k = erase_key(move |_: &()| key.clone());
+        let mut seen = String::new();
+        k.visit(&(), &mut |s| seen.push_str(s));
+        assert_eq!(seen, want);
+        assert_eq!(&*k.label(&()), want);
     }
 
     #[test]
-    fn label_of_strings_and_integers_is_their_text() {
-        assert_eq!(&*label(String::from("a b")), "a b");
-        assert_eq!(&*label("lit"), "lit");
-        assert_eq!(&*label(2021_i32), "2021");
-        assert_eq!(&*label(7_u32), "7");
+    fn label_and_visit_agree_for_every_key_kind() {
+        agree(String::from("a b"), "a b");
+        agree("lit", "lit");
+        agree(Arc::<str>::from("shared"), "shared");
+        agree(7_u32, "7");
+        agree(Region::North, "Northern");
+    }
+
+    #[test]
+    fn a_display_that_formats_a_key_does_not_panic() {
+        agree(Nested(5), "<5>");
     }
 }

@@ -182,7 +182,7 @@ impl<K: Hash + Eq + Clone + Display + Send + Sync + 'static> DictionaryKey for K
 /// ```
 #[derive(Clone, Debug)]
 pub struct Dictionary<K = Arc<str>> {
-    codes: HashMap<K, u32>,
+    codes: HashMap<K, u32, foldhash::fast::RandomState>,
     keys: Vec<K>,
     labels: Vec<Arc<str>>,
 }
@@ -190,7 +190,7 @@ pub struct Dictionary<K = Arc<str>> {
 impl<K> Default for Dictionary<K> {
     fn default() -> Self {
         Self {
-            codes: HashMap::new(),
+            codes: HashMap::with_hasher(foldhash::fast::RandomState::default()),
             keys: Vec::new(),
             labels: Vec::new(),
         }
