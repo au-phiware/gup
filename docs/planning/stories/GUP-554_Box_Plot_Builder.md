@@ -10,8 +10,8 @@ touches: [crates/gup-core/src/builder/mod.rs, crates/gup-core/src/lib.rs]
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: 📋
-Planned **Created**: 2026-10-24
+**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: 🚧 In
+Progress **Created**: 2026-10-24
 
 ## Context
 
@@ -45,8 +45,8 @@ data within 1.5 IQR of the box, and points beyond drawn individually.
 
 ### AC1: `transform::box_stats`
 
-- [ ] `BoxStats` and `box_stats` as in Decisions, documented.
-- [ ] Unit tests against values computed by hand (and matching NumPy's default
+- [x] `BoxStats` and `box_stats` as in Decisions, documented.
+- [x] Unit tests against values computed by hand (and matching NumPy's default
       `percentile`): `[1, 2, 3, 4]` gives q1 1.75, median 2.5, q3 3.25;
       `[1..=9, 100]` reports 100 as the only outlier and the upper whisker at 9;
       a single value gives every statistic equal to it; NaN is dropped; empty
@@ -54,20 +54,20 @@ data within 1.5 IQR of the box, and points beyond drawn individually.
 
 ### AC2: The builder
 
-- [ ] `gup::boxplot(rows) -> BoxPlotChart<T>` with the methods in Decisions,
+- [x] `gup::boxplot(rows) -> BoxPlotChart<T>` with the methods in Decisions,
       exported from the crate root; a doctest from the `gup` crate.
-- [ ] Per category (first-seen order on a band x axis): a box from q1 to q3, a
+- [x] Per category (first-seen order on a band x axis): a box from q1 to q3, a
       median line across the box, whiskers from the box to each whisker end with
       caps half the box width, outliers as circles (pixel tests on one category
       with known statistics, positions within 1 px).
-- [ ] `color(key)` colours each box by a key with a legend; `fill(c)` sets one
+- [x] `color(key)` colours each box by a key with a legend; `fill(c)` sets one
       colour; the default is `#0072B2`.
-- [ ] `tooltip(|s: &BoxSummary| ..)` shows on hover over the box (test).
-- [ ] The y axis domain includes every outlier and whisker (test).
+- [x] `tooltip(|s: &BoxSummary| ..)` shows on hover over the box (test).
+- [x] The y axis domain includes every outlier and whisker (test).
 
 ### AC3: Visual
 
-- [ ] Golden `gup_core/boxplot` (640×400): five categories of 200 deterministic
+- [x] Golden `gup_core/boxplot` (640×400): five categories of 200 deterministic
       values each (an LCG with Box–Muller, two with injected outliers). The
       worker reads it: boxes centred in bands, medians visible against the fill,
       whisker caps aligned, outliers distinct.
@@ -144,10 +144,10 @@ data within 1.5 IQR of the box, and points beyond drawn individually.
 
 ## Technical Tasks
 
-- [ ] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30 min.
-- [ ] `box_stats` with unit tests; commit.
-- [ ] `builder/boxplot.rs`; pixel tests; commit.
-- [ ] Colours, tooltip, domain test, golden; commit.
+- [x] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30 min.
+- [x] `box_stats` with unit tests; commit.
+- [x] `builder/boxplot.rs`; pixel tests; commit.
+- [x] Colours, tooltip, domain test, golden; commit.
 
 ## Dependencies
 
@@ -169,7 +169,7 @@ data within 1.5 IQR of the box, and points beyond drawn individually.
 
 ## Success Metrics
 
-- [ ] A box plot with outliers is one call chain, with statistics matching
+- [x] A box plot with outliers is one call chain, with statistics matching
       NumPy's defaults.
 
 ## Risk Assessment
@@ -179,15 +179,75 @@ data within 1.5 IQR of the box, and points beyond drawn individually.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1` and
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1` and
       `cargo test -p gup-core -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (`gup_core/boxplot`)
-- [ ] `mask wasm-browser`: not needed, builder only
-- [ ] WASM size: `mask wasm-size` scatter gz bytes reported
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye (`gup_core/boxplot`)
+- [x] `mask wasm-browser`: not needed, builder only
+- [x] WASM size: `mask wasm-size` scatter gz bytes reported
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `transform::box_stats` and `BoxStats` (type-7 quartiles, Tukey whiskers;
+  non-finite values dropped), with unit tests against NumPy values.
+- `gup::boxplot` / `BoxPlotChart` / `BoxSummary` in `builder/boxplot.rs`: layers
+  are boxes (Rect), whiskers, caps, medians (Segments, the last two through
+  `band.then(Offset::by(..))`) and outliers (Circles, only if any).
+  `color(key)`, `fill`, `tooltip`, `pick`, `plot_mut`, `into_plot`.
+- `crates/gup-core/tests/boxplot_png.rs` (6 tests: marks within a pixel, domain,
+  colours, tooltip and pick, order, golden `gup_core/boxplot`), a `gup` crate
+  doctest and a `gup-core` doctest.
+- Evidence: golden read by eye: five boxes centred in their bands, medians
+  darker than the 0.3-opacity fill, caps aligned and half a box wide, outliers
+  as distinct discs (search 210/232, checkout 12/262). `mask merge-check` PASS;
+  `cargo test --doc -p gup` 56 + 4 passed. WASM scatter gz 345615 B (budget
+  341760, +3855 B vs the recorded figure, inside the 4 KB trigger and the pass
+  band).
+
+## Retrospective
+
+**Completed**: 2026-10-31
+
+### Key Technical Learnings
+
+#### Hit order hides tooltips on shared edges
+
+- **Challenge**: a tooltip test hovering `pick_anchor` (the box's top-edge
+  midpoint) did nothing: the whisker segment starts exactly there and wins the
+  hit.
+- **Solution**: hover inside the box. **Pattern**: anchors of a layer under
+  another layer's mark are not hoverable.
+
+#### Unfitted `Categorical::eval`
+
+- **Challenge**: `Categorical::okabe_ito().eval(0.0)` is grey, not the first
+  colour, until the scale has keys.
+- **Solution**: tests name the palette colours.
+
+### Architectural Decisions
+
+#### Value axis keeps the plain linear rule
+
+- **Decision**: GUP-561's "round up to a tick strictly above the max" is not
+  applied to the box plot: its axis is not anchored at zero and no mark sits at
+  the data end other than outlier discs. Revisit if a disc clips.
+- **Trade-off**: the top outlier may sit close to the plot edge.
+
+#### A category's colour key is its first row's
+
+- **Decision**: `color(key)` per category takes the first row's key.
+
+### Development Workflow Insights
+
+- The first session ended on a usage limit before any commit; the checkpoint ref
+  preserved the tree.
+
+### Follow-up Stories
+
+None.

@@ -146,6 +146,7 @@ use crate::column::DictionaryKey;
 
 pub(crate) mod area;
 pub(crate) mod bar;
+pub(crate) mod boxplot;
 pub(crate) mod heatmap;
 pub(crate) mod histogram;
 pub(crate) mod line;
@@ -153,6 +154,7 @@ pub(crate) mod scatter;
 
 pub use area::{AreaChart, AreaPoint, area};
 pub use bar::{BarChart, Horizontal, Orientation, Vertical, bar, barh};
+pub use boxplot::{BoxPlotChart, BoxSummary, boxplot};
 pub use heatmap::{HeatmapChart, heatmap};
 pub use histogram::{HistogramBin, HistogramChart, histogram};
 pub use line::{LineChart, line};
@@ -278,6 +280,7 @@ mod send_sync {
         assert_send_sync::<super::LineChart<(f64, f64)>>();
         assert_send_sync::<super::AreaChart<(f64, f64)>>();
         assert_send_sync::<super::BarChart<(f64, f64)>>();
+        assert_send_sync::<super::BoxPlotChart<(f64, f64)>>();
         assert_send_sync::<super::HistogramChart<f64>>();
         assert_send_sync::<super::HeatmapChart<(f64, f64)>>();
     }
