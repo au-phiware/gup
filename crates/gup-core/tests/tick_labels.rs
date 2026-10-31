@@ -229,3 +229,40 @@ fn a_line_keeps_its_end_ticks_on_the_data_extent() {
     let pad = Theme::default().plot_padding.0;
     assert!(r.layout.plot.right() - last.1 <= pad + 0.5, "{last:?}");
 }
+
+/// The y tick labels of a plot of circles at the given `(x, y)` layers.
+fn y_labels(layers: &[&[(f64, f64)]]) -> Vec<String> {
+    let cx = Context::new_blocking().unwrap();
+    let mut plot = Plot::new();
+    let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
+    for data in layers {
+        plot.add(Selection::<(f64, f64), Circle>::new(data.to_vec()))
+            .attr(Circle::X, x.encode(|r: &(f64, f64)| r.0))
+            .attr(Circle::Y, y.encode(|r: &(f64, f64)| r.1))
+            .attr(Circle::RADIUS, Px(3.0));
+    }
+    let r = plot.resolve(&cx, 640.0, 400.0).unwrap();
+    let left = r.layout.plot.left();
+    r.layout
+        .texts
+        .iter()
+        .filter(|t| t.run.role == TextRole::TickLabel && t.bounds.right() <= left)
+        .map(|t| t.run.text.to_string())
+        .collect()
+}
+
+/// Whole-number data tick in whole steps; the flag is the AND over every
+/// layer fitted in the pass; a new plot starts clean.
+#[test]
+fn whole_number_data_gets_whole_tick_labels() {
+    let whole: &[(f64, f64)] = &[(0.0, 0.0), (1.0, 1.0), (2.0, 2.0), (3.0, 3.0)];
+    let labels = y_labels(&[whole]);
+    assert!(labels.len() >= 2, "{labels:?}");
+    assert!(labels.iter().all(|l| !l.contains('.')), "{labels:?}");
+
+    let labels = y_labels(&[whole, &[(1.0, 1.5)]]);
+    assert!(labels.iter().any(|l| l.contains('.')), "{labels:?}");
+
+    let labels = y_labels(&[whole]);
+    assert!(labels.iter().all(|l| !l.contains('.')), "{labels:?}");
+}

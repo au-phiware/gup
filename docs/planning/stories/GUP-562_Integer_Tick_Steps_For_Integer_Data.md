@@ -10,8 +10,8 @@ touches: [crates/gup-core/src/encoding.rs]
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: 📋
-Planned **Created**: 2026-10-26
+**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: ✅
+Complete (2026-10-31) **Created**: 2026-10-26
 
 ## Context
 
@@ -205,3 +205,80 @@ None directly.
 - [ ] WASM size: `mask wasm-size` scatter gz bytes reported
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
+
+## Resolved (2026-10-31): orchestrator accepted the cost with an early-out
+
+AC5's trigger fired on the first design (`v.fract() == 0.0` on every value: +60%
+on the first `resolve` of 1M rows). The orchestrator accepted a cost with an
+early-out: `Acc::push` tests a value only while the column is still integral,
+using a branch-free test (`(v + 1.5 * 2^52) - 1.5 * 2^52 == v`, since `fract` is
+a libm `trunc` call on baseline x86-64).
+
+Throwaway example (not committed): `Plot::resolve` of a 1M-row `scatter`, x and
+y from `f64` fields, 640x400, release, median of 15, parent and after binaries
+run alternately (load average above 20, so only the ratio counts).
+
+| Data             | parent       | after                    |
+| ---------------- | ------------ | ------------------------ |
+| non-integral f64 | 14.5-15.1 ms | 14.9-15.1 ms (about +1%) |
+| whole-number f64 | 14.6-14.8 ms | 16.6-16.8 ms (+13%)      |
+
+Earlier variants, all without the early-out, on non-integral data: `fract` +60%,
+cast round trip +25%, branch-free test +15%.
+
+`mask wasm-size`: scatter gz 346,376 bytes (recorded 341,760, +1.35%, pass).
+
+AC2 correction: the story says (0, 100) at count 8 has step 20; the actual step
+is 10, with or without the flag. The test asserts equality with the default and
+a step of 10.
+
+## Implementation Summary
+
+- `ColumnStats::integral` (`column.rs`), `fit_integral` on `ShaderFn` and
+  `EncodeFn` (blanket, chain-first-link, column encoding, and the closure path
+  via `dyn_fit_integral`), `ScaleRef` AND accumulator, `Linear::integral` and
+  the unit in `step`. `tick_unit` wins; strict `nice_to` composes because it
+  uses the same `step`.
+- Tests: 5 `linear.rs` unit tests, 1 `column.rs`, 1 integration test in
+  `tick_labels.rs`. `resolve_cache.rs` fixture y data got +0.5 so its labels
+  still change width on zoom.
+- Goldens re-blessed and read: `tutorials/06_squares` (Week 0, 1, 2, 3),
+  `tutorials/03_custom_ramp` (Row 0-4), `gup_core/msaa_1x` and `msaa_4x` (x axis
+  0, 1, 2); `tests/fixtures/msaa_guides.svg` (x ticks lose halves).
+
+## Retrospective
+
+**Completed**: 2026-10-31
+
+### Key Technical Learnings
+
+#### Hidden per-value cost
+
+- **Challenge**: `f64::fract` in the stats loop cost +60% on a first resolve.
+- **Solution**: a branch-free magic-number test, plus an early-out once a column
+  is known non-integral.
+- **Pattern**: measure a per-value addition with alternating A/B binaries; check
+  rounding functions' codegen on baseline x86-64.
+
+#### Type-erased paths
+
+- **Challenge**: closures on position channels use a `dyn` encoding that the
+  trait hook did not reach, so tutorial 6 did not change.
+- **Solution**: `dyn_fit_integral`. Pattern: grep every `fit` implementer when
+  adding a fit hook.
+
+### Architectural Decisions
+
+#### Flag applies to explicit domains too
+
+- **Decision**: `Linear::fit_integral` sets the flag even for explicit domains.
+- **Trade-off**: whole-number data on a fixed domain also ticks in whole steps.
+
+### Development Workflow Insights
+
+- A `git checkout <old> -- src` for A/B builds overwrites uncommitted edits;
+  commit first.
+
+### Follow-up Stories
+
+None.

@@ -24,6 +24,8 @@ fn fixture() -> Fixture {
     fixture_with(Linear::new(), Linear::new())
 }
 
+/// y is fractional, so its ticks stay fractional (whole-number data tick in
+/// whole steps) and the labels change width as the plot zooms.
 fn fixture_with(xs: Linear, ys: Linear) -> Fixture {
     let mut plot = Plot::new();
     let (x, y) = (plot.x(xs), plot.y(ys));
@@ -33,7 +35,7 @@ fn fixture_with(xs: Linear, ys: Linear) -> Fixture {
             .map(|i| {
                 (
                     f64::from(i * 10),
-                    f64::from(i * i % 9 * 10),
+                    f64::from(i * i % 9 * 10) + 0.5,
                     f64::from(i % 5),
                 )
             })
