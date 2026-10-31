@@ -193,9 +193,10 @@ cell labels, error bars, pie charts and facets.
   only where labels reach (capped at a quarter of the axis) and edge labels are
   drawn whole; label boxes measured once and cached. Not beside GUP-541 or
   GUP-552 (`plot.rs`). Deps: GUP-542 ✅, GUP-528 ✅, GUP-529 ✅.
-- [GUP-526](GUP-526_Text_Layers_On_The_Right_Axis.md) 💡 — A text layer's `y`
-  mapped through the plot's right y axis, so dual-axis charts can label both
-  series. Deps: GUP-542 ✅.
+- [GUP-526](GUP-526_Text_Layers_On_The_Right_Axis.md) 📋 — `TextLayer::y_right`
+  and `y_right_key` map labels through the plot's right y axis, with GUP-555's
+  edge room on that axis, so dual-axis charts label both series. Edits
+  `plot.rs`. Deps: GUP-542 ✅, GUP-555 ✅.
 - [GUP-527](GUP-527_Label_Halos_And_Overlap_Culling.md) 💡 — `halo(Px)` and
   `hide_overlaps(true)` on text layers, so labels stay legible over dense marks.
   Deps: GUP-542 ✅, GUP-405 📋 (soft).
@@ -237,19 +238,31 @@ cell labels, error bars, pie charts and facets.
 - [GUP-553](GUP-553_Dark_Theme.md) ✅ — `Theme::dark()` with contrast-checked
   colours and a theme palette (`OKABE_ITO_DARK`, black replaced) that
   `Categorical::okabe_ito()` follows. Deps: GUP-552 📋 (soft).
-- [GUP-524](GUP-524_Svg_Unbrushed_Dimming.md) 💡 — `SvgTarget` dims unbrushed
-  rows as the GPU does, so brushed goldens get the SVG parity check. Deps:
-  GUP-553 ✅.
+- [GUP-524](GUP-524_Svg_Unbrushed_Dimming.md) 📋 — `SvgTarget` dims unbrushed
+  rows as the GPU does, through a CPU mirror of the brush state shared with the
+  cached scene, so the three brushed goldens get the SVG parity check. Edits
+  `selection.rs`. Deps: GUP-553 ✅.
 - [GUP-554](GUP-554_Box_Plot_Builder.md) 📋 — `transform::box_stats` (type-7
   quartiles, 1.5 IQR whiskers) and `gup::boxplot` with outliers and tooltips.
   Deps: GUP-537 📋, GUP-548 📋.
-- [GUP-405](GUP-405_Gup_Text_OpenType_Shaping.md) 📋 — Shape `gup-text` runs
-  with rustybuzz: Inter's GPOS kerning and `tnum` tabular figures for tick
-  labels, with a 25 KB gz WASM stop rule. Deps: GUP-400 ✅, GUP-542 📋 (soft).
-- [GUP-416](GUP-416_Gup_Text_Font_Fallback.md) 📋 — A user-supplied fallback
-  chain (`Context::add_fallback_font`), so characters outside the bundled subset
-  draw from another font instead of as boxes; fallbacks parse lazily and
-  `SvgTarget` embeds the fonts it uses. Deps: GUP-407 ✅, GUP-405 📋.
+- [GUP-405](GUP-405_Gup_Text_OpenType_Shaping.md) 📋 — `gup-text` lays out by
+  glyph index and kerns every run with Inter's GPOS `kern` (an in-house walk on
+  fontdue's `ttf-parser`, checked against rustybuzz as a dev-dependency;
+  rustybuzz itself would add 210 KB gz), adds `Features::TNUM`, and re-blesses
+  the goldens, within +6,000 B gz. Deps: GUP-400 ✅, GUP-407 ✅, GUP-542 ✅.
+- [GUP-579](GUP-579_Tabular_Figures_For_Tick_Labels.md) 📋 — Tick labels request
+  `tnum` (measured and drawn), so four-digit axes keep their margin at every
+  zoom, and `SvgTarget` writes `font-variant-numeric:tabular-nums` on them.
+  Edits `plot.rs`. Deps: GUP-405 📋.
+- [GUP-416](GUP-416_Gup_Text_Font_Fallback.md) 📋 — `TextSystem::add_fallback`
+  and `Font::with_fallbacks`: an ordered chain for characters the primary lacks,
+  with fonts validated at `from_bytes` and parsed on first use (Noto Sans JP
+  takes 259 ms), in `gup-text` only. Deps: GUP-407 ✅, GUP-405 📋.
+- [GUP-580](GUP-580_Fallback_Fonts_In_Gup_Core_And_Svg.md) 📋 —
+  `Context::add_fallback_font`, the `gup_core::Font` re-export, the scene's
+  fallback list, SVG `font-family` and embedding of the fallbacks a scene uses,
+  and a mixed-script title golden. Edits `lib.rs` and `plot.rs`. Deps: GUP-416
+  📋.
 - [GUP-439](GUP-439_Line_Translucent_Joins.md) 📋 — Translucent lines with even
   opacity at rows, curve pieces and self-crossings (a per-layer coverage pass),
   opaque lines unchanged. Deps: GUP-432 ✅, GUP-550 📋, GUP-551 📋.
