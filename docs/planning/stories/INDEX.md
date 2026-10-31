@@ -261,7 +261,7 @@ cell labels, error bars, pie charts and facets.
   `tnum` (measured and drawn), so four-digit axes keep their margin at every
   zoom, and `SvgTarget` writes `font-variant-numeric:tabular-nums` on them.
   Edits `plot.rs`. Deps: GUP-405 ✅.
-- [GUP-416](GUP-416_Gup_Text_Font_Fallback.md) 📋 — `TextSystem::add_fallback`
+- [GUP-416](GUP-416_Gup_Text_Font_Fallback.md) 🚧 — `TextSystem::add_fallback`
   and `Font::with_fallbacks`: an ordered chain for characters the primary lacks,
   with fonts validated at `from_bytes` and parsed on first use (Noto Sans JP
   takes 259 ms), in `gup-text` only. Deps: GUP-407 ✅, GUP-405 ✅.
