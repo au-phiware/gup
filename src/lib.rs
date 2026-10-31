@@ -49,6 +49,27 @@
 //! # Ok::<(), gup::Error>(())
 //! ```
 //!
+//! ## A box plot in one line
+//!
+//! `gup::boxplot` summarises each category's values as a box (the
+//! quartiles), a median line, whiskers to the most extreme values within
+//! 1.5 IQR of the box, and a disc for each value beyond them.
+//!
+//! ```
+//! use gup::prelude::*;
+//!
+//! struct Request { service: &'static str, ms: f64 }
+//! let requests: Vec<Request> = (0..90)
+//!     .map(|i| Request { service: ["auth", "search", "cart"][i % 3], ms: 20.0 + (i * 7 % 31) as f64 })
+//!     .chain([Request { service: "auth", ms: 400.0 }])
+//!     .collect();
+//!
+//! let mut chart = gup::boxplot(requests).x(|r| r.service).y(|r| r.ms);
+//! let image = chart.render(&Context::shared()?, 480, 320)?;
+//! assert_eq!(image.dimensions(), (480, 320));
+//! # Ok::<(), gup::Error>(())
+//! ```
+//!
 //! ## Areas
 //!
 //! The region under a line: one series, one per key (overlapping, drawn at
