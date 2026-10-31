@@ -249,8 +249,10 @@ work=''
 cleanup_work() { [[ -z $work ]] || rm -rf -- "$work"; }
 trap cleanup_work EXIT
 
-# disk_kb: the build directory's size on disk. ZFS allocates seconds after a
-# write, so flush first or `du` misses what the last build wrote.
+# disk_kb: the build directory's size on disk. `sync -f` flushes what the last
+# build wrote. ZFS still allocates (and frees) blocks only at its next
+# transaction group, up to 5 s later, so `du` can lag by the last few seconds
+# of work; that is noise against a cap of tens of GB.
 disk_kb() {
   sync -f "$build" 2>/dev/null || true
   du -sk -- "$build" | cut -f1
@@ -491,9 +493,10 @@ evict() {
   rm -rf -- "${files[@]}"
   for ino in "${inos[@]}"; do
     while IFS= read -r p; do
-      [[ -n $p && $p == "$build"/checkouts/?* ]] && rm -f -- "$p"
+      if [[ $p == "$build"/checkouts/?* ]]; then rm -f -- "$p"; fi
     done <<<"${links[$ino]:-}"
   done
+  return 0
 }
 
 # Rule 5: evict least recently used units while the build directory is over
@@ -503,8 +506,10 @@ prune_lru() {
   local -A held=()
   local -a fds=() cands=()
   [[ $build != *[[:space:]]* ]] || return 0
-  total=$(disk_kb)
-  [[ $dry_run -eq 0 ]] || total=$((total - freed_kb))
+  # What rules 1-4 just deleted may not show in `du` yet (or, in a dry run,
+  # never will): count it as gone. At worst this under-counts, so it never
+  # evicts more than the cap needs.
+  total=$(($(disk_kb) - freed_kb))
   [[ $total -gt $total_cap_kb ]] || return 0
   for profile in "${profiles[@]}"; do
     exec {fd}<"$profile/.cargo-lock"
@@ -520,19 +525,15 @@ prune_lru() {
   load_links
   cutoff=$((now - keep_minutes * 60))
   mapfile -t cands < <(sort -k1,1n -k2,2n "$work/units")
-  while :; do
-    while [[ $i -lt ${#cands[@]} && $total -gt $total_cap_kb ]]; do
-      read -r eff _ kb _ dir <<<"${cands[i]}"
-      i=$((i + 1))
-      [[ $eff -lt $cutoff ]] || continue
-      [[ -n ${held[${dir%/.fingerprint/*}]:-} ]] || continue
-      evict "$dir" "$kb"
-      total=$((total - kb))
-    done
-    # The estimate ignores directory overhead; trust the disk before stopping.
-    [[ $dry_run -eq 1 || $i -ge ${#cands[@]} ]] && break
-    total=$(disk_kb)
-    [[ $total -gt $total_cap_kb ]] || break
+  # The estimate counts files only, so the directory is at or under the cap
+  # by at least the directories' overhead.
+  while [[ $i -lt ${#cands[@]} && $total -gt $total_cap_kb ]]; do
+    read -r eff _ kb _ dir <<<"${cands[i]}"
+    i=$((i + 1))
+    [[ $eff -lt $cutoff ]] || continue
+    [[ -n ${held[${dir%/.fingerprint/*}]:-} ]] || continue
+    evict "$dir" "$kb"
+    total=$((total - kb))
   done
   if [[ $total -gt $total_cap_kb ]]; then
     left=$(((total - total_cap_kb) / 1024))
