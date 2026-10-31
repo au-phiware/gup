@@ -11,7 +11,7 @@ touches: [crates/gup-core/src/selection.rs]
 ## Story Overview
 
 **Initiative**: Strategic Review 2026-11 (N5 Performance at Scale) **Status**:
-🚧 In Progress **Created**: 2026-10-26
+✅ Complete (2026-11-01) **Created**: 2026-10-26
 
 ## Context
 
@@ -58,43 +58,43 @@ results identical to today's.
 
 ### AC1: Spike, where the time goes (stop rule)
 
-- [ ] A committed headless benchmark,
+- [x] A committed headless benchmark,
       `crates/gup-core/examples/edge_inset_bench.rs` (copyright header): the
       same rows as `zoom_bench --points 4194304 --chunk-rows 65536 --sorted`
       (through `tests/common/scatter.rs`, as `zoom_bench` does), resolved
       offscreen at 1920×1080 with `Context::new_blocking`, 60 warm-up then 600
       frames of `zoom_bench`'s `zoom(t)` path, timing only `Plot::resolve`. It
       prints `metric edge.resolve.median_ms` and `metric edge.resolve.p95_ms`.
-- [ ] At the parent commit, with an uncommitted `Instant` around the
+- [x] At the parent commit, with an uncommitted `Instant` around the
       `edge_marks` calls in `plot.rs`, record the median time per frame spent in
       them. **Rule**: if it is below 0.3 ms, stop and report (the regression is
       elsewhere); otherwise continue.
 
 ### AC2: Sorted-values cache
 
-- [ ] The cache in Decisions is implemented; the constant-size branch of
+- [x] The cache in Decisions is implemented; the constant-size branch of
       `edge_marks` uses it instead of `chunk_values` plus `in_domain_extremes`.
-- [ ] Property test in `selection.rs`: for 2,000 seeded cases (100–5,000 values
+- [x] Property test in `selection.rs`: for 2,000 seeded cases (100–5,000 values
       with some NaN, a `Linear` or `Log` encoding, random domains inside,
       straddling and outside the data, forward and reversed ranges),
       `sorted_extremes` on the sorted finite values returns exactly what
       `in_domain_extremes` returns on the unsorted values (bit-equal `f32`).
-- [ ] Invalidation tests: appending rows to the last chunk, an eviction
+- [x] Invalidation tests: appending rows to the last chunk, an eviction
       (`Window::LastRows`), and re-evaluating the columns each make the next
       solve match a fresh plot's insets.
 
 ### AC3: Results unchanged
 
-- [ ] Every GUP-528 and GUP-540 test passes unchanged, and every golden passes
+- [x] Every GUP-528 and GUP-540 test passes unchanged, and every golden passes
       without re-blessing.
 
 ### AC4: Target
 
-- [ ] After the change, `edge_marks`' median time per frame (same temporary
+- [x] After the change, `edge_marks`' median time per frame (same temporary
       instrumentation) is at most 0.05 ms, and `edge.resolve.median_ms` drops by
       at least 80% of AC1's `edge_marks` time. Both numbers, before and after,
       go in the Implementation Summary.
-- [ ] If the environment has a display (`WAYLAND_DISPLAY` or `DISPLAY` set), run
+- [x] If the environment has a display (`WAYLAND_DISPLAY` or `DISPLAY` set), run
       `scripts/perf_budget.sh` and report `zoom_culled.cpu.median_ms` (target at
       most 0.90); otherwise say so. The orchestrator re-records
       `PERF_BUDGETS.md`; the worker does not edit it.
@@ -159,10 +159,10 @@ results identical to today's.
 
 ## Technical Tasks
 
-- [ ] AC1 benchmark and spike measurement at the parent commit.
-- [ ] `EdgeCache`, `SortedChunk`, `sorted_extremes`; use them in `edge_marks`.
-- [ ] Property and invalidation tests.
-- [ ] Measure after; `scripts/perf_budget.sh` if a display is available.
+- [x] AC1 benchmark and spike measurement at the parent commit.
+- [x] `EdgeCache`, `SortedChunk`, `sorted_extremes`; use them in `edge_marks`.
+- [x] Property and invalidation tests.
+- [x] Measure after; `scripts/perf_budget.sh` if a display is available.
 
 ## Dependencies
 
@@ -183,8 +183,8 @@ None directly.
 
 ## Success Metrics
 
-- [ ] `edge_marks` at most 0.05 ms per frame on the 4M-row zoom.
-- [ ] `zoom_culled.cpu.median_ms` back under 0.90 ms.
+- [x] `edge_marks` at most 0.05 ms per frame on the 4M-row zoom.
+- [x] `zoom_culled.cpu.median_ms` back under 0.90 ms.
 
 ## Risk Assessment
 
@@ -196,16 +196,98 @@ None directly.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`, plus
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`, plus
       `scripts/with_cargo_env.sh cargo test -p gup-core -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye: not needed, no output change (AC3)
-- [ ] `mask wasm-browser` not needed: no layout, input or wasm code changes
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye: not needed, no output change (AC3)
+- [x] `mask wasm-browser` not needed: no layout, input or wasm code changes
       (insets are identical)
-- [ ] WASM size: `mask wasm-size` scatter gz bytes reported
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] WASM size: `mask wasm-size` scatter gz bytes reported
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+`Selection` holds `edge_cache: Mutex<EdgeCache>` (`selection.rs`): per (chunk,
+column, chunk rows) the finite decoded values sorted with `total_cmp`, cleared
+when `epoch` changes, capped at `2 * EDGE_ROW_BUDGET` values (oldest dropped).
+The constant-size branch of `edge_marks` answers with `sorted_extremes` (binary
+search with `partition_point`); the size-column branch is unchanged. Budget
+accounting is unchanged, so insets are identical. `in_domain_extremes` is now
+`#[cfg(test)]`, the oracle of the property test.
+
+Files: `crates/gup-core/src/selection.rs`,
+`crates/gup-core/examples/edge_inset_bench.rs` (new). Four new tests (2,000-case
+property test; append, eviction and re-evaluation invalidation tests, each
+checked to fail when the matching key is removed). All 261 `gup-core` lib tests,
+every integration test and golden pass unchanged; `mask merge-check --dogfood`
+and `cargo test --doc -p gup` pass.
+
+Measurements (release, load average 3-7 on a shared machine, 1920x1080
+offscreen, `edge_inset_bench`; temporary `Instant` around the `edge_marks`
+calls, 659 frames including warm-up):
+
+| Metric                        | Before | After |
+| ----------------------------- | ------ | ----- |
+| `edge_marks` median per frame | 0.676  | 0.019 |
+| `edge_marks` p95 per frame    | n/a    | 0.027 |
+| `edge.resolve.median_ms`      | 0.906  | 0.167 |
+| `edge.resolve.p95_ms`         | 1.069  | 0.196 |
+
+AC1 rule: 0.676 ms is above 0.3 ms, so the story continued. AC4: 0.019 ms is at
+most 0.05 ms, and the resolve drop (0.739 ms) is 109% of the `edge_marks` time.
+`scripts/perf_budget.sh --skip-wasm` (display present):
+`zoom_culled.cpu.median_ms` 0.892, 0.795, 0.874 over three runs (recorded 1.24,
+target 0.90); at the parent commit in the same session 1.993 (load).
+`zoom.cpu.median_ms` (100k rows) measured 0.845, 0.872, 0.784 after and 0.829 at
+the parent against a recorded 0.69: machine drift, not this change.
+`mask wasm-size`: `wasm.scatter.gz_bytes` 348,546 (recorded 345,682, limit
+352,596), `over_wgpu` 316,186, `per_row_type` 1,426. `PERF_BUDGETS.md` is for
+the orchestrator to re-record.
+
+## Retrospective
+
+**Completed**: 2026-11-01
+
+### Key Technical Learnings
+
+#### Invalidation tests need a changed value that still binds
+
+- **Challenge**: The first eviction and re-evaluation tests passed even with the
+  epoch check removed, because the replacement rows no longer reached an edge,
+  so the chunk was skipped and the stale entry was never read.
+- **Solution**: Replacement rows still reach the edges, nearer than before, and
+  each test was mutation-checked by removing the key it is about.
+- **Pattern**: Prove a cache test can fail by deleting the key it guards.
+
+#### Warm versus cold comparison
+
+- **Challenge**: Comparing with a fresh plot differs by chunk layout under
+  eviction.
+- **Solution**: Resolve with the stale-able cache, clear it, resolve again, and
+  require identical insets.
+
+### Architectural Decisions
+
+#### Cache stays inside `Selection`
+
+- **Decision**: As in the story, a `Mutex` field, no new trait surface.
+- **Trade-off**: A miss sorts a chunk (a few ms); a zoom whose edge moves to a
+  new chunk each frame costs more than the scan did. The benchmark stays in one
+  chunk; p95 fell (1.069 to 0.196 ms).
+
+### Development Workflow Insights
+
+- Heredocs in Bash calls were refused in this worktree; the Write tool plus
+  `cat >>` worked.
+- `zoom.cpu.median_ms` (100k) swings 0.78-0.87 ms with load; compare alternately
+  against the parent before blaming a change.
+
+### Follow-up Stories
+
+None. A y solve that skips chunks whose x range is outside the x domain is
+already listed under Out of Scope.
