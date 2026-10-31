@@ -436,4 +436,106 @@ mod tests {
         assert!((two[0].x - 2.0 * one[0].x).abs() <= 2.0, "{one:?} {two:?}");
         assert!((two[0].y - 2.0 * one[0].y).abs() <= 2.0, "{one:?} {two:?}");
     }
+
+    const CHART_TEXT: [&str; 8] = [
+        "0123456789 .,:;%+-±×÷=<>()[]/",
+        "1.5k 20M 3G 4T 5µs 6 mm² 10⁻³ 7‰ ½ ¾",
+        "−42 °C – 3 °F, 12.5 ℃, 1 m·s⁻¹, 5 Ω, CO₂",
+        "$1 €2 £3 ¥4 ₹5 ₽6 ₩7 ₺8 ₿9 ¢",
+        "Zürich, São Paulo, Kraków, İstanbul, Łódź, București, Århus, Øresund, Șiret",
+        "σ = 0.3, Δt, λ, μ ≈ π, x ≤ y ≥ z ≠ w, √2, ∞, ∑",
+        "Revenue — Q1 “actual” vs ‘plan’ … ← ↑ → ↓ «» №5 ™",
+        "■ □ ▲ △ ▼ ◆ ◇ ● ○ ★ ✓ ✗",
+    ];
+
+    /// Glyph indices, unkerned, are the `char` layout this crate had before
+    /// it laid text out by glyph: same advances, same positions.
+    #[test]
+    fn without_features_layout_is_the_character_layout() {
+        for (font, weight) in [
+            (Font::inter(), Weight::Regular),
+            (Font::inter_semibold(), Weight::SemiBold),
+        ] {
+            for text in CHART_TEXT {
+                for px in [11.0, 16.0] {
+                    let advances: Vec<f32> = text
+                        .chars()
+                        .map(|c| font.face_for(c).glyphs.metrics(c, px).advance_width)
+                        .collect();
+                    let width: f32 = advances.iter().sum();
+                    let measured = font.measure_with(text, px, Features::NONE).width;
+                    assert_eq!(measured, width, "{text:?} at {px} {weight:?}");
+
+                    let r = Run {
+                        text,
+                        size: px,
+                        at: [10.0, 30.0],
+                        anchor: Anchor::new(HAlign::Middle, VAlign::Baseline),
+                        weight,
+                        features: Features::NONE,
+                    };
+                    let mut placed = Vec::new();
+                    font.walk(&r, 1.0, |g| placed.push((g.c, g.x, g.y, g.metrics.width)));
+                    let (mut pen, baseline) = (font.baseline_origin(&r)[0].round(), 30.0);
+                    for (i, c) in text.chars().enumerate() {
+                        let m = font.face_for(c).glyphs.metrics(c, px);
+                        let want = (
+                            c,
+                            (pen + m.xmin as f32).round(),
+                            baseline - (m.ymin as f32 + m.height as f32),
+                            m.width,
+                        );
+                        assert_eq!(placed[i], want, "{text:?} glyph {i} at {px} {weight:?}");
+                        pen += advances[i];
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn kerning_pairs_are_narrower_than_their_advances() {
+        let f = Font::inter();
+        for pair in ["AV", "To"] {
+            let kerned = f.measure_with(pair, 16.0, Features::KERN).width;
+            let plain = f.measure_with(pair, 16.0, Features::NONE).width;
+            assert!(kerned < plain, "{pair}: {kerned} vs {plain}");
+        }
+        // The default is kerned.
+        assert_eq!(
+            f.measure("AV", 16.0).width,
+            f.measure_with("AV", 16.0, Features::KERN).width
+        );
+        // Drawing follows measuring: the second glyph moves left by the kern.
+        let walk = |features| {
+            let r = Run {
+                features,
+                ..run("AV", Anchor::new(HAlign::Start, VAlign::Baseline))
+            };
+            let mut xs = Vec::new();
+            f.walk(&r, 1.0, |g| xs.push(g.x));
+            xs
+        };
+        assert!(walk(Features::KERN)[1] < walk(Features::NONE)[1]);
+    }
+
+    #[test]
+    fn tabular_figures_share_one_advance() {
+        for font in [Font::inter(), Font::inter_semibold()] {
+            let tnum = Features::KERN | Features::TNUM;
+            let digit = |c: char| font.measure_with(&c.to_string(), 16.0, tnum).width;
+            for c in '0'..='9' {
+                assert_eq!(digit(c), digit('0'), "{c}");
+            }
+            assert_eq!(
+                font.measure_with("1000", 16.0, tnum).width,
+                font.measure_with("1111", 16.0, tnum).width
+            );
+            // Proportional figures differ, so the feature does something.
+            assert_ne!(
+                font.measure_with("1", 16.0, Features::KERN).width,
+                font.measure_with("0", 16.0, Features::KERN).width
+            );
+        }
+    }
 }
