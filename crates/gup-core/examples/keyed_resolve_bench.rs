@@ -119,11 +119,18 @@ fn main() -> gup_core::Result<()> {
             .collect(),
     );
     let mut d = Dictionary::<Arc<str>>::new();
-    // The builder's per-row work at this commit: the user's clone, copied
-    // into a new `Arc<str>` label, then encoded.
+    // The builder's per-row work: the user's clone, its label borrowed by
+    // the dictionary (copied only when new).
     let builder = median(
         (0..RUNS)
-            .map(|_| ns_per_row(&rows, |r| drop(d.encode(Arc::from(r.key.clone())))))
+            .map(|_| {
+                ns_per_row(&rows, |r| {
+                    drop({
+                        let k = r.key.clone();
+                        d.encode_borrowed(k.as_str())
+                    })
+                })
+            })
             .collect(),
     );
     println!("metric keyed.dict.borrowed.ns_per_row {borrowed:.1}");
