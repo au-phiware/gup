@@ -80,8 +80,8 @@ X) or `info` (printed, never fails).
 | `pipeline.link_create.cold_ms`     | 1.04      | <= 10     | `pipeline_timings`, its first run                   |
 | `pipeline.link_create.max_ms`      | 1.06      | info      | `pipeline_timings`                                  |
 | `wasm.wgpu.gz_bytes`               | 32,360    | info      | `scripts/wasm_size.sh`, bare wgpu                   |
-| `wasm.scatter.gz_bytes`            | 345,682   | +2%       | `scripts/wasm_size.sh`, the reference scatter       |
-| `wasm.over_wgpu.gz_bytes`          | 313,322   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10         |
+| `wasm.scatter.gz_bytes`            | 354,964   | +2%       | `scripts/wasm_size.sh`, the reference scatter       |
+| `wasm.over_wgpu.gz_bytes`          | 322,604   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10         |
 | `wasm.per_row_type.gz_bytes`       | 1,730     | <= 2600   | `scripts/wasm_size.sh`, one more Selection row type |
 
 A legitimate change that moves a number (a new guide, a bigger feature) records
@@ -521,3 +521,10 @@ seeded violation (GUP-417 retrospective).
   WASM scatter from 341,760 to 345,682 B gz (+3,922, +1.1%), and over bare wgpu
   from 309,400 to 313,322 (87 KB of headroom). Re-recorded before GUP-405
   (kerning, budgeted at +6,000) so its own cost is measured.
+- **GUP-562, 566 and 405 merged (2026-11-01, orchestrator)**: GUP-405's GPOS
+  kerning and GSUB `tnum` walk over `ttf-parser` (no rustybuzz, which alone
+  would add about 210 KB) adds about 8 KB; GUP-566's `foldhash` dictionary adds
+  1.4 KB; GUP-562 adds a few hundred bytes. The WASM scatter goes from 345,682
+  to 354,964 B gz, over bare wgpu from 313,322 to 322,604 (77 KB of headroom
+  under the 400,000 cap). `tests/zoom_uploads.rs`'s guide budget goes from
+  1,506,360 to 1,508,952 B: kerned tick labels change the glyph instances.
