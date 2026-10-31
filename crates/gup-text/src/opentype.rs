@@ -19,6 +19,9 @@ const MAX_CACHED_PAIRS: usize = 65_536;
 
 /// A face's `kern` and `tnum` data, read once.
 pub(crate) struct OtLayout {
+    /// The parsed face, borrowing the font file the owner keeps alive (see
+    /// [`OtLayout::parse`]).
+    face: Face<'static>,
     units_per_em: f32,
     /// GSUB `tnum` single substitutions, flattened: glyph to tabular glyph.
     tnum: HashMap<u16, u16>,
@@ -30,7 +33,23 @@ pub(crate) struct OtLayout {
 }
 
 impl OtLayout {
-    pub(crate) fn parse(face: &Face<'_>) -> Self {
+    /// Read `data`'s `kern` and `tnum`, and keep its parsed tables for
+    /// kerning pairs later.
+    ///
+    /// # Safety
+    ///
+    /// `data` must outlive the returned value and never move or change: the
+    /// parsed face borrows it. `Font` keeps the bytes in the same `Face` as
+    /// the layout, as a `&'static` slice or a heap `Arc<[u8]>` it never
+    /// replaces, and nothing reads the layout after the bytes drop.
+    pub(crate) unsafe fn parse(data: &[u8]) -> Result<Self, ttf_parser::FaceParsingError> {
+        // SAFETY: the caller's contract above.
+        let data: &'static [u8] = unsafe { std::mem::transmute::<&[u8], &'static [u8]>(data) };
+        let face = Face::parse(data, 0)?;
+        Ok(Self::read(face))
+    }
+
+    fn read(face: Face<'static>) -> Self {
         let mut tnum = HashMap::new();
         if let Some(gsub) = face.tables().gsub {
             let wanted = Tag::from_bytes(b"tnum");
@@ -63,6 +82,7 @@ impl OtLayout {
         }
         Self {
             units_per_em: f32::from(face.units_per_em()),
+            face,
             tnum,
             kern_lookups,
             pairs: Mutex::new(HashMap::new()),
@@ -80,17 +100,14 @@ impl OtLayout {
         !self.kern_lookups.is_empty()
     }
 
-    /// Kerning between `a` and `b` in pixels at `px`. `data` is the font
-    /// file; it is parsed again on a cache miss.
-    pub(crate) fn kern(&self, data: &[u8], a: u16, b: u16, px: f32) -> f32 {
+    /// Kerning between `a` and `b` in pixels at `px`.
+    pub(crate) fn kern(&self, a: u16, b: u16, px: f32) -> f32 {
         let cached = {
             let pairs = self.pairs.lock().unwrap_or_else(|e| e.into_inner());
             pairs.get(&(a, b)).copied()
         };
         let units = cached.unwrap_or_else(|| {
-            let units = Face::parse(data, 0)
-                .map(|face| self.pair_units(&face, a, b))
-                .unwrap_or(0);
+            let units = self.pair_units(a, b);
             let mut pairs = self.pairs.lock().unwrap_or_else(|e| e.into_inner());
             if pairs.len() >= MAX_CACHED_PAIRS {
                 pairs.clear();
@@ -104,8 +121,8 @@ impl OtLayout {
     /// The summed adjustment of the `kern` lookups, in font units: each
     /// lookup contributes the first pair record that matches, and the lookups
     /// add up in index order.
-    fn pair_units(&self, face: &Face<'_>, a: u16, b: u16) -> i16 {
-        let Some(gpos) = face.tables().gpos else {
+    fn pair_units(&self, a: u16, b: u16) -> i16 {
+        let Some(gpos) = self.face.tables().gpos else {
             return 0;
         };
         let (a, b) = (GlyphId(a), GlyphId(b));
@@ -188,7 +205,8 @@ mod tests {
     #[test]
     fn the_regular_subset_has_tnum_and_kern() {
         let face = Face::parse(INTER_REGULAR, 0).unwrap();
-        let ot = OtLayout::parse(&face);
+        // SAFETY: `INTER_REGULAR` is static.
+        let ot = unsafe { OtLayout::parse(INTER_REGULAR) }.unwrap();
         for c in '0'..='9' {
             let d = glyph(&face, c);
             assert_ne!(ot.tabular(d), d, "{c:?} has a tabular form");
@@ -196,9 +214,9 @@ mod tests {
         assert_eq!(ot.tabular(glyph(&face, 'A')), glyph(&face, 'A'));
         assert_eq!(ot.kern_lookups, [0, 1]);
         assert!(ot.has_gpos_kern());
-        let av = ot.kern(INTER_REGULAR, glyph(&face, 'A'), glyph(&face, 'V'), 16.0);
+        let av = ot.kern(glyph(&face, 'A'), glyph(&face, 'V'), 16.0);
         assert!(av < 0.0, "{av}");
-        let space = ot.kern(INTER_REGULAR, glyph(&face, ' '), glyph(&face, ' '), 16.0);
+        let space = ot.kern(glyph(&face, ' '), glyph(&face, ' '), 16.0);
         assert_eq!(space, 0.0);
     }
 }
