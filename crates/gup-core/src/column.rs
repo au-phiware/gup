@@ -352,6 +352,16 @@ struct Acc {
     integral: bool,
 }
 
+/// `v.fract() == 0.0` for finite `v`, without `trunc` (a libm call on a
+/// baseline x86-64 build): adding and removing 1.5 * 2^52 rounds `v` to
+/// a whole number, and every `f64` of 2^51 or more is whole already.
+/// Branch-free, so the stats loop still vectorises.
+#[inline(always)]
+fn is_whole(v: f64) -> bool {
+    const MAGIC: f64 = 6_755_399_441_055_744.0;
+    (v.abs() >= 2_251_799_813_685_248.0) | ((v + MAGIC) - MAGIC == v)
+}
+
 impl Acc {
     const EMPTY: Self = Self {
         min: f64::INFINITY,
@@ -364,7 +374,7 @@ impl Acc {
         if v.is_finite() {
             self.min = self.min.min(v);
             self.max = self.max.max(v);
-            self.integral &= v.fract() == 0.0;
+            self.integral &= is_whole(v);
         } else {
             self.non_finite += 1;
         }

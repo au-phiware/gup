@@ -205,3 +205,41 @@ None directly.
 - [ ] WASM size: `mask wasm-size` scatter gz bytes reported
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
+
+## Blocked (2026-10-31)
+
+**Question**: AC5's escalation trigger fired: the stats pass slows the first
+`resolve` of a 1,000,000-row `scatter` by well over 3%. Accept a cost, or change
+the design?
+
+Everything else is implemented and committed (ACs 1-4 met; goldens 03, 06, msaa
+1x/4x and the msaa SVG fixture re-blessed and read). Measured with a throwaway
+example (not committed) that builds 1M rows of `f64` x and y and times
+`Plot::resolve` at 640x400 in release: median of 15 runs, built binaries run
+alternately on a loaded machine (load average above 20, so absolute numbers are
+noisy; the A/B ratio was stable).
+
+| Variant of `Acc::push`'s whole-number test               | median first resolve |
+| -------------------------------------------------------- | -------------------- |
+| parent (no test)                                         | 15.7-18.5 ms         |
+| `v.fract() == 0.0` (the Decisions' form)                 | 28.7-29.1 ms (+60%)  |
+| `(v as i64) as f64 == v` guarded for large values        | 20.7-23.0 ms (+25%)  |
+| `(v + 1.5 * 2^52) - 1.5 * 2^52 == v`, branch-free (kept) | 18.2-20.9 ms (+15%)  |
+
+`fract` is `v - trunc(v)`, and `trunc` is a libm call on baseline x86-64 (no
+SSE4.1), which also stops the min/max loop vectorising. The kept variant is
+about 1 ns per value, 2M values here. WASM: `mask wasm-size` scatter gz 346,376
+bytes (recorded 341,760, +1.35%, passes).
+
+**Options**
+
+1. Accept about +15% on first resolve of 1M rows (2-3 ms; a frame budget is 16
+   ms and this runs once per data change). Needs a budget or story decision.
+2. Compute `integral` lazily: only for columns whose channel is fitted by a
+   `Linear` (the stats pass would take a flag), so colour, size and other
+   columns do not pay. Changes the `ColumnStats` contract (AC1).
+3. Compute it only over a sample (not exact: a rare fractional value would be
+   missed, wrong ticks). Not recommended.
+
+**Recommendation**: option 1 if the orchestrator accepts the cost; otherwise
+option 2.
