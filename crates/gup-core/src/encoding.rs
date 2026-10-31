@@ -84,6 +84,11 @@ pub trait ShaderFn: Clone + Send + Sync + 'static {
     /// every link before fitting any layer.
     fn begin_fit(&self) {}
 
+    /// Whether every value fitted in this pass is a whole number; called
+    /// after [`fit_domain`](Self::fit_domain) with the column's
+    /// [`ColumnStats::integral`].
+    fn fit_integral(&mut self, _integral: bool) {}
+
     /// Counts changes made through a shared handle (a
     /// [`ScaleRef`](crate::ScaleRef) write); `0` for a function that has
     /// none. Internal: the plot's resolve cache sums it.
@@ -203,6 +208,10 @@ pub trait EncodeFn: Clone + Send + Sync + 'static {
     /// column's data `extent`, each later link's to the image of that
     /// extent through the links before it.
     fn fit(&mut self, extent: (f64, f64)) -> Result<()>;
+
+    /// Pass whether the column's values are all whole numbers to the first
+    /// link (the one that reads the column); called after [`fit`](Self::fit).
+    fn fit_integral(&mut self, _integral: bool) {}
 
     /// Fit every link's automatic domain from a dictionary-encoded
     /// column's `keys` (see [`ShaderFn::fit_keys`]): the first link's by
@@ -448,6 +457,10 @@ impl<S: ShaderFn> EncodeFn for S {
         self.fit_domain(extent)
     }
 
+    fn fit_integral(&mut self, integral: bool) {
+        ShaderFn::fit_integral(self, integral);
+    }
+
     fn fit_dictionary(&mut self, keys: &[Arc<str>]) -> Result<()> {
         ShaderFn::fit_keys(self, keys)
     }
@@ -564,6 +577,10 @@ where
         self.first.fit(extent)?;
         let (a, b) = (self.first.eval(extent.0), self.first.eval(extent.1));
         self.next.fit((a.min(b), a.max(b)))
+    }
+
+    fn fit_integral(&mut self, integral: bool) {
+        self.first.fit_integral(integral);
     }
 
     fn fit_dictionary(&mut self, keys: &[Arc<str>]) -> Result<()> {
@@ -1133,7 +1150,9 @@ where
     fn fit(&mut self, stats: Option<ColumnStats>) -> Result<()> {
         let Some(stats) = stats else { return Ok(()) };
         self.extent = Some(stats.extent());
-        self.func.fit(stats.extent())
+        self.func.fit(stats.extent())?;
+        self.func.fit_integral(stats.integral);
+        Ok(())
     }
 
     fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)> {
@@ -1211,6 +1230,7 @@ where
 pub(crate) trait DynEncodeFn: Send + Sync {
     fn dyn_links(&self) -> Vec<&dyn DynShaderFn>;
     fn dyn_fit(&mut self, extent: (f64, f64)) -> Result<()>;
+    fn dyn_fit_integral(&mut self, integral: bool);
     fn dyn_image(&self, extent: (f64, f64)) -> Option<(f64, f64)>;
     #[cfg(feature = "svg")]
     fn dyn_mirror(&self) -> Arc<dyn ColumnMirror>;
@@ -1225,6 +1245,9 @@ impl<E: EncodeFn> DynEncodeFn for E {
     }
     fn dyn_fit(&mut self, extent: (f64, f64)) -> Result<()> {
         EncodeFn::fit(self, extent)
+    }
+    fn dyn_fit_integral(&mut self, integral: bool) {
+        EncodeFn::fit_integral(self, integral);
     }
     fn dyn_image(&self, extent: (f64, f64)) -> Option<(f64, f64)> {
         EncodeFn::image(self, extent)
@@ -1279,7 +1302,9 @@ impl<T> DynColumnEncoding<T> for AxisEncoding<T> {
     fn fit(&mut self, stats: Option<ColumnStats>) -> Result<()> {
         let Some(stats) = stats else { return Ok(()) };
         self.extent = Some(stats.extent());
-        self.func.dyn_fit(stats.extent())
+        self.func.dyn_fit(stats.extent())?;
+        self.func.dyn_fit_integral(stats.integral);
+        Ok(())
     }
 
     fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)> {

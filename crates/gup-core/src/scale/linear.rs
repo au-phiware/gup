@@ -20,6 +20,9 @@ pub struct Linear {
     /// Ticks are multiples of this (times 1, 2, 5, 10, ...), if set: the
     /// bin width of a histogram, so that ticks fall on bin edges.
     tick_unit: Option<f64>,
+    /// Every value fitted in the last pass is a whole number
+    /// ([`ShaderFn::fit_integral`]): ticks step by at least 1.
+    integral: bool,
 }
 
 impl Default for Linear {
@@ -36,6 +39,7 @@ impl Linear {
             explicit: false,
             range: (0.0, 1.0),
             tick_unit: None,
+            integral: false,
         }
     }
 
@@ -131,6 +135,10 @@ impl ShaderFn for Linear {
             self.domain = Some(extent);
         }
         Ok(())
+    }
+
+    fn fit_integral(&mut self, integral: bool) {
+        self.integral = integral;
     }
 }
 
@@ -247,10 +255,15 @@ impl PositionScale for Linear {
 
 impl Linear {
     /// The step `ticks(count)` uses over `lo..hi`: [`tick_step`], then the
-    /// `tick_unit` rounding.
+    /// `tick_unit` rounding. Whole-number data over a span of at least 2
+    /// act as a unit of 1 (a `tick_unit` wins); the span guard keeps at
+    /// least two ticks when zoomed in.
     fn step(&self, lo: f64, hi: f64, count: usize) -> f64 {
         let step = tick_step(lo, hi, count);
-        match self.tick_unit {
+        let unit = self
+            .tick_unit
+            .or((self.integral && hi - lo >= 2.0).then_some(1.0));
+        match unit {
             Some(unit) => unit * nearest_125(step / unit),
             None => step,
         }
@@ -288,6 +301,54 @@ mod tests {
         // 5 would be the default step: the nearest multiple of 2 is 4.
         let ticks = s.ticks(5);
         assert_eq!(ticks.values[1] - ticks.values[0], 4.0);
+    }
+
+    fn whole(lo: f64, hi: f64) -> Linear {
+        let mut s = Linear::new().domain(lo, hi);
+        s.fit_integral(true);
+        s
+    }
+
+    #[test]
+    fn whole_number_data_ticks_in_whole_steps() {
+        assert_eq!(whole(-0.5, 3.5).ticks(8).values, [0.0, 1.0, 2.0, 3.0]);
+        // Steps of 1 or more are untouched.
+        let wide = whole(0.0, 100.0).ticks(8).values;
+        assert_eq!(wide, Linear::new().domain(0.0, 100.0).ticks(8).values);
+        assert_eq!(wide[1] - wide[0], 10.0);
+        // A span under 2 keeps its fractional ticks.
+        let narrow = whole(1.2, 2.8);
+        assert_eq!(narrow.ticks(8), Linear::new().domain(1.2, 2.8).ticks(8));
+        // Without the flag the default stays.
+        let plain = Linear::new().domain(-0.5, 3.5).ticks(8).values;
+        assert_eq!(plain[1] - plain[0], 0.5);
+    }
+
+    #[test]
+    fn a_tick_unit_wins_over_whole_numbers() {
+        let mut s = Linear::new().domain(0.0, 3.0).tick_unit(0.5);
+        s.fit_integral(true);
+        let t = s.ticks(8).values;
+        assert_eq!(t[1] - t[0], 0.5);
+    }
+
+    #[test]
+    fn a_chain_passes_the_flag_to_its_first_link_only() {
+        use crate::encoding::EncodeFn;
+        let (a, b) = (ScaleRef::new(Linear::new()), ScaleRef::new(Linear::new()));
+        let mut chain = a.then(b.clone());
+        chain.fit((0.0, 10.0)).unwrap();
+        EncodeFn::fit_integral(&mut chain, true);
+        assert!(a.read().integral);
+        assert!(!b.read().integral);
+    }
+
+    #[test]
+    fn whole_steps_compose_with_strict_rounding() {
+        let mut s = Linear::new().domain(0.0, 3.0);
+        s.fit_integral(true);
+        s.nice_to(8, true);
+        assert_eq!(s.resolved_domain(), (0.0, 4.0));
     }
 
     /// A seeded xorshift in 0..1.

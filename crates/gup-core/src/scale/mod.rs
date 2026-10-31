@@ -164,6 +164,9 @@ struct Shared<S> {
     scale: RwLock<S>,
     /// The union of the extents fitted since [`ShaderFn::begin_fit`].
     fit: Mutex<Option<(f64, f64)>>,
+    /// Whether every column fitted since [`ShaderFn::begin_fit`] holds
+    /// whole numbers only; `None` before the first.
+    integral: Mutex<Option<bool>>,
     /// The key dictionary of the layers that encode keys through the scale.
     keys: DictionarySlot,
     /// Bumped by every [`ScaleRef::write`], so a cache can tell that the
@@ -217,6 +220,7 @@ impl<S> ScaleRef<S> {
         Self(Arc::new(Shared {
             scale: RwLock::new(scale),
             fit: Mutex::new(None),
+            integral: Mutex::new(None),
             keys: DictionarySlot::default(),
             revision: AtomicU64::new(0),
             format: RwLock::new(None),
@@ -317,6 +321,18 @@ impl<S: ShaderFn> ShaderFn for ScaleRef<S> {
 
     fn begin_fit(&self) {
         *self.0.fit.lock().unwrap_or_else(|p| p.into_inner()) = None;
+        *self.0.integral.lock().unwrap_or_else(|p| p.into_inner()) = None;
+    }
+
+    /// ANDs `integral` across the pass's fits before telling the scale.
+    fn fit_integral(&mut self, integral: bool) {
+        let all = {
+            let mut acc = self.0.integral.lock().unwrap_or_else(|p| p.into_inner());
+            let all = acc.unwrap_or(true) && integral;
+            *acc = Some(all);
+            all
+        };
+        self.write().fit_integral(all);
     }
 
     /// Unions `extent` into the pass's extent (see

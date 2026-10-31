@@ -329,6 +329,10 @@ pub struct ColumnStats {
     pub max: f64,
     /// Number of nulls: non-finite values (NaN or ±∞), or missing keys.
     pub non_finite: u32,
+    /// Whether every finite value is a whole number (`fract() == 0.0`); true
+    /// for dictionary codes. A linear axis fed only whole numbers ticks in
+    /// whole steps.
+    pub integral: bool,
 }
 
 impl ColumnStats {
@@ -345,6 +349,7 @@ struct Acc {
     min: f64,
     max: f64,
     non_finite: u32,
+    integral: bool,
 }
 
 impl Acc {
@@ -352,12 +357,14 @@ impl Acc {
         min: f64::INFINITY,
         max: f64::NEG_INFINITY,
         non_finite: 0,
+        integral: true,
     };
 
     fn push(&mut self, v: f64) {
         if v.is_finite() {
             self.min = self.min.min(v);
             self.max = self.max.max(v);
+            self.integral &= v.fract() == 0.0;
         } else {
             self.non_finite += 1;
         }
@@ -368,6 +375,7 @@ impl Acc {
             min: self.min.min(other.min),
             max: self.max.max(other.max),
             non_finite: self.non_finite + other.non_finite,
+            integral: self.integral && other.integral,
         }
     }
 
@@ -376,6 +384,7 @@ impl Acc {
             min: self.min,
             max: self.max,
             non_finite: self.non_finite,
+            integral: self.integral,
         })
     }
 }
@@ -1435,6 +1444,24 @@ mod tests {
     }
 
     #[test]
+    fn stats_track_whole_numbers() {
+        let integral = |values: Vec<f64>| {
+            let store = ColumnStore::from_columns(vec![(ColumnFormat::F32, values)], ALL).unwrap();
+            store.stats(0).unwrap().integral
+        };
+        assert!(integral(vec![0.0, 1.0, 2.0]));
+        assert!(!integral(vec![0.0, 0.5]));
+        assert!(integral(vec![3.0, f64::NAN]));
+        // Merged across chunks.
+        let mut acc = Acc::EMPTY;
+        acc.push(1.0);
+        let mut other = Acc::EMPTY;
+        other.push(1.5);
+        assert!(acc.stats().unwrap().integral);
+        assert!(!acc.merge(other).stats().unwrap().integral);
+    }
+
+    #[test]
     fn mismatched_lengths_are_a_configuration_error() {
         let err = ColumnStore::from_columns(
             vec![
@@ -1524,6 +1551,7 @@ mod tests {
                             min: finite.clone().fold(f64::INFINITY, f64::min),
                             max: finite.fold(f64::NEG_INFINITY, f64::max),
                             non_finite: values.iter().filter(|v| !v.is_finite()).count() as u32,
+                            integral: values.iter().all(|v| !v.is_finite() || v.fract() == 0.0),
                         })
                     );
                     assert_eq!(col.stats(), store.stats(k));
