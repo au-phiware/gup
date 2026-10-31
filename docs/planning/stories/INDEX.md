@@ -199,7 +199,7 @@ cell labels, error bars, pie charts and facets.
   `plot.rs`. Deps: GUP-542 ✅, GUP-555 ✅.
 - [GUP-527](GUP-527_Label_Halos_And_Overlap_Culling.md) 💡 — `halo(Px)` and
   `hide_overlaps(true)` on text layers, so labels stay legible over dense marks.
-  Deps: GUP-542 ✅, GUP-405 📋 (soft).
+  Deps: GUP-542 ✅, GUP-405 ✅ (soft).
 - [GUP-543](GUP-543_Horizontal_Bars_And_Group_Padding.md) ✅ — `gup::barh`
   (`BarChart<T, Horizontal>`, categories top to bottom) and
   `BarChart::group_padding`. Deps: GUP-537 📋.
@@ -245,7 +245,7 @@ cell labels, error bars, pie charts and facets.
 - [GUP-554](GUP-554_Box_Plot_Builder.md) ✅ — `transform::box_stats` (type-7
   quartiles, 1.5 IQR whiskers) and `gup::boxplot` with outliers and tooltips.
   Deps: GUP-537 📋, GUP-548 📋.
-- [GUP-405](GUP-405_Gup_Text_OpenType_Shaping.md) 📋 — `gup-text` lays out by
+- [GUP-405](GUP-405_Gup_Text_OpenType_Shaping.md) ✅ — `gup-text` lays out by
   glyph index and kerns every run with Inter's GPOS `kern` (an in-house walk on
   fontdue's `ttf-parser`, checked against rustybuzz as a dev-dependency;
   rustybuzz itself would add 210 KB gz), adds `Features::TNUM`, and re-blesses
@@ -253,11 +253,11 @@ cell labels, error bars, pie charts and facets.
 - [GUP-579](GUP-579_Tabular_Figures_For_Tick_Labels.md) 📋 — Tick labels request
   `tnum` (measured and drawn), so four-digit axes keep their margin at every
   zoom, and `SvgTarget` writes `font-variant-numeric:tabular-nums` on them.
-  Edits `plot.rs`. Deps: GUP-405 📋.
+  Edits `plot.rs`. Deps: GUP-405 ✅.
 - [GUP-416](GUP-416_Gup_Text_Font_Fallback.md) 📋 — `TextSystem::add_fallback`
   and `Font::with_fallbacks`: an ordered chain for characters the primary lacks,
   with fonts validated at `from_bytes` and parsed on first use (Noto Sans JP
-  takes 259 ms), in `gup-text` only. Deps: GUP-407 ✅, GUP-405 📋.
+  takes 259 ms), in `gup-text` only. Deps: GUP-407 ✅, GUP-405 ✅.
 - [GUP-580](GUP-580_Fallback_Fonts_In_Gup_Core_And_Svg.md) 📋 —
   `Context::add_fallback_font`, the `gup_core::Font` re-export, the scene's
   fallback list, SVG `font-family` and embedding of the fallbacks a scene uses,

@@ -347,6 +347,7 @@ impl TextRun {
             at: [self.at.x, self.at.y],
             anchor: self.anchor,
             weight: self.style.weight,
+            features: gup_text::Features::default(),
         }
     }
 }

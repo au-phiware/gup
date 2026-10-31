@@ -378,6 +378,7 @@ impl<T: Send + Sync + 'static> TextLayer<T> {
                         at: [0.0, 0.0],
                         anchor,
                         weight,
+                        features: gup_text::Features::default(),
                     };
                     let b = font.ink_bounds(&run);
                     (b.width > 0.0 && b.height > 0.0).then(|| (b, font.baseline_origin(&run)))
@@ -697,6 +698,7 @@ mod tests {
                             at,
                             anchor,
                             weight,
+                            features: gup_text::Features::default(),
                         };
                         let box0 = font.ink_bounds(&run([0.0, 0.0]));
                         let off = font.baseline_origin(&run([0.0, 0.0]));

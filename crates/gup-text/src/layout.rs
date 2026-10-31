@@ -5,10 +5,12 @@
 //! glyphs of one run.
 //!
 //! Glyphs are placed on whole pixels, because they are drawn 1:1 from a
-//! bitmap atlas. Kerning comes from the font's `kern` table when it has
-//! one. There is no shaping, wrapping or rotation yet.
+//! bitmap atlas. Text is laid out by glyph index: each character maps to a
+//! glyph (a tabular one when [`Features::TNUM`] asks), advances by that
+//! glyph's width and kerns against its neighbour. There is no wrapping,
+//! ligature or rotation yet.
 
-use crate::font::Font;
+use crate::font::{Face, Font};
 
 /// Horizontal anchor of a text run.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -102,6 +104,47 @@ pub struct Bounds {
     pub height: f32,
 }
 
+/// OpenType features a run asks for. The default is [`Features::KERN`].
+///
+/// Combine with `|`: `Features::KERN | Features::TNUM`.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Features(u8);
+
+impl Features {
+    /// No features: glyph advances only.
+    pub const NONE: Self = Self(0);
+    /// GPOS `kern` pair adjustments, or the legacy `kern` table for a face
+    /// without GPOS kerning. Only pair kerning applies: contextual kerning
+    /// and mark positioning are ignored.
+    pub const KERN: Self = Self(1);
+    /// GSUB `tnum`: tabular (equal-advance) figures.
+    pub const TNUM: Self = Self(2);
+
+    /// The features in `self` or `other`.
+    pub const fn union(self, other: Self) -> Self {
+        Self(self.0 | other.0)
+    }
+
+    /// Whether every feature of `other` is in `self`.
+    pub const fn contains(self, other: Self) -> bool {
+        self.0 & other.0 == other.0
+    }
+}
+
+impl Default for Features {
+    fn default() -> Self {
+        Self::KERN
+    }
+}
+
+impl std::ops::BitOr for Features {
+    type Output = Self;
+
+    fn bitor(self, other: Self) -> Self {
+        self.union(other)
+    }
+}
+
 /// One line of horizontal text to measure or lay out, in logical pixels.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct Run<'a> {
@@ -115,6 +158,8 @@ pub struct Run<'a> {
     pub anchor: Anchor,
     /// Which bundled face draws the text.
     pub weight: Weight,
+    /// OpenType features to apply (kerning by default).
+    pub features: Features,
 }
 
 /// The weight of a [`Run`]: which of the two bundled faces draws it.
@@ -152,8 +197,11 @@ impl Weight {
 
 /// One glyph of a laid-out run, in physical pixels.
 #[derive(Copy, Clone, Debug)]
-pub(crate) struct PlacedGlyph {
+pub(crate) struct PlacedGlyph<'f> {
     pub c: char,
+    /// The face that draws the glyph, and its glyph index there.
+    pub face: &'f Face,
+    pub glyph: u16,
     /// The glyph's size in physical pixels (the atlas key).
     pub px: f32,
     pub metrics: fontdue::Metrics,
@@ -163,20 +211,15 @@ pub(crate) struct PlacedGlyph {
 }
 
 impl Font {
-    /// Measure `text` at `size` pixels.
+    /// Measure `text` at `size` pixels, with the default [`Features`].
     pub fn measure(&self, text: &str, size: f32) -> TextMetrics {
+        self.measure_with(text, size, Features::default())
+    }
+
+    /// Measure `text` at `size` pixels with `features`.
+    pub fn measure_with(&self, text: &str, size: f32, features: Features) -> TextMetrics {
         let mut width = 0.0;
-        let mut prev: Option<(char, &fontdue::Font)> = None;
-        for c in text.chars() {
-            let face = self.face_for(c);
-            if let Some((p, pface)) = prev
-                && std::ptr::eq(face, pface)
-            {
-                width += face.horizontal_kern(p, c, size).unwrap_or(0.0);
-            }
-            width += face.metrics(c, size).advance_width;
-            prev = Some((c, face));
-        }
+        self.shape(text, size, features, |g| width += g.kern + g.advance);
         let line = self.line_metrics(size);
         TextMetrics {
             width,
@@ -218,7 +261,7 @@ impl Font {
     /// [`baseline_origin`](Self::baseline_origin) at `scale` physical
     /// pixels per logical pixel, in physical pixels.
     fn origin(&self, run: &Run<'_>, scale: f32) -> [f32; 2] {
-        let m = self.measure(run.text, run.size * scale);
+        let m = self.measure_with(run.text, run.size * scale, run.features);
         let [ax, ay] = run.at.map(|v| v * scale);
         let x = match run.anchor.h {
             HAlign::Start => ax,
@@ -236,31 +279,80 @@ impl Font {
 
     /// Visit the glyphs of `run` laid out at `scale` physical pixels per
     /// logical pixel, in physical pixels.
-    pub(crate) fn walk(&self, run: &Run<'_>, scale: f32, mut f: impl FnMut(PlacedGlyph)) {
+    pub(crate) fn walk<'f>(
+        &'f self,
+        run: &Run<'_>,
+        scale: f32,
+        mut f: impl FnMut(PlacedGlyph<'f>),
+    ) {
         let px = run.size * scale;
         let [x, y] = self.origin(run, scale);
         // Whole pixels: bitmap glyphs are drawn 1:1.
         let (mut pen, baseline) = (x.round(), y.round());
-        let mut prev: Option<(char, &fontdue::Font)> = None;
-        for c in run.text.chars() {
-            let face = self.face_for(c);
-            if let Some((p, pface)) = prev
-                && std::ptr::eq(face, pface)
-            {
-                pen += face.horizontal_kern(p, c, px).unwrap_or(0.0);
-            }
-            let metrics = face.metrics(c, px);
+        self.shape(run.text, px, run.features, |g| {
+            pen += g.kern;
             f(PlacedGlyph {
-                c,
+                c: g.c,
+                face: g.face,
+                glyph: g.glyph,
                 px,
-                metrics,
-                x: (pen + metrics.xmin as f32).round(),
-                y: baseline - (metrics.ymin as f32 + metrics.height as f32),
+                metrics: g.metrics,
+                x: (pen + g.metrics.xmin as f32).round(),
+                y: baseline - (g.metrics.ymin as f32 + g.metrics.height as f32),
             });
-            pen += metrics.advance_width;
-            prev = Some((c, face));
+            pen += g.advance;
+        });
+    }
+
+    /// The one place text becomes glyphs: maps each character to a glyph
+    /// index, substitutes tabular figures when asked, and measures the
+    /// advance and the kerning against the previous glyph (zero unless both
+    /// come from one face). `measure_with` and `walk` both read it, so
+    /// measuring and drawing agree.
+    fn shape<'f>(&'f self, text: &str, px: f32, features: Features, mut f: impl FnMut(Shaped<'f>)) {
+        let mut prev: Option<(&Face, u16)> = None;
+        for c in text.chars() {
+            let face = self.face_for(c);
+            let mut glyph = face.glyphs.lookup_glyph_index(c);
+            if features.contains(Features::TNUM) {
+                glyph = face.layout.tabular(glyph);
+            }
+            let kern = match prev {
+                Some((pface, p)) if features.contains(Features::KERN) && pface.id == face.id => {
+                    if face.layout.has_gpos_kern() {
+                        face.layout.kern(face.data.bytes(), p, glyph, px)
+                    } else {
+                        face.glyphs
+                            .horizontal_kern_indexed(p, glyph, px)
+                            .unwrap_or(0.0)
+                    }
+                }
+                _ => 0.0,
+            };
+            let metrics = face.glyphs.metrics_indexed(glyph, px);
+            f(Shaped {
+                c,
+                face,
+                glyph,
+                kern,
+                advance: metrics.advance_width,
+                metrics,
+            });
+            prev = Some((face, glyph));
         }
     }
+}
+
+/// One glyph out of [`Font::shape`].
+struct Shaped<'f> {
+    c: char,
+    face: &'f Face,
+    glyph: u16,
+    /// Added to the pen before the glyph.
+    kern: f32,
+    /// Added to the pen after the glyph.
+    advance: f32,
+    metrics: fontdue::Metrics,
 }
 
 #[cfg(test)]
@@ -274,6 +366,7 @@ mod tests {
             at: [100.0, 50.0],
             anchor,
             weight: Weight::Regular,
+            features: Features::default(),
         }
     }
 
@@ -342,5 +435,107 @@ mod tests {
         // The first glyph lands at about twice the logical position.
         assert!((two[0].x - 2.0 * one[0].x).abs() <= 2.0, "{one:?} {two:?}");
         assert!((two[0].y - 2.0 * one[0].y).abs() <= 2.0, "{one:?} {two:?}");
+    }
+
+    const CHART_TEXT: [&str; 8] = [
+        "0123456789 .,:;%+-±×÷=<>()[]/",
+        "1.5k 20M 3G 4T 5µs 6 mm² 10⁻³ 7‰ ½ ¾",
+        "−42 °C – 3 °F, 12.5 ℃, 1 m·s⁻¹, 5 Ω, CO₂",
+        "$1 €2 £3 ¥4 ₹5 ₽6 ₩7 ₺8 ₿9 ¢",
+        "Zürich, São Paulo, Kraków, İstanbul, Łódź, București, Århus, Øresund, Șiret",
+        "σ = 0.3, Δt, λ, μ ≈ π, x ≤ y ≥ z ≠ w, √2, ∞, ∑",
+        "Revenue — Q1 “actual” vs ‘plan’ … ← ↑ → ↓ «» №5 ™",
+        "■ □ ▲ △ ▼ ◆ ◇ ● ○ ★ ✓ ✗",
+    ];
+
+    /// Glyph indices, unkerned, are the `char` layout this crate had before
+    /// it laid text out by glyph: same advances, same positions.
+    #[test]
+    fn without_features_layout_is_the_character_layout() {
+        for (font, weight) in [
+            (Font::inter(), Weight::Regular),
+            (Font::inter_semibold(), Weight::SemiBold),
+        ] {
+            for text in CHART_TEXT {
+                for px in [11.0, 16.0] {
+                    let advances: Vec<f32> = text
+                        .chars()
+                        .map(|c| font.face_for(c).glyphs.metrics(c, px).advance_width)
+                        .collect();
+                    let width: f32 = advances.iter().sum();
+                    let measured = font.measure_with(text, px, Features::NONE).width;
+                    assert_eq!(measured, width, "{text:?} at {px} {weight:?}");
+
+                    let r = Run {
+                        text,
+                        size: px,
+                        at: [10.0, 30.0],
+                        anchor: Anchor::new(HAlign::Middle, VAlign::Baseline),
+                        weight,
+                        features: Features::NONE,
+                    };
+                    let mut placed = Vec::new();
+                    font.walk(&r, 1.0, |g| placed.push((g.c, g.x, g.y, g.metrics.width)));
+                    let (mut pen, baseline) = (font.baseline_origin(&r)[0].round(), 30.0);
+                    for (i, c) in text.chars().enumerate() {
+                        let m = font.face_for(c).glyphs.metrics(c, px);
+                        let want = (
+                            c,
+                            (pen + m.xmin as f32).round(),
+                            baseline - (m.ymin as f32 + m.height as f32),
+                            m.width,
+                        );
+                        assert_eq!(placed[i], want, "{text:?} glyph {i} at {px} {weight:?}");
+                        pen += advances[i];
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn kerning_pairs_are_narrower_than_their_advances() {
+        let f = Font::inter();
+        for pair in ["AV", "To"] {
+            let kerned = f.measure_with(pair, 16.0, Features::KERN).width;
+            let plain = f.measure_with(pair, 16.0, Features::NONE).width;
+            assert!(kerned < plain, "{pair}: {kerned} vs {plain}");
+        }
+        // The default is kerned.
+        assert_eq!(
+            f.measure("AV", 16.0).width,
+            f.measure_with("AV", 16.0, Features::KERN).width
+        );
+        // Drawing follows measuring: the second glyph moves left by the kern.
+        let walk = |features| {
+            let r = Run {
+                features,
+                ..run("AV", Anchor::new(HAlign::Start, VAlign::Baseline))
+            };
+            let mut xs = Vec::new();
+            f.walk(&r, 1.0, |g| xs.push(g.x));
+            xs
+        };
+        assert!(walk(Features::KERN)[1] < walk(Features::NONE)[1]);
+    }
+
+    #[test]
+    fn tabular_figures_share_one_advance() {
+        for font in [Font::inter(), Font::inter_semibold()] {
+            let tnum = Features::KERN | Features::TNUM;
+            let digit = |c: char| font.measure_with(&c.to_string(), 16.0, tnum).width;
+            for c in '0'..='9' {
+                assert_eq!(digit(c), digit('0'), "{c}");
+            }
+            assert_eq!(
+                font.measure_with("1000", 16.0, tnum).width,
+                font.measure_with("1111", 16.0, tnum).width
+            );
+            // Proportional figures differ, so the feature does something.
+            assert_ne!(
+                font.measure_with("1", 16.0, Features::KERN).width,
+                font.measure_with("0", 16.0, Features::KERN).width
+            );
+        }
     }
 }

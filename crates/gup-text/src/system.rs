@@ -7,7 +7,7 @@
 use crate::atlas::GlyphAtlas;
 use crate::error::Result;
 use crate::font::Font;
-use crate::layout::{Bounds, Run, TextMetrics, Weight};
+use crate::layout::{Bounds, Features, Run, TextMetrics, Weight};
 use std::collections::HashMap;
 use std::sync::OnceLock;
 
@@ -292,7 +292,19 @@ impl TextSystem {
 
     /// Measure `text` at `size` logical pixels in `weight`.
     pub fn measure_weight(&self, text: &str, size: f32, weight: Weight) -> TextMetrics {
-        self.font_weight(weight).measure(text, size)
+        self.measure_with(text, size, weight, Features::default())
+    }
+
+    /// Measure `text` at `size` logical pixels in `weight` with `features`
+    /// (see [`Font::measure_with`]).
+    pub fn measure_with(
+        &self,
+        text: &str,
+        size: f32,
+        weight: Weight,
+        features: Features,
+    ) -> TextMetrics {
+        self.font_weight(weight).measure_with(text, size, features)
     }
 
     /// The ink box of `run` in logical pixels (see [`Font::ink_bounds`]),
@@ -306,7 +318,7 @@ impl TextSystem {
         self.atlas.size()
     }
 
-    /// Distinct glyphs (character and physical size) in the atlas.
+    /// Distinct glyphs (face, glyph and physical size) in the atlas.
     pub fn atlas_glyphs(&self) -> usize {
         self.atlas.len()
     }
@@ -325,13 +337,12 @@ impl TextSystem {
     /// scale into the atlas.
     pub fn layout(&mut self, run: &Run<'_>, color: [f32; 4], glyphs: &mut Glyphs) -> Result<()> {
         let font = self.font_weight(run.weight).clone();
-        let weight = run.weight;
         let mut result = Ok(());
         font.walk(run, glyphs.scale, |g| {
             if result.is_err() || g.metrics.width == 0 || g.metrics.height == 0 {
                 return;
             }
-            match self.atlas.glyph(&font, weight, g.c, g.px) {
+            match self.atlas.glyph(g.face, g.glyph, g.c, g.px) {
                 Ok(r) => {
                     let [u, v, w, h] = [r.x, r.y, r.width, r.height].map(|t| t as f32);
                     glyphs.quads.push(GlyphInstance {

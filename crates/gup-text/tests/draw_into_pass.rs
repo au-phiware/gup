@@ -6,7 +6,8 @@
 //! into a render pass the test opened itself, and read the pixels back.
 
 use gup_text::{
-    Anchor, DrawTarget, GlyphBuffer, Glyphs, HAlign, Run, TextSystem, Uploader, VAlign, Weight,
+    Anchor, DrawTarget, Features, GlyphBuffer, Glyphs, HAlign, Run, TextSystem, Uploader, VAlign,
+    Weight,
 };
 use std::cell::Cell;
 
@@ -148,6 +149,7 @@ fn measures_and_draws_a_run_into_a_callers_pass() {
         at: [WIDTH as f32 / 2.0, 16.0],
         anchor: Anchor::new(HAlign::Middle, VAlign::Top),
         weight: Weight::Regular,
+        features: Features::default(),
     };
     let metrics = text.measure(run.text, run.size);
     assert!(metrics.width > 60.0 && metrics.width < 200.0, "{metrics:?}");
@@ -236,6 +238,7 @@ fn semibold_text_is_wider_and_has_its_own_glyphs() {
         at: [0.0, 0.0],
         anchor: Anchor::new(HAlign::Start, VAlign::Top),
         weight: Weight::Regular,
+        features: Features::default(),
     };
     let mut glyphs = Glyphs::new(1.0);
     text.layout(&run, [0.0; 4], &mut glyphs).unwrap();
@@ -259,6 +262,7 @@ fn a_device_pixel_ratio_of_two_draws_twice_the_size() {
         at: [10.0, 10.0],
         anchor: Anchor::new(HAlign::Start, VAlign::Top),
         weight: Weight::Regular,
+        features: Features::default(),
     };
     let ink = |g: &Glyphs| {
         g.rects()
@@ -289,4 +293,81 @@ fn a_device_pixel_ratio_of_two_draws_twice_the_size() {
         text.prepare(&queue, &mut GlyphBuffer::new(), &Glyphs::new(2.0), &target)
             .is_none()
     );
+}
+
+#[test]
+fn kerned_text_draws_only_inside_its_ink_bounds() {
+    let (device, queue) = device();
+    let mut text = TextSystem::new(&device);
+    let run = Run {
+        text: "AVATAR To 11",
+        size: 24.0,
+        at: [WIDTH as f32 / 2.0, 16.0],
+        anchor: Anchor::new(HAlign::Middle, VAlign::Top),
+        weight: Weight::Regular,
+        features: Features::KERN | Features::TNUM,
+    };
+    let kerned = text.measure_with(run.text, run.size, Weight::Regular, run.features);
+    let unkerned = text.measure_with(run.text, run.size, Weight::Regular, Features::TNUM);
+    assert!(kerned.width < unkerned.width, "{kerned:?} {unkerned:?}");
+    let ink = text.ink_bounds(&run);
+    let mut glyphs = Glyphs::new(1.0);
+    text.layout(&run, [0.0, 0.0, 0.0, 1.0], &mut glyphs)
+        .expect("layout");
+    let target = DrawTarget {
+        format: FORMAT,
+        samples: 1,
+        width: WIDTH,
+        height: HEIGHT,
+    };
+    let batch = text
+        .prepare(&queue, &mut GlyphBuffer::new(), &glyphs, &target)
+        .expect("a batch");
+    let pixels = render(&device, &queue, |pass| batch.draw(pass));
+    let (mut inside, mut outside) = (0, 0);
+    for y in 0..HEIGHT {
+        for x in 0..WIDTH {
+            if pixels[((y * WIDTH + x) * 4) as usize] < 128 {
+                let (fx, fy) = (x as f32 + 0.5, y as f32 + 0.5);
+                if fx >= ink.x && fx <= ink.x + ink.width && fy >= ink.y && fy <= ink.y + ink.height
+                {
+                    inside += 1;
+                } else {
+                    outside += 1;
+                }
+            }
+        }
+    }
+    assert!(inside > 100, "{inside} dark pixels inside {ink:?}");
+    assert_eq!(outside, 0, "dark pixels outside {ink:?}");
+}
+
+#[test]
+fn the_atlas_keys_glyphs_by_index_not_character() {
+    let (device, _queue) = device();
+    let mut text = TextSystem::new(&device);
+    let mut run = Run {
+        text: "1",
+        size: 16.0,
+        at: [0.0, 0.0],
+        anchor: Anchor::new(HAlign::Start, VAlign::Top),
+        weight: Weight::Regular,
+        features: Features::KERN,
+    };
+    let mut glyphs = Glyphs::new(1.0);
+    text.layout(&run, [0.0; 4], &mut glyphs).unwrap();
+    assert_eq!(text.atlas_glyphs(), 1);
+    // Tabular "1" is another glyph of the same character.
+    run.features = Features::KERN | Features::TNUM;
+    text.layout(&run, [0.0; 4], &mut glyphs).unwrap();
+    assert_eq!(text.atlas_glyphs(), 2);
+    for features in [
+        Features::NONE,
+        Features::KERN,
+        Features::KERN | Features::TNUM,
+    ] {
+        run.features = features;
+        text.layout(&run, [0.0; 4], &mut glyphs).unwrap();
+    }
+    assert_eq!(text.atlas_glyphs(), 2);
 }

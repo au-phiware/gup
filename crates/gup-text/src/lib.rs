@@ -25,7 +25,7 @@
 //! - **Uploads** go through an [`Uploader`], so a host can count them.
 //!
 //! ```no_run
-//! use gup_text::{Anchor, DrawTarget, GlyphBuffer, Glyphs, HAlign, Run, TextSystem, VAlign, Weight};
+//! use gup_text::{Anchor, DrawTarget, Features, GlyphBuffer, Glyphs, HAlign, Run, TextSystem, VAlign, Weight};
 //!
 //! # fn demo(device: &wgpu::Device, queue: &wgpu::Queue, pass: &mut wgpu::RenderPass<'_>)
 //! # -> gup_text::Result<()> {
@@ -36,6 +36,7 @@
 //!     at: [100.0, 20.0],
 //!     anchor: Anchor::new(HAlign::Middle, VAlign::Top),
 //!     weight: Weight::Regular,
+//!     features: Features::default(),
 //! };
 //! let width = text.measure(run.text, run.size).width;
 //! # let _ = width;
@@ -62,11 +63,12 @@ mod atlas;
 mod error;
 mod font;
 mod layout;
+mod opentype;
 mod system;
 
 pub use error::{Error, Result};
 pub use font::{Font, INTER_REGULAR, INTER_REGULAR_FULL, INTER_SEMIBOLD, LineMetrics};
-pub use layout::{Anchor, Bounds, HAlign, Run, TextMetrics, VAlign, Weight};
+pub use layout::{Anchor, Bounds, Features, HAlign, Run, TextMetrics, VAlign, Weight};
 pub use system::{DrawTarget, GlyphBatch, GlyphBuffer, Glyphs, TextSystem, Uploader};
 /// The wgpu `gup-text` is built against.
 pub use wgpu;

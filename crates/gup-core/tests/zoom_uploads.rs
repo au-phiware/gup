@@ -48,7 +48,7 @@ fn zooming_100k_points_writes_no_column_bytes() {
         &Budget {
             chunks: 1,
             uniform_bytes: 136,
-            instance_bytes: 1_506_360,
+            instance_bytes: 1_508_952, // GUP-405: kerned labels move the plot rect 1 px
             draw_calls: 4,
         },
     );
@@ -63,7 +63,7 @@ fn zooming_100k_points_in_chunks_writes_no_column_bytes() {
         &Budget {
             chunks: 7,
             uniform_bytes: 112 + 16 + 6 * 256 + 8,
-            instance_bytes: 1_506_360,
+            instance_bytes: 1_508_952, // GUP-405: kerned labels move the plot rect 1 px
             draw_calls: 10,
         },
     );

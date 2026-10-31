@@ -4,6 +4,8 @@
 //! Fonts: the bundled default, loading from bytes and line metrics.
 
 use crate::error::{Error, Result};
+use crate::opentype::OtLayout;
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, OnceLock};
 
 /// The bundled default face: a subset of Inter Regular 4.1 (SIL Open Font
@@ -53,22 +55,41 @@ pub const INTER_REGULAR_FULL: &[u8] = include_bytes!("../fonts/Inter-Regular.ttf
 #[derive(Clone)]
 pub struct Font {
     name: Arc<str>,
-    data: Data,
-    face: Arc<fontdue::Font>,
+    face: Arc<Face>,
     /// Draws the characters `face` lacks (the bundled SemiBold subset
     /// falls back to Regular), so they are not missing-glyph boxes.
     fallback: Option<Arc<Font>>,
 }
 
+/// A face's identity: part of the glyph atlas key, so glyph indices of
+/// different faces never collide.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+pub(crate) struct FaceId(u32);
+
+/// One parsed face: its rasteriser, its font file and its OpenType layout
+/// data. Built once per font.
+pub(crate) struct Face {
+    pub id: FaceId,
+    pub data: Data,
+    pub glyphs: fontdue::Font,
+    pub layout: OtLayout,
+}
+
+impl std::fmt::Debug for Face {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Face").field("id", &self.id).finish()
+    }
+}
+
 /// The font file a face was parsed from.
 #[derive(Clone)]
-enum Data {
+pub(crate) enum Data {
     Static(&'static [u8]),
     Owned(Arc<[u8]>),
 }
 
 impl Data {
-    fn bytes(&self) -> &[u8] {
+    pub(crate) fn bytes(&self) -> &[u8] {
         match self {
             Data::Static(bytes) => bytes,
             Data::Owned(bytes) => bytes,
@@ -151,15 +172,24 @@ impl Font {
     }
 
     fn parse(name: &str, data: Data) -> Result<Self> {
-        let face = fontdue::Font::from_bytes(data.bytes(), fontdue::FontSettings::default())
-            .map_err(|reason| Error::Font {
-                name: name.to_owned(),
-                reason: reason.to_owned(),
-            })?;
+        static NEXT_ID: AtomicU32 = AtomicU32::new(0);
+        let font_error = |reason: String| Error::Font {
+            name: name.to_owned(),
+            reason,
+        };
+        let glyphs = fontdue::Font::from_bytes(data.bytes(), fontdue::FontSettings::default())
+            .map_err(|reason| font_error(reason.to_owned()))?;
+        let layout = OtLayout::parse(
+            &ttf_parser::Face::parse(data.bytes(), 0).map_err(|e| font_error(e.to_string()))?,
+        );
         Ok(Self {
             name: name.into(),
-            data,
-            face: Arc::new(face),
+            face: Arc::new(Face {
+                id: FaceId(NEXT_ID.fetch_add(1, Ordering::Relaxed)),
+                data,
+                glyphs,
+                layout,
+            }),
             fallback: None,
         })
     }
@@ -172,19 +202,19 @@ impl Font {
     /// The font file this face was parsed from, for embedding it (an SVG
     /// `@font-face`) or loading it into another rasteriser.
     pub fn data(&self) -> &[u8] {
-        self.data.bytes()
+        self.face.data.bytes()
     }
 
     /// Whether the font has a glyph for `c` (otherwise `c` draws as the
     /// font's missing-glyph box).
     pub fn has_glyph(&self, c: char) -> bool {
-        self.face.has_glyph(c) || self.fallback.as_ref().is_some_and(|f| f.has_glyph(c))
+        self.face.glyphs.has_glyph(c) || self.fallback.as_ref().is_some_and(|f| f.has_glyph(c))
     }
 
     /// Whether the font itself has a glyph for `c`, not counting a fallback
     /// face ([`inter_semibold`](Self::inter_semibold) falls back to Regular).
     pub fn has_own_glyph(&self, c: char) -> bool {
-        self.face.has_glyph(c)
+        self.face.glyphs.has_glyph(c)
     }
 
     /// The distinct characters of `text` this font has no glyph for, in
@@ -214,11 +244,12 @@ impl Font {
     pub fn line_metrics(&self, size: f32) -> LineMetrics {
         let (ascent, descent, line_gap) = self
             .face
+            .glyphs
             .horizontal_line_metrics(size)
             .map_or((size * 0.8, size * 0.2, size * 0.1), |m| {
                 (m.ascent, -m.descent, m.line_gap)
             });
-        let h = self.face.metrics('H', size);
+        let h = self.face.glyphs.metrics('H', size);
         LineMetrics {
             ascent,
             descent,
@@ -229,14 +260,16 @@ impl Font {
 
     #[cfg(test)]
     pub(crate) fn face(&self) -> &fontdue::Font {
-        &self.face
+        &self.face.glyphs
     }
 
     /// The face that draws `c`: this one, or the fallback when this one
     /// lacks `c` and the fallback has it.
-    pub(crate) fn face_for(&self, c: char) -> &fontdue::Font {
+    pub(crate) fn face_for(&self, c: char) -> &Face {
         match &self.fallback {
-            Some(fallback) if !self.face.has_glyph(c) && fallback.face.has_glyph(c) => {
+            Some(fallback)
+                if !self.face.glyphs.has_glyph(c) && fallback.face.glyphs.has_glyph(c) =>
+            {
                 &fallback.face
             }
             _ => &self.face,
@@ -322,12 +355,12 @@ mod tests {
         for c in ['–', 'é', 'µ', 'α'] {
             assert!(!semibold.face().has_glyph(c), "{c:?} is in the subset");
             assert!(semibold.has_glyph(c));
-            let (m, bitmap) = semibold.face_for(c).rasterize(c, 16.0);
+            let (m, bitmap) = semibold.face_for(c).glyphs.rasterize(c, 16.0);
             let regular = Font::inter().face().rasterize(c, 16.0);
             assert_eq!((m, bitmap), regular, "{c:?} comes from Regular");
         }
         // Mapped glyphs are SemiBold's own, and the box is the last resort.
-        let a = semibold.face_for('A').rasterize('A', 16.0);
+        let a = semibold.face_for('A').glyphs.rasterize('A', 16.0);
         assert_eq!(a, semibold.face().rasterize('A', 16.0));
         assert_ne!(a, Font::inter().face().rasterize('A', 16.0));
         assert_eq!(semibold.missing_glyphs("2024–Q1"), Vec::<char>::new());
@@ -340,6 +373,7 @@ mod tests {
             at: [0.0, 20.0],
             anchor: crate::Anchor::new(crate::HAlign::Start, crate::VAlign::Baseline),
             weight: crate::Weight::SemiBold,
+            features: crate::Features::default(),
         };
         semibold.walk(&run, 1.0, |g| ink.push((g.c, g.metrics.width > 0)));
         assert_eq!(ink.len(), 7);
