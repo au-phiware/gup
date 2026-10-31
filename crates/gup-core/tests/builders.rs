@@ -621,7 +621,10 @@ mod bars {
     }
 
     /// The reference for simple bars: a `Plot` built by hand.
-    fn reference_simple(rows: Vec<Sale>) -> Plot {
+    /// The hand-built plot. The builder's value axis ends on the first tick
+    /// past its tallest bar, so a zero-height rect at `top` (that tick) stands
+    /// in for the rounding: it draws nothing and fixes the domain's end.
+    fn reference_simple(rows: Vec<Sale>, top: f64) -> Plot {
         let mut plot = Plot::new();
         let x = plot.x(Band::new());
         plot.y(Linear::new());
@@ -630,6 +633,11 @@ mod bars {
             .width(x.band_width_px())
             .y(|r: &Sale| r.total)
             .y_end(|_: &Sale| 0.0f64);
+        plot.rects(vec![top])
+            .x_with(x.encode_key(|_: &f64| QUARTERS[0]).domain(QUARTERS))
+            .width(x.band_width_px())
+            .y(|t: &f64| *t)
+            .y_end(|t: &f64| *t);
         plot
     }
 
@@ -642,7 +650,8 @@ mod bars {
             .collect();
         let mut chart = gup_core::bar(rows.clone()).x(|r| r.quarter).y(|r| r.total);
         let (built, layout) = chart.render_resolved(&cx, 400, 300).unwrap();
-        let (reference, ref_layout) = reference_simple(rows)
+        let top = layout.y_ticks.last().expect("ticks").0;
+        let (reference, ref_layout) = reference_simple(rows, top)
             .render_resolved(&cx, 400, 300)
             .unwrap();
         assert!(built.as_raw() == reference.as_raw(), "pixels differ");

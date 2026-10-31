@@ -20,6 +20,18 @@
 // axis, with no ramp along it), and the other either ends butt too (the
 // pieces are collinear) or keeps the half of its round cap outside the
 // butt piece (a corner, rounded on the outside).
+//
+// A monotone curve (GUP-551) draws each instance as 16 pieces of the cubic
+// Bezier from row to row: the glue calls `vertex_controls` with the row's
+// two control values (its control columns through the y scale), and the
+// control points lie at one and two thirds of the segment in x. Every
+// joint, between pieces and at rows, is a plane through the joint point
+// perpendicular to the curve's tangent there: each piece draws its own
+// capsule's pixels on its side, so no pixel is drawn twice, none is left
+// out, and the union has the coverage of round joins. Both pieces compute the same plane: within a segment
+// from the same cubic, and at a row because the curve's tangent there is
+// continuous under a linear or time y scale (the control values are
+// computed from one tangent per row).
 #define_import_path gup::marks::line
 
 #import gup::view::{View, px_to_clip}
@@ -58,10 +70,15 @@ struct Varyings {
     @location(6) @interpolate(flat) others: vec4<f32>,
 }
 
-// The curve a layer's glue passes to `vertex_variant` (`Curve::variant`).
+// The curve a layer's glue passes to `vertex_variant` or
+// `vertex_controls` (`Curve::variant`).
 const CURVE_STEP: u32 = 1u;
 const CURVE_STEP_BEFORE: u32 = 2u;
 const CURVE_STEP_AFTER: u32 = 3u;
+const CURVE_MONOTONE_X: u32 = 4u;
+
+// The pieces a monotone segment is drawn as (`marks::MONOTONE_PIECES`).
+const MONOTONE_PIECES: u32 = 16u;
 
 // How a piece's end meets its neighbour.
 // A round cap: the line ends here.
@@ -70,6 +87,12 @@ const JOIN_CAP: u32 = 0u;
 const JOIN_BUTT: u32 = 1u;
 // A round cap less the pixels on the (butt) neighbour's side.
 const JOIN_KEEP: u32 = 2u;
+// A round cap, its pixels only on this piece's side of the plane through
+// the end whose normal (pointing along the curve) `others` holds; the
+// neighbour draws the other side. With the plane bisecting the two
+// pieces, each side's own capsule is the nearer, so the two give the
+// coverage of a round join with no seam at the plane.
+const JOIN_PLANE: u32 = 3u;
 
 // Pixels within this distance (physical pixels) of the line between two
 // pieces are drawn by both, so a pixel centre that each piece places a
@@ -197,6 +220,97 @@ fn vertex_variant(m: LineIn, vertex_index: u32, row: u32, view: View, curve: u32
     return out;
 }
 
+// The cubic Bezier from `p0` to `p3` with control points `p1`, `p2`, at
+// `t` (as `monotone::bezier` on the CPU).
+fn bezier(p0: vec2<f32>, p1: vec2<f32>, p2: vec2<f32>, p3: vec2<f32>, t: f32) -> vec2<f32> {
+    let u = 1.0 - t;
+    return u * u * u * p0 + 3.0 * u * u * t * p1 + 3.0 * u * t * t * p2 + t * t * t * p3;
+}
+
+// The unit tangent of the same cubic at `t`; the chord's direction where
+// the derivative vanishes.
+fn bezier_tangent(p0: vec2<f32>, p1: vec2<f32>, p2: vec2<f32>, p3: vec2<f32>, t: f32) -> vec2<f32> {
+    let u = 1.0 - t;
+    let d = u * u * (p1 - p0) + 2.0 * u * t * (p2 - p1) + t * t * (p3 - p2);
+    let len = length(d);
+    return select(direction(p0, p3), d / len, len > 0.0);
+}
+
+// Joint `j` (0 to 16) of the monotone segment from `a` to `b` with
+// control points `p1`, `p2`: the cubic at the Chebyshev node
+// `(1 - cos(pi j / 16)) / 2`, `a` and `b` exactly at the ends (as
+// `Curve::path` on the CPU). The pieces are shortest at the rows, where
+// a monotone cubic bends most (a level tangent at an extremum), so the
+// first and last pieces leave along the row's tangent.
+fn monotone_point(a: vec2<f32>, p1: vec2<f32>, p2: vec2<f32>, b: vec2<f32>, j: u32) -> vec2<f32> {
+    if (j == 0u) {
+        return a;
+    }
+    if (j >= MONOTONE_PIECES) {
+        return b;
+    }
+    let t = 0.5 - 0.5 * cos(3.14159265358979 * f32(j) / f32(MONOTONE_PIECES));
+    return bezier(a, p1, p2, b, t);
+}
+
+// The normal of the plane between the pieces `p`–`q` and `q`–`r`: the
+// bisector of their directions, the same for both pieces.
+fn bisector(p: vec2<f32>, q: vec2<f32>, r: vec2<f32>) -> vec2<f32> {
+    let sum = direction(p, q) + direction(q, r);
+    let len = length(sum);
+    return select(direction(p, q), sum / len, len > 0.0);
+}
+
+// Vertex `vertex_index` of a segment drawn as a monotone cubic (`curve`
+// is `CURVE_MONOTONE_X`): piece `vertex_index / 6` of 16, corner
+// `vertex_index % 6`. `controls` are the y values (logical pixels) of the
+// control points at one and two thirds of the segment in x. `rows` is the
+// layer's stored row count: the first and last segments end in round
+// caps; every other end is a `JOIN_PLANE`. Between pieces the plane
+// bisects the two pieces, so each side's own capsule is the nearer and
+// the union is exactly the round-joined polyline; at a row it is
+// perpendicular to the curve's tangent, which both segments compute
+// alike under a linear or time y scale. A null row is not seen: the ends
+// either side of it end flat, at the row.
+fn vertex_controls(m: LineIn, controls: vec2<f32>, vertex_index: u32, row: u32, view: View, curve: u32, rows: u32) -> Varyings {
+    let a = vec2<f32>(m.x, m.y);
+    let b = vec2<f32>(m.x_next, m.y_next);
+    let dx = b.x - a.x;
+    let p1 = vec2<f32>(a.x + dx / 3.0, controls.x);
+    let p2 = vec2<f32>(a.x + dx * 2.0 / 3.0, controls.y);
+    let k = vertex_index / 6u;
+    // The joints before, at the ends of, and after this piece.
+    let before = monotone_point(a, p1, p2, b, max(k, 1u) - 1u);
+    let start = monotone_point(a, p1, p2, b, k);
+    let stop = monotone_point(a, p1, p2, b, k + 1u);
+    let after = monotone_point(a, p1, p2, b, k + 2u);
+    var out = capsule(m, start, stop, vertex_index % 6u, row, (a.x + b.x) * 0.5, view);
+    // The row nearer in x: the fragment's x past the midpoint towards the
+    // next row (exact, as the quad's position is linear in screen space).
+    out.side = out.side * sign(dx);
+
+    let axis = direction(start, stop);
+    var start_join = JOIN_PLANE;
+    var end_join = JOIN_PLANE;
+    var start_normal = bisector(before, start, stop);
+    var end_normal = bisector(start, stop, after);
+    if (k == 0u) {
+        start_normal = bezier_tangent(a, p1, p2, b, 0.0);
+        if (row == 0u) {
+            start_join = JOIN_CAP;
+        }
+    }
+    if (k + 1u == MONOTONE_PIECES) {
+        end_normal = bezier_tangent(a, p1, p2, b, 1.0);
+        if (row + 2u >= rows) {
+            end_join = JOIN_CAP;
+        }
+    }
+    out.joins = start_join | (end_join << 2u);
+    out.others = vec4<f32>(to_local(start_normal, axis), to_local(end_normal, axis));
+    return out;
+}
+
 // The coverage of the pixel centred on `local` by the capsule of half
 // length `half.x` and radius `half.y`: the box coverage across the
 // segment, taken at the distance from the segment, so the body matches
@@ -204,8 +318,10 @@ fn vertex_variant(m: LineIn, vertex_index: u32, row: u32, view: View, curve: u32
 // cap and no ramp: the segment runs on past it at full coverage, and the
 // pixels past it are the neighbour's (`owned`).
 fn capsule_coverage(local: vec2<f32>, half: vec2<f32>, joins: u32) -> f32 {
-    let before = select(max(-local.x - half.x, 0.0), 0.0, (joins & 3u) == JOIN_BUTT);
-    let after = select(max(local.x - half.x, 0.0), 0.0, (joins >> 2u) == JOIN_BUTT);
+    let s = joins & 3u;
+    let e = joins >> 2u;
+    let before = select(max(-local.x - half.x, 0.0), 0.0, s == JOIN_BUTT);
+    let after = select(max(local.x - half.x, 0.0), 0.0, e == JOIN_BUTT);
     return span(length(vec2<f32>(before + after, local.y)), half.y);
 }
 
@@ -223,6 +339,8 @@ fn owned(v: Varyings) -> bool {
             || (e == JOIN_BUTT && v.local.x > v.half.x + JOIN_SLACK)
             || (s == JOIN_KEEP && past_start && dot(v.local - start, v.others.xy) > JOIN_SLACK)
             || (e == JOIN_KEEP && past_end && dot(v.local - end, v.others.zw) > JOIN_SLACK)
+            || (s == JOIN_PLANE && dot(v.local - start, v.others.xy) < 0.0)
+            || (e == JOIN_PLANE && dot(v.local - end, v.others.zw) > 0.0)
     );
 }
 
@@ -244,7 +362,8 @@ fn hit_distance(v: Varyings) -> f32 {
 
 // The row a fragment picks (`side`): for a straight segment the end
 // nearer the fragment, this row (the segment's first) at or before the
-// middle, else the next; for a step the curve's rule.
+// middle, else the next; for a step the curve's rule; for a monotone
+// curve the row nearer in x.
 fn hit_row(v: Varyings) -> u32 {
     return select(v.row + 1u, v.row, v.side <= 0.0);
 }

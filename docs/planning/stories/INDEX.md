@@ -225,9 +225,12 @@ cell labels, error bars, pie charts and facets.
 - [GUP-550](GUP-550_Line_Curves_And_Steps.md) ✅ — `Curve` and
   `.curve(Curve::StepAfter)` on lines: step pieces drawn exactly in the shader
   through a per-layer vertex count and glue constant, straight lines unchanged.
-- [GUP-551](GUP-551_Monotone_Line_Curves.md) 📋 — `Curve::MonotoneX`: Steffen
+- [GUP-551](GUP-551_Monotone_Line_Curves.md) ✅ — `Curve::MonotoneX`: Steffen
   tangents on the CPU as Bezier control columns, tessellated per segment, never
   overshooting. Deps: GUP-550 📋.
+- [GUP-576](GUP-576_Monotone_Piece_Count_From_Density.md) 💡 — Monotone curves
+  choose their piece count from pixel density, so 100K-row curves cost about
+  what straight lines cost (16 pieces cost 18x today). Deps: GUP-551 ✅.
 - [GUP-552](GUP-552_Chart_Subtitle.md) ✅ — `subtitle` on `Plot` and the
   builders, laid out under the title with its own theme size and colour. Deps:
   GUP-541 📋 (soft).
@@ -260,7 +263,7 @@ touches no hot file and runs beside any of them.
   labels read the plot's stored tick format through a shared slot, so a format
   set via `plot_mut()` (before or after a resolve) labels the bars too; the
   builder's copy is removed. Deps: GUP-544 ✅, GUP-541 ✅.
-- [GUP-561](GUP-561_Axis_Ends_Fit_Bars_And_Bands.md) 📋 — Bar and histogram
+- [GUP-561](GUP-561_Axis_Ends_Fit_Bars_And_Bands.md) ✅ — Bar and histogram
   value axes round out to their own tick step (`PositionScale::nice_to`), so
   every bar ends at or inside a labelled tick, and band and point axes lose the
   far-end `plot_padding` that overran heatmap cells. Deps: GUP-543 ✅, GUP-548

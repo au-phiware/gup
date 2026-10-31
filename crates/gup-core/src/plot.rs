@@ -199,6 +199,10 @@ pub struct Plot {
     /// Whether each axis (x, y, right y) was widened by the last resolve: its range
     /// is the whole plot rect, not inset at the far end.
     widened: [bool; 3],
+    /// Whether each automatic axis (x, y, right y) is rounded out to the
+    /// step its own ticks use (see [`Plot::round_to_ticks`]), so both of its
+    /// ends are ticks.
+    tick_ends: [bool; 3],
     /// The domain a zoom left on each widened axis. While the axis still
     /// has it, the axis keeps the widened range policy, so zooming moves
     /// no pixel. A domain set any other way gets the fixed-domain policy.
@@ -470,6 +474,7 @@ impl Plot {
             cache: None,
             generation: 0,
             widened: [false; 3],
+            tick_ends: [false; 3],
             zoomed: [None; 3],
             pick: None,
             drawn: Vec::new(),
@@ -505,6 +510,15 @@ impl Plot {
     pub fn chunk_culling(&mut self, on: bool) -> &mut Self {
         self.revision = self.revision.wrapping_add(1);
         self.cull = on;
+        self
+    }
+
+    /// Round the automatic domain of `axis` (0 x, 1 y, 2 right y) out to
+    /// multiples of the step its ticks use, not the 10-tick step, so both
+    /// ends are ticks: a bar's value axis ends on a labelled tick.
+    pub(crate) fn round_to_ticks(&mut self, axis: usize) -> &mut Self {
+        self.revision = self.revision.wrapping_add(1);
+        self.tick_ends[axis] = true;
         self
     }
 
@@ -1925,9 +1939,22 @@ impl Plot {
                 s.fit_position(f64::from(px));
             }
         }
-        for s in [Some(x), Some(y), right].into_iter().flatten() {
+        // Tick counts come from the size alone; a bar's value axis rounds
+        // to the step of its own ticks (GUP-561).
+        let y_count = ((height / th.y_tick_spacing.0) as usize).max(2);
+        let mut counts = (
+            ((width / th.x_tick_spacing.0) as usize).max(2),
+            y_count,
+            y_count,
+        );
+        for (i, s) in [Some(x), Some(y), right].into_iter().enumerate() {
+            let Some(s) = s else { continue };
             if s.is_auto() {
-                s.nice();
+                if self.tick_ends[i] {
+                    s.nice_to([counts.0, counts.1, counts.2][i], true);
+                } else {
+                    s.nice();
+                }
             }
         }
 
@@ -1984,12 +2011,6 @@ impl Plot {
         let held = self
             .hold
             .filter(|h| (h.width, h.height) == (width.to_bits(), height.to_bits()));
-        let y_count = ((height / th.y_tick_spacing.0) as usize).max(2);
-        let mut counts = (
-            ((width / th.x_tick_spacing.0) as usize).max(2),
-            y_count,
-            y_count,
-        );
         let layout = |counts: (usize, usize, usize)| -> Result<TickLayout> {
             let x_ticks = x.ticks(counts.0);
             let y_ticks = y.ticks(counts.1);
@@ -2125,9 +2146,19 @@ impl Plot {
         // whole while a baseline, which has no overhang, sits on its axis.
         // `insets` is (near, far) per axis: the overhang at both ends
         // until the data says less (GUP-528).
+        let keyed = [
+            x.reads_keys(),
+            y.reads_keys(),
+            right.is_some_and(|r| r.reads_keys()),
+        ];
         let ranges = |plot: Rect, widened: [bool; 3], insets: [(f32, f32); 3]| {
             let near = |i: usize| if widened[i] { 0.0 } else { insets[i].0 };
-            let far = |i: usize| if widened[i] { 0.0 } else { insets[i].1 + pad };
+            // A band or point axis makes its own room with its outer padding.
+            let far = |i: usize| match (widened[i], keyed[i]) {
+                (true, _) => 0.0,
+                (false, true) => insets[i].1,
+                (false, false) => insets[i].1 + pad,
+            };
             [
                 (plot.left() + near(0), plot.right() - far(0)),
                 (plot.bottom() - near(1), plot.top() + far(1)),
@@ -2204,6 +2235,23 @@ impl Plot {
             }),
         ];
         self.widened = widened;
+        // Widening can change the step the ticks use; grow a rounded axis
+        // back to ticks at both ends. Only grows, so the room (and the
+        // step past the data end) is kept.
+        let tick_ends = self.tick_ends;
+        let round_out = |counts: (usize, usize, usize), only: [bool; 3]| {
+            let counts = [counts.0, counts.1, counts.2];
+            for (i, s) in [Some(x), Some(y), right].into_iter().enumerate() {
+                if let Some(s) = s
+                    && tick_ends[i]
+                    && only[i]
+                    && s.is_auto()
+                {
+                    s.nice_to(counts[i], false);
+                }
+            }
+        };
+        round_out(counts, widened);
         if widened.contains(&true) {
             // Tick values stay on the rounded numbers; the margins may change.
             lay = layout(counts)?;
@@ -2311,6 +2359,12 @@ impl Plot {
         let before = counts;
         thin(&mut lay, &mut counts);
         if counts != before {
+            // A coarser step: grow each rounded axis to it.
+            let (was, now) = (
+                [before.0, before.1, before.2],
+                [counts.0, counts.1, counts.2],
+            );
+            round_out(counts, std::array::from_fn(|i| was[i] != now[i]));
             let reserved = (lay.y_label_w, lay.y_right_label_w);
             let again = layout(counts)?;
             if (again.y_label_w, again.y_right_label_w) != reserved || again.plot != lay.plot {

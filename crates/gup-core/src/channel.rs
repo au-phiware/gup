@@ -344,7 +344,11 @@ pub enum HitShape {
 /// `vertex_variant(m, vertex_index, row, view, variant: u32, rows: u32)`
 /// (`rows` the layer's stored row count), which the glue
 /// calls instead of `vertex` for a non-default variant, drawing more
-/// vertices per instance (GUP-550).
+/// vertices per instance (GUP-550). A variant that reads per-row control
+/// values (a monotone curve, GUP-551) is drawn by
+/// `vertex_controls(m, controls: vec2<f32>, vertex_index, row, view,
+/// variant: u32, rows: u32)` instead, `controls` the row's two control
+/// columns read through the y channel's chain.
 ///
 /// Implement it with `#[derive(Mark)]` (RFC-001 S6), which also checks the
 /// module's input struct against the channels at compile time.

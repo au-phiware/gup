@@ -10,8 +10,8 @@ touches: [crates/gup-core/src/plot.rs, crates/gup-core/src/builder/]
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: 📋
-Planned **Created**: 2026-10-26
+**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: 🚧 In
+Progress Planned **Created**: 2026-10-26
 
 ## Context
 
@@ -59,63 +59,63 @@ last column and above the top row (`tests/golden/gup_core/heatmap.png`).
 
 ### AC1: `nice_to` rounds to the ticks' own step
 
-- [ ] Unit test in `scale/linear.rs`: for 10,000 seeded random extents (`lo` in
+- [x] Unit test in `scale/linear.rs`: for 10,000 seeded random extents (`lo` in
       −1000..1000, span in 1e-3..1e6, including `lo = 0`) and every count
       2..=12, after `nice_to(count)` the domain contains the extent, and
       `ticks(count)`'s first value equals the domain's start and its last value
       the domain's end (relative error ≤ 1e-9).
-- [ ] With a `tick_unit` set, the same holds (ticks on multiples of the unit).
-- [ ] A domain of `(0, 0)` gets the same padding `nice` gives it.
+- [x] With a `tick_unit` set, the same holds (ticks on multiples of the unit).
+- [x] A domain of `(0, 0)` gets the same padding `nice` gives it.
 
 ### AC2: Bars end inside the last tick
 
-- [ ] New test file `crates/gup-core/tests/bar_axis_ends.rs`: for vertical
+- [x] New test file `crates/gup-core/tests/bar_axis_ends.rs`: for vertical
       simple, grouped (with a negative value), stacked, horizontal simple and
       horizontal stacked bar charts and a histogram, with values from a seeded
       generator (largest bar 1..1000), at every size `w` in 240..=800 step 80
       and `h` in 160..=560 step 80: the largest bar end is ≤ the last value tick
       (`Layout::y_ticks`, or `x_ticks` for `barh`), the most negative is ≥ the
       first, and 0 is a tick. Zero failures.
-- [ ] The same charts with `.value_labels()` hold too (their axis is then
+- [x] The same charts with `.value_labels()` hold too (their axis is then
       widened past the rounded end, which keeps the bars inside it).
 
 ### AC3: Band and point axes have no far padding
 
-- [ ] New test in `tests/heatmap_png.rs` (or `bar_axis_ends.rs`): for a heatmap
+- [x] New test in `tests/heatmap_png.rs` (or `bar_axis_ends.rs`): for a heatmap
       at 640×400, from `Layout`: the last x band's far edge (last x tick + half
       the spacing between the last two x ticks) equals the plot rect's right
       edge within 0.5 px, and the top y band's top edge equals the plot rect's
       top within 0.5 px.
-- [ ] `tests/golden/gup_core/heatmap.png` re-blessed and read: the x axis line
+- [x] `tests/golden/gup_core/heatmap.png` re-blessed and read: the x axis line
       ends at the right edge of hour 23's column and the y axis line at the top
       of Monday's row, with no 4 px stub.
-- [ ] A point-scale axis (`tests/ordinal_png.rs`) keeps its marks off the plot
+- [x] A point-scale axis (`tests/ordinal_png.rs`) keeps its marks off the plot
       edge (its existing assertions pass; update only a number that encodes the
       4 px far pad, and list each one in the Implementation Summary).
 
 ### AC4: The goldens that change, and only those
 
-- [ ] Re-bless with `GUP_BLESS=1`. Only goldens whose chart has a `Band` or
+- [x] Re-bless with `GUP_BLESS=1`. Only goldens whose chart has a `Band` or
       `Point` axis, or is a bar or histogram builder chart, may change. Expected
       among them: `builder_bars`, `builder_barh`, `builder_owned_keys`,
       `bar_value_labels`, `bar_value_labels_stacked`, `grouped_bars`,
       `rect_bars`, `histogram`, `heatmap`, `heatmap_diverging`, `band_months`,
       and `tutorials/01_grouped_bars`. Any other golden changing is an
       escalation.
-- [ ] Read each changed PNG and record one line per image in the Implementation
+- [x] Read each changed PNG and record one line per image in the Implementation
       Summary. Required: `builder_barh.png`'s last x tick is 100 and the New
       Zealand bar ends before it; `bar_value_labels_stacked.png`'s last tick is
       70 and South ends before it; `histogram.png`'s count axis ends on a
       labelled tick (by the rule, 300 for its tallest bin of about 242 at count
       8: 260 rounds with step 20, whose span asks for step 50); every bar lies
       inside the plot area.
-- [ ] Tests that assert a band position or an axis line end numerically are
+- [x] Tests that assert a band position or an axis line end numerically are
       updated only where the number encodes the removed 4 px; list them.
 
 ### AC5: Browser scenes and dogfood
 
-- [ ] `mask wasm-browser` passes (its scatter page has a `Band` axis).
-- [ ] `./dogfood/run_all.sh` passes with every check's status unchanged
+- [x] `mask wasm-browser` passes (its scatter page has a `Band` axis).
+- [x] `./dogfood/run_all.sh` passes with every check's status unchanged
       (`t2_bars` is a bar chart).
 
 ## Decisions
@@ -250,3 +250,76 @@ last column and above the top row (`tests/golden/gup_core/heatmap.png`).
 - [ ] WASM size: `mask wasm-size` scatter gz bytes reported
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
+
+## Implementation Summary
+
+Added `PositionScale::nice_to` (default `nice`), `DynPositionScale::nice_to`,
+`Linear::step` and `Linear::nice_to`; `Plot::tick_ends`/`round_to_ticks`; tick
+counts moved above step 1-2; bar and histogram builders call `round_to_ticks`;
+key axes lose the far `plot_padding` (`ranges`); `plot_padding` doc updated.
+Tests: `scale/linear.rs` (AC1, 10,000 extents x 11 counts, with and without
+`tick_unit`), `tests/bar_axis_ends.rs` (576 cases: 48 sizes x 6 kinds x labels
+on/off, zero failures), `heatmap_png.rs` (flush axes within 0.5 px). No existing
+numeric assertion needed changing (no test encoded the 4 px).
+
+Deviation: widening (value labels) can change the tick step after the domain was
+rounded, so bars ended past the last tick (barh 240x400 with labels: 748 vs last
+tick 500). `round_out` runs `nice_to` again right after widening and after
+thinning for tick-ending axes; it only grows the domain, adds no relayout pass.
+Areas (`gup::area`) are unchanged: the story leaves them out of scope.
+
+Goldens re-blessed (each read):
+
+- `builder_barh`: last tick 100, New Zealand (about 90) ends before it.
+- `bar_value_labels_stacked`: axis 0-70, South (61) ends before 70.
+- `histogram`: count axis 0-300, tallest bin (242) below the 300 tick.
+- `heatmap`, `heatmap_diverging`: axis lines flush with last column and top row.
+- `bar_value_labels`: axis -20..60, labels clear.
+- `builder_bars`: grouped 0-55, stacked 0-180, bars on the baseline.
+- `builder_owned_keys`, `grouped_bars`, `rect_bars`: value axis ends on 60.
+- `band_months`: Dec band ends flush with the plot edge.
+- `tutorials/01_grouped_bars`: axis ends on 7; Q3 South ends exactly at 7.
+
+Results: `mask merge-check --dogfood` PASS (incl. wasm-browser, dogfood);
+`cargo test --doc -p gup` 54 passed; wasm scatter gz 344098 B (budget 341760
++2%, pass). `perf_budget --skip-wasm`: exact rows unchanged; first run
+`zoom.cpu.median_ms` 0.839 vs 0.828 (noise), second run clean.
+
+### Amendment: strict far end (2026-10-27)
+
+A bar ending exactly on the last tick ran to the plot edge and looked cut off.
+`nice_to(count, strict)`: with `strict` (the first rounding of a bar axis), a
+nonzero data end that is already a tick moves out one step; the zero baseline
+stays. Re-rounds after widening or thinning are not strict (they only grow).
+AC1/AC2 tests assert the strict rule (tallest bar strictly below the last tick),
+plus a unit case with the max exactly on a tick. Re-blessed again:
+`tutorials/01_grouped_bars` (axis 0-8, Q3 South 7 below it) and
+`builder_owned_keys` (axis 0-70, 60 below it). `rect_bars` is hand-built rects,
+not a bar builder, so its May bar (60) still touches the top. The builders.rs
+hand-built reference now adds a zero-height rect at the rounded end.
+
+## Retrospective
+
+**Completed**: 2026-10-27
+
+### Key Technical Learnings
+
+#### Widening changes the tick step
+
+- **Challenge**: rounding to the ticks' step before widening is not enough;
+  label headroom widens the domain, and `tick_step` of the wider span can pick a
+  coarser step whose last tick lies below the bars.
+- **Solution**: re-run `nice_to` after widening (grow only).
+- **Pattern**: any later domain growth must re-round for tick-ending axes.
+
+### Architectural Decisions
+
+#### Area charts not rounded
+
+- **Decision**: left unchanged (story says out of scope).
+- **Future**: `gup::area` can call `round_to_ticks(1)`; GUP-562 reuses
+  `Linear::step`.
+
+### Follow-up Stories
+
+None.

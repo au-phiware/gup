@@ -77,6 +77,7 @@ pub struct HistogramBin {
 pub fn histogram<T: Send + Sync + 'static>(rows: impl IntoIterator<Item = T>) -> HistogramChart<T> {
     let mut plot = Plot::new();
     plot.y(Linear::new());
+    plot.round_to_ticks(1);
     plot.y_title("Count");
     HistogramChart {
         plot,

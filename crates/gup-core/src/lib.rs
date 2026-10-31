@@ -149,6 +149,7 @@ mod gpu_pick;
 mod guide;
 mod input;
 pub mod marks;
+mod monotone;
 mod order;
 mod pick;
 pub mod plot;

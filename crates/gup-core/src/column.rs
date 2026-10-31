@@ -441,6 +441,25 @@ impl ChunkColumn {
         }
     }
 
+    /// Encode `value` as this numeric column stores it against its origin
+    /// (an origin is set first if the column has none), widening the
+    /// stats: the bytes of one row.
+    fn encode_one(&mut self, value: f64) -> ([u8; 8], usize) {
+        if self.origin.is_none() {
+            self.origin = Some(if self.format.is_relative() {
+                value
+            } else {
+                0.0
+            });
+        }
+        let [hi, lo] = self.format.split(value - self.origin());
+        let mut cell = [0; 8];
+        cell[..4].copy_from_slice(&hi.to_le_bytes());
+        cell[4..].copy_from_slice(&lo.to_le_bytes());
+        self.stats.push(value);
+        (cell, self.format.stride() as usize)
+    }
+
     /// Store dictionary `codes` as rows `at..` of this `U32` column.
     fn write_codes(&mut self, bytes: &mut [u8], at: u32, codes: &[u32]) {
         self.origin = Some(0.0);
@@ -494,6 +513,10 @@ struct ChunkGpu {
     capacity: u32,
     /// Rows written to the buffer; rows `rows..len` are the dirty tail.
     rows: u32,
+    /// Rows before `rows` rewritten since they were written
+    /// ([`ColumnStore::rewrite`]): column, row and the row's bytes, which
+    /// the next upload writes.
+    patches: Vec<(usize, u32, [u8; 8])>,
     /// Validity bits, once the store has a null.
     validity: Option<ValidityGpu>,
 }
@@ -713,9 +736,22 @@ impl Chunk {
                 buffer: chunk_buffer(cx, layout(formats, self.capacity).1),
                 capacity: self.capacity,
                 rows: 0,
+                patches: Vec::new(),
                 validity: None,
             }),
         };
+        // Rewritten rows, at the columns' current offsets (a grown chunk
+        // moved them above).
+        for (column, row, cell) in gpu.patches.drain(..) {
+            let col = &self.columns[column];
+            let stride = col.format.stride();
+            cx.write_buffer(
+                Upload::Column,
+                &gpu.buffer,
+                col.offset + u64::from(row) * stride,
+                &cell[..stride as usize],
+            );
+        }
         if gpu.rows < self.len {
             let cpu = self.cpu.as_ref().expect("checked by uploadable_to");
             for col in &self.columns {
@@ -1074,6 +1110,42 @@ impl ColumnStore {
             done += take as usize;
         }
         Ok(())
+    }
+
+    /// Replace stored row `row`'s value in numeric column `column` by
+    /// `value`, which must be finite exactly when the old value was (so
+    /// the validity bits stay): the CPU copy if the chunk keeps one, and,
+    /// if the row is already on the GPU, the next [`upload`](Self::upload)
+    /// writes its bytes (one row, counted as [`Upload::Column`]). A
+    /// released chunk takes the write on the context it was uploaded to.
+    /// The column's stats only widen. A monotone line rewrites the control
+    /// values of the two rows before an append (GUP-551).
+    pub(crate) fn rewrite(&mut self, row: u64, column: usize, value: f64) {
+        let Some(chunk) = self
+            .chunks
+            .iter_mut()
+            .find(|c| (c.row_base..c.row_base + u64::from(c.len)).contains(&row))
+        else {
+            return;
+        };
+        if !value.is_finite() {
+            // A null's bytes are never read.
+            return;
+        }
+        let local = (row - chunk.row_base) as u32;
+        let col = &mut chunk.columns[column];
+        debug_assert!(col.format.has_validity(), "a numeric column");
+        let (cell, stride) = col.encode_one(value);
+        let at = col.offset as usize + local as usize * stride;
+        if let Some(cpu) = chunk.cpu.as_mut() {
+            Arc::make_mut(cpu).bytes[at..at + stride].copy_from_slice(&cell[..stride]);
+        }
+        if let Some(gpu) = chunk.gpu.as_mut()
+            && local < gpu.rows
+        {
+            gpu.patches.retain(|p| (p.0, p.1) != (column, local));
+            gpu.patches.push((column, local, cell));
+        }
     }
 
     /// Drop the first `chunks` chunks (their buffers, CPU copies, origins

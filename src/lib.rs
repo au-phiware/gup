@@ -130,6 +130,23 @@
 //! # Ok::<(), gup::Error>(())
 //! ```
 //!
+//! ## Smooth lines
+//!
+//! [`Curve::MonotoneX`] draws a smooth curve through every row that never
+//! overshoots: between two rows it rises or falls with the data and stays
+//! within their values, so a peak is drawn at the row that has it. Rows
+//! must be sorted by x.
+//!
+//! ```
+//! use gup::prelude::*;
+//!
+//! let rainfall = vec![(1.0, 82.0), (2.0, 64.0), (3.0, 71.0), (4.0, 30.0), (5.0, 33.0)];
+//! let mut chart = gup::line(rainfall).x(|r| r.0).y(|r| r.1).curve(Curve::MonotoneX);
+//! let image = chart.render(&Context::shared()?, 480, 320)?;
+//! assert_eq!(image.dimensions(), (480, 320));
+//! # Ok::<(), gup::Error>(())
+//! ```
+//!
 //! ## Labels at data positions
 //!
 //! `plot.text(rows)` adds a layer of labels, placed through the plot's
