@@ -2017,8 +2017,13 @@ impl Plot {
             let y_right_ticks = right.map(|r| r.ticks(counts.2));
             let text = cx.text();
             let width_of = |ticks: &Ticks, i: usize| {
-                text.measure_weight(&ticks.labels[i], th.tick_size.0, ticks.weight(i))
-                    .width
+                text.measure_with(
+                    &ticks.labels[i],
+                    th.tick_size.0,
+                    ticks.weight(i),
+                    TextRole::TickLabel.features(),
+                )
+                .width
             };
             let y_label_w = (0..y_ticks.labels.len())
                 .map(|i| width_of(&y_ticks, i))
@@ -2332,8 +2337,13 @@ impl Plot {
                         let h = if vertical {
                             x_label_h
                         } else {
-                            text.measure_weight(l, th.tick_size.0, ticks.weight(i))
-                                .width
+                            text.measure_with(
+                                l,
+                                th.tick_size.0,
+                                ticks.weight(i),
+                                TextRole::TickLabel.features(),
+                            )
+                            .width
                         } / 2.0;
                         (c - h, c + h)
                     })

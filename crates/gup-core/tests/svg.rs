@@ -61,6 +61,38 @@ fn contents<'a>(svg: &'a str, tag: &str) -> Vec<&'a str> {
         .collect()
 }
 
+/// GUP-579: only tick labels ask SVG viewers for tabular figures.
+#[test]
+fn tick_labels_ask_for_tabular_figures() {
+    let cx = Context::new_blocking().unwrap();
+    let s = legend::scene(&cx);
+    let mut target = SvgTarget::new();
+    target.render(&s.scene).unwrap();
+    let svg = target.svg();
+    let style = r#" style="font-variant-numeric:tabular-nums""#;
+    let tags: Vec<&str> = svg
+        .match_indices("<text ")
+        .map(|(i, _)| &svg[i..i + svg[i..].find('>').unwrap()])
+        .collect();
+    let runs: Vec<_> = s.scene.text_runs().collect();
+    assert_eq!(tags.len(), runs.len());
+    assert!(runs.iter().any(|r| r.role == TextRole::TickLabel));
+    for (tag, run) in tags.iter().zip(&runs) {
+        assert_eq!(
+            tag.contains(style),
+            run.role == TextRole::TickLabel,
+            "{:?} {tag}",
+            run.role
+        );
+    }
+    let title = tags
+        .iter()
+        .zip(&runs)
+        .find(|(_, r)| &*r.text == common::scatter::TITLE)
+        .unwrap();
+    assert!(!title.0.contains("tabular-nums"));
+}
+
 #[test]
 fn guides_svg_matches_the_png() {
     let cx = Context::new_blocking().unwrap();
@@ -282,7 +314,7 @@ fn semibold_runs_set_the_weight_and_embed_the_second_face() {
     let doc = svg.svg();
     assert_eq!(doc.matches("@font-face").count(), 2, "{doc}");
     assert_eq!(doc.matches(r#"font-weight="600""#).count(), 1, "{doc}");
-    assert!(doc.contains(r##"font-weight="600" text-anchor="middle" fill="#333333">2021<"##));
+    assert!(doc.contains(r##"font-weight="600" text-anchor="middle" fill="#333333" style="font-variant-numeric:tabular-nums">2021<"##));
     let prefix = r#"font-family:"Inter";font-weight:600;src:url(data:font/ttf;base64,"#;
     let start = doc.find(prefix).expect("a 600 @font-face") + prefix.len();
     let len = doc[start..].find(')').unwrap();
