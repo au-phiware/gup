@@ -22,6 +22,16 @@ const USAGE: &str = "#[mark(module = \"gup::marks::circle\", geometry = Quad)] (
                      picking: `Disc`, `AlignedBox`, `Segment` or `Polyline`) and `gpu_pick` \
                      (GPU picking: the module defines `hit_distance` and `hit_row`)";
 
+/// The `role` names a channel may take (the message and the check both use it).
+const ROLES: [&str; 6] = ["X", "Y", "Size", "Width", "Height", "Color"];
+
+/// The `role` error, listing every name in [`ROLES`]: `` `X`, `Y` or `Color` ``.
+fn role_message() -> String {
+    let (last, rest) = ROLES.split_last().expect("ROLES is not empty");
+    let rest: Vec<String> = rest.iter().map(|r| format!("`{r}`")).collect();
+    format!("`role` is one of {} or `{last}`", rest.join(", "))
+}
+
 /// `Selection` inherent methods that a generated setter would shadow.
 const SELECTION_METHODS: &[&str] = &[
     "new",
@@ -151,13 +161,8 @@ fn parse_fields(input: &DeriveInput) -> syn::Result<Vec<Channel>> {
             attr.parse_nested_meta(|meta| {
                 if meta.path.is_ident("role") {
                     let r: Ident = meta.value()?.parse()?;
-                    if !["X", "Y", "Size", "Width", "Height", "Color"]
-                        .contains(&r.to_string().as_str())
-                    {
-                        return Err(syn::Error::new(
-                            r.span(),
-                            "`role` is one of `X`, `Y`, `Size` or `Color`",
-                        ));
+                    if !ROLES.contains(&r.to_string().as_str()) {
+                        return Err(syn::Error::new(r.span(), role_message()));
                     }
                     role = Some(r);
                 } else if meta.path.is_ident("default") {
