@@ -114,6 +114,14 @@ fn ink_is(image: &image::RgbaImage, x: f32, y: f32, want: impl Fn([u8; 4]) -> bo
 #[test]
 fn bars_read_against_the_right_axis_and_the_line_against_the_left() {
     let mut s = fixture();
+    // GUP-526: each rainfall value sits above its bar, on the right axis.
+    s.plot
+        .text(months())
+        .x(|m| m.n)
+        .y_right(|m| m.rain)
+        .text(|m| m.rain)
+        .anchor(Anchor::BOTTOM)
+        .dy(-4.0);
     let (image, resolved) = render(&mut s);
     let layout = &resolved.layout;
     let plot = layout.plot;

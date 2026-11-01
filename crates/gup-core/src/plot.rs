@@ -1912,6 +1912,18 @@ impl Plot {
             }
         }
 
+        for (i, layer) in self.annotations.iter().enumerate() {
+            if layer.on_right_axis() && self.y_right.is_none() {
+                return Err(Error::config(
+                    "text layer position",
+                    format!(
+                        "text layer {i} places its labels on the right y axis (`y_right(..)`), \
+                         but the plot has none; add one with `Plot::y_right(scale)`"
+                    ),
+                ));
+            }
+        }
+
         for layer in &mut self.layers {
             layer.bind_axes(self.axes_generation, self.x.as_ref(), self.y.as_ref())?;
         }
@@ -2125,15 +2137,19 @@ impl Plot {
         // a quarter of the plot (GUP-555). Measured once, with the text
         // system free again before the layout takes it.
         let mut lay = layout(counts)?;
-        let mut text_reach = [0.0f32; 2];
+        let mut text_reach = [0.0f32; 3];
         if !self.annotations.is_empty() {
             let text = cx.text();
             for layer in &mut self.annotations {
                 let r = layer.reach(&text, &th);
+                let side = 1 + usize::from(layer.on_right_axis());
                 text_reach[0] = text_reach[0].max(r[0]);
-                text_reach[1] = text_reach[1].max(r[1]);
+                text_reach[side] = text_reach[side].max(r[1]);
             }
         }
+        // The y scale a text layer maps through: the right one if it asks
+        // (checked above), else the left.
+        let y_scales: [&dyn DynPositionScale; 2] = [&**y, right.map_or(&**y, |r| &**r)];
         let lens = [lay.plot.width, lay.plot.height, lay.plot.height];
         let text_over = [
             if x.reads_keys() {
@@ -2146,7 +2162,11 @@ impl Plot {
             } else {
                 text_reach[1].min(0.25 * lens[1])
             },
-            0.0,
+            if right.is_none_or(|r| r.reads_keys()) {
+                0.0
+            } else {
+                text_reach[2].min(0.25 * lens[2])
+            },
         ];
         let over = std::array::from_fn::<f32, 3, _>(|i| mark_over[i].max(text_over[i]));
         // A widened axis already holds the inset in its domain, so its
@@ -2196,15 +2216,17 @@ impl Plot {
         // An automatic axis with labels widens each end by what the labels
         // there need, solved on the first plot rect with doubled padding
         // (widening pads both ends) and the smaller span (GUP-555).
-        let mut label_room = [(0.0f32, 0.0f32); 2];
+        let mut label_room = [(0.0f32, 0.0f32); 3];
         {
             let ends = [
                 (lay.plot.left(), lay.plot.right()),
                 (lay.plot.bottom(), lay.plot.top()),
+                (lay.plot.bottom(), lay.plot.top()),
             ];
-            let scales: [&dyn DynPositionScale; 2] = [&**x, &**y];
-            let axes: [Option<inset::EdgeAxis>; 2] = std::array::from_fn(|i| {
-                let s = scales[i];
+            let scales: [Option<&dyn DynPositionScale>; 3] =
+                [Some(&**x), Some(&**y), right.map(|r| &**r)];
+            let axes: [Option<inset::EdgeAxis>; 3] = std::array::from_fn(|i| {
+                let s = scales[i]?;
                 (s.is_auto() && !s.reads_keys() && text_reach[i] > 0.0).then(|| {
                     s.set_range(Px(ends[i].0), Px(ends[i].1));
                     inset::EdgeAxis {
@@ -2215,11 +2237,17 @@ impl Plot {
                 })
             });
             if axes.iter().any(Option::is_some) {
-                let mut cands: [Vec<inset::Edge>; 2] = Default::default();
+                let mut cands: [Vec<inset::Edge>; 3] = Default::default();
                 for layer in &self.annotations {
-                    layer.edges(&**x, &**y, [axes[0].as_ref(), axes[1].as_ref()], &mut cands);
+                    let side = 1 + usize::from(layer.on_right_axis());
+                    let mut tmp: [Vec<inset::Edge>; 2] = Default::default();
+                    let ys = y_scales[side - 1];
+                    layer.edges(&**x, ys, [axes[0].as_ref(), axes[side].as_ref()], &mut tmp);
+                    let [tx, ty] = tmp;
+                    cands[0].extend(tx);
+                    cands[side].extend(ty);
                 }
-                for i in 0..2 {
+                for i in 0..3 {
                     if axes[i].is_some() {
                         label_room[i] = inset::edge_insets(&cands[i], lens[i], 2.0 * pad, over[i]);
                     }
@@ -2240,8 +2268,12 @@ impl Plot {
                 padded(mark_over[1].max(label_room[1].1)),
             ) || kept(1, &**y),
             right.is_some_and(|r| {
-                let o = padded(mark_over[2]);
-                r.widen(lay.plot.bottom(), lay.plot.top(), o, o) || kept(2, &**r)
+                r.widen(
+                    lay.plot.bottom(),
+                    lay.plot.top(),
+                    padded(mark_over[2].max(label_room[2].0)),
+                    padded(mark_over[2].max(label_room[2].1)),
+                ) || kept(2, &**r)
             }),
         ];
         self.widened = widened;
@@ -2299,14 +2331,15 @@ impl Plot {
                 }
                 let mut cands: [Vec<inset::Edge>; 3] =
                     marks.map(|m| m.into_iter().map(|(t, h)| (t, h, h)).collect());
-                let mut labels: [Vec<inset::Edge>; 2] = Default::default();
-                let label_axes = [axes[0].as_ref(), axes[1].as_ref()];
                 for layer in &self.annotations {
-                    layer.edges(&**x, &**y, label_axes, &mut labels);
+                    let side = 1 + usize::from(layer.on_right_axis());
+                    let mut tmp: [Vec<inset::Edge>; 2] = Default::default();
+                    let ys = y_scales[side - 1];
+                    layer.edges(&**x, ys, [axes[0].as_ref(), axes[side].as_ref()], &mut tmp);
+                    let [tx, ty] = tmp;
+                    cands[0].extend(tx);
+                    cands[side].extend(ty);
                 }
-                let [lx, ly] = labels;
-                cands[0].extend(lx);
-                cands[1].extend(ly);
                 Some((asked, cands))
             } else {
                 None
@@ -2645,7 +2678,8 @@ impl Plot {
         {
             let text = cx.text();
             for layer in &mut self.annotations {
-                let placed = layer.runs(&text, &**x, &**y, plot, &th)?;
+                let ys = y_scales[usize::from(layer.on_right_axis())];
+                let placed = layer.runs(&text, &**x, ys, plot, &th)?;
                 annotation_runs.push((layer.z(), placed.iter().map(|p| p.run.clone()).collect()));
                 texts.extend(placed);
             }
