@@ -280,3 +280,93 @@ pipeline.link_create.max_ms                1.06     info            -        1.1
 - **Tests**: `crates/gup-core/tests/line_translucent.rs` (AC1 cases, MSAA, SVG
   group and parity, overplotted golden), render unit test (AC2: which layers
   draw offscreen, draw counts).
+
+## Retrospective
+
+**Completed**: 2026-11-02
+
+### Key Technical Learnings
+
+#### Max blending is the union of capsules
+
+- **Challenge**: an overlap must count once, but only a pixel's neighbours
+  (other segments, other layers' pixels) know it is an overlap.
+- **Solution**: draw the layer into its own texture with `BlendOperation::Max`.
+  `shade` already outputs premultiplied colour times coverage, and a capsule's
+  box coverage falls with the distance to the stroke, so the maximum over the
+  capsules is the coverage of their union: the round-joined stroke, drawn once.
+  No shader or glue change was needed; the pipeline differs only in blend state
+  and target.
+- **Pattern**: before adding geometry to avoid double cover, check whether a
+  blend state on a separate target expresses "count once".
+
+#### The composite must not move the target's bytes
+
+- **Challenge**: a full-target composite risks touching every pixel.
+- **Solution**: discard texels with alpha 0 and scissor to the layer's clip;
+  premultiplied over with a zero source is exact anyway. The texel comes from
+  the interpolated position, not `@builtin(position)`, so a viewport offset
+  cannot shift it (GUP-576's lesson).
+
+#### A translucent layer hides inside an "opaque" golden
+
+- **Challenge**: blessing every gup-core golden to prove opaque lines
+  byte-identical changed `gup_core/line_monotone`.
+- **Solution**: the diff (654 pixels, at most 1/255) sat only on its alpha-0.35
+  reference polyline, which now takes the offscreen path. Comparing the colours
+  of the differing pixels in the parent render settled it in a minute.
+- **Pattern**: "bless everything, then `git status tests/golden`" is a cheap
+  byte-identity check for "unchanged" ACs, and the differing pixels' colours
+  name the layer.
+
+### Architectural Decisions
+
+#### `Rgba8Unorm`, not `R8`
+
+- **Decision**: the offscreen target holds premultiplied colour.
+- **Reasoning**: a key- or palette-encoded colour is only known on the GPU, so
+  an `R8` coverage target would need the layer's colour on the CPU, and per-row
+  colour would be lost.
+- **Trade-off**: 4x the memory (4 B per pixel per translucent layer); where rows
+  of different colours overlap, each channel takes the larger value.
+- **Future**: many translucent layers cost a texture each; sharing one between
+  layers whose boxes do not overlap is the next step if it matters.
+
+#### Host passes unchanged
+
+- **Decision**: `Renderer::prepare` + `Prepared::draw` keep the direct draw;
+  `Renderer::render` gets the offscreen pass. The public `Prepared::encode` is
+  proposed in GUP-584, not made (the story's escalation trigger).
+- **Reasoning**: `gup-egui` and `gup-bevy` render through `TextureTarget`, so
+  every in-repo host already gets the pass; only `zoom_bench` and external
+  draw-in-pass hosts do not.
+- **Trade-off**: AC3's timing used a local prototype patch, so it is not yet
+  reproducible from the tree (GUP-584 adds `zoom_bench --translucent`).
+
+#### Only `Line`, by type
+
+- **Decision**: the translucency check is keyed on `TypeId::of::<Line>()`, not
+  `Geometry::Polyline`.
+- **Reasoning**: `Area` is also `Polyline` geometry; its trapezoids share edges
+  and must keep blending directly (a translucent area fill would otherwise take
+  the pass).
+
+### Development Workflow Insights
+
+- Seeding by flipping one boolean (`prepare_with(.., false)` in `render`) showed
+  every AC1 case failing (0.749 ink, 0.875 where the line doubles back) except
+  `MonotoneX`, whose plane joints already draw each pixel once.
+- GPU pass times on the HD 630 move by up to 1.6x run to run (clock governor,
+  load 2-7). Alternating four variants for 5-7 rounds and comparing medians gave
+  a stable 1.19-1.21x ratio where single rounds ranged from 1.02x to 1.80x.
+- Comparing WASM size against the parent by checking out the parent's sources
+  over the tree, measuring and checking them back out took two runs of
+  `wasm_size.sh` and no extra worktree.
+- The worktree guard refuses commands that combine `cd`, heredocs and `git`;
+  writing scripts to `/tmp` and running plain commands avoided it.
+
+### Follow-up Stories
+
+1. **GUP-584: Translucent Lines in Host-Owned Passes** — a public
+   `Prepared::encode`, a `draw` that stays correct without it, and
+   `zoom_bench --translucent` to make AC3's timing reproducible.

@@ -276,6 +276,10 @@ cell labels, error bars, pie charts and facets.
 - [GUP-439](GUP-439_Line_Translucent_Joins.md) ✅ — Translucent lines with even
   opacity at rows, curve pieces and self-crossings (a per-layer coverage pass),
   opaque lines unchanged. Deps: GUP-432 ✅, GUP-550 📋, GUP-551 📋.
+- [GUP-584](GUP-584_Translucent_Lines_In_Host_Passes.md) 💡 — A public
+  `Prepared::encode` so hosts drawing in their own pass get GUP-439's offscreen
+  pass (`draw` stays correct without it), and `zoom_bench --translucent`. Edits
+  `render.rs`. Deps: GUP-439 ✅.
 
 Follow-ups from reviewing N1 and N2 (2026-10-26). GUP-560, GUP-561 and GUP-563
 all edit `plot.rs`, so they run one at a time; GUP-562 follows GUP-561 (it
