@@ -5,7 +5,8 @@
 
 mod common;
 
-use common::vr::{harness, layout_metadata};
+use common::svg_marks;
+use common::vr::{harness, layout_metadata, rect as px_rect, rgba8};
 use gup_core::geom::Point as Pt;
 use gup_core::prelude::*;
 use gup_core::scene::{ItemKind, TextRole, Z_TOOLTIP};
@@ -677,6 +678,29 @@ fn a_pan_keeps_the_edge_insets_and_reset_view_restores_them() {
     assert_eq!(first.x_ticks.len(), again.x_ticks.len());
 }
 
+/// The layout's metadata with any tooltip box as a text region (its text
+/// is not in the layout).
+fn scene_metadata(
+    scene: &gup_core::Scene,
+    layout: &gup_core::Layout,
+) -> gup_visual_regression::LayoutMetadata {
+    let theme = Theme::default();
+    let mut meta = layout_metadata(layout);
+    for item in &scene.items {
+        if let ItemKind::Rects(rects) = &item.kind {
+            for r in rects.iter().filter(|r| r.color == theme.tooltip_background) {
+                meta = meta.with_text(
+                    gup_visual_regression::TextRole::Other,
+                    "tooltip",
+                    px_rect(r.rect),
+                    rgba8(theme.tooltip_text),
+                );
+            }
+        }
+    }
+    meta
+}
+
 #[test]
 fn brush_golden() {
     let cx = Context::new_blocking().expect("headless GPU context");
@@ -696,11 +720,16 @@ fn brush_golden() {
     assert_eq!(plot.brush().unwrap().rows, [id(0, 1), id(0, 2)]);
     let resolved = plot.resolve(&cx, W, H).unwrap();
     let layout = resolved.layout.clone();
+    let resolved_scene = resolved.scene.clone();
+    let meta = scene_metadata(&resolved_scene, &layout);
     let image = ImageTarget::new(&cx, W as u32, H as u32)
         .unwrap()
-        .render_blocking(&cx, &resolved.scene)
+        .render_blocking(&cx, &resolved_scene)
         .unwrap();
     let vr = RgbaImage::new(W as u32, H as u32, image.into_raw()).unwrap();
+    // The SVG dims as the image does. Checked before the theme changes
+    // below: a scene's brush state is shared with its layers' GPU state.
+    svg_marks::assert_matches("gup_core/brush", &resolved_scene, &vr, &meta);
     // Rows 1 and 2 (inside) look as without dimming; the others are
     // `#0072B2` at 0.3 over white.
     plot.theme(Theme {
@@ -743,7 +772,7 @@ fn brush_golden() {
         assert!(g.abs_diff(w) <= 6, "border {border:?}");
     }
     harness()
-        .run("gup_core/brush", Ok((vr, layout_metadata(&layout))))
+        .run("gup_core/brush", Ok((vr.clone(), meta.clone())))
         .assert_ok();
 }
 
@@ -1422,11 +1451,14 @@ fn brush_grey_golden() {
     });
     let resolved = plot.resolve(&cx, W, H).unwrap();
     let layout = resolved.layout.clone();
+    let resolved_scene = resolved.scene.clone();
+    let meta = scene_metadata(&resolved_scene, &layout);
     let image = ImageTarget::new(&cx, W as u32, H as u32)
         .unwrap()
-        .render_blocking(&cx, &resolved.scene)
+        .render_blocking(&cx, &resolved_scene)
         .unwrap();
     let vr = RgbaImage::new(W as u32, H as u32, image.into_raw()).unwrap();
+    svg_marks::assert_matches("gup_core/brush_grey", &resolved_scene, &vr, &meta);
     for row in 0..5 {
         let p = anchor(&mut plot, row);
         let (got, before) = (rgb_at(vr.data(), p.x, p.y), rgb_at(&plain, p.x, p.y));
@@ -1457,7 +1489,7 @@ fn brush_grey_golden() {
     let cleared = render_bytes(&cx, &mut plot);
     assert_eq!(cleared, render_styled(&cx, &mut plot, Unbrushed::Fade(1.0)));
     harness()
-        .run("gup_core/brush_grey", Ok((vr, layout_metadata(&layout))))
+        .run("gup_core/brush_grey", Ok((vr.clone(), meta.clone())))
         .assert_ok();
 }
 
@@ -1512,4 +1544,88 @@ fn grey_replaces_every_colour_channel() {
     ] {
         assert_eq!(rgb_at(&dim, sx, sy), rgb_at(&full, sx, sy));
     }
+}
+
+/// The SVG of the plot's current scene (resolved at `W x H`), and the
+/// `<circle>` lines of it.
+fn circle_lines(cx: &Context, plot: &mut Plot) -> Vec<String> {
+    let resolved = plot.resolve(cx, W, H).unwrap();
+    let mut target = gup_core::SvgTarget::new();
+    gup_core::VectorTarget::render(&mut target, &resolved.scene).unwrap();
+    target
+        .into_string()
+        .lines()
+        .filter(|l| l.starts_with("<circle "))
+        .map(str::to_owned)
+        .collect()
+}
+
+/// Three circles with row 1 brushed.
+fn brushed_trio(cx: &Context, style: Unbrushed) -> Plot {
+    let mut plot = Plot::new();
+    plot.circles(rows(3)).x(|r| r.x).y(|r| r.y).radius(Px(5.0));
+    plot.drag(Drag::Brush);
+    plot.theme(Theme {
+        unbrushed: style,
+        ..Theme::default()
+    });
+    plot.resolve(cx, W, H).unwrap();
+    brush_row_one(&mut plot);
+    assert_eq!(plot.brush().unwrap().rows, [id(0, 1)]);
+    plot
+}
+
+fn brush_row_one(plot: &mut Plot) {
+    let p1 = anchor(plot, 1);
+    drag(
+        plot,
+        Pt::new(p1.x - 10.0, p1.y - 10.0),
+        Pt::new(p1.x + 10.0, p1.y + 10.0),
+    );
+}
+
+/// AC1: `Fade` multiplies the unbrushed rows' alpha, `Grey` replaces their
+/// colour, and with no brush the SVG is the undimmed one.
+#[test]
+fn the_svg_dims_rows_outside_the_brush() {
+    let cx = Context::new_blocking().expect("headless GPU context");
+    let mut never = Plot::new();
+    never.circles(rows(3)).x(|r| r.x).y(|r| r.y).radius(Px(5.0));
+    let plain = circle_lines(&cx, &mut never);
+
+    let mut fade = brushed_trio(&cx, Unbrushed::Fade(0.3));
+    let c = circle_lines(&cx, &mut fade);
+    assert_eq!(c.len(), 3);
+    assert!(c[0].contains("fill-opacity=\"0.3\""), "{}", c[0]);
+    assert!(!c[1].contains("fill-opacity"), "{}", c[1]);
+    assert!(c[2].contains("fill-opacity=\"0.3\""), "{}", c[2]);
+
+    let mut grey = brushed_trio(&cx, Unbrushed::Grey(Color::hex(GREY)));
+    let c = circle_lines(&cx, &mut grey);
+    assert!(c[0].contains("fill=\"#bfbfbf\""), "{}", c[0]);
+    assert!(!c[1].contains("#bfbfbf"), "{}", c[1]);
+    assert!(c[2].contains("fill=\"#bfbfbf\""), "{}", c[2]);
+
+    // Cleared, the SVG is byte-identical to a plot that was never brushed.
+    for plot in [&mut fade, &mut grey] {
+        plot.clear_brush();
+        assert_eq!(circle_lines(&cx, plot), plain);
+    }
+}
+
+/// AC3: a cached scene follows the brush, as its GPU buffers do.
+#[test]
+fn a_cached_scene_follows_the_brush_in_the_svg() {
+    let cx = Context::new_blocking().expect("headless GPU context");
+    let mut plot = brushed_trio(&cx, Unbrushed::Fade(0.3));
+    let dimmed = |c: &[String]| c.iter().filter(|l| l.contains("fill-opacity")).count();
+    assert_eq!(dimmed(&circle_lines(&cx, &mut plot)), 2);
+
+    plot.clear_brush();
+    let c = circle_lines(&cx, &mut plot);
+    assert_eq!(dimmed(&c), 0, "{c:?}");
+
+    brush_row_one(&mut plot);
+    let c = circle_lines(&cx, &mut plot);
+    assert_eq!(dimmed(&c), 2, "{c:?}");
 }
