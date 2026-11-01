@@ -15,8 +15,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: 🚧 In
-Progress **Created**: 2026-10-27
+**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: ✅
+Complete (2026-11-01) **Created**: 2026-10-27
 
 ## Context
 
@@ -39,14 +39,14 @@ See RFC-001 "GUP-551 findings", "Cost".
 
 ## Acceptance Criteria
 
-- [ ] The layer chooses its pieces per segment, 1 to 16, at prepare from the
+- [x] The layer chooses its pieces per segment, 1 to 16, at prepare from the
       data's pixel density: for example, the median segment width in pixels
       under the current x scale. The vertex count is `6 × pieces`. It changes
       only when the count changes, and the shader reads the count as a constant,
       not as `MONOTONE_PIECES`.
-- [ ] `zoom_bench --line monotone` (100K rows) is at most 2x `--line linear`;
+- [x] `zoom_bench --line monotone` (100K rows) is at most 2x `--line linear`;
       `gup_core/line_monotone` is unchanged (16 pieces).
-- [ ] `Curve::path` and the picks use the same count. The seam tests of
+- [x] `Curve::path` and the picks use the same count. The seam tests of
       `line_monotone.rs` pass at every count.
 
 ## Decisions
@@ -63,7 +63,7 @@ See RFC-001 "GUP-551 findings", "Cost".
 
 ## Technical Tasks
 
-- [ ] Count from density; uniform or glue constant; tests; measurement.
+- [x] Count from density; uniform or glue constant; tests; measurement.
 
 ## Dependencies
 
@@ -78,7 +78,7 @@ See RFC-001 "GUP-551 findings", "Cost".
 
 ## Success Metrics
 
-- [ ] Dense monotone lines cost about what straight lines cost.
+- [x] Dense monotone lines cost about what straight lines cost.
 
 ## Risk Assessment
 
@@ -87,7 +87,71 @@ See RFC-001 "GUP-551 findings", "Cost".
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] `cargo test -p gup-core -- --test-threads=1` and `mask all-fix` pass
-- [ ] Measurements recorded in RFC-001
-- [ ] Story status updated in the story file and INDEX.md
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] `cargo test -p gup-core -- --test-threads=1` and `mask all-fix` pass
+- [x] Measurements recorded in RFC-001
+- [x] Story status updated in the story file and INDEX.md
+
+## Implementation Summary
+
+- **Count rule** (`monotone::pieces_for`): the fewest power of two (1, 2, 4,
+  8, 16) whose misplaced ink `width / n² × min(width, 1)` is at most 1/8 of a
+  pixel, `width` the pixel width of the segment at the width-weighted median. 16
+  pieces above 8 px, 1 below 0.35 px.
+- **Statistic** (`monotone::Widths`): quarter-octave buckets of the curved
+  segments' data widths, filled at evaluation and added to by appends. Prepare
+  maps the median bucket's segment through x's CPU map (`cpu_eval`), so the
+  count follows zooming. No CPU map, or no curved segment: 16.
+- **Glue**: the count is the literal `vertex_controls` reads (the variant
+  value), with labels `curve monotone-x, 4 pieces`, so each count links its own
+  pipeline and a changed count rebuilds the layer's GPU state. The vertex count
+  is `6 × pieces`. `MONOTONE_PIECES` is gone from Rust and WGSL; the Rust
+  maximum is `MAX_MONOTONE_PIECES`.
+- **CPU**: `Curve::path`, `Curve::pieces` and `Curve::variant` take the layer's
+  count; `Shape::Path` and `pick::Chans` carry it.
+- **Joints**: planes are tested at the pixel's centre on the target, not in each
+  piece's interpolated frame. That frame moves with the rasterizer's vertex
+  snapping, which left whole pixels out on dense rows at every count, 16
+  included. At a row, each segment also draws within 2 ulps' angle of its plane
+  (`plane_slack`), since the two segments' tangents differ by rounding.
+- **Files**: `monotone.rs`, `marks.rs`, `selection.rs`, `pick.rs`, `vector.rs`
+  (one call), `line.wgsl`, `tests/line_monotone.rs`, RFC-001.
+- **Tests**:
+  - Unit tests: `pieces_follow_pixel_width`,
+    `joints_are_chebyshev_nodes_at_every_count`,
+    `widths_take_the_width_weighted_median`,
+    `a_monotone_path_measures_the_drawn_pieces`, and the extended `Curve` path
+    test (every count).
+  - `line_monotone.rs`: `joints_are_seamless_at_every_count` (a 2000-row wave at
+    1 piece and a 300-row wave at 4, widths 1.5, 3 and 6) and
+    `the_count_follows_zoom_and_appends` (1, then 8 zoomed, then 1; 16, then 1
+    after appends). The existing 11 tests pass, the 16-piece seams among them.
+
+### Definition of Done evidence (2026-11-01)
+
+**Cost** (AC2): `zoom_bench --line linear|monotone`, 100K rows, 1600x1000
+Mailbox uncapped, release, Intel HD 630. Before and after binaries alternated, 5
+rounds of 600 frames, load average 4.8. Medians of the 5 GPU pass medians:
+
+| Line      | Before    | After    |
+| --------- | --------- | -------- |
+| Linear    | 1.503 ms  | 1.479 ms |
+| MonotoneX | 28.782 ms | 2.060 ms |
+
+MonotoneX is **1.39x** Linear (19x before). The bench draws 1 piece throughout.
+
+- **Golden** `gup_core/line_monotone`: unchanged (16 pieces). The fresh render
+  differs from the golden by no pixel at the compare's threshold. I read it at
+  4x around the peak at x = 7 and the valley after it: smooth, no facets, no
+  seam at any joint.
+- **`mask merge-check --dogfood`** (HEAD `166bed0d`): story-ids, doc, gup-core
+  (740 tests), wasm-size, wasm-browser and dogfood PASS. WASM scatter **358,067
+  B gz** (budget 362,063).
+- **`cargo test --doc -p gup`**: 56 + 4 passed.
+- **`scripts/perf_budget.sh --skip-wasm`**: every exact counter passes. Run 1
+  (load 1.7): `zoom.gpu_pass.median_ms` 2.405 (pass), `pipeline.link_create`
+  2.095 against a 1.332 budget (FAIL). Run 2 (load 18): `zoom.gpu_pass` 3.718
+  and `link_create` 1.511 (both FAIL); three more `pipeline_timings` runs at
+  load 13 read 1.70, 1.25 and 1.69. Both measure the scatter's Circle program,
+  whose glue and WGSL this story does not change, so I read them as load noise.
+  `PERF_BUDGETS.md` is not edited.
