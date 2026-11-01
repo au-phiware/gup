@@ -523,10 +523,12 @@ prune_lru() {
   # Fast path: the build directory cannot be bigger than the filesystem's used
   # space, so below the cap there is nothing to measure (no sync, no du).
   if fs_below_cap; then return 0; fi
-  # What rules 1-4 just deleted may not show in `du` yet (or, in a dry run,
-  # never will): count it as gone. At worst this under-counts, so it never
-  # evicts more than the cap needs.
-  total=$(($(disk_kb) - freed_kb))
+  # The size measured before rules 1-4 deleted anything, less what they and
+  # rule 5 have freed since. (Measuring now and subtracting would count rules
+  # 1-4's deletions twice wherever `du` already shows them, and stop short of
+  # the cap; ZFS shows them late, and a dry run never.)
+  [[ -n $start_kb ]] || start_kb=$(disk_kb)
+  total=$((start_kb - freed_kb))
   [[ $total -gt $total_cap_kb ]] || return 0
   for profile in "${profiles[@]}"; do
     if [[ $dry_run -eq 1 ]]; then
@@ -563,6 +565,11 @@ prune_lru() {
   fi
   for fd in "${fds[@]}"; do exec {fd}<&-; done
 }
+
+# The size before anything is deleted, for rule 5 (empty while the filesystem
+# is below the cap: the fast path needs no measurement).
+start_kb=''
+if [[ $report -eq 0 ]] && ! fs_below_cap; then start_kb=$(disk_kb); fi
 
 # Profile directories: those holding a cargo lock, outside checkouts/.
 mapfile -t profiles < <(find "$build" -mindepth 2 -maxdepth 3 \
