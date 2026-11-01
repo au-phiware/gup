@@ -273,7 +273,7 @@ cell labels, error bars, pie charts and facets.
 - [GUP-557](GUP-557_Svg_Text_Path_Out_Of_Wasm.md) 💡 — Keep `SvgTarget`'s text
   path out of the WASM build, then ungate GUP-580's fallback code. Deps: GUP-580
   ✅.
-- [GUP-439](GUP-439_Line_Translucent_Joins.md) 📋 — Translucent lines with even
+- [GUP-439](GUP-439_Line_Translucent_Joins.md) 🚧 — Translucent lines with even
   opacity at rows, curve pieces and self-crossings (a per-layer coverage pass),
   opaque lines unchanged. Deps: GUP-432 ✅, GUP-550 📋, GUP-551 📋.
 
