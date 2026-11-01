@@ -62,24 +62,88 @@ Absorbed into track N2 by the November review's triage ("same polyline geometry
 as line curves and area outlines; do them together") and promoted from 💡 to 📋.
 It runs after GUP-550 and GUP-551.
 
+### Read First
+
+- RFC-001 "GUP-432 findings" (capsules, bridges, "Joins and caps"), "GUP-550
+  findings" (joint ownership, `joins`/`others`), "GUP-551 findings" and "GUP-576
+  findings" (plane joints, piece counts, cost table): `grep -n` for the headings
+  in `docs/planning/rfcs/RFC-001_Core_Architecture.md`.
+- `crates/gup-core/src/render.rs`: `Renderer::prepare_unscoped`,
+  `Renderer::render`, `Prepared::draw`, `create_pipeline`.
+- `crates/gup-core/src/selection.rs`: `Layer::prepare` (where the batch is
+  built) and `brush_dim`.
+- `crates/gup-wgsl/library/line.wgsl`: `shade` (premultiplied output).
+- `crates/gup-core/tests/line_png.rs`: `a_translucent_join_blends_twice`.
+- `crates/gup-core/src/svg.rs`: `write_layer`.
+
 ### Decisions
+
+(Written 2026-11-02 at the start of implementation; the N2 notes' decisions are
+kept, the coverage format is amended.)
 
 - **Scope includes curve pieces**: after GUP-550/551 a translucent step or
   monotone line overlaps at every piece joint as well as at rows; AC1's even
   opacity applies to those joints too (add 3 piece joints of a `MonotoneX` line
   and the corners of a `StepAfter` line to the AC1 measurements).
 - **Areas are not in scope**: `Area` trapezoids share edges and do not
-  double-blend (GUP-545).
-- **Decision rule for the prototype**: choose the offscreen coverage target
-  (`R8`, `Max` blend, composited) unless it costs more than 2× the layer's
-  direct draw at 100K points or cannot run on the browser smoke test's adapter;
-  then the stencil approach. Record both measurements.
+  double-blend (GUP-545). Area outlines are `Line` layers and get the pass like
+  any other line.
+- **Mechanism: an offscreen target per translucent line layer.** The layer is
+  drawn with its own glue and `line.wgsl` (no shader change) into an
+  `Rgba8Unorm` texture cleared to 0, with `BlendOperation::Max` on colour and
+  alpha. `shade` outputs premultiplied colour times coverage, so each texel
+  holds the largest coverage any segment or piece gives it: the coverage of the
+  union, the round-joined stroke drawn once, at joins, piece joints, overlapping
+  segments and self-crossings alike. The scene pass then draws one full-target
+  triangle per such layer, scissored to the layer's clip, that loads the texel
+  under each pixel and blends it with premultiplied over. Outside the line the
+  texel is 0, which leaves the target's bytes unchanged.
+- **`Rgba8Unorm`, not `R8`** (amends the N2 note): a premultiplied colour target
+  keeps per-row colour, and needs no CPU copy of the layer's colour. Where rows
+  of different colours overlap, each channel takes the larger value; where they
+  share a colour (the usual case: one series per layer) the result is exact.
+  Cost: 4 bytes per target pixel per translucent layer, pooled across frames.
+- **Which layers**: `Polyline` geometry whose colour can have alpha below 1: a
+  constant, derived or default colour with alpha < 1; a colour column with a LUT
+  holding alpha < 255, or with no LUT (unknown, so assumed translucent); an
+  active brush with `Fade` below 1 or a translucent `Grey`; or a read null
+  colour with alpha < 1. Every other layer, and every opaque line, takes today's
+  path byte for byte, with no texture and no extra pass.
+- **Gup-owned targets** (`Renderer::render`: image, texture, window and web
+  targets) record the offscreen passes in the frame's encoder before the scene
+  pass. The scene is still drawn in one pass.
+- **Draw-in-pass hosts** (`Renderer::prepare` + `Prepared::draw`) are unchanged
+  until the escalation below is answered: their translucent lines draw directly,
+  as today.
+- **Stencil is not built** unless the offscreen target fails the 2x rule: it
+  needs a depth-stencil attachment in every target and host pass (a `TargetDesc`
+  change), and a binary stencil either drops the analytic antialiasing or keeps
+  the seam where two rims cross (RFC-001 "GUP-432 findings", alternative 3). The
+  reasons are recorded in RFC-001.
+- **Decision rule**: keep the offscreen target unless the translucent layer
+  costs more than 2x its direct draw at 100K points (`zoom_bench`), or cannot
+  run on the browser smoke test's adapter (WebGPU baseline only: `Max` blend,
+  `Rgba8Unorm` render attachment and `textureLoad` are core).
+- **SVG**: a translucent line layer whose strokes share one alpha is written as
+  `<g opacity="a">` around opaque strokes: the group is composited once, as the
+  GPU's offscreen target is. A layer with mixed alphas keeps per-element
+  `stroke-opacity`.
 
 ### Escalation Triggers
 
 - Neither approach keeps opaque lines byte-identical with no extra pass (AC2).
 - Draw-in-pass hosts (`Prepared::draw`, egui, Bevy) would need an API change to
   get the extra pass: report the smallest change before making it.
+- The offscreen layer costs more than 2x the direct draw at 100K points.
+- WASM growth over 3 KB gz, or any opaque golden changes.
+
+### Out of Scope
+
+- Areas, segments, circles and other marks; blending between different layers
+  (overplotted series still blend over each other, which is the density the
+  story wants).
+- Sharing one texture between several translucent layers (memory grows with
+  their count; see the RFC record).
 
 ### Additional Dependencies
 
