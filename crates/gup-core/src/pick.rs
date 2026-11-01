@@ -53,15 +53,17 @@ pub(crate) enum Shape {
         h: f32,
     },
     /// A step or curve from the row's point `a` to the next row's `b`
-    /// (its control values `ctrl`, for a monotone curve): a capsule along
-    /// each piece of `curve`'s path ([`Curve::path`]), which also decides
-    /// the row a point picks ([`Curve::picks_next`]).
+    /// (its control values `ctrl` and the layer's `pieces`, for a
+    /// monotone curve): a capsule along each piece of `curve`'s path
+    /// ([`Curve::path`]), which also decides the row a point picks
+    /// ([`Curve::picks_next`]).
     Path {
         a: [f32; 2],
         b: [f32; 2],
         ctrl: [f32; 2],
         h: f32,
         curve: Curve,
+        pieces: u32,
     },
     /// The area between the top edge `a`–`b` (row `i` to row `i + 1`) and
     /// the baseline `a0`–`b0`: the two triangles `area.wgsl` draws (split
@@ -152,8 +154,9 @@ impl Shape {
                 ctrl,
                 h,
                 curve,
+                pieces,
             } => {
-                let (path, n) = curve.path(a, b, ctrl);
+                let (path, n) = curve.path(a, b, ctrl, pieces);
                 path[..n]
                     .windows(2)
                     .map(|s| segment_distance(p, s[0], s[1]))
@@ -292,6 +295,9 @@ pub(crate) struct Chans {
     /// How a `Polyline` runs between rows: a step or curve is a
     /// [`Shape::Path`]. (An `Area` is always straight.)
     pub curve: Curve,
+    /// A monotone curve's pieces per segment, as the layer draws them
+    /// (GUP-576); unused otherwise.
+    pub pieces: u32,
     /// A monotone curve's control values, in pixels (see
     /// [`crate::monotone`]); unused otherwise.
     pub ctrl: [Chan; 2],
@@ -435,6 +441,7 @@ pub(crate) fn build_items(
                                 ctrl,
                                 h,
                                 curve: c.curve,
+                                pieces: c.pieces,
                             }
                         },
                     );
@@ -666,6 +673,30 @@ mod tests {
         assert_eq!(s.distance([10.0, 10.0]), -4.0);
         assert!((s.distance([13.5, 10.0]) + 0.5).abs() < 1e-6);
         assert!((s.distance([17.0, 10.0]) - 3.0).abs() < 1e-6);
+    }
+
+    /// GUP-576: a monotone path is measured along the pieces the layer
+    /// draws: one piece is the chord's capsule, and 16 follow the cubic.
+    #[test]
+    fn a_monotone_path_measures_the_drawn_pieces() {
+        // Level at both rows: the cubic bulges below the chord's middle.
+        let (a, b) = ([0.0, 0.0], [30.0, 30.0]);
+        let path = |pieces| Shape::Path {
+            a,
+            b,
+            ctrl: [0.0, 30.0],
+            h: 1.0,
+            curve: Curve::MonotoneX,
+            pieces,
+        };
+        let p = [20.0, 10.0];
+        let chord = Shape::Capsule { a, b, h: 1.0 }.distance(p);
+        assert!((path(1).distance(p) - chord).abs() < 1e-5);
+        // The cubic `y = 30 t² (3 - 2 t)`, `x = 30 t` strays furthest from
+        // the chord at `t = 0.2113`: (6.34, 3.45), 2.04 px from it.
+        let on = [6.34, 3.45];
+        assert!(path(16).distance(on) < -0.9, "{}", path(16).distance(on));
+        assert!(path(1).distance(on) > 0.9, "{}", path(1).distance(on));
     }
 
     #[test]

@@ -21,17 +21,24 @@
 // pieces are collinear) or keeps the half of its round cap outside the
 // butt piece (a corner, rounded on the outside).
 //
-// A monotone curve (GUP-551) draws each instance as 16 pieces of the cubic
-// Bezier from row to row: the glue calls `vertex_controls` with the row's
-// two control values (its control columns through the y scale), and the
-// control points lie at one and two thirds of the segment in x. Every
-// joint, between pieces and at rows, is a plane through the joint point
-// perpendicular to the curve's tangent there: each piece draws its own
-// capsule's pixels on its side, so no pixel is drawn twice, none is left
-// out, and the union has the coverage of round joins. Both pieces compute the same plane: within a segment
-// from the same cubic, and at a row because the curve's tangent there is
-// continuous under a linear or time y scale (the control values are
-// computed from one tangent per row).
+// A monotone curve (GUP-551) draws each instance as 1 to 16 pieces of the
+// cubic Bezier from row to row: the glue calls `vertex_controls` with the
+// row's two control values (its control columns through the y scale) and
+// the layer's piece count, a literal its pipeline was linked with
+// (GUP-576: chosen from the data's pixel density). The control points
+// lie at one and two thirds of the segment in x. Every joint, between
+// pieces and at rows, is a plane through the joint point perpendicular to
+// the curve's tangent there: each piece draws its own capsule's pixels on
+// its side, so no pixel is drawn twice, none is left out, and the union
+// has the coverage of round joins. Both pieces compute the same plane:
+// within a segment from the same cubic, and at a row because the curve's
+// tangent there is continuous under a linear or time y scale (the control
+// values are computed from one tangent per row). A pixel tests a plane at
+// its own centre on the target, which both pieces see exactly (their
+// interpolated frames differ by the rasterizer's snapping of their
+// vertices, which left whole pixels out on dense rows), and at a row
+// within the angle the two segments' planes may differ by rounding
+// (GUP-576).
 #define_import_path gup::marks::line
 
 #import gup::view::{View, px_to_clip}
@@ -65,20 +72,26 @@ struct Varyings {
     // and at the end (bits 2-3). A straight segment's are 0 (round caps).
     @location(5) @interpolate(flat) joins: u32,
     // For a `JOIN_KEEP` end, the butt piece's direction away from the
-    // joint, in the local (along, across) frame: the start's in `xy`, the
-    // end's in `zw`.
+    // joint, in the local (along, across) frame; for a `JOIN_PLANE` end,
+    // the plane's normal (pointing along the curve) on the target. The
+    // start's in `xy`, the end's in `zw`.
     @location(6) @interpolate(flat) others: vec4<f32>,
+    // For a `JOIN_PLANE` end at a row, how far (radians) the plane may
+    // turn by rounding, at the start (`x`) and the end (`y`): the pixels
+    // within that angle of it are this piece's too. 0 elsewhere.
+    @location(7) @interpolate(flat) slack: vec2<f32>,
+    // The vertex's position in physical pixels, from the target's corner.
+    @location(8) screen: vec2<f32>,
+    // For a `JOIN_PLANE` end, the joint, in physical pixels from the
+    // target's corner: the start's in `xy`, the end's in `zw`.
+    @location(9) @interpolate(flat) joints: vec4<f32>,
 }
 
-// The curve a layer's glue passes to `vertex_variant` or
-// `vertex_controls` (`Curve::variant`).
+// The curve a layer's glue passes to `vertex_variant` (`Curve::variant`;
+// a monotone curve passes its piece count to `vertex_controls`).
 const CURVE_STEP: u32 = 1u;
 const CURVE_STEP_BEFORE: u32 = 2u;
 const CURVE_STEP_AFTER: u32 = 3u;
-const CURVE_MONOTONE_X: u32 = 4u;
-
-// The pieces a monotone segment is drawn as (`marks::MONOTONE_PIECES`).
-const MONOTONE_PIECES: u32 = 16u;
 
 // How a piece's end meets its neighbour.
 // A round cap: the line ends here.
@@ -98,6 +111,12 @@ const JOIN_PLANE: u32 = 3u;
 // pieces are drawn by both, so a pixel centre that each piece places a
 // rounding error apart is never left out.
 const JOIN_SLACK: f32 = 0.01;
+
+// The units in the last place a coordinate may be off by, for
+// `plane_slack`. With 1 the dense seams of `line_monotone.rs` show no
+// hole on the Intel HD 630 either; 2 leaves a margin, and draws about one
+// rim pixel in 1400 twice there (GUP-576).
+const ROW_SLACK_ULPS: f32 = 2.0;
 
 // One capsule from `start` to `stop`, corner `corner` (0..5) of its quad,
 // its `side` the vertex's x right of `turn`, with round caps.
@@ -120,6 +139,9 @@ fn capsule(m: LineIn, start: vec2<f32>, stop: vec2<f32>, corner: u32, row: u32, 
     out.side = (q.position.x - turn) * view.dpr;
     out.joins = JOIN_CAP;
     out.others = vec4<f32>(0.0);
+    out.slack = vec2<f32>(0.0);
+    out.screen = q.position * view.dpr;
+    out.joints = vec4<f32>(0.0);
     return out;
 }
 
@@ -236,21 +258,33 @@ fn bezier_tangent(p0: vec2<f32>, p1: vec2<f32>, p2: vec2<f32>, p3: vec2<f32>, t:
     return select(direction(p0, p3), d / len, len > 0.0);
 }
 
-// Joint `j` (0 to 16) of the monotone segment from `a` to `b` with
-// control points `p1`, `p2`: the cubic at the Chebyshev node
-// `(1 - cos(pi j / 16)) / 2`, `a` and `b` exactly at the ends (as
-// `Curve::path` on the CPU). The pieces are shortest at the rows, where
+// Joint `j` (0 to `n`) of the monotone segment from `a` to `b` with
+// control points `p1`, `p2`, drawn as `n` pieces: the cubic at the
+// Chebyshev node `(1 - cos(pi j / n)) / 2`, `a` and `b` exactly at the
+// ends (as `Curve::path` on the CPU). The pieces are shortest at the rows, where
 // a monotone cubic bends most (a level tangent at an extremum), so the
 // first and last pieces leave along the row's tangent.
-fn monotone_point(a: vec2<f32>, p1: vec2<f32>, p2: vec2<f32>, b: vec2<f32>, j: u32) -> vec2<f32> {
+fn monotone_point(a: vec2<f32>, p1: vec2<f32>, p2: vec2<f32>, b: vec2<f32>, n: u32, j: u32) -> vec2<f32> {
     if (j == 0u) {
         return a;
     }
-    if (j >= MONOTONE_PIECES) {
+    if (j >= n) {
         return b;
     }
-    let t = 0.5 - 0.5 * cos(3.14159265358979 * f32(j) / f32(MONOTONE_PIECES));
+    let t = 0.5 - 0.5 * cos(3.14159265358979 * f32(j) / f32(n));
     return bezier(a, p1, p2, b, t);
+}
+
+// The most a row's joint plane, perpendicular to the tangent `t`
+// (logical pixels, before normalising) between points as far as `m` from
+// the origin, turns by rounding (radians): each coordinate is off by a
+// few units in the last place of `m`, which turns `t` by that over its
+// length. The two segments at a row each compute the plane from their own
+// control value, so their planes differ by up to twice this; each draws
+// the pixels within this angle past its plane, so none is left out
+// (GUP-576). Dense rows have short tangents, so a wider angle.
+fn plane_slack(t: vec2<f32>, m: f32) -> f32 {
+    return ROW_SLACK_ULPS * 1.1920929e-7 * m / max(length(t), 1e-20);
 }
 
 // The normal of the plane between the pieces `p`–`q` and `q`–`r`: the
@@ -261,9 +295,9 @@ fn bisector(p: vec2<f32>, q: vec2<f32>, r: vec2<f32>) -> vec2<f32> {
     return select(direction(p, q), sum / len, len > 0.0);
 }
 
-// Vertex `vertex_index` of a segment drawn as a monotone cubic (`curve`
-// is `CURVE_MONOTONE_X`): piece `vertex_index / 6` of 16, corner
-// `vertex_index % 6`. `controls` are the y values (logical pixels) of the
+// Vertex `vertex_index` of a segment drawn as a monotone cubic in
+// `pieces` pieces (a power of two from 1 to 16, the layer's literal):
+// piece `vertex_index / 6`, corner `vertex_index % 6`. `controls` are the y values (logical pixels) of the
 // control points at one and two thirds of the segment in x. `rows` is the
 // layer's stored row count: the first and last segments end in round
 // caps; every other end is a `JOIN_PLANE`. Between pieces the plane
@@ -272,7 +306,7 @@ fn bisector(p: vec2<f32>, q: vec2<f32>, r: vec2<f32>) -> vec2<f32> {
 // perpendicular to the curve's tangent, which both segments compute
 // alike under a linear or time y scale. A null row is not seen: the ends
 // either side of it end flat, at the row.
-fn vertex_controls(m: LineIn, controls: vec2<f32>, vertex_index: u32, row: u32, view: View, curve: u32, rows: u32) -> Varyings {
+fn vertex_controls(m: LineIn, controls: vec2<f32>, vertex_index: u32, row: u32, view: View, pieces: u32, rows: u32) -> Varyings {
     let a = vec2<f32>(m.x, m.y);
     let b = vec2<f32>(m.x_next, m.y_next);
     let dx = b.x - a.x;
@@ -280,34 +314,40 @@ fn vertex_controls(m: LineIn, controls: vec2<f32>, vertex_index: u32, row: u32, 
     let p2 = vec2<f32>(a.x + dx * 2.0 / 3.0, controls.y);
     let k = vertex_index / 6u;
     // The joints before, at the ends of, and after this piece.
-    let before = monotone_point(a, p1, p2, b, max(k, 1u) - 1u);
-    let start = monotone_point(a, p1, p2, b, k);
-    let stop = monotone_point(a, p1, p2, b, k + 1u);
-    let after = monotone_point(a, p1, p2, b, k + 2u);
+    let before = monotone_point(a, p1, p2, b, pieces, max(k, 1u) - 1u);
+    let start = monotone_point(a, p1, p2, b, pieces, k);
+    let stop = monotone_point(a, p1, p2, b, pieces, k + 1u);
+    let after = monotone_point(a, p1, p2, b, pieces, k + 2u);
     var out = capsule(m, start, stop, vertex_index % 6u, row, (a.x + b.x) * 0.5, view);
     // The row nearer in x: the fragment's x past the midpoint towards the
     // next row (exact, as the quad's position is linear in screen space).
     out.side = out.side * sign(dx);
 
-    let axis = direction(start, stop);
     var start_join = JOIN_PLANE;
     var end_join = JOIN_PLANE;
     var start_normal = bisector(before, start, stop);
     var end_normal = bisector(start, stop, after);
+    // The farthest coordinate the tangents at the rows are computed from.
+    let far = max(max(abs(a.x), abs(a.y)), max(max(abs(b.x), abs(b.y)), max(abs(controls.x), abs(controls.y))));
     if (k == 0u) {
         start_normal = bezier_tangent(a, p1, p2, b, 0.0);
+        out.slack.x = plane_slack(p1 - a, far);
         if (row == 0u) {
             start_join = JOIN_CAP;
         }
     }
-    if (k + 1u == MONOTONE_PIECES) {
+    if (k + 1u == pieces) {
         end_normal = bezier_tangent(a, p1, p2, b, 1.0);
+        out.slack.y = plane_slack(b - p2, far);
         if (row + 2u >= rows) {
             end_join = JOIN_CAP;
         }
     }
     out.joins = start_join | (end_join << 2u);
-    out.others = vec4<f32>(to_local(start_normal, axis), to_local(end_normal, axis));
+    // Planes are tested at the pixel's own centre, against the joint and
+    // normal both pieces compute alike (`owned`).
+    out.others = vec4<f32>(start_normal, end_normal);
+    out.joints = vec4<f32>(start, stop) * view.dpr;
     return out;
 }
 
@@ -334,13 +374,18 @@ fn owned(v: Varyings) -> bool {
     let e = v.joins >> 2u;
     let past_start = v.local.x < -v.half.x;
     let past_end = v.local.x > v.half.x;
+    // The pixel's centre, from the target's corner: its framebuffer
+    // position less the viewport's (whole-pixel) offset. Two pieces see
+    // the same centre exactly, where their interpolated frames differ by
+    // the rasterizer's snapping of their own vertices.
+    let at = v.clip.xy - round(v.clip.xy - v.screen);
     return !(
         (s == JOIN_BUTT && v.local.x < -v.half.x - JOIN_SLACK)
             || (e == JOIN_BUTT && v.local.x > v.half.x + JOIN_SLACK)
             || (s == JOIN_KEEP && past_start && dot(v.local - start, v.others.xy) > JOIN_SLACK)
             || (e == JOIN_KEEP && past_end && dot(v.local - end, v.others.zw) > JOIN_SLACK)
-            || (s == JOIN_PLANE && dot(v.local - start, v.others.xy) < 0.0)
-            || (e == JOIN_PLANE && dot(v.local - end, v.others.zw) > 0.0)
+            || (s == JOIN_PLANE && dot(at - v.joints.xy, v.others.xy) < -v.slack.x * length(at - v.joints.xy))
+            || (e == JOIN_PLANE && dot(at - v.joints.zw, v.others.zw) > v.slack.y * length(at - v.joints.zw))
     );
 }
 

@@ -3998,3 +3998,74 @@ cubic Bezier with control points at one and two thirds of the segment in x.
 `gup::area` and stacked areas have no curve setter. Curved areas stay out of
 scope. When they come, they must build the region from `Curve::path` (with the
 control values) and pick with `Curve::picks_next`.
+
+## GUP-576 findings (2026-11-01)
+
+[GUP-576](../stories/GUP-576_Monotone_Piece_Count_From_Density.md) draws each
+`Curve::MonotoneX` segment as 1, 2, 4, 8 or 16 pieces, chosen per layer from the
+data's pixel density.
+
+### The count rule
+
+- **Statistic**: `monotone::Widths` keeps the layer's segment widths (data
+  units, curved segments only) in quarter-octave buckets, each with its summed
+  width and one segment's x. Evaluation fills it and appends add to it. At each
+  prepare the layer maps the segment at the **width-weighted median** through
+  x's CPU map. A few wide gaps among dense rows do not raise the count, and a
+  gap spanning most of the chart does. Every library scale is a fixed transform
+  followed by an affine map, so the median segment stays the median at any zoom.
+- **Rule** (`monotone::pieces_for`): the fewest power of two whose misplaced ink
+  `width / n² × min(width, 1)` is at most 1/8 of a pixel. `width / n²` is the
+  tessellation error GUP-551 measured (0.19 px for 16 pieces of a 50 px
+  segment). Across a segment narrower than a pixel, the offset moves only that
+  fraction of the pixel's ink. So 16 pieces above 8 px, 8 above 2 px, 4 above
+  0.71 px, 2 above 0.35 px, and 1 below that (4600 rows or more across 1600 px).
+  The first rule tried, `width / n²` alone, drew 2 pieces when zoom_bench zoomed
+  past 8x, and cost 2.4x Linear.
+- **Mechanism**: the count is the literal `vertex_controls` reads (the glue's
+  variant value), so each count links its own pipeline (label
+  `curve monotone-x, 4 pieces`). Powers of two bound that to five per layer. A
+  change of count rebuilds the layer's GPU state, and the same count reuses it.
+  `Curve::path` and `Shape::Path` take the layer's count, so CPU picks measure
+  the pieces the GPU draws. No change to the `Mark` trait or to straight-line
+  glue.
+
+### Joints on dense rows
+
+A dense smooth wave (300 and 2000 rows) showed whole pixels missing at joints,
+at 16 pieces as well, so the fault predates GUP-576:
+
+- Each piece tested its joint planes in its own interpolated `local` frame. The
+  rasterizer snaps each quad's vertices to its sub-pixel grid, so two pieces
+  place a pixel centre up to about 0.004 px apart. An absolute slack of 0.005 px
+  filled the holes but blended rim pixels twice in the sparse seam test.
+- **Fix**: a plane is tested at the pixel's centre on the target (the fragment
+  position less the viewport's whole-pixel offset, recovered by rounding against
+  an interpolated physical position), against the joint point and the normal in
+  target space. Both pieces see that centre exactly.
+- At a row, the two segments compute the tangent from different control values,
+  so their planes differ by rounding, up to about `ulp(coordinate) / |tangent|`.
+  Each segment also draws within 2 ulps' angle past its plane. On the 2000-row
+  wave this blends at most 8 of 11039 rim pixels twice (+0.25 at most), and it
+  leaves no hole. With 1 ulp there was no hole either.
+- Limitation: a viewport offset that is not a whole pixel would misplace the
+  planes. gup-core sets no viewport, and egui's callback viewports are whole
+  pixels.
+
+### Cost
+
+`zoom_bench --line linear|monotone`, 100K-row random walk, 1600x1000 Mailbox
+uncapped, release, Intel HD 630. Before and after binaries alternated, 5 rounds
+of 600 frames, load average 4.8:
+
+| Line                 | GPU pass median (of 5) | Ratio to Linear |
+| -------------------- | ---------------------- | --------------- |
+| `Linear` (before)    | 1.503 ms               | 1x              |
+| `MonotoneX` (before) | 28.782 ms              | 19x             |
+| `Linear` (after)     | 1.479 ms               | 1x              |
+| `MonotoneX` (after)  | 2.060 ms               | 1.39x           |
+
+The bench draws 1 piece throughout (at most 0.32 px segments at its deepest
+zoom). A forced single piece measured 2.03-2.05 ms, so the rest of the cost is
+the two control columns and the cubic's arithmetic. `gup_core/line_monotone`
+still draws 16 pieces, and its golden is unchanged.
