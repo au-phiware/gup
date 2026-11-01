@@ -765,3 +765,190 @@ fn the_room_for_a_label_is_capped_at_a_quarter_of_the_axis() {
     let t = label(&layout, long).expect("still drawn");
     assert!(layout.plot.contains_rect(&t.bounds));
 }
+
+// GUP-526: text layers on the right y axis.
+
+/// A plot with left y 0..10 and right y 0..1000, both explicit.
+fn two_axes() -> (Plot, ScaleRef<Linear>, ScaleRef<Linear>) {
+    let (mut plot, _, y) = plot_with_discs(&[(5.0, 5.0)]);
+    let right = plot.y_right(Linear::new().domain(0.0, 1000.0));
+    (plot, y, right)
+}
+
+/// AC2: a right-axis label is placed through the right scale.
+#[test]
+fn a_right_axis_label_is_placed_through_the_right_scale() {
+    let cx = Context::new_blocking().unwrap();
+    let (mut plot, left, right) = two_axes();
+    plot.text([(5.0, 500.0)])
+        .x(|r: &(f64, f64)| r.0)
+        .y_right(|r: &(f64, f64)| r.1)
+        .text(|_: &(f64, f64)| "mid")
+        .dy(-6.0);
+    let layout = plot.resolve(&cx, W, H).unwrap().layout.clone();
+    let t = label(&layout, "mid").expect("drawn");
+    let want = right.read().eval(500.0) - 6.0;
+    let wrong = left.read().eval(500.0) - 6.0;
+    assert!(
+        (f64::from(t.run.at.y) - want).abs() <= 0.5,
+        "{t:?} vs {want}"
+    );
+    assert!(
+        (f64::from(t.run.at.y) - wrong).abs() >= 20.0,
+        "{t:?} vs {wrong}"
+    );
+}
+
+/// AC1: the later of the y setters wins.
+#[test]
+fn the_later_y_setter_wins() {
+    let cx = Context::new_blocking().unwrap();
+    let (mut plot, left, right) = two_axes();
+    plot.text([(5.0, 500.0)])
+        .x(|r: &(f64, f64)| r.0)
+        .y_right(|r: &(f64, f64)| r.1)
+        .y(|r: &(f64, f64)| r.1 / 100.0)
+        .text(|_: &(f64, f64)| "left");
+    plot.text([(5.0, 500.0)])
+        .x(|r: &(f64, f64)| r.0)
+        .y(|r: &(f64, f64)| r.1 / 100.0)
+        .y_right(|r: &(f64, f64)| r.1)
+        .text(|_: &(f64, f64)| "right");
+    let layout = plot.resolve(&cx, W, H).unwrap().layout.clone();
+    let at = |name| f64::from(label(&layout, name).unwrap().run.at.y);
+    assert!((at("left") - left.read().eval(5.0)).abs() <= 0.5);
+    assert!((at("right") - right.read().eval(500.0)).abs() <= 0.5);
+}
+
+/// AC1: a right-axis layer on a plot without one fails, naming the fix.
+#[test]
+fn a_right_axis_layer_needs_a_right_axis() {
+    let cx = Context::new_blocking().unwrap();
+    let (mut plot, ..) = plot_with_discs(&[(1.0, 1.0)]);
+    plot.text([(1.0, 1.0)])
+        .x(|r: &(f64, f64)| r.0)
+        .y_right(|r: &(f64, f64)| r.1)
+        .text(|_: &(f64, f64)| "x");
+    let err = plot.resolve(&cx, W, H).expect_err("no right axis");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("text layer position") && msg.contains("Plot::y_right"),
+        "{msg}"
+    );
+}
+
+/// AC1: a position that does not suit the right axis names the right setter.
+#[test]
+fn a_position_that_does_not_suit_the_right_axis_is_an_error() {
+    let cx = Context::new_blocking().unwrap();
+    let (mut plot, ..) = two_axes();
+    plot.text(["a"])
+        .x(|_: &&str| 1.0)
+        .y_right_key(|k: &&str| *k)
+        .text(|k: &&str| *k);
+    let err = plot
+        .resolve(&cx, W, H)
+        .expect_err("a key on a numeric axis");
+    assert!(err.to_string().contains("`y_right(..)`"), "{err}");
+
+    let mut plot = Plot::new();
+    let x = plot.x(Linear::new().domain(0.0, 10.0));
+    let r = plot.y_right(Band::new());
+    plot.add(Selection::<&str, Circle>::new(vec!["a", "b"]))
+        .attr(Circle::X, x.encode(|_: &&str| 2.0))
+        .attr(Circle::Y, r.encode_key(|k: &&str| *k));
+    plot.text(["a"])
+        .x(|_: &&str| 1.0)
+        .y_right(|_: &&str| 0.5)
+        .text(|k: &&str| *k);
+    let err = plot.resolve(&cx, W, H).expect_err("a value on a band axis");
+    assert!(err.to_string().contains("`y_right_key(..)`"), "{err}");
+}
+
+/// AC3: a label at the top of an explicit right domain is drawn whole.
+#[test]
+fn an_explicit_right_domain_is_inset_for_a_label() {
+    let cx = Context::new_blocking().unwrap();
+    let (mut plot, ..) = two_axes();
+    plot.text([(5.0, 1000.0)])
+        .x(|r: &(f64, f64)| r.0)
+        .y_right(|r: &(f64, f64)| r.1)
+        .text(|_: &(f64, f64)| "Sydney")
+        .anchor(Anchor::BOTTOM)
+        .dy(-6.0);
+    let layout = plot.resolve(&cx, W, H).unwrap().layout.clone();
+    let t = label(&layout, "Sydney").expect("drawn");
+    assert!(
+        layout.plot.contains_rect(&t.bounds),
+        "{t:?} in {:?}",
+        layout.plot
+    );
+}
+
+/// AC3: an automatic right domain widens for a label at its maximum, and
+/// the left axis is left alone.
+#[test]
+fn an_automatic_right_domain_widens_for_a_label() {
+    let cx = Context::new_blocking().unwrap();
+    let make = |with_text: bool| {
+        let mut plot = Plot::new();
+        plot.legends(false);
+        let x = plot.x(Linear::new().domain(0.0, 10.0));
+        let y = plot.y(Linear::new().domain(0.0, 10.0));
+        let right = plot.y_right(Linear::new());
+        let mut sel = Selection::<(f64, f64), Circle>::new(vec![(1.0, 100.0), (5.0, 180.0)]);
+        sel.attr(Circle::X, x.encode(|r: &(f64, f64)| r.0))
+            .attr(Circle::Y, right.encode(|r: &(f64, f64)| r.1))
+            .attr(Circle::RADIUS, Px(4.0));
+        plot.add(sel);
+        if with_text {
+            plot.text([(5.0, 180.0)])
+                .x(|r: &(f64, f64)| r.0)
+                .y_right(|r: &(f64, f64)| r.1)
+                .text(|_: &(f64, f64)| "Peak")
+                .anchor(Anchor::BOTTOM)
+                .dy(-6.0);
+        }
+        let layout = plot.resolve(&cx, W, H).unwrap().layout.clone();
+        (layout, y, right)
+    };
+    let (_, by, br) = make(false);
+    let (with, wy, wr) = make(true);
+    let t = label(&with, "Peak").expect("drawn");
+    assert!(
+        with.plot.contains_rect(&t.bounds),
+        "{t:?} in {:?}",
+        with.plot
+    );
+    assert!(
+        wr.read().eval(180.0) > br.read().eval(180.0) + 1.0,
+        "the peak is lower with the label"
+    );
+    let top = with
+        .y_right_ticks
+        .iter()
+        .map(|t| t.0)
+        .fold(f64::MIN, f64::max);
+    assert!(top >= 180.0, "{top}");
+    for v in [0.0, 10.0] {
+        assert!((wy.read().eval(v) - by.read().eval(v)).abs() < 0.01);
+    }
+}
+
+/// AC3: left-axis labels leave the right axis's range alone.
+#[test]
+fn left_labels_do_not_move_the_right_axis() {
+    let cx = Context::new_blocking().unwrap();
+    let make = |with_text: bool| {
+        let (mut plot, _, right) = two_axes();
+        if with_text {
+            labelled(&mut plot, &[(5.0, 10.0, "Top")], Anchor::BOTTOM, 0.0, -6.0);
+        }
+        plot.resolve(&cx, W, H).unwrap();
+        right
+    };
+    let (a, b) = (make(false), make(true));
+    for v in [0.0, 1000.0] {
+        assert!((a.read().eval(v) - b.read().eval(v)).abs() < 0.01);
+    }
+}

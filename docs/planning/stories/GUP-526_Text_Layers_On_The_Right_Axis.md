@@ -224,3 +224,35 @@ on 2026-10-31: neither exists.
       expect at most 1,000 B gz)
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
+
+## Blocked (2026-11-01)
+
+**Question**: the `secondary_y` golden now renders as the story describes, but
+`svg_marks::assert_matches("gup_core/secondary_y", ..)` (the SVG-vs-GPU check in
+the same test, outside `touches:`) fails: 2 of 20160 4x4 blocks differ by up to
+ΔE 5.4, over `MAX_BLOCK_DE` = 5.0. Which way do we go?
+
+**Evidence**: the new `180` label at x = 12 (anchor BOTTOM, wider than the 9 px
+bar half-width) makes GUP-555 give the x axis a little room, so the temperature
+line moves right by a fraction of a pixel (old vs new golden differ along the
+line and at x ticks 3, 6, 9, 10, 12). The hot blocks are on the steep line
+segments (around (185, 140) and (440, 350)), not on any label. This is the resvg
+quarter-step vertical coverage the `MAX_BLOCK_DE` doc comment describes (4.7
+measured over earlier goldens). The GPU golden itself is correct (read; the left
+axis ticks 8..26 are unchanged, each rainfall value sits above its bar, 180 is
+whole, the right axis ends near 190).
+
+**Options**:
+
+1. Raise `MAX_BLOCK_DE` to 5.5 with this measurement as the reason (a gate
+   change, which I may not make).
+2. Drop the label at x = 12 or give the bars a different width in the test (but
+   the story fixes the label call and `fixture()`).
+3. Shift the line by setting an explicit x domain in this test (changes the
+   golden beyond the labels).
+
+**Recommendation**: option 1.
+
+Everything else is done and green: tests in `tests/text_layer.rs` (24 pass),
+doctest, `mask all-fix`. Not yet run: `mask merge-check --dogfood`,
+`mask wasm-browser`, wasm size.

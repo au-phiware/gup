@@ -127,6 +127,8 @@ pub struct TextLayer<T> {
     rows: Vec<T>,
     x: Option<Position<T>>,
     y: Option<Position<T>>,
+    /// Which y scale `y` maps through.
+    y_side: YSide,
     text: Option<RowFn<T, Arc<str>>>,
     anchor: Anchor,
     dx: Offset,
@@ -149,6 +151,7 @@ impl<T: Send + Sync + 'static> TextLayer<T> {
             rows,
             x: None,
             y: None,
+            y_side: YSide::Left,
             text: None,
             anchor: Anchor::CENTER,
             dx: Offset::Const(0.0),
@@ -184,6 +187,46 @@ impl<T: Send + Sync + 'static> TextLayer<T> {
     /// [`y_key`](Self::y_key): a value there is an error at resolve.
     pub fn y<D: ColumnValue>(&mut self, f: impl Fn(&T) -> D + Send + Sync + 'static) -> &mut Self {
         self.y = Some(Position::Value(Arc::new(move |r| f(r).to_f64())));
+        self.y_side = YSide::Left;
+        self.changed()
+    }
+
+    /// Place each label at the data value `f` returns, mapped through the
+    /// plot's right y scale ([`Plot::y_right`](crate::Plot::y_right)), so a
+    /// label sits on the points of a series drawn against the right axis.
+    /// The later of [`y`](Self::y), [`y_key`](Self::y_key), `y_right` and
+    /// [`y_right_key`](Self::y_right_key) wins; [`within_y`](Self::within_y)
+    /// spans are read on the same axis. A plot with no right axis fails at
+    /// resolve; on a band or point right axis use
+    /// [`y_right_key`](Self::y_right_key).
+    ///
+    /// ```
+    /// use gup_core::prelude::*;
+    ///
+    /// let rows = vec![(3.0, 500.0), (9.0, 900.0)];
+    /// let cx = Context::new_blocking()?;
+    /// let mut plot = Plot::new();
+    /// let x = plot.x(Linear::new().domain(0.0, 10.0));
+    /// plot.y(Linear::new().domain(0.0, 10.0));
+    /// let right = plot.y_right(Linear::new().domain(0.0, 1000.0));
+    /// plot.add(Selection::<(f64, f64), Circle>::new(rows.clone()))
+    ///     .attr(Circle::X, x.encode(|r: &(f64, f64)| r.0))
+    ///     .attr(Circle::Y, right.encode(|r: &(f64, f64)| r.1));
+    /// plot.text(rows)
+    ///     .x(|r: &(f64, f64)| r.0)
+    ///     .y_right(|r: &(f64, f64)| r.1)
+    ///     .text(|r: &(f64, f64)| r.1);
+    /// let layout = plot.resolve(&cx, 480.0, 300.0)?.layout.clone();
+    /// let label = layout.texts.iter().find(|t| &*t.run.text == "500").unwrap();
+    /// assert!((f64::from(label.run.at.y) - right.read().eval(500.0)).abs() <= 0.5);
+    /// # Ok::<(), gup_core::Error>(())
+    /// ```
+    pub fn y_right<D: ColumnValue>(
+        &mut self,
+        f: impl Fn(&T) -> D + Send + Sync + 'static,
+    ) -> &mut Self {
+        self.y = Some(Position::Value(Arc::new(move |r| f(r).to_f64())));
+        self.y_side = YSide::Right;
         self.changed()
     }
 
@@ -209,6 +252,19 @@ impl<T: Send + Sync + 'static> TextLayer<T> {
         key: impl Fn(&T) -> K + Send + Sync + 'static,
     ) -> &mut Self {
         self.y = Some(Position::Key(Arc::new(move |r| key(r).to_string().into())));
+        self.y_side = YSide::Left;
+        self.changed()
+    }
+
+    /// Place each label at the centre of the band (or point) of the key
+    /// `key` returns, on a band or point right y axis; see
+    /// [`y_right`](Self::y_right) and [`x_key`](Self::x_key).
+    pub fn y_right_key<K: DictionaryKey>(
+        &mut self,
+        key: impl Fn(&T) -> K + Send + Sync + 'static,
+    ) -> &mut Self {
+        self.y = Some(Position::Key(Arc::new(move |r| key(r).to_string().into())));
+        self.y_side = YSide::Right;
         self.changed()
     }
 
@@ -390,6 +446,13 @@ impl<T: Send + Sync + 'static> TextLayer<T> {
     }
 }
 
+/// Which y scale a text layer maps through.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum YSide {
+    Left,
+    Right,
+}
+
 /// An error when a position and its axis disagree: a value on a band or
 /// point axis, or a key on a numeric one.
 fn check_axis<T>(
@@ -474,6 +537,9 @@ pub(crate) trait AnnotationLayer: Send + Sync {
         axes: [Option<&EdgeAxis>; 2],
         out: &mut [Vec<Edge>; 2],
     );
+    /// Whether the layer's y is on the plot's right y axis; the plot then
+    /// passes the right scale as `y` to `runs`, `reach` and `edges`.
+    fn on_right_axis(&self) -> bool;
     /// Drop the evaluated labels so the next resolve evaluates them again
     /// (something they read outside the layer changed).
     fn invalidate(&mut self);
@@ -494,6 +560,10 @@ impl<T: Send + Sync + 'static> AnnotationLayer for TextLayer<T> {
         self.changed();
     }
 
+    fn on_right_axis(&self) -> bool {
+        self.y_side == YSide::Right
+    }
+
     fn runs(
         &mut self,
         text: &TextSystem,
@@ -503,7 +573,12 @@ impl<T: Send + Sync + 'static> AnnotationLayer for TextLayer<T> {
         theme: &Theme,
     ) -> Result<Vec<PlacedText>> {
         check_axis("x", self.x.as_ref(), x)?;
-        check_axis("y", self.y.as_ref(), y)?;
+        let y_name = if self.y_side == YSide::Right {
+            "y_right"
+        } else {
+            "y"
+        };
+        check_axis(y_name, self.y.as_ref(), y)?;
         if !self.prepare(text, theme) {
             return Ok(Vec::new());
         }
