@@ -336,7 +336,7 @@ concurrently --group --names '\s,ignore,rs,nix,md,gha,sh,gallery,hook,doc' \
    'prettier --cache --log-level warn --check "**/*.md" && mdl --git-recurse .' \
    'actionlint .github/workflows/*.y*ml' \
    'shellcheck scripts/*.sh dogfood/run_all.sh' \
-   './scripts/check_gallery_sync.sh && ./scripts/check_story_ids.sh' \
+   './scripts/check_gallery_sync.sh && ./scripts/check_gallery_links.sh && ./scripts/check_story_ids.sh' \
    './scripts/test_pre_commit.sh && ./scripts/test_shared_build_dir.sh && ./scripts/test_prune_build_dir.sh && ./scripts/test_checkpoint.sh && ./scripts/test_check_story_ids.sh' \
    'mask doc'
 ```
