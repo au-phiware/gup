@@ -325,17 +325,15 @@ fn visits() -> Vec<Cell> {
         .collect()
 }
 
-/// Check the render against its golden and the visual checks; `svg` also
-/// compares the scene's SVG with it.
-fn golden(name: &str, resolved: &gup_core::Resolved, image: image::RgbaImage, svg: bool) {
+/// Check the render against its golden and the visual checks, and the
+/// scene's SVG against it.
+fn golden(name: &str, resolved: &gup_core::Resolved, image: image::RgbaImage) {
     let vr = RgbaImage::new(W, H, image.into_raw()).unwrap();
     let meta = layout_metadata(&resolved.layout);
     harness()
         .run(name, Ok((vr.clone(), meta.clone())))
         .assert_ok();
-    if svg {
-        svg_marks::assert_matches(name, &resolved.scene, &vr, &meta);
-    }
+    svg_marks::assert_matches(name, &resolved.scene, &vr, &meta);
 }
 
 /// AC3: activity by weekday and hour.
@@ -351,11 +349,7 @@ fn heatmap_golden() {
         .unwrap()
         .render_blocking(&cx, &resolved.scene)
         .unwrap();
-    // The SVG comparison is skipped: the 168 hairline gaps between cells
-    // are drawn with slightly different antialiasing by resvg, which moves
-    // a few 4x4 blocks by up to dE 5.4, past the 5.0 limit. The diverging
-    // golden has the same marks and is compared.
-    golden("gup_core/heatmap", &resolved, image, false);
+    golden("gup_core/heatmap", &resolved, image);
 }
 
 /// A symmetric 6 by 6 correlation matrix.
@@ -389,7 +383,7 @@ fn heatmap_diverging_golden() {
         .unwrap()
         .render_blocking(&cx, &resolved.scene)
         .unwrap();
-    golden("gup_core/heatmap_diverging", &resolved, image, true);
+    golden("gup_core/heatmap_diverging", &resolved, image);
 }
 
 /// GUP-561: the axes end with the grid. The last column's far edge is the

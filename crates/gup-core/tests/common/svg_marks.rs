@@ -91,8 +91,12 @@ pub fn compare_with(
 
 /// The largest block ΔE a correct SVG may have: resvg's quarter-step
 /// vertical coverage moves a block by up to 4.7 (measured over every
-/// golden scene).
-pub const MAX_BLOCK_DE: f32 = 5.0;
+/// golden scene). Recalibrated 5.0 -> 5.5 on 2026-11-01 (GUP-526): two
+/// independent scenes reached 5.4 from the same antialiasing on hairlines
+/// and steep lines: the heatmap's 168 cell gaps (GUP-549, which skipped this
+/// check; it measures 4.1 on current main) and the dual-axis line after a
+/// sub-pixel shift (`secondary_y`, 5.4). No other case exceeds 4.7.
+pub const MAX_BLOCK_DE: f32 = 5.5;
 
 /// Whether block statistics are within the harness tolerance
 /// ([`DiffTolerance::default`]) and `MAX_BLOCK_DE`.
