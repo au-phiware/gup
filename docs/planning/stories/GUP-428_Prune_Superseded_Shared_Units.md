@@ -438,3 +438,22 @@ prune report: /home/corin/.cache/gup/build (on disk 36.7 GB, cap 80.0 GB)
 
 1. **GUP-577**: incremental caches of unowned crates count toward the cap but
    are never evicted by it.
+
+### CI fix 2026-11-01
+
+- **Symptom**: `scripts/test_prune_build_dir.sh` passed locally (ZFS) but failed
+  on GitHub's ext4 runner from bound round 22: the directory ended over the cap
+  and a removed worktree's `depw` dependency survived.
+- **Root cause**: a real bug in `prune_lru`, not the fixtures. It computed
+  `du now - freed_kb`, where `freed_kb` includes what rules 1-4 had just
+  deleted. That correction exists for ZFS, whose `du` lags; on a filesystem that
+  frees immediately (ext4, tmpfs) the deletions were subtracted twice, the
+  estimate fell under the cap, and eviction stopped early.
+- **Fix**: `scripts/prune_build_dir.sh` now measures `du` once before anything
+  is deleted (skipped while the filesystem is below the cap, so the fast path
+  costs nothing) and rule 5 uses `start_kb - freed_kb`. This is right whether or
+  not `du` lags. The test is unchanged; `GUP_TEST_SCRATCH` already selects the
+  scratch filesystem.
+- **Evidence**: reproduced on tmpfs (`GUP_TEST_SCRATCH=/dev/shm/...`: round 22
+  24580 KB against a 14336 KB cap, same failures as CI); after the fix tmpfs
+  ends at 13156 KB and ZFS at 6954 KB, all cases passed on both.
