@@ -195,6 +195,7 @@ pub use encoding::{
 };
 pub use error::{Error, Result};
 pub use gpu_pick::{GpuPick, PickTicket};
+pub use gup_text::Font;
 pub use input::{Axes, Brush, Button, Drag, Event, EventInfo, Input, Response};
 pub use marks::{
     Area, AreaAttrs, Circle, CircleAttrs, Curve, Line, LineAttrs, Rect, RectAttrs, Segment,

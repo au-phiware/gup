@@ -365,6 +365,8 @@ struct CacheKey {
     height: u32,
     /// Sum of every revision counter that the plot reads.
     revisions: u64,
+    /// The context's font generation (`TextSystem::generation`).
+    fonts: u64,
 }
 
 /// Zoom factor per wheel line (scrolling up zooms in).
@@ -1147,11 +1149,14 @@ impl Plot {
         for layer in &mut self.layers {
             layer.drain_feed()?;
         }
+        // A short lock, never held with the pipeline lock.
+        let fonts = cx.text().generation();
         let key = |plot: &Self| CacheKey {
             context: cx.id(),
             width: width.to_bits(),
             height: height.to_bits(),
             revisions: plot.revision_sum(),
+            fonts,
         };
         if self.cache.as_ref().is_some_and(|(k, _)| *k == key(self)) {
             // A browser reports errors late.
@@ -2473,6 +2478,7 @@ impl Plot {
 
         // 7. The scene.
         let mut scene = Scene::new(width, height, th.background);
+        scene.fallback_fonts = cx.fallback_fonts();
         let mut rules = Vec::new();
         let mut labels = Vec::new();
         let axis = |p0: Point, p1: Point| Rule {

@@ -307,7 +307,12 @@ pub enum Curve {
     /// scale (on a log scale it stays within each segment's pixel range).
     /// Appending rows rewrites the two rows before the first new row, so
     /// the curve after an append is the curve of all the rows at once.
-    /// The line draws 16 pieces per segment.
+    ///
+    /// The line draws each segment as 1 to 16 straight pieces of its
+    /// cubic, as many as its pixel density needs: 16 where a segment is
+    /// wide enough for its curve to show, and as few as one, which costs
+    /// what a straight segment costs, where 100K rows share a chart's
+    /// width. The count follows zooming. Picks follow the same pieces.
     ///
     /// ```
     /// use gup_core::prelude::*;
@@ -331,21 +336,33 @@ pub enum Curve {
 }
 
 /// The most points [`Curve::path`] returns: a monotone curve's 16 pieces.
-pub(crate) const PATH_POINTS: usize = MONOTONE_PIECES as usize + 1;
+pub(crate) const PATH_POINTS: usize = MAX_MONOTONE_PIECES as usize + 1;
 
-/// The pieces a [`Curve::MonotoneX`] segment is drawn as (`line.wgsl`'s
-/// `MONOTONE_PIECES`).
-pub(crate) const MONOTONE_PIECES: u32 = 16;
+/// The most pieces a [`Curve::MonotoneX`] segment is drawn as: a layer
+/// draws a power of two from 1 to this, chosen from its pixel density
+/// ([`monotone::pieces_for`](crate::monotone::pieces_for), GUP-576).
+pub(crate) const MAX_MONOTONE_PIECES: u32 = 16;
+
+/// The glue signature labels of a monotone layer, by its pieces' power
+/// of two (1, 2, 4, 8, 16): each count links its own pipeline.
+const MONOTONE_LABELS: [&str; 5] = [
+    "curve monotone-x, 1 piece",
+    "curve monotone-x, 2 pieces",
+    "curve monotone-x, 4 pieces",
+    "curve monotone-x, 8 pieces",
+    "curve monotone-x, 16 pieces",
+];
 
 impl Curve {
-    /// The straight pieces drawn between two rows: 1, 2 or 3 (16 for a
-    /// monotone curve).
-    pub(crate) const fn pieces(self) -> u32 {
+    /// The straight pieces drawn between two rows: 1, 2 or 3, and for a
+    /// monotone curve `monotone`, the layer's count (a power of two from
+    /// 1 to [`MAX_MONOTONE_PIECES`]).
+    pub(crate) const fn pieces(self, monotone: u32) -> u32 {
         match self {
             Curve::Linear => 1,
             Curve::StepBefore | Curve::StepAfter => 2,
             Curve::Step => 3,
-            Curve::MonotoneX => MONOTONE_PIECES,
+            Curve::MonotoneX => monotone,
         }
     }
 
@@ -356,15 +373,25 @@ impl Curve {
     }
 
     /// The value `line.wgsl`'s `vertex_variant` reads (its `CURVE_*`
-    /// constants), and the glue signature's label: `None` for
+    /// constants), or for a monotone curve the pieces `monotone` that
+    /// `vertex_controls` draws, and the glue signature's label: `None` for
     /// [`Linear`](Curve::Linear), which keeps the plain `vertex` entry.
-    pub(crate) const fn variant(self) -> Option<(u32, &'static str)> {
+    pub(crate) const fn variant(self, monotone: u32) -> Option<(u32, &'static str)> {
         match self {
             Curve::Linear => None,
             Curve::Step => Some((1, "curve step")),
             Curve::StepBefore => Some((2, "curve step-before")),
             Curve::StepAfter => Some((3, "curve step-after")),
-            Curve::MonotoneX => Some((4, "curve monotone-x")),
+            Curve::MonotoneX => {
+                assert!(
+                    monotone.is_power_of_two() && monotone <= MAX_MONOTONE_PIECES,
+                    "a monotone layer draws a power of two pieces, at most 16"
+                );
+                Some((
+                    monotone,
+                    MONOTONE_LABELS[monotone.trailing_zeros() as usize],
+                ))
+            }
         }
     }
 
@@ -379,26 +406,28 @@ impl Curve {
         }
     }
 
-    /// The path from `a` to `b` (pixels): its `pieces() + 1` points, the
-    /// ends included, in the order `line.wgsl` draws them. For a step,
+    /// The path from `a` to `b` (pixels): its `pieces(monotone) + 1`
+    /// points, the ends included, in the order `line.wgsl` draws them. For a step,
     /// point `k` lies at `a`'s x for `k = 0`, `b`'s for the last and the
     /// turn's between, and at `a`'s level up to the first vertical piece,
     /// `b`'s after. For a monotone curve, point `k` is the segment's cubic
-    /// at [`monotone::joint`](crate::monotone::joint)`(k)`, its control
-    /// values `ctrl` (pixels; ignored by other curves). SVG paths, CPU
-    /// picks and later outline geometry read it.
+    /// at [`monotone::joint`](crate::monotone::joint)`(k, monotone)`, its
+    /// control values `ctrl` (pixels), in the layer's `monotone` pieces
+    /// (both ignored by other curves). SVG paths, CPU picks and later
+    /// outline geometry read it.
     pub(crate) fn path(
         self,
         a: [f32; 2],
         b: [f32; 2],
         ctrl: [f32; 2],
+        monotone: u32,
     ) -> ([[f32; 2]; PATH_POINTS], usize) {
-        let n = self.pieces() as usize;
+        let n = self.pieces(monotone) as usize;
         if self == Curve::MonotoneX {
             let p = crate::monotone::control_points(a, b, ctrl);
             let mut out = [b; PATH_POINTS];
-            for (k, q) in out.iter_mut().enumerate() {
-                *q = crate::monotone::bezier(p, crate::monotone::joint(k as u32));
+            for (k, q) in out.iter_mut().enumerate().take(n + 1) {
+                *q = crate::monotone::bezier(p, crate::monotone::joint(k as u32, monotone));
             }
             // The ends exactly.
             (out[0], out[n]) = (a, b);
@@ -525,35 +554,46 @@ mod tests {
     fn curve_paths_turn_where_their_names_say() {
         let (a, b) = ([10.0, 50.0], [30.0, 20.0]);
         let path = |c: Curve| {
-            let (p, n) = c.path(a, b, [0.0; 2]);
-            assert_eq!(n as u32, c.pieces() + 1, "{c:?}");
+            let (p, n) = c.path(a, b, [0.0; 2], 16);
+            assert_eq!(n as u32, c.pieces(16) + 1, "{c:?}");
             p[..n].to_vec()
         };
         assert_eq!(path(Curve::Linear), vec![a, b]);
         assert_eq!(path(Curve::StepAfter), vec![a, [30.0, 50.0], b]);
         assert_eq!(path(Curve::StepBefore), vec![a, [10.0, 20.0], b]);
         assert_eq!(path(Curve::Step), vec![a, [20.0, 50.0], [20.0, 20.0], b]);
-        assert_eq!(Curve::Linear.variant(), None);
+        assert_eq!(Curve::Linear.variant(16), None);
         assert_eq!(Curve::default(), Curve::Linear);
         assert_eq!(Curve::Step.picks_next(a, b, 19.0), Some(false));
         assert_eq!(Curve::Step.picks_next(a, b, 21.0), Some(true));
         assert_eq!(Curve::StepAfter.picks_next(a, b, 29.0), Some(false));
         assert_eq!(Curve::StepBefore.picks_next(a, b, 11.0), Some(true));
 
-        // A monotone curve: 17 points on the cubic, from `a` to `b`, x at
-        // the Chebyshev nodes (the controls lie at thirds in x, so x is
-        // linear in the cubic's parameter).
-        let (p, n) = Curve::MonotoneX.path(a, b, [45.0, 25.0]);
-        assert_eq!(n, 17);
-        assert_eq!((p[0], p[16]), (a, b));
-        for (k, q) in p[..n].iter().enumerate() {
-            assert!(
-                (q[0] - (10.0 + 20.0 * crate::monotone::joint(k as u32))).abs() < 1e-4,
-                "{k}: {q:?}"
+        // A monotone curve in each count it draws: `pieces + 1` points on
+        // the cubic, from `a` to `b`, x at the Chebyshev nodes (the
+        // controls lie at thirds in x, so x is linear in the cubic's
+        // parameter).
+        for pieces in [1, 2, 4, 8, 16] {
+            let (p, n) = Curve::MonotoneX.path(a, b, [45.0, 25.0], pieces);
+            assert_eq!(n as u32, pieces + 1);
+            assert_eq!((p[0], p[n - 1]), (a, b));
+            for (k, q) in p[..n].iter().enumerate() {
+                let t = crate::monotone::joint(k as u32, pieces);
+                assert!((q[0] - (10.0 + 20.0 * t)).abs() < 1e-4, "{k}: {q:?}");
+                assert!((20.0..=50.0).contains(&q[1]), "{k}: {q:?}");
+            }
+            assert!(p[..n].windows(2).all(|w| w[1][1] <= w[0][1]), "{p:?}");
+            assert_eq!(
+                Curve::MonotoneX.variant(pieces).map(|v| v.0),
+                Some(pieces),
+                "the glue passes the count"
             );
-            assert!((20.0..=50.0).contains(&q[1]), "{k}: {q:?}");
         }
-        assert!(p[..n].windows(2).all(|w| w[1][1] <= w[0][1]), "{p:?}");
+        let labels = [1, 2, 4, 8, 16].map(|n| Curve::MonotoneX.variant(n).unwrap().1);
+        assert!(
+            labels.windows(2).all(|w| w[0] != w[1]),
+            "each count links its own pipeline: {labels:?}"
+        );
         assert_eq!(Curve::MonotoneX.picks_next(a, b, 19.0), Some(false));
         assert_eq!(Curve::MonotoneX.picks_next(a, b, 21.0), Some(true));
         assert_eq!(Curve::MonotoneX.picks_next(b, a, 21.0), Some(false));

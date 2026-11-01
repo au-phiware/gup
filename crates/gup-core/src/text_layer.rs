@@ -100,6 +100,9 @@ struct Evaluated {
 /// and places glyphs on integers from it.
 struct Measured {
     size: f32,
+    /// `TextSystem::generation` when measured: a new fallback font changes
+    /// the boxes.
+    fonts: u64,
     boxes: Vec<Option<(Bounds, [f32; 2])>>,
 }
 
@@ -419,7 +422,11 @@ impl<T: Send + Sync + 'static> TextLayer<T> {
         let size = self.size.unwrap_or(theme.tick_size.0);
         let (anchor, weight) = (self.anchor, self.weight);
         let ev = self.evaluated.as_mut().expect("evaluated above");
-        if ev.measured.as_ref().is_none_or(|m| m.size != size) {
+        if ev
+            .measured
+            .as_ref()
+            .is_none_or(|m| m.size != size || m.fonts != text.generation())
+        {
             let font = text.font_weight(weight);
             let boxes = ev
                 .text
@@ -440,7 +447,11 @@ impl<T: Send + Sync + 'static> TextLayer<T> {
                     (b.width > 0.0 && b.height > 0.0).then(|| (b, font.baseline_origin(&run)))
                 })
                 .collect();
-            ev.measured = Some(Measured { size, boxes });
+            ev.measured = Some(Measured {
+                size,
+                fonts: text.generation(),
+                boxes,
+            });
         }
         true
     }

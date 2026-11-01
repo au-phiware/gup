@@ -483,8 +483,10 @@ fn the_atlas_keys_fallback_glyphs_by_face() {
     text.layout(&run, [0.0; 4], &mut glyphs).unwrap();
     assert_eq!(text.atlas_glyphs(), 2);
     // The same font again is the same face: no new entries.
+    assert_eq!(text.generation(), 1);
     let again = text.fallbacks()[0].clone();
     text.add_fallback(again);
+    assert_eq!(text.generation(), 2);
     text.layout(&run, [0.0; 4], &mut glyphs).unwrap();
     assert_eq!(text.atlas_glyphs(), 2);
 }

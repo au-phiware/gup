@@ -234,14 +234,19 @@ pub struct Selection<T, M: Mark> {
     /// A line's curve ([`Linear`](Curve::Linear) for every other mark):
     /// the glue's variant and the CPU geometry of picks and SVG.
     curve: Curve,
-    /// The vertices drawn per instance (GUP-550):
-    /// [`Mark::VERTICES_PER_INSTANCE`], times the pieces of a curve.
-    vertices: u32,
+    /// The pieces a monotone curve draws each segment as (GUP-576):
+    /// chosen at each prepare from the pixel width of the segment at
+    /// `widths`' median ([`crate::monotone::pieces_for`]). The glue, the
+    /// vertices per instance, and CPU picks all read it.
+    pieces: u32,
     /// For a curve with control values ([`Curve::MonotoneX`]), the x and y
     /// (data units) of the last three stored rows: an append recomputes
     /// the control values of the two rows before its first row from them
     /// (GUP-551).
     tail: Vec<[f64; 2]>,
+    /// For a monotone curve, its segments' widths in data units (GUP-576),
+    /// from evaluation and every append.
+    widths: crate::monotone::Widths,
     _mark: PhantomData<fn() -> M>,
 }
 
@@ -289,8 +294,9 @@ impl<T, M: Mark> std::fmt::Debug for Selection<T, M> {
 impl<T: Send + Sync + 'static> Selection<T, Line> {
     /// How the line runs from each row to the next (default
     /// [`Curve::Linear`]). A step curve draws each segment as 2 or 3
-    /// straight pieces, and a monotone curve as 16 pieces of a cubic;
-    /// picks and SVG output follow the same path. A straight line draws
+    /// straight pieces, and a monotone curve as 1 to 16 pieces of a cubic,
+    /// as many as its pixel density needs; picks and SVG output follow the
+    /// same path. A straight line draws
     /// exactly as before curves existed. Switching to or from
     /// [`Curve::MonotoneX`] evaluates the columns again at the next
     /// resolve (its control values are two more columns), which needs the
@@ -320,7 +326,6 @@ impl<T: Send + Sync + 'static> Selection<T, Line> {
                 self.columns = None;
             }
             self.curve = curve;
-            self.vertices = Line::VERTICES_PER_INSTANCE * curve.pieces();
             self.gpu = None;
         }
         self
@@ -360,8 +365,9 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             waker: None,
             appended: 0,
             curve: Curve::Linear,
-            vertices: M::VERTICES_PER_INSTANCE,
+            pieces: crate::marks::MAX_MONOTONE_PIECES,
             tail: Vec::new(),
+            widths: crate::monotone::Widths::default(),
             _mark: PhantomData,
         }
     }
@@ -441,6 +447,9 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
                     .chain(ys.iter().copied())
                     .collect();
                 let (c1, c2) = crate::monotone::controls(&wx, &wy);
+                // The new segments' widths, from the last stored row's.
+                let from = t.saturating_sub(1);
+                self.widths.add(&wx[from..], &wy[from..]);
                 let base = store.rows() - t as u64;
                 rewrite.extend((t.saturating_sub(2)..t).map(|k| (base + k as u64, c1[k], c2[k])));
                 self.tail = tail_of(&self.tail, xs, ys);
@@ -685,6 +694,32 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         M::GEOMETRY == Geometry::Polyline && self.curve.has_controls()
     }
 
+    /// The pieces a monotone line draws each segment as now (GUP-576):
+    /// [`pieces_for`](crate::monotone::pieces_for) the pixel width, under
+    /// the x scale as it is (zoomed), of the segment at the width-weighted
+    /// median of the layer's segments. Every library scale is a fixed
+    /// transform followed by an affine map, so zooming scales every
+    /// segment's pixel width alike (in the transformed space) and the
+    /// median segment stays the median. The most pieces without a curved
+    /// segment or a CPU map of x.
+    fn monotone_pieces(&self) -> u32 {
+        let most = crate::marks::MAX_MONOTONE_PIECES;
+        let x = M::CHANNELS
+            .iter()
+            .zip(&self.encodings)
+            .find_map(|(d, e)| match e {
+                Some(Encoding::Column(c)) if d.name == "x" => Some(c),
+                _ => None,
+            });
+        let (Some(x), Some([a, b])) = (x, self.widths.median()) else {
+            return most;
+        };
+        match (x.cpu_eval(a), x.cpu_eval(b)) {
+            (Some(a), Some(b)) => crate::monotone::pieces_for((b - a).abs()),
+            _ => most,
+        }
+    }
+
     /// Where the curve's control values come from, if it has them
     /// ([`Curve::MonotoneX`]): x and y must be numeric columns.
     fn control_source(&self) -> Result<Option<ControlSource>> {
@@ -778,6 +813,8 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
                 let (xs, ys) = (numbers(&values[c.x]), numbers(&values[c.y]));
                 let (c1, c2) = crate::monotone::controls(xs, ys);
                 self.tail = tail_of(&[], xs, ys);
+                self.widths = crate::monotone::Widths::default();
+                self.widths.add(xs, ys);
                 values.push(ColumnData::Values(c1));
                 values.push(ColumnData::Values(c2));
             }
@@ -988,7 +1025,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
                 Unbrushed::Fade(_) => glue::BrushStyle::Fade,
                 Unbrushed::Grey(_) => glue::BrushStyle::Grey,
             }),
-            variant: self.curve.variant(),
+            variant: self.curve.variant(self.pieces),
             controls: self.controlled().then(|| {
                 M::CHANNELS
                     .iter()
@@ -1824,6 +1861,11 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             m.dim = dim;
             m.grey = grey;
         }
+        if self.controlled() {
+            // A new count is a new glue variant, so new GPU state below;
+            // the same count reuses it.
+            self.pieces = self.monotone_pieces();
+        }
         let glue = self.glue();
         let program = cx.program(&glue)?;
 
@@ -2040,7 +2082,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
                     chunks: chunk_draws(),
                     spans,
                 },
-                self.vertices,
+                M::VERTICES_PER_INSTANCE * self.curve.pieces(self.pieces),
             )?,
         );
         self.write_bits(cx, &gpu);
@@ -2284,6 +2326,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             x_end: chan("x_end"),
             y_end: chan("y_end"),
             curve: self.curve,
+            pieces: self.pieces,
             ctrl,
         };
 

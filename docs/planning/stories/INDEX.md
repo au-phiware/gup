@@ -236,7 +236,7 @@ cell labels, error bars, pie charts and facets.
 - [GUP-551](GUP-551_Monotone_Line_Curves.md) ✅ — `Curve::MonotoneX`: Steffen
   tangents on the CPU as Bezier control columns, tessellated per segment, never
   overshooting. Deps: GUP-550 📋.
-- [GUP-576](GUP-576_Monotone_Piece_Count_From_Density.md) 💡 — Monotone curves
+- [GUP-576](GUP-576_Monotone_Piece_Count_From_Density.md) ✅ — Monotone curves
   choose their piece count from pixel density, so 100K-row curves cost about
   what straight lines cost (16 pieces cost 18x today). Deps: GUP-551 ✅.
 - [GUP-552](GUP-552_Chart_Subtitle.md) ✅ — `subtitle` on `Plot` and the
@@ -265,11 +265,14 @@ cell labels, error bars, pie charts and facets.
   and `Font::with_fallbacks`: an ordered chain for characters the primary lacks,
   with fonts validated at `from_bytes` and parsed on first use (Noto Sans JP
   takes 259 ms), in `gup-text` only. Deps: GUP-407 ✅, GUP-405 ✅.
-- [GUP-580](GUP-580_Fallback_Fonts_In_Gup_Core_And_Svg.md) 📋 —
+- [GUP-580](GUP-580_Fallback_Fonts_In_Gup_Core_And_Svg.md) ✅ —
   `Context::add_fallback_font`, the `gup_core::Font` re-export, the scene's
   fallback list, SVG `font-family` and embedding of the fallbacks a scene uses,
   and a mixed-script title golden. Edits `lib.rs` and `plot.rs`. Deps: GUP-416
-  📋.
+  ✅.
+- [GUP-557](GUP-557_Svg_Text_Path_Out_Of_Wasm.md) 💡 — Keep `SvgTarget`'s text
+  path out of the WASM build, then ungate GUP-580's fallback code. Deps: GUP-580
+  ✅.
 - [GUP-439](GUP-439_Line_Translucent_Joins.md) 📋 — Translucent lines with even
   opacity at rows, curve pieces and self-crossings (a per-layer coverage pass),
   opaque lines unchanged. Deps: GUP-432 ✅, GUP-550 📋, GUP-551 📋.
