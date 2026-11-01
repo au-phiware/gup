@@ -148,7 +148,7 @@ GUP-535 in turn (they share `src/lib.rs`); GUP-536 after N2's builders.
   chart type with a tested block of at most 20 lines and a golden image. Deps:
   GUP-530 📋, GUP-537 📋, GUP-542 📋, GUP-544 📋, GUP-547 📋, GUP-548 📋,
   GUP-549 📋; GUP-550–554 📋 (soft).
-- [GUP-564](GUP-564_Derive_Role_Message_And_Stale_Gallery.md) 📋 — The
+- [GUP-564](GUP-564_Derive_Role_Message_And_Stale_Gallery.md) 🚧 — The
   `#[derive(Mark)]` role error lists all six roles (with a compile-fail case),
   the gallery page is regenerated (96 of 101 source links were dead), and
   `all-check` runs the gallery link check. Edits `maskfile.md`. Deps: GUP-531

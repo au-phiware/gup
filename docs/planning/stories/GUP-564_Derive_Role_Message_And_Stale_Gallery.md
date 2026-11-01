@@ -10,7 +10,7 @@ touches: [maskfile.md]
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N1 Docs and Tutorials) **Status**: 📋
+**Initiative**: Strategic Review 2026-11 (N1 Docs and Tutorials) **Status**: 🚧
 Planned **Created**: 2026-10-26
 
 ## Context
