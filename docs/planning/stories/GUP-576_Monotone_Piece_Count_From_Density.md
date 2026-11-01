@@ -155,3 +155,81 @@ MonotoneX is **1.39x** Linear (19x before). The bench draws 1 piece throughout.
   load 13 read 1.70, 1.25 and 1.69. Both measure the scatter's Circle program,
   whose glue and WGSL this story does not change, so I read them as load noise.
   `PERF_BUDGETS.md` is not edited.
+
+## Retrospective
+
+**Completed**: 2026-11-01
+
+### Key Technical Learnings
+
+#### A sub-pixel segment misplaces only its share of a pixel
+
+- **Challenge**: The tessellation error alone (`width / n²` within 1/8 px) drew
+  2 pieces once zoom_bench zoomed in past 8x, which cost 2.4x Linear.
+- **Solution**: Measure the misplaced ink, `width / n² × min(width, 1)`. An
+  offset across a segment 0.3 px wide moves 0.3 of the ink that the same offset
+  across a whole pixel would.
+- **Pattern**: Express a level-of-detail rule in the unit the eye sees, which is
+  pixel coverage, not in geometric distance alone.
+
+#### Rasterizer snapping breaks per-piece frames
+
+- **Challenge**: Dense smooth rows left whole pixels out at joints, at every
+  count, 16 included. Every piece tested its joint plane in its own interpolated
+  `local` frame. The rasterizer snaps each quad's vertices, which moves that
+  frame by about 0.004 px, so a pixel centre near a plane could fall outside
+  both pieces. An absolute slack fixed the holes, but then the sparse seam test
+  blended rim pixels twice.
+- **Solution**: Test the plane at the fragment's own centre on the target
+  (`clip.xy` less the viewport's whole-pixel offset), against a joint point and
+  a normal that both pieces compute alike. Only the rounding of the two tangents
+  at a row remains, covered by an angular slack of 2 ulps over the tangent's
+  length.
+- **Pattern**: Ownership tests shared by two primitives must read inputs that
+  both see bit-for-bit: the pixel centre, and values computed from the same
+  operands. Never use interpolated per-primitive frames for them.
+
+#### Dense fixtures find what sparse ones cannot
+
+- The GUP-551 seam tests used 7 and 12 rows. A 2000-row wave puts thousands of
+  joints under the stroke, and found the snapping holes at once. The windowed
+  `ink_errors` (pieces within reach in x) keeps the check fast at that size.
+
+### Architectural Decisions
+
+#### The count is a glue literal, in powers of two
+
+- **Decision**: The count is the variant value of the glue, one pipeline per
+  count, with five counts.
+- **Reasoning**: A uniform count needs a field in `Encodings` (glue.rs, outside
+  the story's files), and changing the vertex count still needs a new
+  `LayerGpu`. The literal uses GUP-550's mechanism unchanged.
+- **Trade-off**: Crossing a count while zooming rebuilds the layer's GPU state,
+  and the first crossing links a pipeline (about 1-5 ms native). Powers of two
+  draw up to twice the pieces the exact rule would.
+
+#### The width-weighted median, from data widths
+
+- **Decision**: The median is weighted by width and kept in data units through
+  appends. The median segment's two rows are mapped through x's CPU map at every
+  prepare.
+- **Trade-off**: It is exact under affine x (linear, time). Under log, pow or
+  symlog x, the median is weighted by data width, not by pixel width. Rows that
+  a window evicts stay in the summary. Neither seemed worth a story, since a
+  monotone curve on a non-affine x scale is rare.
+
+### Development Workflow Insights
+
+- `zoom_bench` binaries copied aside (`~/.cache/gup/gup576/zoom_bench_before`,
+  `_after`, and `_one` with the count forced to 1) made alternating measurements
+  and what-if floors cheap. The forced single piece (2.03 ms) gave the floor
+  before I tuned the rule.
+- The worktree sandbox refuses compound shell lines with loops or heredocs that
+  feed tools. Short scripts under `/tmp` worked.
+- A session limit stopped the work mid-debug for several hours. The checkpoint
+  ref and a commit taken before the investigation meant nothing was lost.
+
+### Follow-up Stories
+
+None. The non-affine weighting and window eviction are recorded above, and the
+joint fix is complete in this story.
