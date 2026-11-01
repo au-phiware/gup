@@ -20,8 +20,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: 🚧 In
-Progress **Created**: 2026-10-31
+**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: ✅
+Complete (2026-11-01) **Created**: 2026-10-31
 
 ## Context
 
@@ -62,15 +62,15 @@ The owner confirmed the entry point's name on 2026-10-24:
 
 ### AC1: The entry point
 
-- [ ] `gup_core::Font` (and so `gup::Font`) re-exports `gup_text::Font`.
+- [x] `gup_core::Font` (and so `gup::Font`) re-exports `gup_text::Font`.
       `Context::add_fallback_font(&self, font: Font)` and
       `Context::fallback_fonts(&self) -> Vec<Font>` are public and documented.
-- [ ] Doctest on `add_fallback_font`, running headless:
+- [x] Doctest on `add_fallback_font`, running headless:
       `cx.add_fallback_font(Font::inter_full())`. A plot titled "Київ" then
       resolves with no missing glyphs:
       `Font::inter().with_fallbacks(&cx.fallback_fonts()).missing_glyphs("Київ")`
       is empty.
-- [ ] A fallback added after a resolve takes effect on the next `resolve`, with
+- [x] A fallback added after a resolve takes effect on the next `resolve`, with
       nothing else changed. Integration test: a plot titled "東京" with a text
       layer labelled "東京" is resolved, then the jp face is added, then the
       plot is resolved again. The second resolve is a full one, and both the
@@ -81,22 +81,22 @@ The owner confirmed the entry point's name on 2026-10-24:
 
 ### AC2: Lazy through gup-core
 
-- [ ] Integration test: a context with the jp test face as fallback renders a
+- [x] Integration test: a context with the jp test face as fallback renders a
       scatter whose text Inter covers. `jp.is_parsed()` stays `false`. After a
       title with "東京", it is `true`.
 
 ### AC3: SVG
 
-- [ ] `Scene` has `pub fallback_fonts: Vec<gup_text::Font>`. `Scene::new` leaves
+- [x] `Scene` has `pub fallback_fonts: Vec<gup_text::Font>`. `Scene::new` leaves
       it empty, `Plot::resolve` fills it from `cx.fallback_fonts()`, and
       `Scene::guides` copies it.
-- [ ] `SvgTarget` writes
+- [x] `SvgTarget` writes
       `font-family="Inter, &quot;<fallback 1>&quot;, …, sans-serif"`. Each
       fallback family, as named in Decisions, is CSS-quoted with `css_string`
       and XML-escaped. Its `baseline_origin` comes from
       `font.with_fallbacks(&scene.fallback_fonts)`, so its anchor rounding
       matches the GPU's.
-- [ ] With `embed_font`, each fallback that some run of the scene uses gets an
+- [x] With `embed_font`, each fallback that some run of the scene uses gets an
       `@font-face` with its family name and data. A fallback no run uses is not
       embedded. Test in `tests/svg.rs`: fallbacks `[Font::inter_full(), jp]` and
       a title "東京" embed jp and not Inter full. Neither is embedded for a
@@ -104,7 +104,7 @@ The owner confirmed the entry point's name on 2026-10-24:
 
 ### AC4: Golden (user-visible)
 
-- [ ] `crates/gup-core/tests/fallback_fonts_png.rs` uses its own
+- [x] `crates/gup-core/tests/fallback_fonts_png.rs` uses its own
       `Context::new_blocking()`, never `shared()`, so no other test sees the
       fallbacks. It draws the scatter of `scatter_png.rs` titled "Київ — 東京 —
       Zürich", with fallbacks `[Font::inter_full(), jp]`. Golden
@@ -113,13 +113,13 @@ The owner confirmed the entry point's name on 2026-10-24:
       `Font::inter().missing_glyphs(title)` is
       `['К', 'и', 'ї', 'в', '東', '京']`, so the golden shows the fallback at
       work.
-- [ ] Read the PNG by eye. The title shows Cyrillic, CJK and Latin with no
+- [x] Read the PNG by eye. The title shows Cyrillic, CJK and Latin with no
       boxes, on one baseline, centred, and the plot rect matches
       `scatter.png`'s.
 
 ### AC5: Size
 
-- [ ] `mask wasm-size`: at most 1,000 B gz growth (`svg` is off in the WASM
+- [x] `mask wasm-size`: at most 1,000 B gz growth (`svg` is off in the WASM
       build). Report the figures.
 
 ## Decisions
@@ -177,14 +177,14 @@ The owner confirmed the entry point's name on 2026-10-24:
 
 ## Technical Tasks
 
-- [ ] Re-export; `add_fallback_font`, `fallback_fonts` and the doctest.
-- [ ] `TextSystem::generation`; `CacheKey::fonts`; `Measured::fonts`; the
+- [x] Re-export; `add_fallback_font`, `fallback_fonts` and the doctest.
+- [x] `TextSystem::generation`; `CacheKey::fonts`; `Measured::fonts`; the
       late-fallback test.
-- [ ] `Scene::fallback_fonts`; fill it in `resolve_full`; copy it in `guides`.
-- [ ] SVG family list, naming rule, `with_fallbacks` origin, used-font
+- [x] `Scene::fallback_fonts`; fill it in `resolve_full`; copy it in `guides`.
+- [x] SVG family list, naming rule, `with_fallbacks` origin, used-font
       embedding; the `tests/svg.rs` cases.
-- [ ] `fallback_fonts_png.rs` golden and lazy test; read the PNG.
-- [ ] `mask wasm-size`.
+- [x] `fallback_fonts_png.rs` golden and lazy test; read the PNG.
+- [x] `mask wasm-size`.
 
 ## Dependencies
 
@@ -207,7 +207,7 @@ The owner confirmed the entry point's name on 2026-10-24:
 
 ## Success Metrics
 
-- [ ] A chart with a CJK title draws it on screen and in its SVG with one call.
+- [x] A chart with a CJK title draws it on screen and in its SVG with one call.
 
 ## Risk Assessment
 
@@ -218,15 +218,79 @@ The owner confirmed the entry point's name on 2026-10-24:
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -p gup-core -- --test-threads=1` and
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -p gup-core -- --test-threads=1` and
       `cargo test --doc -p gup`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (`fallback_title.png`)
-- [ ] `mask wasm-browser`: not needed (no layout or wasm scene change); say so
-- [ ] WASM size: `mask wasm-size` scatter gz bytes
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye (`fallback_title.png`)
+- [x] `mask wasm-browser`: not needed (no layout or wasm scene change); say so
+- [x] WASM size: `mask wasm-size` scatter gz bytes
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Resolved (2026-11-01)
+
+Orchestrator gated SVG fallback code behind `svg`; accepted +406 B gz.
+
+`SvgTarget::used_fallbacks`, `fallback_families`, `Font::with_fallbacks` and the
+font-family and `@font-face` emission for fallbacks are compiled only with the
+`svg` feature; without it the document names the primary family only. Before
+gating, `mask wasm-size` measured +1,329 B gz (parent 357,216 B, work 358,545 B)
+because `SvgTarget::write` is linked in the WASM harness. After: scatter 357,622
+B gz, **+406 B** over the parent (`11ee73d2`: 357,216 B), within the 1,000 B
+limit. Not ungating `SvgTarget::write` wholesale: GUP-557.
+
+## Implementation Summary
+
+- `gup_core::Font` re-export; `Context::add_fallback_font` and `fallback_fonts`
+  (doctest); `TextSystem::generation`; `CacheKey::fonts` and `Measured::fonts`,
+  so a late fallback applies on the next resolve.
+- `Scene::fallback_fonts`, filled by `Plot::resolve`, copied by `guides`.
+- `SvgTarget`: `font-family` lists fallbacks (index appended on a repeated
+  name), `with_fallbacks` origins, embedding of only the fallbacks a run uses
+  (`svg` feature).
+- Tests: `tests/fallback_fonts_png.rs` (golden `gup_core/fallback_title`, lazy,
+  late), `tests/svg.rs` embedding case, a naming unit test, `svg_marks`
+  rasterises with the scene's fallbacks loaded.
+- Evidence: gup-core tests and doctests pass; `mask merge-check --dogfood` PASS
+  (before gating; re-run after); `mask wasm-browser` not needed. Golden read
+  zoomed: Cyrillic, CJK and Latin all real glyphs on one baseline, centred. WASM
+  scatter 357,216 B gz parent, 357,622 B after (+406 B).
+
+## Retrospective
+
+**Completed**: 2026-11-01
+
+### Key Technical Learnings
+
+#### WASM size and `svg`
+
+- **Challenge**: The story assumed `svg` is off in WASM, so SVG code costs
+  nothing; `SvgTarget::write` is not gated and is linked, costing +1,329 B gz.
+- **Solution**: Gate fallback-only helpers behind `svg`; +406 B.
+- **Pattern**: Measure parent and after early. Individual reverts of small
+  pieces moved nothing; `twiggy` function lists located the cost.
+
+#### Parity with fallbacks
+
+- **Challenge**: resvg lacked Cyrillic and CJK glyphs, drawing boxes outside the
+  masked text regions.
+- **Solution**: `svg_marks::assert_matches` loads the scene's fallback fonts.
+
+### Architectural Decisions
+
+#### Guides-only builds name one family
+
+- **Decision**: without `svg`, no fallback names, embedding or chain origins.
+- **Trade-off**: such builds' SVG text may anchor differently for fallback text.
+
+### Development Workflow Insights
+
+- The worktree guard refuses compound shell commands; use plain scripts.
+
+### Follow-up Stories
+
+1. **GUP-557: Keep SvgTarget text out of the WASM build** - see its file.
