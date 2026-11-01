@@ -25,8 +25,8 @@ fn rect(r: gup::geom::Rect) -> PxRect {
 
 /// Layout metadata from gup's own `Layout` (a copy of the adapter in
 /// `crates/gup-core/tests/common/vr.rs`, which this crate cannot import).
-fn layout_metadata(layout: &gup::Layout) -> LayoutMetadata {
-    let mut meta = LayoutMetadata::new(rect(layout.plot)).with_background(Rgba8::WHITE);
+fn layout_metadata(layout: &gup::Layout, background: Rgba8) -> LayoutMetadata {
+    let mut meta = LayoutMetadata::new(rect(layout.plot)).with_background(background);
     for t in &layout.texts {
         let role = match t.run.role {
             TextRole::Title => VrTextRole::Title,
@@ -60,12 +60,17 @@ fn harness() -> Harness {
 
 /// Render `chart` at the tutorials' size and check it against the golden.
 fn check(name: &str, chart: &mut impl Chart) {
+    check_on(name, chart, Rgba8::WHITE);
+}
+
+/// Like [`check`], for a chart drawn on `background`.
+fn check_on(name: &str, chart: &mut impl Chart, background: Rgba8) {
     let cx = Context::shared().unwrap();
     let (image, layout) = chart.render_resolved(&cx, WIDTH, HEIGHT).unwrap();
     assert_eq!(image.dimensions(), (WIDTH, HEIGHT));
     let image = RgbaImage::new(WIDTH, HEIGHT, image.into_raw()).unwrap();
     harness()
-        .run(name, Ok((image, layout_metadata(&layout))))
+        .run(name, Ok((image, layout_metadata(&layout, background))))
         .assert_ok();
 }
 
@@ -427,4 +432,238 @@ fn tutorial_5_appended() {
 
     // The appended rows are drained by the resolve `check` makes.
     check("tutorials/05_appended", &mut chart);
+}
+
+/// Tutorial 7 (`07_chart_types.md`), "Scatter": two groups, tuple rows and a
+/// tick format.
+#[test]
+fn tutorial_7_scatter() {
+    let students = (0..24).map(|i| {
+        let hours = f64::from(i) / 3.0 + 1.0;
+        let score = 40.0 + 5.0 * hours + f64::from(i * 7 % 11);
+        (hours, score, ["Morning", "Evening"][i as usize % 2])
+    });
+
+    let mut chart = gup::scatter(students)
+        .x(|s| s.0)
+        .y(|s| s.1)
+        .color(|s| s.2)
+        .title("Study time and exam score")
+        .x_title("Hours studied per week")
+        .y_title("Exam score")
+        .y_tick_format(|v| format!("{v:.0}%"))
+        .grid(Axes::Both);
+
+    check("tutorials/07_scatter", &mut chart);
+}
+
+/// Tutorial 7, "Line": a monotone curve through two series.
+#[test]
+fn tutorial_7_line() {
+    let rows = (1..=6).flat_map(|m| {
+        let t = f64::from(m) * 2.0 - f64::from(m * m) / 2.0;
+        [(m, "Perth", 23.0 + t), (m, "Hobart", 15.0 + t)]
+    });
+
+    let mut chart = gup::line(rows)
+        .x(|r| f64::from(r.0))
+        .y(|r| r.2)
+        .color(|r| r.1)
+        .curve(Curve::MonotoneX)
+        .title("Average daily maximum")
+        .x_title("Month")
+        .y_title("Temperature (°C)")
+        .grid(Axes::Y);
+
+    check("tutorials/07_line", &mut chart);
+}
+
+/// Tutorial 7, "Bar": grouped bars with value labels.
+#[test]
+fn tutorial_7_bar() {
+    let sales = [
+        ("Q1", "Phones", 12.0),
+        ("Q1", "Laptops", 8.0),
+        ("Q2", "Phones", 15.0),
+        ("Q2", "Laptops", 9.0),
+        ("Q3", "Phones", 11.0),
+        ("Q3", "Laptops", 14.0),
+    ];
+
+    let mut chart = gup::bar(sales)
+        .x(|s| s.0)
+        .y(|s| s.2)
+        .group(|s| s.1)
+        .group_padding(0.2)
+        .value_labels()
+        .title("Units sold (thousands)")
+        .y_title("Units")
+        .grid(Axes::Y);
+
+    check("tutorials/07_bar", &mut chart);
+}
+
+/// Tutorial 7, "Horizontal bar": a ranking with owned names.
+#[test]
+fn tutorial_7_barh() {
+    struct Language {
+        name: String,
+        share: f64,
+    }
+    let languages =
+        [("Rust", 41.0), ("Go", 27.0), ("Python", 19.0), ("Zig", 8.0)].map(|(name, share)| {
+            Language {
+                name: name.to_string(),
+                share,
+            }
+        });
+
+    let mut chart = gup::barh(languages)
+        .y(|l| l.name.clone())
+        .x(|l| l.share)
+        .value_labels()
+        .title("Services by language")
+        .x_title("Share of services (%)")
+        .y_title("Language");
+
+    check("tutorials/07_barh", &mut chart);
+}
+
+/// Tutorial 7, "Stacked area": traffic by source.
+#[test]
+fn tutorial_7_area() {
+    let visits = (1..=12).flat_map(|month| {
+        [("Search", 5.0), ("Social", 3.0), ("Direct", 2.0)].map(move |(source, base)| {
+            let m = f64::from(month);
+            (m, source, base * (1.0 + m / 12.0 + 0.4 * (m / 2.0).sin()))
+        })
+    });
+
+    let mut chart = gup::area(visits)
+        .x(|v| v.0)
+        .y(|v| v.2)
+        .stack(|v| v.1)
+        .outline(1.0)
+        .title("Visits by source")
+        .x_title("Month")
+        .y_title("Visits (thousands)");
+
+    check("tutorials/07_area", &mut chart);
+}
+
+/// Tutorial 7, "Histogram": bins of ten.
+#[test]
+fn tutorial_7_histogram() {
+    let scores = (0..300).map(|i| f64::from((i * 37 % 100 + i * 61 % 100 + i * 17 % 100) / 3));
+
+    let mut chart = gup::histogram(scores)
+        .x(|s| *s)
+        .bins(Bins::Width(10.0))
+        .title("Exam scores")
+        .x_title("Score")
+        .y_title("Students");
+
+    check("tutorials/07_histogram", &mut chart);
+}
+
+/// Tutorial 7, "Heatmap": visits by weekday and hour.
+#[test]
+fn tutorial_7_heatmap() {
+    let visits = ["Mon", "Tue", "Wed", "Thu", "Fri"]
+        .into_iter()
+        .enumerate()
+        .flat_map(|(d, day)| {
+            [9, 12, 15, 18].map(move |hour| (hour, day, ((d * 7 + hour * 3) % 23) as f64))
+        });
+
+    let mut chart = gup::heatmap(visits)
+        .x(|v| v.0)
+        .y(|v| v.1)
+        .color_value(|v| v.2)
+        .legend_title("Visits")
+        .title("When customers visit")
+        .x_title("Hour of day")
+        .y_title("Weekday");
+
+    check("tutorials/07_heatmap", &mut chart);
+}
+
+/// Tutorial 7, "Box plot": response times per service.
+#[test]
+fn tutorial_7_boxplot() {
+    let requests = (0..90)
+        .map(|i| {
+            let service = ["auth", "search", "cart"][i % 3];
+            (service, 25.0 + (i * 7 % 31) as f64 * (1 + i % 3) as f64)
+        })
+        .chain([("auth", 160.0)]);
+
+    let mut chart = gup::boxplot(requests)
+        .x(|r| r.0)
+        .y(|r| r.1)
+        .title("Response time by service")
+        .y_title("Milliseconds")
+        .grid(Axes::Y);
+
+    check("tutorials/07_boxplot", &mut chart);
+}
+
+/// Tutorial 7, "Annotations": labels at data positions.
+#[test]
+fn tutorial_7_text() {
+    let cities = [
+        ("Perth", 115.9, -31.9),
+        ("Darwin", 130.8, -12.5),
+        ("Brisbane", 153.0, -27.5),
+        ("Sydney", 151.2, -33.9),
+        ("Hobart", 147.3, -42.9),
+    ];
+
+    let mut chart = gup::scatter(cities)
+        .x(|c| c.1)
+        .y(|c| c.2)
+        .radius(4.0)
+        .title("Five cities")
+        .x_title("Longitude")
+        .y_title("Latitude");
+    chart
+        .plot_mut()
+        .text(cities)
+        .x(|c| c.1)
+        .y(|c| c.2)
+        .text(|c| c.0)
+        .anchor(Anchor::BOTTOM)
+        .dy(-6.0);
+
+    check("tutorials/07_text", &mut chart);
+}
+
+/// Tutorial 7, "A dark theme".
+#[test]
+fn tutorial_7_dark() {
+    let loads = [("web", 0.0), ("db", 1.5), ("cache", 3.0)]
+        .into_iter()
+        .flat_map(|(host, phase)| {
+            (0..24).map(move |h| {
+                (
+                    f64::from(h),
+                    host,
+                    50.0 + 30.0 * (f64::from(h) / 4.0 + phase).sin(),
+                )
+            })
+        });
+
+    let mut chart = gup::line(loads)
+        .x(|r| r.0)
+        .y(|r| r.2)
+        .color(|r| r.1)
+        .title("CPU load")
+        .subtitle("Three hosts over one day")
+        .x_title("Hour")
+        .y_title("Load (%)")
+        .grid(Axes::Y)
+        .theme(Theme::dark());
+
+    let [r, g, b, _] = Theme::dark().background.to_rgba8();
+    check_on("tutorials/07_dark", &mut chart, Rgba8::rgb(r, g, b));
 }

@@ -312,4 +312,7 @@ mod tutorials {
     /// Tutorial 6, "Custom Marks" (GUP-531).
     #[doc = include_str!("../docs/tutorials/06_custom_marks.md")]
     struct CustomMarks;
+    /// Tutorial 7, "A Tour of Chart Types" (GUP-536).
+    #[doc = include_str!("../docs/tutorials/07_chart_types.md")]
+    struct ChartTypes;
 }
