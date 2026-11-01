@@ -301,3 +301,69 @@ fn semibold_runs_set_the_weight_and_embed_the_second_face() {
     assert_eq!(regular.svg().matches("@font-face").count(), 1);
     assert!(!regular.svg().contains("font-weight=\"600\""));
 }
+
+/// GUP-580: the `font-family` lists the scene's fallbacks (named, with the
+/// chain index when a name repeats), and with `embed_font` only the
+/// fallbacks some run needs are embedded under those names.
+#[test]
+fn fallback_fonts_are_named_and_embedded_when_used() {
+    use base64::Engine as _;
+    const JP: &[u8] = include_bytes!("../../gup-text/tests/fonts/NotoSansJP-Test.ttf");
+    let jp = gup_core::Font::from_bytes("Noto Sans JP", JP).unwrap();
+    let svg_of = |title: &str, embed: bool| {
+        let mut scene = Scene::new(200.0, 40.0, Color::WHITE);
+        scene.fallback_fonts = vec![gup_core::Font::inter_full(), jp.clone()];
+        scene.push(Item {
+            z: 0,
+            clip: None,
+            kind: ItemKind::Text(vec![TextRun {
+                text: title.into(),
+                at: Point::new(100.0, 20.0),
+                anchor: Anchor::new(HAlign::Middle, VAlign::Top),
+                style: TextStyle {
+                    size: Px(16.0),
+                    color: Color::hex(0x333333),
+                    weight: Weight::Regular,
+                },
+                role: TextRole::Title,
+            }]),
+        });
+        let mut svg = SvgTarget::with_options(SvgOptions {
+            embed_font: embed,
+            ..SvgOptions::default()
+        });
+        svg.render(&scene).unwrap();
+        svg.svg().to_owned()
+    };
+    let family =
+        r#"font-family="Inter, &quot;Inter 1&quot;, &quot;Noto Sans JP&quot;, sans-serif""#;
+
+    // 東京: the jp face is used, Inter full is not.
+    let svg = svg_of("東京", true);
+    assert!(svg.contains(family), "{svg}");
+    assert_eq!(svg.matches("@font-face").count(), 2, "primary and jp");
+    let prefix = r#"font-family:"Noto Sans JP";font-weight:400;src:url(data:font/ttf;base64,"#;
+    let start = svg.find(prefix).expect("an @font-face for jp") + prefix.len();
+    let len = svg[start..].find(')').unwrap();
+    let data = base64::engine::general_purpose::STANDARD
+        .decode(&svg[start..start + len])
+        .unwrap();
+    assert_eq!(data, JP);
+    assert!(!svg.contains(r#"font-family:"Inter 1""#), "Inter full used");
+
+    // Covered by Inter's own glyphs, or by the first fallback that has
+    // them: Zürich needs neither (the subset has ü).
+    let svg = svg_of("Zürich", true);
+    assert!(svg.contains(family));
+    assert_eq!(svg.matches("@font-face").count(), 1, "primary only");
+
+    // Cyrillic: Inter full, the first fallback with it, not jp.
+    let svg = svg_of("Київ", true);
+    assert!(svg.contains(r#"font-family:"Inter 1";font-weight:400"#));
+    assert!(!svg.contains(r#"font-family:"Noto Sans JP";font-weight"#));
+
+    // Not embedded: named only.
+    let svg = svg_of("東京", false);
+    assert!(svg.contains(family));
+    assert_eq!(svg.matches("@font-face").count(), 0);
+}

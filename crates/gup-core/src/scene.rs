@@ -36,6 +36,10 @@ pub struct Scene {
     pub items: Vec<Item>,
     /// Clip rectangles referenced by [`Item::clip`].
     pub clips: Vec<Rect>,
+    /// The context's fallback fonts when the scene was resolved, in order
+    /// (`Context::add_fallback_font`): a vector target names and embeds the
+    /// ones its text uses.
+    pub fallback_fonts: Vec<gup_text::Font>,
 }
 
 impl Scene {
@@ -47,6 +51,7 @@ impl Scene {
             background,
             items: Vec::new(),
             clips: Vec::new(),
+            fallback_fonts: Vec::new(),
         }
     }
 
@@ -84,6 +89,7 @@ impl Scene {
             height: self.height,
             background: self.background,
             clips: self.clips.clone(),
+            fallback_fonts: self.fallback_fonts.clone(),
         }
     }
 
