@@ -200,7 +200,7 @@ cell labels, error bars, pie charts and facets.
   only where labels reach (capped at a quarter of the axis) and edge labels are
   drawn whole; label boxes measured once and cached. Not beside GUP-541 or
   GUP-552 (`plot.rs`). Deps: GUP-542 ✅, GUP-528 ✅, GUP-529 ✅.
-- [GUP-526](GUP-526_Text_Layers_On_The_Right_Axis.md) 🚧 — `TextLayer::y_right`
+- [GUP-526](GUP-526_Text_Layers_On_The_Right_Axis.md) ✅ — `TextLayer::y_right`
   and `y_right_key` map labels through the plot's right y axis, with GUP-555's
   edge room on that axis, so dual-axis charts label both series. Edits
   `plot.rs`. Deps: GUP-542 ✅, GUP-555 ✅.

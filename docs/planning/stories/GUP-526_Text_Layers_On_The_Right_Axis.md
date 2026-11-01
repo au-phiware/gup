@@ -60,49 +60,49 @@ on 2026-10-31: neither exists.
 
 ### AC1: The API
 
-- [ ] `TextLayer::y_right(f)` and `TextLayer::y_right_key(key)` place labels
+- [x] `TextLayer::y_right(f)` and `TextLayer::y_right_key(key)` place labels
       through the plot's right y scale, like `y` and `y_key` on the left. The
       later of `y`, `y_key`, `y_right` and `y_right_key` wins. `within_y` spans
       are read on whichever axis y is on. Each setter has rustdoc, and `y_right`
       has a doctest: a two-axis plot whose label sits at `right.eval(v)` (± 0.5
       px) after resolve.
-- [ ] A layer on the right axis of a plot without one fails at resolve with
+- [x] A layer on the right axis of a plot without one fails at resolve with
       `Error::config("text layer position", ..)`, whose message names
       `Plot::y_right`. Test in `tests/text_layer.rs`.
-- [ ] `y_right(..)` on a band or point right axis, and `y_right_key(..)` on a
+- [x] `y_right(..)` on a band or point right axis, and `y_right_key(..)` on a
       numeric one, give `check_axis`'s errors naming `y_right_key(..)` and
       `y_right(..)` respectively. Test in `tests/text_layer.rs`.
 
 ### AC2: Placement
 
-- [ ] Left `Linear` 0–10, right `Linear` 0–1000, a right-axis label at 500 with
+- [x] Left `Linear` 0–10, right `Linear` 0–1000, a right-axis label at 500 with
       `dy(-6.0)`: its `PlacedText::run.at.y` equals `right.eval(500) - 6` within
       0.5 px. It is at least 20 px from the left scale's `eval(500) - 6`.
-- [ ] Seeded failure, recorded in the retrospective: passing the left scale to
+- [x] Seeded failure, recorded in the retrospective: passing the left scale to
       `runs` for every layer makes this test fail.
 
 ### AC3: Room at the edge (GUP-555's rule on the right axis)
 
-- [ ] Explicit right domain 0–1000, a label at 1000 anchored `BOTTOM`: its
+- [x] Explicit right domain 0–1000, a label at 1000 anchored `BOTTOM`: its
       `PlacedText::bounds` lies inside `layout.plot`, so the label is drawn
       whole.
-- [ ] Automatic right domain, a label at the data maximum anchored `BOTTOM`:
+- [x] Automatic right domain, a label at the data maximum anchored `BOTTOM`:
       drawn whole, and the right axis widened (its top tick is at or above the
       data maximum).
-- [ ] With only left-axis labels, step 5 gives the same left and right insets as
+- [x] With only left-axis labels, step 5 gives the same left and right insets as
       before. All of GUP-555's tests in `tests/text_layer.rs` pass unchanged.
 
 ### AC4: Golden (user-visible)
 
-- [ ] The golden test in `secondary_y.rs`, and not `fixture()`, which other
+- [x] The golden test in `secondary_y.rs`, and not `fixture()`, which other
       tests share, adds
       `plot.text(months()).x(|m| m.n).y_right(|m| m.rain).text(|m| m.rain).anchor(Anchor::BOTTOM).dy(-4.0)`.
       The rainfall bars are the right-axis series. Re-bless only
       `secondary_y.png` and read it. Each value sits just above its bar's top,
       the 180 mm label is whole (the automatic right axis widened), and the
       temperature line still follows the left axis's ticks.
-- [ ] `git diff --stat tests/golden` lists only `secondary_y.png`.
-- [ ] `mask wasm-browser` passes (step 5 changed).
+- [x] `git diff --stat tests/golden` lists only `secondary_y.png`.
+- [x] `mask wasm-browser` passes (step 5 changed).
 
 ## Decisions
 
@@ -176,12 +176,12 @@ on 2026-10-31: neither exists.
 
 ## Technical Tasks
 
-- [ ] `YSide`, the setters and their docs and doctest;
+- [x] `YSide`, the setters and their docs and doctest;
       `AnnotationLayer::on_right_axis`.
-- [ ] `resolve_full`'s missing-axis error.
-- [ ] Step 5's three-axis arrays and step 7's scale choice.
-- [ ] Tests AC1–AC3 in `tests/text_layer.rs`; the seeded failure.
-- [ ] The `secondary_y` golden; `mask wasm-browser`.
+- [x] `resolve_full`'s missing-axis error.
+- [x] Step 5's three-axis arrays and step 7's scale choice.
+- [x] Tests AC1–AC3 in `tests/text_layer.rs`; the seeded failure.
+- [x] The `secondary_y` golden; `mask wasm-browser`.
 
 ## Dependencies
 
@@ -199,7 +199,7 @@ on 2026-10-31: neither exists.
 
 ## Success Metrics
 
-- [ ] A dual-axis chart labels both of its series with two `plot.text(..)`
+- [x] A dual-axis chart labels both of its series with two `plot.text(..)`
       calls.
 
 ## Risk Assessment
@@ -212,18 +212,18 @@ on 2026-10-31: neither exists.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -p gup-core -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (`secondary_y.png`)
-- [ ] `mask wasm-browser` (step 5 changed)
-- [ ] WASM size: `mask wasm-size` scatter gz bytes (text layers are generic;
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -p gup-core -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye (`secondary_y.png`)
+- [x] `mask wasm-browser` (step 5 changed)
+- [x] WASM size: `mask wasm-size` scatter gz bytes (text layers are generic;
       expect at most 1,000 B gz)
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
 
 ## Blocked (2026-11-01)
 
@@ -256,3 +256,94 @@ whole, the right axis ends near 190).
 Everything else is done and green: tests in `tests/text_layer.rs` (24 pass),
 doctest, `mask all-fix`. Not yet run: `mask merge-check --dogfood`,
 `mask wasm-browser`, wasm size.
+
+**Resolved (2026-11-01)**: orchestrator recalibrated `MAX_BLOCK_DE` 5.0 -> 5.5
+and re-enabled the heatmap SVG check (`heatmap_png.rs`'s `golden` no longer
+takes an `svg` flag).
+
+## Implementation Summary
+
+- `TextLayer::y_right` / `y_right_key` (private `YSide`),
+  `AnnotationLayer::on_right_axis`; `resolve_full` fails a right-axis layer on a
+  plot without `Plot::y_right`; step 5 (`text_reach`, `text_over`, `label_room`,
+  the `labels` candidates, `widened[2]`) is three-axis; step 7 picks the scale
+  per layer. Files: `crates/gup-core/src/text_layer.rs`, `plot.rs`,
+  `tests/text_layer.rs` (+7 tests, 24 total), `tests/secondary_y.rs`,
+  `tests/golden/gup_core/secondary_y.png`.
+- Gate change (approved): `MAX_BLOCK_DE` 5.5 in `tests/common/svg_marks.rs`;
+  heatmap SVG check re-enabled.
+- Golden (read): each rainfall value sits above its bar's top, "180" is whole at
+  the plot edge, the right axis widens to about 190 with its top tick 180, the
+  left axis still runs 8..26 and the temperature line follows it. The x axis
+  gained a sub-pixel of room for the "180" label (GUP-555).
+- `mask merge-check --dogfood`: all six steps PASS. WASM scatter 358,629 B gz
+  (budget 354,964 +2%, pass). `cargo test --doc -p gup`: 56 pass. `wasm-browser`
+  PASS.
+
+## Retrospective
+
+**Completed**: 2026-11-02
+
+### Key Technical Learnings
+
+#### Seeded failure (AC2)
+
+- **Challenge**: prove the placement test bites.
+- **Solution**: passing the left scale to `runs` for every layer made
+  `a_right_axis_label_is_placed_through_the_right_scale`,
+  `the_later_y_setter_wins` and the two explicit/automatic edge tests fail.
+- **Pattern**: index a scale array by `on_right_axis()` in one place per step.
+
+#### SVG-vs-GPU block tolerance
+
+- **Challenge**: a label wider than a bar's overhang shifted the x range by a
+  sub-pixel, moving the line's resvg coverage to ΔE 5.4 (limit 5.0).
+- **Solution**: orchestrator recalibrated to 5.5. Max block ΔE of every case
+  that runs `assert_matches`, measured on this branch before the change
+  (heatmap's check re-enabled); the values do not change with the constant:
+
+| case                 | max ΔE | case                 | max ΔE |
+| -------------------- | ------ | -------------------- | ------ |
+| secondary_y          | 5.38   | fallback_title       | 2.95   |
+| segment_mark         | 4.64   | line_monotone        | 2.82   |
+| heatmap              | 4.15   | time_years           | 2.58   |
+| diverging_anomaly    | 3.67   | rect_bars            | 2.42   |
+| line_series          | 3.61   | grouped_bars         | 2.41   |
+| time_tick_hierarchy  | 2.95   | categorical_species  | 2.15   |
+| scatter, grid        | 2.95   | line_steps           | 2.05   |
+| heatmap_diverging    | 2.05   | theme_dark           | 2.01   |
+| histogram            | 1.98   | band_months          | 1.95   |
+| legend_two_layers    | 1.90   | categorical_nulls    | 1.84   |
+| tick_format_date     | 1.78   | boxplot              | 1.62   |
+| sqrt_radius          | 1.61   | theme_dark_brush     | 1.58   |
+| text_annotations     | 1.55   | axis_titles          | 1.52   |
+| tick_format_currency | 1.48   | tick_format_percent  | 1.48   |
+| legend_guides        | 1.45   | area_mark            | 1.39   |
+| symlog_signed        | 1.32   | composite_two_layers | 1.11   |
+| brush                | 1.08   | brush_grey           | 0.76   |
+
+Before (limit 5.0): only `secondary_y` failed. After (limit 5.5): all pass.
+Nothing else sits between 4.7 and 5.5. The heatmap, said to reach 5.4 on its own
+branch, measures 4.15 on current main.
+
+- **Pattern**: a golden's SVG check can fail from a sub-pixel layout shift
+  alone; measure every case before moving the limit.
+
+### Architectural Decisions
+
+#### Right-axis layers pass the right scale as `y`
+
+- **Decision**: as specified; `runs`/`reach`/`edges` keep their signatures.
+- **Trade-off**: `plot.rs` indexes `y_scales[side]`; `reach` is `[f32; 2]` and
+  step 5 remaps its y entry to slot 2.
+
+### Development Workflow Insights
+
+- Worktree sandbox refuses compound shell with `sed -i` on variable paths and
+  python heredocs mentioning paths; use Edit and plain commands.
+- `cargo test` stops at the first failing test binary; use `--no-fail-fast`.
+
+### Follow-up Stories
+
+None. (Overlap of labels with lines in the golden, e.g. "48" and "90", is
+GUP-527's halos.)
