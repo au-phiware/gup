@@ -91,7 +91,7 @@ fn render_golden(name: &str, chart: &mut Chart, cx: &Context, svg: bool) {
     harness()
         .run(name, Ok((vr.clone(), meta.clone())))
         .assert_ok();
-    // The SVG target does not dim unbrushed rows (a GPU-side effect).
+    // The SVG matches the image, unbrushed rows dimmed as the GPU does.
     if svg {
         svg_marks::assert_matches(name, &resolved.scene, &vr, &meta);
     }
@@ -137,7 +137,7 @@ fn dark_theme_brush_golden() {
     let _ = chart.handle(Input::PointerMoved { at: b });
     let _ = chart.handle(Input::PointerUp { at: b, button });
     assert!(chart.plot_mut().brush().is_some_and(|b| !b.rows.is_empty()));
-    render_golden("gup_core/theme_dark_brush", &mut chart, &cx, false);
+    render_golden("gup_core/theme_dark_brush", &mut chart, &cx, true);
 }
 
 /// AC2: applying the same theme again rebuilds nothing and writes no

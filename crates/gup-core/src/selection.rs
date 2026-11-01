@@ -27,7 +27,7 @@ use crate::scene::MarkBatch;
 use crate::shader::glue::{self, ChannelSource, ChunkBase, Glue, GlueChannel, GlueSpec};
 use crate::theme::{Theme, Unbrushed};
 #[cfg(feature = "svg")]
-use crate::vector::{CpuLayer, LayerVector, MarkKind, VChan};
+use crate::vector::{BrushMirror, CpuLayer, LayerVector, MarkKind, VChan};
 use std::any::Any;
 use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
@@ -218,6 +218,11 @@ pub struct Selection<T, M: Mark> {
     brushable: bool,
     /// The theme's opacity for unbrushed rows at the last `prepare`.
     unbrushed: Unbrushed,
+    /// The brush state as vector targets see it, shared with the layer's
+    /// vector snapshots so a cached scene follows later brush writes
+    /// (GUP-524).
+    #[cfg(feature = "svg")]
+    brush_mirror: Arc<Mutex<BrushMirror>>,
     /// The brushed data rows, sorted, while the plot has a brush.
     brush: Option<Vec<usize>>,
     /// Rows other threads pushed through [`appender`](Self::appender), and
@@ -348,6 +353,8 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             gpu: None,
             brushable: false,
             unbrushed: Unbrushed::Fade(1.0),
+            #[cfg(feature = "svg")]
+            brush_mirror: Arc::default(),
             brush: None,
             feed: None,
             waker: None,
@@ -864,6 +871,15 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         }
     }
 
+    /// `Unbrushed::Grey`'s colour, for the vector mirror.
+    #[cfg(feature = "svg")]
+    fn grey(&self) -> Option<crate::Color> {
+        match self.unbrushed {
+            Unbrushed::Grey(c) => Some(c),
+            Unbrushed::Fade(_) => None,
+        }
+    }
+
     /// Write the brushed-row bits of `gpu` from the layer's brush (nothing
     /// without a brush or bits; an unbrushed layer needs none, its factor
     /// is 1.0).
@@ -871,6 +887,8 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         let (Some(brushed), Some(words), Some(store)) =
             (&self.brush, gpu.brush_words(), &self.columns)
         else {
+            #[cfg(feature = "svg")]
+            self.mirror().bits.clear();
             return;
         };
         let mut bits = vec![0u32; words];
@@ -899,7 +917,19 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
                 }
             }
         }
+        #[cfg(feature = "svg")]
+        {
+            self.mirror().bits.clone_from(&bits);
+        }
         gpu.write_brush_bits(cx, &bits);
+    }
+
+    /// The vector targets' copy of the brush state (GUP-524).
+    #[cfg(feature = "svg")]
+    fn mirror(&self) -> std::sync::MutexGuard<'_, BrushMirror> {
+        self.brush_mirror
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     /// The widest `width` (logical pixels) the layer draws: a constant's,
@@ -1325,6 +1355,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             entries: entries.to_vec(),
             chans,
             null_color: theme.null_color,
+            brush: Arc::clone(&self.brush_mirror),
         }))
     }
 }
@@ -1785,6 +1816,14 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         self.check_module_paths()?;
         self.brushable = brushable;
         self.unbrushed = theme.unbrushed;
+        #[cfg(feature = "svg")]
+        {
+            let (on, dim, grey) = (self.brushable, self.brush_dim(), self.grey());
+            let mut m = self.mirror();
+            m.on = on;
+            m.dim = dim;
+            m.grey = grey;
+        }
         let glue = self.glue();
         let program = cx.program(&glue)?;
 
@@ -2018,6 +2057,15 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             r.dedup();
             r
         });
+        #[cfg(feature = "svg")]
+        {
+            let dim = self.brush_dim();
+            let mut m = self.mirror();
+            m.dim = dim;
+            if self.brush.is_none() {
+                m.bits.clear();
+            }
+        }
         if !self.brushable {
             return Ok(());
         }

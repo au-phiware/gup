@@ -30,7 +30,7 @@ use crate::geom::Point;
 use crate::marks::Curve;
 use crate::order::DrawEntry;
 use crate::render::Span;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 /// The library mark a layer draws, with the geometry a vector target
 /// writes for it.
@@ -79,6 +79,52 @@ pub(crate) enum VChan {
     },
 }
 
+/// What the GPU's brush state says, for vector targets (GUP-524).
+#[derive(Clone, Debug, Default)]
+pub(crate) struct BrushMirror {
+    /// The glue dims at all (`Selection::brushable` at the last prepare).
+    pub on: bool,
+    /// Rows inside the brush, one bit per stored row, exactly as
+    /// `write_bits` wrote them.
+    pub bits: Vec<u32>,
+    /// The `brush_dim` uniform: 1.0 without a brush, else `Fade`'s opacity
+    /// or 0.0 for `Grey`.
+    pub dim: f32,
+    /// `Unbrushed::Grey`'s colour, else `None` (Fade).
+    pub grey: Option<Color>,
+}
+
+impl BrushMirror {
+    /// Whether the glue leaves every colour as it is.
+    fn is_identity(&self) -> bool {
+        !self.on || self.dim == 1.0
+    }
+
+    /// Whether stored row `row` is inside the brush.
+    fn inside(&self, row: usize) -> bool {
+        self.bits
+            .get(row / 32)
+            .is_some_and(|w| (w >> (row % 32)) & 1 == 1)
+    }
+
+    /// `c` as the glue colours stored row `row`.
+    fn apply(&self, c: Color, row: usize) -> Color {
+        let k = if self.inside(row) { 1.0 } else { self.dim };
+        match self.grey {
+            None => Color { a: c.a * k, ..c },
+            Some(g) => {
+                let mix = |a: f32, b: f32| a + (b - a) * k;
+                Color {
+                    r: mix(g.r, c.r),
+                    g: mix(g.g, c.g),
+                    b: mix(g.b, c.b),
+                    a: c.a * mix(g.a, 1.0),
+                }
+            }
+        }
+    }
+}
+
 /// A frozen, CPU-evaluable layer.
 pub(crate) struct CpuLayer {
     pub kind: MarkKind,
@@ -88,6 +134,9 @@ pub(crate) struct CpuLayer {
     pub chans: Vec<(&'static str, Option<Role>, VChan)>,
     /// The theme's colour for a null in a numeric colour column.
     pub null_color: Color,
+    /// The layer's brush state, shared with the `Selection` so a cached
+    /// scene sees later brush writes (GUP-524).
+    pub brush: Arc<Mutex<BrushMirror>>,
 }
 
 /// One mark, in pixels, as a vector target draws it.
@@ -204,7 +253,22 @@ impl CpuLayer {
         }
     }
 
-    fn colors(&self, name: &str, needed: &[bool]) -> Result<Colors, String> {
+    /// Channel `name`'s colours by stored row, dimmed for rows outside the
+    /// brush as the GPU does.
+    fn colors(&self, name: &str, needed: &[bool], brush: &BrushMirror) -> Result<Colors, String> {
+        let plain = self.plain_colors(name, needed)?;
+        if brush.is_identity() || self.chan(name).1 != Some(Role::Color) {
+            return Ok(plain);
+        }
+        let total = (0..self.cols.chunks())
+            .map(|k| self.cols.rows_of(k))
+            .sum::<usize>();
+        Ok(Colors::Col(
+            (0..total).map(|d| brush.apply(plain.at(d), d)).collect(),
+        ))
+    }
+
+    fn plain_colors(&self, name: &str, needed: &[bool]) -> Result<Colors, String> {
         match &self.chan(name).2 {
             VChan::Const(ConstValue::Vec4(c)) => Ok(Colors::Const(Color::from(*c))),
             VChan::Const(ConstValue::F32(_)) => Ok(Colors::Const(Color::TRANSPARENT)),
@@ -259,6 +323,11 @@ impl CpuLayer {
             needed[e.this] = true;
             needed[e.next] = true;
         }
+        let brush = self
+            .brush
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
         let valid = self.valid_rows(&needed, &[])?;
         let n = valid.len();
         let row = |chunk: usize, local: u32| self.cols.row_base(chunk) as usize + local as usize;
@@ -272,11 +341,11 @@ impl CpuLayer {
                     self.numbers("radius", &needed)?,
                 );
                 let (fill, opacity) = (
-                    self.colors("fill", &needed)?,
+                    self.colors("fill", &needed, &brush)?,
                     self.numbers("fill_opacity", &needed)?,
                 );
                 let (stroke, sw) = (
-                    self.colors("stroke", &needed)?,
+                    self.colors("stroke", &needed, &brush)?,
                     self.numbers("stroke_width", &needed)?,
                 );
                 for s in spans {
@@ -311,11 +380,11 @@ impl CpuLayer {
                     c("y_end")?,
                 );
                 let (fill, opacity) = (
-                    self.colors("fill", &needed)?,
+                    self.colors("fill", &needed, &brush)?,
                     self.numbers("fill_opacity", &needed)?,
                 );
                 let (stroke, sw) = (
-                    self.colors("stroke", &needed)?,
+                    self.colors("stroke", &needed, &brush)?,
                     self.numbers("stroke_width", &needed)?,
                 );
                 // A non-zero extent centres the box; zero spans to the far
@@ -354,7 +423,7 @@ impl CpuLayer {
             MarkKind::Segment => {
                 let c = |name| self.numbers(name, &needed);
                 let (x, y, xe, ye, w) = (c("x")?, c("y")?, c("x_end")?, c("y_end")?, c("width")?);
-                let color = self.colors("color", &needed)?;
+                let color = self.colors("color", &needed, &brush)?;
                 for s in spans {
                     let e = &self.entries[s.chunk as usize];
                     for i in s.rows.clone() {
@@ -384,7 +453,7 @@ impl CpuLayer {
                     self.numbers(CONTROLS[0], &needed)?,
                     self.numbers(CONTROLS[1], &needed)?,
                 );
-                let color = self.colors("color", &needed)?;
+                let color = self.colors("color", &needed, &brush)?;
                 // The open run: its start, its segments, and their width
                 // and colour (taken from each segment's first row).
                 type Run = (Point, Vec<[Point; 3]>, f32, Color);
@@ -447,7 +516,7 @@ impl CpuLayer {
                     self.numbers("y", &needed)?,
                     self.numbers("width", &needed)?,
                 );
-                let color = self.colors("color", &needed)?;
+                let color = self.colors("color", &needed, &brush)?;
                 // The open run: its points, and the width and colour of its
                 // segments (taken from each segment's first row).
                 let mut run: Option<(Vec<Point>, f32, Color)> = None;
@@ -496,7 +565,7 @@ impl CpuLayer {
                 let c = |name| self.numbers(name, &needed);
                 let (x, y, ye) = (c("x")?, c("y")?, c("y_end")?);
                 let (fill, opacity) = (
-                    self.colors("fill", &needed)?,
+                    self.colors("fill", &needed, &brush)?,
                     self.numbers("fill_opacity", &needed)?,
                 );
                 // The open run: its top edge and baseline, and its fill
