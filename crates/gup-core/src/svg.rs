@@ -125,7 +125,10 @@ pub struct SvgOptions {
     /// then names the font and relies on the viewer having it. The
     /// embedded file is the font's [`data`](gup_text::Font::data) as
     /// loaded, so a large face makes a large SVG; the bundled subset adds
-    /// about 82 KB. The bundled Inter is under the SIL Open Font License,
+    /// about 82 KB. Fallback fonts ([`Scene::fallback_fonts`]) that some
+    /// text needs are embedded too, whole and unsubsetted: a CJK face of
+    /// several MB makes an SVG that large (with the `svg` feature; without
+    /// it the document names the primary family only). The bundled Inter is under the SIL Open Font License,
     /// which allows embedding it in documents. `semibold_font` follows as
     /// a second `@font-face` with `font-weight:600`, when the scene has a
     /// semibold run.
@@ -194,9 +197,58 @@ impl SvgTarget {
         })
     }
 
+    /// Which of `scene.fallback_fonts` some text run needs: it has a
+    /// character the run's primary lacks, and the font is the first
+    /// fallback with a glyph for it.
+    #[cfg(feature = "svg")]
+    fn used_fallbacks(&self, scene: &Scene) -> Vec<bool> {
+        let mut used = vec![false; scene.fallback_fonts.len()];
+        if scene.fallback_fonts.is_empty() {
+            return used;
+        }
+        for run in scene.text_runs() {
+            let primary = match run.style.weight {
+                Weight::Regular => &self.options.font,
+                Weight::SemiBold => &self.options.semibold_font,
+            };
+            for c in run.text.chars() {
+                if !primary.has_glyph(c)
+                    && let Some(i) = scene.fallback_fonts.iter().position(|f| f.has_own_glyph(c))
+                {
+                    used[i] = true;
+                }
+            }
+        }
+        used
+    }
+
+    /// Guides-only builds (no `svg` feature) name the primary family only:
+    /// the fallback bookkeeping stays out of the WASM build.
+    #[cfg(not(feature = "svg"))]
+    fn used_fallbacks(&self, _: &Scene) -> Vec<bool> {
+        Vec::new()
+    }
+
     fn write(&self, scene: &Scene) -> std::result::Result<String, std::fmt::Error> {
         let (w, h) = (num(scene.width), num(scene.height));
         let mut s = String::new();
+        #[cfg(feature = "svg")]
+        let fallbacks: &[gup_text::Font] = &scene.fallback_fonts;
+        #[cfg(not(feature = "svg"))]
+        let fallbacks: &[gup_text::Font] = &[];
+        let names = fallback_families(&self.options.font, fallbacks);
+        let used = self.used_fallbacks(scene);
+        // The font-family list: the primary, then every fallback.
+        let family = {
+            let mut f = escape(self.options.font.name());
+            for name in &names {
+                write!(f, ", &quot;{name}&quot;")?;
+            }
+            f.push_str(", sans-serif");
+            f
+        };
+        let regular = chain(&self.options.font, fallbacks);
+        let semibold = chain(&self.options.semibold_font, fallbacks);
         writeln!(
             s,
             r#"<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}">"#
@@ -222,6 +274,18 @@ impl SvgTarget {
                     escape(&css_string(self.options.semibold_font.name())),
                     base64(self.options.semibold_font.data())
                 )?;
+            }
+        }
+        if self.options.embed_font {
+            for (i, font) in fallbacks.iter().enumerate() {
+                if used[i] {
+                    writeln!(
+                        s,
+                        r#"<style>@font-face{{font-family:"{}";font-weight:400;src:url(data:font/ttf;base64,{}) format("truetype")}}</style>"#,
+                        names[i],
+                        base64(font.data())
+                    )?;
+                }
             }
         }
         for (i, c) in scene.clips.iter().enumerate() {
@@ -354,8 +418,8 @@ impl SvgTarget {
                         // path, the pen start and baseline snap to whole
                         // pixels, so glyphs land on the same pixels.
                         let font = match run.style.weight {
-                            Weight::Regular => &self.options.font,
-                            Weight::SemiBold => &self.options.semibold_font,
+                            Weight::Regular => &regular,
+                            Weight::SemiBold => &semibold,
                         };
                         let [x, y] = font.baseline_origin(&run.layout_run());
                         let anchor_x = run.at.x + (x.round() - x);
@@ -367,10 +431,9 @@ impl SvgTarget {
                         };
                         writeln!(
                             s,
-                            r#"<text x="{}" y="{}" font-family="{}, sans-serif" font-size="{}"{} text-anchor="{anchor}" fill="{}"{}{}>{}</text>"#,
+                            r#"<text x="{}" y="{}" font-family="{family}" font-size="{}"{} text-anchor="{anchor}" fill="{}"{}{}>{}</text>"#,
                             num(anchor_x),
                             num(baseline),
-                            escape(self.options.font.name()),
                             num(run.style.size.0),
                             match run.style.weight {
                                 Weight::Regular => String::new(),
@@ -396,6 +459,40 @@ impl SvgTarget {
         s.push_str("</svg>\n");
         Ok(s)
     }
+}
+
+/// `font` with `fallbacks` after it (just `font` without the `svg` feature).
+#[cfg(feature = "svg")]
+fn chain(font: &gup_text::Font, fallbacks: &[gup_text::Font]) -> gup_text::Font {
+    font.with_fallbacks(fallbacks)
+}
+
+#[cfg(not(feature = "svg"))]
+fn chain(font: &gup_text::Font, _: &[gup_text::Font]) -> gup_text::Font {
+    font.clone()
+}
+
+#[cfg(not(feature = "svg"))]
+fn fallback_families(_: &gup_text::Font, _: &[gup_text::Font]) -> Vec<String> {
+    Vec::new()
+}
+
+/// The family each fallback is written under, ready to sit inside a CSS
+/// string in XML text: its name, with its 1-based chain index appended when
+/// that would repeat the primary's or an earlier fallback's
+/// (`Font::inter_full()` is named "Inter" like the subset, and two
+/// `@font-face` rules for one family would hide one).
+#[cfg(feature = "svg")]
+fn fallback_families(primary: &gup_text::Font, fallbacks: &[gup_text::Font]) -> Vec<String> {
+    let mut names: Vec<String> = Vec::with_capacity(fallbacks.len());
+    for (i, f) in fallbacks.iter().enumerate() {
+        let mut name = f.name().to_string();
+        if name == primary.name() || names.contains(&name) {
+            name.push_str(&format!(" {}", i + 1));
+        }
+        names.push(name);
+    }
+    names.iter().map(|n| escape(&css_string(n))).collect()
 }
 
 impl VectorTarget for SvgTarget {
@@ -697,6 +794,18 @@ fn escape(text: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(feature = "svg")]
+    #[test]
+    fn a_repeated_fallback_name_gets_its_chain_index() {
+        use gup_text::Font;
+        let other = Font::from_bytes("Other", gup_text::INTER_REGULAR).unwrap();
+        let names = fallback_families(
+            &Font::inter(),
+            &[Font::inter_full(), other.clone(), other, Font::inter_full()],
+        );
+        assert_eq!(names, ["Inter 1", "Other", "Other 3", "Inter 4"]);
+    }
 
     #[test]
     fn numbers_are_short() {

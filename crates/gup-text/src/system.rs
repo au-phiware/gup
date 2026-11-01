@@ -191,6 +191,8 @@ pub struct TextSystem {
     /// Fonts tried, in order, for characters the face of a weight lacks
     /// ([`add_fallback`](Self::add_fallback)).
     fallbacks: Vec<Font>,
+    /// Number of [`add_fallback`](Self::add_fallback) calls so far.
+    generation: u64,
     /// `fonts` with `fallbacks` appended: what measures and draws.
     chained: [OnceLock<Font>; Weight::COUNT],
     atlas: GlyphAtlas,
@@ -267,6 +269,7 @@ impl TextSystem {
             device: device.clone(),
             fonts,
             fallbacks: Vec::new(),
+            generation: 0,
             chained: [OnceLock::new(), OnceLock::new()],
             atlas: GlyphAtlas::new(device.limits().max_texture_dimension_2d),
             texture: None,
@@ -306,9 +309,17 @@ impl TextSystem {
     /// character needs it.
     pub fn add_fallback(&mut self, font: Font) {
         self.fallbacks.push(font);
+        self.generation += 1;
         for cell in &mut self.chained {
             cell.take();
         }
+    }
+
+    /// A counter that starts at 0 and grows by one with every
+    /// [`add_fallback`](Self::add_fallback): measurements cached under an
+    /// older value are stale.
+    pub fn generation(&self) -> u64 {
+        self.generation
     }
 
     /// The fonts added with [`add_fallback`](Self::add_fallback), in order.

@@ -520,6 +520,31 @@ impl Context {
             .map_err(|e| crate::error::Error::Readback(e.to_string()))
     }
 
+    /// Add `font` to the end of this context's fallback chain: characters the
+    /// bundled Inter lacks draw from the first fallback that has them. Parsed
+    /// on first use. Affects every plot drawn with this context (all users of
+    /// [`Context::shared`]), from its next full resolve.
+    ///
+    /// ```
+    /// # use gup_core::{Context, Font};
+    /// # fn main() -> Result<(), Box<dyn std::error::Error>> {
+    /// let cx = Context::new_blocking()?;
+    /// cx.add_fallback_font(Font::inter_full());
+    /// let chain = Font::inter().with_fallbacks(&cx.fallback_fonts());
+    /// assert!(chain.missing_glyphs("Київ").is_empty());
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn add_fallback_font(&self, font: crate::Font) {
+        self.text().add_fallback(font);
+    }
+
+    /// The fallback chain ([`add_fallback_font`](Self::add_fallback_font)),
+    /// in order.
+    pub fn fallback_fonts(&self) -> Vec<crate::Font> {
+        self.text().fallbacks().to_vec()
+    }
+
     /// The pipeline cache: never together with the text system.
     pub(crate) fn pipelines(&self) -> Ordered<'_, PipelineCache> {
         Ordered::new(LockRank::Pipelines, &self.inner.pipelines)

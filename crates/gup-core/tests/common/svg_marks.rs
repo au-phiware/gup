@@ -16,10 +16,19 @@ use std::path::Path;
 
 /// Rasterise `svg` at its own size, with only the bundled Inter loaded.
 pub fn rasterise(svg: &str) -> RgbaImage {
+    rasterise_with(svg, &[])
+}
+
+/// [`rasterise`] with `fonts` (font files, e.g. a scene's fallbacks) loaded
+/// as well.
+pub fn rasterise_with(svg: &str, fonts: &[&[u8]]) -> RgbaImage {
     use resvg::{tiny_skia, usvg};
     let mut opt = usvg::Options::default();
     opt.fontdb_mut()
         .load_font_data(gup_text::INTER_REGULAR.to_vec());
+    for font in fonts {
+        opt.fontdb_mut().load_font_data(font.to_vec());
+    }
     let tree = usvg::Tree::from_str(svg, &opt).expect("SvgTarget output parses");
     let size = tree.size().to_int_size();
     let mut pixmap = tiny_skia::Pixmap::new(size.width(), size.height()).unwrap();
@@ -43,7 +52,17 @@ pub fn compare(
     gpu: &RgbaImage,
     meta: &LayoutMetadata,
 ) -> (DiffStats, DiffStats, RgbaImage) {
-    let raster = rasterise(svg);
+    compare_with(svg, gpu, meta, &[])
+}
+
+/// [`compare`] with `fonts` loaded into the rasteriser as well.
+pub fn compare_with(
+    svg: &str,
+    gpu: &RgbaImage,
+    meta: &LayoutMetadata,
+    fonts: &[&[u8]],
+) -> (DiffStats, DiffStats, RgbaImage) {
+    let raster = rasterise_with(svg, fonts);
     assert_eq!(
         (raster.width(), raster.height()),
         (gpu.width(), gpu.height()),
@@ -98,7 +117,10 @@ pub fn assert_matches(case: &str, scene: &Scene, gpu: &RgbaImage, meta: &LayoutM
     let artifacts =
         default_artifact_dir(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")).join(case);
     target.save(artifacts.with_extension("svg")).unwrap();
-    let (whole, stats, masked) = compare(&svg, gpu, meta);
+    // The scene's fallback fonts are loaded too, as a viewer with them
+    // installed (or the embedded copies) would draw.
+    let fonts: Vec<&[u8]> = scene.fallback_fonts.iter().map(|f| f.data()).collect();
+    let (whole, stats, masked) = compare_with(&svg, gpu, meta, &fonts);
     masked
         .save_png(artifacts.with_file_name(format!(
             "{}_svg.png",
