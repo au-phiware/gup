@@ -1,0 +1,5 @@
+error: `role` is one of `X`, `Y`, `Size`, `Width`, `Height` or `Color`
+  --> tests/derive_mark_fail/unknown_role.rs:12:22
+   |
+12 |     #[channel(role = Depth)]
+   |                      ^^^^^
