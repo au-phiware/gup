@@ -188,6 +188,11 @@ pub struct TextSystem {
     /// parsing Inter takes about 18 ms (release), which a device that never
     /// draws text (or never draws semibold text) should not pay.
     fonts: [OnceLock<Font>; Weight::COUNT],
+    /// Fonts tried, in order, for characters the face of a weight lacks
+    /// ([`add_fallback`](Self::add_fallback)).
+    fallbacks: Vec<Font>,
+    /// `fonts` with `fallbacks` appended: what measures and draws.
+    chained: [OnceLock<Font>; Weight::COUNT],
     atlas: GlyphAtlas,
     texture: Option<AtlasTexture>,
     bind_group_layout: wgpu::BindGroupLayout,
@@ -261,6 +266,8 @@ impl TextSystem {
         Self {
             device: device.clone(),
             fonts,
+            fallbacks: Vec::new(),
+            chained: [OnceLock::new(), OnceLock::new()],
             atlas: GlyphAtlas::new(device.limits().max_texture_dimension_2d),
             texture: None,
             bind_group_layout,
@@ -277,12 +284,36 @@ impl TextSystem {
         self.font_weight(Weight::Regular)
     }
 
-    /// The font that draws `weight`.
+    /// The font that draws `weight`: its face, then its own fallbacks (the
+    /// bundled SemiBold falls back to Regular), then the fonts added with
+    /// [`add_fallback`](Self::add_fallback).
     pub fn font_weight(&self, weight: Weight) -> &Font {
-        self.fonts[weight.index()].get_or_init(match weight {
-            Weight::Regular => Font::inter,
-            Weight::SemiBold => Font::inter_semibold,
+        self.chained[weight.index()].get_or_init(|| {
+            self.fonts[weight.index()]
+                .get_or_init(match weight {
+                    Weight::Regular => Font::inter,
+                    Weight::SemiBold => Font::inter_semibold,
+                })
+                .with_fallbacks(&self.fallbacks)
         })
+    }
+
+    /// Append `font` to the fallback chain. A character the weight's face
+    /// lacks (and its own fallback, for SemiBold) draws from the first added
+    /// font that has a glyph for it, in the order they were added; baseline
+    /// and line metrics stay the primary's. A character no font has draws as
+    /// the primary's missing-glyph box. The font is parsed only when a
+    /// character needs it.
+    pub fn add_fallback(&mut self, font: Font) {
+        self.fallbacks.push(font);
+        for cell in &mut self.chained {
+            cell.take();
+        }
+    }
+
+    /// The fonts added with [`add_fallback`](Self::add_fallback), in order.
+    pub fn fallbacks(&self) -> &[Font] {
+        &self.fallbacks
     }
 
     /// Measure `text` at `size` logical pixels in the regular weight.

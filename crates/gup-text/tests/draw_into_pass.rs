@@ -6,8 +6,8 @@
 //! into a render pass the test opened itself, and read the pixels back.
 
 use gup_text::{
-    Anchor, DrawTarget, Features, GlyphBuffer, Glyphs, HAlign, Run, TextSystem, Uploader, VAlign,
-    Weight,
+    Anchor, DrawTarget, Features, Font, GlyphBuffer, Glyphs, HAlign, Run, TextSystem, Uploader,
+    VAlign, Weight,
 };
 use std::cell::Cell;
 
@@ -369,5 +369,122 @@ fn the_atlas_keys_glyphs_by_index_not_character() {
         run.features = features;
         text.layout(&run, [0.0; 4], &mut glyphs).unwrap();
     }
+    assert_eq!(text.atlas_glyphs(), 2);
+}
+
+fn jp() -> Font {
+    Font::from_bytes("Noto Sans JP", include_bytes!("fonts/NotoSansJP-Test.ttf")).unwrap()
+}
+
+fn mixed_run(text: &str) -> Run<'_> {
+    Run {
+        text,
+        size: 16.0,
+        at: [8.0, 16.0],
+        anchor: Anchor::new(HAlign::Start, VAlign::Top),
+        weight: Weight::Regular,
+        features: Features::KERN,
+    }
+}
+
+/// Dark pixels of `text` drawn by `text_system`, and how many lie outside
+/// its ink bounds.
+fn draw_dark(
+    device: &wgpu::Device,
+    queue: &wgpu::Queue,
+    text_system: &mut TextSystem,
+    text: &str,
+) -> (Vec<(u32, u32)>, usize) {
+    let run = mixed_run(text);
+    let ink = text_system.ink_bounds(&run);
+    let mut glyphs = Glyphs::new(1.0);
+    text_system
+        .layout(&run, [0.0, 0.0, 0.0, 1.0], &mut glyphs)
+        .expect("layout");
+    let target = DrawTarget {
+        format: FORMAT,
+        samples: 1,
+        width: WIDTH,
+        height: HEIGHT,
+    };
+    let batch = text_system
+        .prepare(queue, &mut GlyphBuffer::new(), &glyphs, &target)
+        .expect("a batch");
+    let pixels = render(device, queue, |pass| batch.draw(pass));
+    let (mut dark, mut outside) = (Vec::new(), 0);
+    for y in 0..HEIGHT {
+        for x in 0..WIDTH {
+            if pixels[((y * WIDTH + x) * 4) as usize] < 128 {
+                dark.push((x, y));
+                let (fx, fy) = (x as f32 + 0.5, y as f32 + 0.5);
+                if !(fx >= ink.x
+                    && fx <= ink.x + ink.width
+                    && fy >= ink.y
+                    && fy <= ink.y + ink.height)
+                {
+                    outside += 1;
+                }
+            }
+        }
+    }
+    (dark, outside)
+}
+
+#[test]
+fn mixed_script_text_draws_inside_its_ink_bounds() {
+    let (device, queue) = device();
+    let mut text = TextSystem::new(&device);
+    text.add_fallback(Font::inter_full());
+    let jp = jp();
+    text.add_fallback(jp.clone());
+    assert_eq!(text.fallbacks().len(), 2);
+    let all = "Київ — 東京 — Zürich";
+    assert!(text.font().missing_glyphs(all).is_empty());
+    let (dark, outside) = draw_dark(&device, &queue, &mut text, all);
+    assert!(dark.len() > 200, "{} dark pixels", dark.len());
+    assert_eq!(outside, 0, "dark pixels outside the ink bounds");
+    assert!(jp.is_parsed());
+
+    // 東 and 京 draw real glyphs, not the missing-glyph box a system
+    // without the fallback draws.
+    let mut bare = TextSystem::new(&device);
+    let (notdef, _) = draw_dark(&device, &queue, &mut bare, "東");
+    let (east, _) = draw_dark(&device, &queue, &mut text, "東");
+    let (capital, _) = draw_dark(&device, &queue, &mut text, "京");
+    assert!(east.len() > 20 && capital.len() > 20 && notdef.len() > 20);
+    assert_ne!(east, notdef);
+    assert_ne!(capital, notdef);
+    assert_ne!(east, capital);
+}
+
+#[test]
+fn uncovered_text_never_parses_a_fallback() {
+    let (device, _queue) = device();
+    let jp = jp();
+    let mut text = TextSystem::new(&device);
+    text.add_fallback(jp.clone());
+    let run = mixed_run("Zürich 1.5k −3 °C");
+    text.measure(run.text, 16.0);
+    text.ink_bounds(&run);
+    text.layout(&run, [0.0; 4], &mut Glyphs::new(1.0)).unwrap();
+    assert!(!jp.is_parsed());
+    let run = mixed_run("東京");
+    text.layout(&run, [0.0; 4], &mut Glyphs::new(1.0)).unwrap();
+    assert!(jp.is_parsed());
+}
+
+#[test]
+fn the_atlas_keys_fallback_glyphs_by_face() {
+    let (device, _queue) = device();
+    let mut text = TextSystem::new(&device);
+    text.add_fallback(jp());
+    let run = mixed_run("東Z");
+    let mut glyphs = Glyphs::new(1.0);
+    text.layout(&run, [0.0; 4], &mut glyphs).unwrap();
+    assert_eq!(text.atlas_glyphs(), 2);
+    // The same font again is the same face: no new entries.
+    let again = text.fallbacks()[0].clone();
+    text.add_fallback(again);
+    text.layout(&run, [0.0; 4], &mut glyphs).unwrap();
     assert_eq!(text.atlas_glyphs(), 2);
 }

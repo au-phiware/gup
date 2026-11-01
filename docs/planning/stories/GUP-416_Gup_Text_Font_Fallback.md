@@ -10,8 +10,9 @@ touches: [crates/gup-text/]
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: 📋
-Planned **Created**: 2026-10-10 (decision-complete rewrite 2026-10-31)
+**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: ✅
+Complete 2026-11-01 **Created**: 2026-10-10 (decision-complete rewrite
+2026-10-31)
 
 ## Context
 
@@ -58,47 +59,47 @@ golden are [GUP-580](GUP-580_Fallback_Fonts_In_Gup_Core_And_Svg.md).
 
 ### AC1: The chain
 
-- [ ] `TextSystem::add_fallback(&mut self, font: Font)` appends to the chain.
+- [x] `TextSystem::add_fallback(&mut self, font: Font)` appends to the chain.
       Each character draws from the first of these that has its glyph: the
       weight's own face, that face's internal fallback (SemiBold to Regular),
       then the added fonts in the order they were added. A character none of
       them has draws as the primary's `.notdef` box, as now.
-- [ ] Unit test: with fallbacks `[Font::inter_full(), jp]` (jp being the test
+- [x] Unit test: with fallbacks `[Font::inter_full(), jp]` (jp being the test
       face below), "Київ — 東京 — Zürich" has no missing glyphs
       (`font_weight(Regular).missing_glyphs(..)` is empty). Its glyphs come from
       Inter subset, Inter full and jp, in order of the characters. With the
       chain `[jp, Font::inter_full()]`, "東" still comes from jp and "К" from
       Inter full, because the subset test face has no Cyrillic.
-- [ ] Kerning and `tnum` stop at a face change (no pair across faces), as they
+- [x] Kerning and `tnum` stop at a face change (no pair across faces), as they
       do today.
 
 ### AC2: Lazy
 
-- [ ] `Font::from_bytes` does not run fontdue. A
+- [x] `Font::from_bytes` does not run fontdue. A
       `#[doc(hidden)] pub fn     is_parsed(&self) -> bool` reports whether the
       glyphs were parsed. Test: a `TextSystem` with fallback jp lays out,
       measures and finds the ink bounds of "Zürich 1.5k −3 °C": `jp.is_parsed()`
       is `false`. It then lays out "東京": `true`.
-- [ ] `Font::from_bytes("Nope", b"not a font")` is still an `Error::Font` naming
+- [x] `Font::from_bytes("Nope", b"not a font")` is still an `Error::Font` naming
       "Nope" (the existing test passes). A font whose cmap maps a code point
       past its glyph count is an `Error::Font` at `from_bytes`: there is a unit
       test with a hand-patched copy of the test face.
 
 ### AC3: Measuring agrees with drawing across faces
 
-- [ ] `draw_into_pass` gains a case: "Київ — 東京 — Zürich" at 16 px with the
+- [x] `draw_into_pass` gains a case: "Київ — 東京 — Zürich" at 16 px with the
       chain above. All its ink lies inside `ink_bounds`. "東" and "京" each draw
       a bitmap different from `.notdef`'s at that size. Every glyph sits on the
       primary's baseline: for each `PlacedGlyph` of the run (from `walk`),
       `g.y + g.metrics.height as f32 + g.metrics.ymin as f32` is the same value
       for "Z", "К" and "東".
-- [ ] The atlas holds "東" from jp and "Z" from Inter under different `FaceId`s.
+- [x] The atlas holds "東" from jp and "Z" from Inter under different `FaceId`s.
       Adding the same fallback twice adds no atlas entries for glyphs already
       drawn.
 
 ### AC4: Size
 
-- [ ] `mask wasm-size`: a default `TextSystem` (no fallbacks) changes the
+- [x] `mask wasm-size`: a default `TextSystem` (no fallbacks) changes the
       scatter by at most 2,000 B gz. Report the figures.
 
 ## Decisions
@@ -198,12 +199,12 @@ golden are [GUP-580](GUP-580_Fallback_Fonts_In_Gup_Core_And_Svg.md).
 
 ## Technical Tasks
 
-- [ ] Make the test face and README; commit them with the licence.
-- [ ] `Font`: lazy `face`, `fallbacks`, validation, `has_own_glyph`,
+- [x] Make the test face and README; commit them with the licence.
+- [x] `Font`: lazy `face`, `fallbacks`, validation, `has_own_glyph`,
       `with_fallbacks`, `is_parsed`; update the font tests (`Arc::ptr_eq` on the
       `face` cell).
-- [ ] `TextSystem`: `fallbacks`, `chained`, `add_fallback`, `fallbacks()`.
-- [ ] Unit tests (AC1, AC2), the `draw_into_pass` case (AC3), `mask wasm-size`.
+- [x] `TextSystem`: `fallbacks`, `chained`, `add_fallback`, `fallbacks()`.
+- [x] Unit tests (AC1, AC2), the `draw_into_pass` case (AC3), `mask wasm-size`.
 
 ## Dependencies
 
@@ -228,8 +229,8 @@ golden are [GUP-580](GUP-580_Fallback_Fonts_In_Gup_Core_And_Svg.md).
 
 ## Success Metrics
 
-- [ ] Mixed-script labels draw without boxes when a fallback covers them.
-- [ ] A covered chart never parses its fallbacks.
+- [x] Mixed-script labels draw without boxes when a fallback covers them.
+- [x] A covered chart never parses its fallbacks.
 
 ## Risk Assessment
 
@@ -242,15 +243,64 @@ golden are [GUP-580](GUP-580_Fallback_Fonts_In_Gup_Core_And_Svg.md).
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -p gup-text -p gup-core -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output: AC3's pixel checks (no gup-core output changes)
-- [ ] `mask wasm-browser`: not needed (no layout, input or wasm code change);
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -p gup-text -p gup-core -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output: AC3's pixel checks (no gup-core output changes)
+- [x] `mask wasm-browser`: not needed (no layout, input or wasm code change);
       say so
-- [ ] WASM size: `mask wasm-size` scatter gz bytes
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] WASM size: `mask wasm-size` scatter gz bytes
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+`Font` now stores `data`, a lazy `Arc<OnceLock<Face>>` and `Arc<[Font]>`
+fallbacks. `Font::from_bytes` validates (table directory, every cmap mapping
+below the glyph count) and parses fontdue on first use. New public API:
+`Font::with_fallbacks`, `Font::is_parsed` (hidden), `TextSystem::add_fallback`
+and `TextSystem::fallbacks`. `TextSystem::font_weight` returns the chained font,
+so every caller sees the chain. Files:
+`crates/gup-text/src/{font,system,layout}.rs`, `tests/draw_into_pass.rs`,
+`tests/fonts/NotoSansJP-Test.ttf` (2,608 B) with `NotoSansJP-OFL.txt` and
+`README.md` beside it.
+
+Tests: `cargo test -p gup-text` 29 unit, 8 `draw_into_pass`, 2 oracle, 2 doc.
+Scatter WASM: 357,205 B gz before, 357,295 B after (+90 B; limit +2,000 B).
+`mask wasm-browser` not needed: no layout, input or wasm code change.
+
+## Retrospective
+
+**Completed**: 2026-11-01
+
+### Key Technical Learnings
+
+#### Validating so a deferred parse cannot fail
+
+- **Challenge**: lazy fontdue parsing must be infallible.
+- **Solution**: validate the cmap against `number_of_glyphs()` at `from_bytes`;
+  the test patches `maxp.numGlyphs` of the test face to prove the error.
+- **Pattern**: validate cheaply with ttf_parser, parse expensively on demand.
+
+### Architectural Decisions
+
+#### Bundled fonts skip validation
+
+- **Decision**: `Font::bundled` does not validate; `bundled_fonts_validate`
+  tests the three bundled files.
+- **Reasoning**: `Font::inter()` stays free of work.
+- **Trade-off**: a corrupt bundled file panics at first use, not at load.
+
+### Development Workflow Insights
+
+- A worktree-isolated shell refuses some heredocs; write scripts with the Write
+  tool instead.
+- The wasm baseline was measured by checking out the previous `src` over the
+  new.
+
+### Follow-up Stories
+
+None (GUP-581 and GUP-582 left unused).

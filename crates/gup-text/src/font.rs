@@ -43,22 +43,25 @@ pub const INTER_SEMIBOLD: &[u8] = include_bytes!("../fonts/Inter-SemiBold-Subset
 /// linked into a program that uses it.
 pub const INTER_REGULAR_FULL: &[u8] = include_bytes!("../fonts/Inter-Regular.ttf");
 
-/// A parsed font face. Cheap to clone.
+/// A font face with an optional chain of fallbacks. Cheap to clone. Loading
+/// validates it; its glyphs are parsed on first use.
 ///
-/// A character the face has no glyph for is measured and drawn as the
-/// face's missing-glyph box (`.notdef`, a visible box in both bundled
-/// faces): never as nothing. The one exception is the bundled SemiBold
-/// ([`Font::inter_semibold`]), which draws characters its small subset
-/// lacks from the Inter Regular subset. [`missing_glyphs`](Self::missing_glyphs)
-/// finds characters that draw as the box; load a face that covers them
-/// (such as [`Font::inter_full`]) to draw them.
+/// A character the face has no glyph for is drawn from its fallbacks in
+/// order (the bundled SemiBold falls back to Regular; see
+/// [`with_fallbacks`](Self::with_fallbacks) and
+/// [`TextSystem::add_fallback`](crate::TextSystem::add_fallback)). When none
+/// has it, it is measured and drawn as the face's missing-glyph box
+/// (`.notdef`, a visible box in both bundled faces): never as nothing.
+/// [`missing_glyphs`](Self::missing_glyphs) finds characters that draw as the
+/// box; add a font that covers them (such as [`Font::inter_full`]) to draw them.
 #[derive(Clone)]
 pub struct Font {
     name: Arc<str>,
-    face: Arc<Face>,
-    /// Draws the characters `face` lacks (the bundled SemiBold subset
-    /// falls back to Regular), so they are not missing-glyph boxes.
-    fallback: Option<Arc<Font>>,
+    data: Data,
+    /// The rasteriser and OpenType layout data, parsed on first use.
+    face: Arc<OnceLock<Face>>,
+    /// Tried in order for characters this face lacks.
+    fallbacks: Arc<[Font]>,
 }
 
 /// A face's identity: part of the glyph atlas key, so glyph indices of
@@ -152,7 +155,7 @@ impl Font {
         INTER
             .get_or_init(|| {
                 let mut font = Font::bundled(INTER_SEMIBOLD);
-                font.fallback = Some(Arc::new(Font::inter()));
+                font.fallbacks = Arc::new([Font::inter()]);
                 font
             })
             .clone()
@@ -160,38 +163,114 @@ impl Font {
 
     fn bundled(data: &'static [u8]) -> Self {
         // The bundled bytes are a compile-time constant covered by this
-        // crate's tests, so a failure is a bug in Gup.
-        Self::parse("Inter", Data::Static(data)).unwrap_or_else(|e| panic!("bundled font: {e}"))
+        // crate's tests (`bundled_fonts_validate`), so they are not validated
+        // here and a failure is a bug in Gup.
+        Self::new("Inter", Data::Static(data))
     }
 
-    /// Parse a TrueType or OpenType font. `name` labels it in errors and
+    fn new(name: &str, data: Data) -> Self {
+        Self {
+            name: name.into(),
+            data,
+            face: Arc::new(OnceLock::new()),
+            fallbacks: Arc::new([]),
+        }
+    }
+
+    /// Load a TrueType or OpenType font. `name` labels it in errors and
     /// `Debug` output, and is the family name vector targets write. The
     /// bytes are copied, so [`data`](Self::data) can return them.
+    ///
+    /// The font is validated here but its glyphs are parsed on first use (see
+    /// [`is_parsed`](Self::is_parsed)), so adding a large font "just in case"
+    /// costs microseconds until a character needs it.
     pub fn from_bytes(name: &str, data: &[u8]) -> Result<Self> {
-        Self::parse(name, Data::Owned(data.into()))
+        let font = Self::new(name, Data::Owned(data.into()));
+        font.validate()?;
+        Ok(font)
     }
 
-    fn parse(name: &str, data: Data) -> Result<Self> {
-        static NEXT_ID: AtomicU32 = AtomicU32::new(0);
+    /// Check what the deferred parse needs: a readable table directory and a
+    /// cmap that stays within the glyph count (fontdue panics on others).
+    fn validate(&self) -> Result<()> {
         let font_error = |reason: String| Error::Font {
-            name: name.to_owned(),
+            name: self.name.to_string(),
             reason,
         };
-        let glyphs = fontdue::Font::from_bytes(data.bytes(), fontdue::FontSettings::default())
-            .map_err(|reason| font_error(reason.to_owned()))?;
-        let layout = OtLayout::parse(
-            &ttf_parser::Face::parse(data.bytes(), 0).map_err(|e| font_error(e.to_string()))?,
-        );
-        Ok(Self {
-            name: name.into(),
-            face: Arc::new(Face {
+        let face =
+            ttf_parser::Face::parse(self.data.bytes(), 0).map_err(|e| font_error(e.to_string()))?;
+        let glyphs = face.number_of_glyphs();
+        let Some(cmap) = face.tables().cmap else {
+            return Ok(());
+        };
+        for subtable in cmap.subtables {
+            let mut bad = None;
+            subtable.codepoints(|cp| {
+                if bad.is_none()
+                    && let Some(g) = subtable.glyph_index(cp)
+                    && g.0 >= glyphs
+                {
+                    bad = Some((cp, g.0));
+                }
+            });
+            if let Some((cp, g)) = bad {
+                return Err(font_error(format!(
+                    "its cmap maps U+{cp:04X} to glyph {g} of {glyphs}"
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    /// The parsed face of this font alone (not its fallbacks), parsing it on
+    /// first use.
+    fn own(&self) -> &Face {
+        static NEXT_ID: AtomicU32 = AtomicU32::new(0);
+        self.face.get_or_init(|| {
+            let glyphs = fontdue::Font::from_bytes(self.data.bytes(), Default::default())
+                .or_else(|_| {
+                    // A GSUB substitute past the glyph count: do without.
+                    fontdue::Font::from_bytes(
+                        self.data.bytes(),
+                        fontdue::FontSettings {
+                            load_substitutions: false,
+                            ..Default::default()
+                        },
+                    )
+                })
+                .expect("validated in from_bytes");
+            let layout = OtLayout::parse(
+                &ttf_parser::Face::parse(self.data.bytes(), 0).expect("validated in from_bytes"),
+            );
+            Face {
                 id: FaceId(NEXT_ID.fetch_add(1, Ordering::Relaxed)),
-                data,
+                data: self.data.clone(),
                 glyphs,
                 layout,
-            }),
-            fallback: None,
+            }
         })
+    }
+
+    /// Whether the glyphs of this font have been parsed. Loading a font
+    /// ([`from_bytes`](Self::from_bytes)) does not parse them; the first
+    /// character drawn from it does, so a fallback font that no text needs is
+    /// never parsed.
+    #[doc(hidden)]
+    pub fn is_parsed(&self) -> bool {
+        self.face.get().is_some()
+    }
+
+    /// This font, then its own fallbacks, then `fallbacks`, each tried in
+    /// order for characters the ones before lack. Only each fallback's own
+    /// face is consulted: a fallback's own fallbacks are not followed. The
+    /// glyphs (and their parse) are shared with `self`.
+    pub fn with_fallbacks(&self, fallbacks: &[Font]) -> Font {
+        Font {
+            name: self.name.clone(),
+            data: self.data.clone(),
+            face: self.face.clone(),
+            fallbacks: self.fallbacks.iter().chain(fallbacks).cloned().collect(),
+        }
     }
 
     /// The name the font was loaded under.
@@ -202,19 +281,24 @@ impl Font {
     /// The font file this face was parsed from, for embedding it (an SVG
     /// `@font-face`) or loading it into another rasteriser.
     pub fn data(&self) -> &[u8] {
-        self.face.data.bytes()
+        self.data.bytes()
     }
 
     /// Whether the font has a glyph for `c` (otherwise `c` draws as the
     /// font's missing-glyph box).
     pub fn has_glyph(&self, c: char) -> bool {
-        self.face.glyphs.has_glyph(c) || self.fallback.as_ref().is_some_and(|f| f.has_glyph(c))
+        self.has_own_glyph(c) || self.fallbacks.iter().any(|f| f.has_own_glyph(c))
     }
 
     /// Whether the font itself has a glyph for `c`, not counting a fallback
     /// face ([`inter_semibold`](Self::inter_semibold) falls back to Regular).
+    /// Does not parse the font's glyphs.
     pub fn has_own_glyph(&self, c: char) -> bool {
-        self.face.glyphs.has_glyph(c)
+        match self.face.get() {
+            Some(face) => face.glyphs.has_glyph(c),
+            None => ttf_parser::Face::parse(self.data.bytes(), 0)
+                .is_ok_and(|f| f.glyph_index(c).is_some()),
+        }
     }
 
     /// The distinct characters of `text` this font has no glyph for, in
@@ -243,13 +327,13 @@ impl Font {
     /// metrics fall back to 0.8 / 0.2 / 0.1 of the size.
     pub fn line_metrics(&self, size: f32) -> LineMetrics {
         let (ascent, descent, line_gap) = self
-            .face
+            .own()
             .glyphs
             .horizontal_line_metrics(size)
             .map_or((size * 0.8, size * 0.2, size * 0.1), |m| {
                 (m.ascent, -m.descent, m.line_gap)
             });
-        let h = self.face.glyphs.metrics('H', size);
+        let h = self.own().glyphs.metrics('H', size);
         LineMetrics {
             ascent,
             descent,
@@ -260,20 +344,19 @@ impl Font {
 
     #[cfg(test)]
     pub(crate) fn face(&self) -> &fontdue::Font {
-        &self.face.glyphs
+        &self.own().glyphs
     }
 
-    /// The face that draws `c`: this one, or the fallback when this one
-    /// lacks `c` and the fallback has it.
+    /// The face that draws `c`: this font's own, or the first fallback
+    /// with a glyph for it; this font's when none has (its missing-glyph
+    /// box). Parses the face it returns.
     pub(crate) fn face_for(&self, c: char) -> &Face {
-        match &self.fallback {
-            Some(fallback)
-                if !self.face.glyphs.has_glyph(c) && fallback.face.glyphs.has_glyph(c) =>
-            {
-                &fallback.face
-            }
-            _ => &self.face,
+        if !self.has_own_glyph(c)
+            && let Some(fallback) = self.fallbacks.iter().find(|f| f.has_own_glyph(c))
+        {
+            return fallback.own();
         }
+        self.own()
     }
 }
 
@@ -457,5 +540,134 @@ mod tests {
         let f = Font::from_bytes("Mine", INTER_REGULAR).unwrap();
         assert_eq!(f.data(), INTER_REGULAR);
         assert_eq!(f.name(), "Mine");
+    }
+
+    /// A two-glyph-plus-notdef Noto Sans JP subset: "東" and "京".
+    const JP: &[u8] = include_bytes!("../tests/fonts/NotoSansJP-Test.ttf");
+
+    fn jp() -> Font {
+        Font::from_bytes("Noto Sans JP", JP).unwrap()
+    }
+
+    fn id(font: &Font, c: char) -> FaceId {
+        font.face_for(c).id
+    }
+
+    const MIXED: &str = "Київ — 東京 — Zürich";
+
+    #[test]
+    fn fallbacks_are_tried_in_order() {
+        let (inter, full, jp) = (Font::inter(), Font::inter_full(), jp());
+        let own = |f: &Font| f.own().id;
+        let chain = inter.with_fallbacks(&[full.clone(), jp.clone()]);
+        assert_eq!(inter.missing_glyphs(MIXED).len(), 6);
+        assert!(chain.missing_glyphs(MIXED).is_empty());
+        // Each character comes from the first font that has it.
+        assert_eq!(id(&chain, 'Z'), own(&inter));
+        assert_eq!(id(&chain, 'ü'), own(&inter));
+        assert_eq!(id(&chain, 'К'), own(&full));
+        assert_eq!(id(&chain, '東'), own(&jp));
+        assert_eq!(id(&chain, '京'), own(&jp));
+        // The test face has no Cyrillic, so its place in the chain is moot.
+        let chain = inter.with_fallbacks(&[jp.clone(), full.clone()]);
+        assert!(chain.missing_glyphs(MIXED).is_empty());
+        assert_eq!(id(&chain, '東'), own(&jp));
+        assert_eq!(id(&chain, 'К'), own(&full));
+        // The first fallback with the glyph wins (Latin is in all three).
+        assert_eq!(
+            id(&inter.with_fallbacks(std::slice::from_ref(&full)), 'Z'),
+            own(&inter)
+        );
+        // A character no font has is the primary's box.
+        assert_eq!(chain.missing_glyphs("a🙂"), ['🙂']);
+        assert_eq!(id(&chain, '🙂'), own(&inter));
+        // Added fonts serve a SemiBold primary after its own Regular.
+        let semibold = Font::inter_semibold().with_fallbacks(&[full.clone(), jp.clone()]);
+        assert!(semibold.missing_glyphs(MIXED).is_empty());
+        assert_eq!(id(&semibold, 'Z'), own(&Font::inter_semibold()));
+        assert_eq!(id(&semibold, 'é'), own(&inter));
+        assert_eq!(id(&semibold, 'К'), own(&full));
+        // A fallback's own fallbacks are not followed.
+        let nested = jp.with_fallbacks(std::slice::from_ref(&inter));
+        let outer = Font::inter_full().with_fallbacks(&[nested]);
+        assert_eq!(id(&outer, 'Z'), own(&full));
+        assert_eq!(id(&outer, '東'), own(&jp));
+        // ... and with_fallbacks shares the parse with its source.
+        assert!(Arc::ptr_eq(&chain.face, &inter.face));
+    }
+
+    #[test]
+    fn kerning_stops_at_a_face_change() {
+        let jp_first = jp().with_fallbacks(&[Font::inter()]);
+        let kern = |t: &str, f| jp_first.measure_with(t, 16.0, f).width;
+        // "AV" kerns inside Inter; no pair is kerned across the face change.
+        assert!(kern("AV", crate::Features::KERN) < kern("AV", crate::Features::NONE));
+        for t in ["A東V", "東A", "V東"] {
+            assert_eq!(
+                kern(t, crate::Features::KERN),
+                kern(t, crate::Features::NONE)
+            );
+        }
+    }
+
+    #[test]
+    fn a_font_is_parsed_when_a_character_needs_it() {
+        let jp = jp();
+        assert!(!jp.is_parsed());
+        let chain = Font::inter_full().with_fallbacks(std::slice::from_ref(&jp));
+        // Covered text, measuring and line metrics never touch the fallback.
+        let covered = "Zürich 1.5k −3 °C";
+        assert!(chain.missing_glyphs(covered).is_empty());
+        chain.measure_with(covered, 16.0, crate::Features::default());
+        chain.line_metrics(16.0);
+        assert!(!jp.is_parsed());
+        // Coverage questions about it do not parse it either.
+        assert!(jp.has_own_glyph('東') && !jp.has_own_glyph('Z'));
+        assert!(!jp.is_parsed());
+        assert!(
+            chain
+                .measure_with("東京", 16.0, crate::Features::default())
+                .width
+                > 16.0
+        );
+        assert!(jp.is_parsed());
+        assert!(chain.is_parsed());
+    }
+
+    #[test]
+    fn the_test_face_has_ink_and_a_taller_ascent() {
+        let jp = jp();
+        for c in ['東', '京'] {
+            let (m, bitmap) = jp.own().glyphs.rasterize(c, 16.0);
+            assert!(m.width > 8 && bitmap.iter().any(|&a| a > 128), "{c:?}");
+            assert_ne!((m, bitmap), jp.own().glyphs.rasterize_indexed(0, 16.0));
+        }
+        assert!(jp.line_metrics(16.0).ascent > Font::inter().line_metrics(16.0).ascent);
+    }
+
+    #[test]
+    fn bundled_fonts_validate() {
+        for data in [INTER_REGULAR, INTER_SEMIBOLD, INTER_REGULAR_FULL] {
+            Font::from_bytes("Inter", data).unwrap();
+        }
+    }
+
+    #[test]
+    fn a_cmap_past_the_glyph_count_is_an_error_at_from_bytes() {
+        // maxp.numGlyphs (u16 at offset 4) of 3 becomes 1, so the cmap's
+        // glyphs 1 and 2 are out of range.
+        let mut data = JP.to_vec();
+        let tables = u16::from_be_bytes([data[4], data[5]]) as usize;
+        let record = (0..tables)
+            .map(|i| 12 + i * 16)
+            .find(|&r| &data[r..r + 4] == b"maxp")
+            .expect("a maxp table");
+        let offset = u32::from_be_bytes(data[record + 8..record + 12].try_into().unwrap()) as usize;
+        assert_eq!(u16::from_be_bytes([data[offset + 4], data[offset + 5]]), 3);
+        data[offset + 4..offset + 6].copy_from_slice(&1u16.to_be_bytes());
+        let e = Font::from_bytes("Patched", &data).unwrap_err().to_string();
+        assert!(e.contains("\"Patched\""), "{e}");
+        assert!(e.contains("its cmap maps U+4EAC to glyph"), "{e}");
+        assert!(e.contains("of 1"), "{e}");
     }
 }
