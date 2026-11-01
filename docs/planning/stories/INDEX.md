@@ -257,7 +257,7 @@ cell labels, error bars, pie charts and facets.
   fontdue's `ttf-parser`, checked against rustybuzz as a dev-dependency;
   rustybuzz itself would add 210 KB gz), adds `Features::TNUM`, and re-blesses
   the goldens, within +6,000 B gz. Deps: GUP-400 ✅, GUP-407 ✅, GUP-542 ✅.
-- [GUP-579](GUP-579_Tabular_Figures_For_Tick_Labels.md) 🚧 — Tick labels request
+- [GUP-579](GUP-579_Tabular_Figures_For_Tick_Labels.md) ✅ — Tick labels request
   `tnum` (measured and drawn), so four-digit axes keep their margin at every
   zoom, and `SvgTarget` writes `font-variant-numeric:tabular-nums` on them.
   Edits `plot.rs`. Deps: GUP-405 ✅.
