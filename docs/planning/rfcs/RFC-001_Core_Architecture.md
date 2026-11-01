@@ -4069,3 +4069,128 @@ The bench draws 1 piece throughout (at most 0.32 px segments at its deepest
 zoom). A forced single piece measured 2.03-2.05 ms, so the rest of the cost is
 the two control columns and the cubic's arithmetic. `gup_core/line_monotone`
 still draws 16 pieces, and its golden is unchanged.
+
+## GUP-439 findings (2026-11-02)
+
+[GUP-439](../stories/GUP-439_Line_Translucent_Joins.md) gives a translucent
+`Line` one opacity along its whole length: joins at rows, step corners, monotone
+piece joints, segments that double back and self-crossings are blended once.
+Opaque lines are unchanged.
+
+### Mechanism: an offscreen target per translucent line layer
+
+- **Draw.** `Renderer::render` draws each translucent line layer first into an
+  `Rgba8Unorm` texture the target's size, cleared to 0, in a pass of its own
+  before the scene pass. The pipeline is the layer's own glue and `line.wgsl`
+  (no shader change, no new glue), with `BlendOperation::Max` on colour and
+  alpha. `shade` outputs premultiplied colour times coverage, so each texel
+  keeps its most covering segment or piece. Over capsules, `max` of the
+  coverages is the coverage of the union (the box coverage is monotone in the
+  distance to the stroke), so a join, a turn's inner overlap and a crossing all
+  read like the arms.
+- **Composite.** The scene pass draws one triangle over the target per such
+  layer (`src/shaders/composite.wgsl`), scissored to the layer's clip, which
+  loads the texel under each pixel and blends it with premultiplied over. A
+  texel of 0 is discarded, so the target's bytes outside the line do not change.
+  The texel is found from the triangle's interpolated position in target pixels,
+  not `@builtin(position)`, so a host's viewport offset cannot move it. At 4
+  samples the composite writes every sample of the pixel.
+- **Which layers.** `Line` layers (not `Area`: its trapezoids share edges) whose
+  colour can have alpha below 1 at this prepare: a constant, derived or default
+  colour below 1; a colour column with a LUT alpha below 255, or with no LUT; a
+  brush that fades or greys translucently; a read null colour below 1.
+  `MarkBatch::translucent` carries it to the renderer. Every other layer draws
+  directly, byte for byte as before; no opaque golden changed.
+- **Per-row colour survives.** Where rows of different colours overlap, each
+  channel takes the larger value. A series is one layer in the builders, so
+  overlaps within a layer share their colour and the result is exact. Separate
+  layers still blend over each other: overplotted translucent series show
+  density.
+- **Draw-in-pass.** `Renderer::prepare` + `Prepared::draw` (a host's own pass)
+  is unchanged: it cannot add a pass before the host's, so it draws translucent
+  lines directly and their overlaps blend twice. `gup-egui` and `gup-bevy`
+  render through `TextureTarget` and `Renderer::render`, so they get the pass.
+  The smallest change for a host that draws in its own pass is a public
+  `Prepared::encode(&self, &mut CommandEncoder)` recorded before its pass
+  (GUP-584).
+- **SVG.** A translucent line layer whose strokes share one alpha is written as
+  `<g opacity="a">` around opaque strokes: the group is composited once, which
+  is the SVG form of the offscreen target. A layer with mixed alphas keeps each
+  element's `stroke-opacity`. A single `<polyline>` was already even (a stroke
+  is painted once); the group also covers crossings between runs split by a
+  null.
+
+### Evidence
+
+- `tests/line_translucent.rs` compares each line at alpha 0.5 with the same line
+  opaque: wherever the opaque line covers a pixel fully, the translucent one has
+  0.5 within 2/255, and no pixel anywhere has more. Cases: turns of 30°, 90° and
+  170°, a bow tie, a line doubling back on itself, `StepAfter` corners,
+  `MonotoneX` (16 pieces per segment) and a 4-sample scene with an area. With
+  the offscreen pass disabled, every case but `MonotoneX` fails: 0.749 ink at a
+  join, corner or crossing, 0.875 where three segments overlap (`MonotoneX`
+  already draws each pixel once, GUP-551: 0.498 at most).
+- The SVG of a bow tie split by a null is one group of two opaque polylines;
+  rasterised, its crossing has 0.5 ink, and it matches the GPU image.
+- `gup_core/line_translucent`: twelve overplotted series at alpha 0.35, 3 px.
+  Each series is even, and crossings between series are darker.
+
+### Cost (AC3)
+
+`zoom_bench --line linear`, the 100K-row random walk, 1600x1000 Mailbox
+uncapped, release, Intel HD 630, Mesa Vulkan, load average 2-5. GPU time is from
+the start of the first pass to the end of the scene pass (a local prototype
+patch that times the offscreen pass with the scene pass; GUP-584 adds it to
+`zoom_bench`). Medians of alternating runs:
+
+| Line, 100K rows            | 4 samples, 7 runs | 1 sample, 5 runs |
+| -------------------------- | ----------------- | ---------------- |
+| none (2 rows)              | 0.061 ms          | 0.060 ms         |
+| opaque                     | 2.349 ms          | 2.368 ms         |
+| alpha 0.5, direct (before) | 2.333 ms          | 2.503 ms         |
+| alpha 0.5, offscreen (now) | 2.809 ms          | 2.981 ms         |
+| offscreen / direct, layer  | 1.21x             | 1.19x            |
+
+- **GPU time**: +0.5 ms at 1600x1000, about 1.2x the layer's direct draw (the
+  story's ceiling is 2x). Run to run the clock governor moves single runs by up
+  to 1.6x, so only medians of alternating runs are compared.
+- **Memory**: 4 bytes per target pixel per translucent line layer (6.4 MB at
+  1600x1000), pooled in the `Renderer` and reused while the target's size stays.
+- **Draws and passes**: one render pass and one clear per translucent layer, the
+  layer's own draws (unchanged), plus one composite draw in the scene pass.
+  `Prepared::draw_calls` counts both. Opaque scenes: no texture, no pass, no
+  extra pipeline.
+- **Pipelines**: two more per translucent glue signature and target format (the
+  `Max`-blend variant and the composite), cached as usual.
+- **WASM**: the reference scatter grows from 358,434 to 360,271 B gz (+1,837,
+  measured against the parent sources); `wasm.per_row_type` from 1,373 to 1,606
+  B (the colour check is generic over the row type).
+
+### Alternatives rejected
+
+1. **`R8` coverage, composited with the layer's colour** (the story's first
+   choice). A quarter of the memory, but per-row colour is lost and the
+   composite needs the layer's colour on the CPU (a key-encoded or palette
+   colour is only known on the GPU).
+2. **Stencil** (draw each pixel once with a stencil test). It needs a
+   depth-stencil attachment in every target and in hosts' passes (a `TargetDesc`
+   change), and a binary stencil keeps the first segment's antialiased rim at an
+   overlap, the seam of "GUP-432 findings" alternative 3, or drops the analytic
+   antialiasing. Not built: the offscreen target met the 2x rule.
+3. **One shared texture for every translucent layer.** Bounded memory, but
+   crossings between series would blend once too, hiding the density
+   overplotting is meant to show.
+4. **Splitting the scene pass around each translucent layer** with one reused
+   texture. Bounded memory, but the scene's target is stored and reloaded around
+   every split (MSAA too), and a host's pass cannot be split at all.
+5. **Blend tricks in the scene pass** (min/max or multiplicative blending on the
+   scene's own target). The scene target holds the background under the line, so
+   no blend state turns two coverages into their union; dual-source blending is
+   not in the WebGPU baseline.
+
+### Proposed adjustments to later steps
+
+- **Many translucent layers** cost a texture each. If a chart needs dozens,
+  layers whose clipped bounding boxes do not overlap can share one texture.
+  Measure before building it.
+- **Draw-in-pass hosts**: GUP-584 (`Prepared::encode`).
