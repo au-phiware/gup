@@ -36,6 +36,81 @@ named them as follow-ups. Two cheap measures cover most charts:
 > "As a visualization developer, I want labels on a busy chart to stay legible,
 > so that I can label many points without a mess of overlapping text."
 
+## Read First
+
+- `crates/gup-core/src/text_layer.rs` (all: `TextLayer` setters, `prepare`,
+  `AnnotationLayer::runs`).
+- `crates/gup-core/src/scene.rs` lines 310–385 (`TextStyle`, `TextRun`).
+- `crates/gup-core/src/render.rs` `RendererGpu::text` (lays runs out into one
+  glyph batch).
+- `crates/gup-core/src/svg.rs` `ItemKind::Text` (the `<text>` writer).
+- `crates/gup-text/src/system.rs` `TextSystem::layout`, and
+  `crates/gup-text/src/atlas.rs` `GlyphAtlas::glyph` (rasterise once per key).
+- `crates/gup-core/tests/text_layer.rs` (the 1,000-label cost test and the
+  `text_annotations` golden) and `crates/gup-core/tests/secondary_y.rs`.
+
+## Decisions
+
+Set by the implementer on 2026-11-02 (the story had none).
+
+1. **Halo = dilated glyph bitmaps in the same R8 atlas.** A halo glyph is the
+   glyph's coverage bitmap dilated by the halo width in physical pixels
+   (`out(p) = clamp(max_q c(q) + r − |p − q|, 0, 1)`: a disc dilation with a
+   one-pixel antialiased edge, i.e. a round-joined stroke of width `2r` outside
+   the outline), rasterised once and cached in the atlas under its own key
+   (face, glyph, size, radius). The atlas stays one R8 texture and the glyph
+   shader and pipeline are unchanged: a halo is just more glyph quads, in the
+   halo colour, laid out by a new `TextSystem::layout_halo` before the run's own
+   quads. Rejected: sampling a neighbourhood in the fragment shader (needs atlas
+   padding of the largest halo, a shader change and a cost per fragment that
+   grows with r²); drawing the text 8–16 times offset (a polygonal halo that
+   does not match an SVG stroke).
+2. **Draw order: halo then fill, per run**, in the one glyph draw (instances
+   blend in order). That is exactly SVG's `paint-order="stroke"` on each
+   `<text>`: a later label's halo covers an earlier label's ink where they
+   overlap, in both targets.
+3. **Scene**: `TextStyle` gains `pub halo: Option<Halo>`, with
+   `Halo { width: Px, color: Color }` in `scene.rs`. The text layer fills in the
+   colour from `Theme::background` at resolve, so the dark theme gets a dark
+   halo. Every other text (ticks, titles, legends, tooltips) has `None`, and
+   `None` adds no quads: output without a halo is unchanged byte for byte.
+4. **SVG**: `stroke` of the halo colour, `stroke-width` = 2 × width,
+   `stroke-linejoin="round"`, `paint-order="stroke"` (resvg 0.45 supports
+   `paint-order` on text spans; checked by the SVG raster comparison).
+5. **Default: no halo anywhere**, bar value labels included. Their goldens
+   (`bar_value_labels*.png`) show why: outside labels sit on the background
+   where a halo is invisible, and stacked labels sit on segment fills where a
+   background-coloured halo would paint a pale blob on the bar. The dual-axis
+   test (`secondary_y`) turns `halo(Px(2.0))` on, because "48" and "90" sit on
+   the temperature line.
+6. **Culling rule**: `hide_overlaps(true)` keeps rows in row order; a label is
+   kept only if its box overlaps (shares positive area with) no kept box. The
+   box is the label's ink box cut to the plot rect (`PlacedText::bounds`), grown
+   by the halo width when there is one, so halos never cover kept ink. Labels
+   dropped for other reasons (off the plot, `within`, no ink) take no room.
+   Priority is row order: sort the rows to rank labels. Culling runs on every
+   full resolve (a zoom changes positions), with a uniform grid over the plot
+   rect (cells of 4 × the font size) holding the kept boxes. Edge room (GUP-555)
+   is still computed from every label.
+7. **Cost**: measured by extending `resolve_cost_of_a_thousand_labels`
+   (release): culling must add under 0.3 ms per 1,000 labels.
+
+## Escalation Triggers
+
+- The halo needs a second atlas texture, a different atlas format or a change to
+  `glyph.wgsl`.
+- The SVG raster comparison fails for the halo golden by more than the existing
+  `MAX_BLOCK_DE` (resvg's stroke and the dilation disagree).
+- Culling costs more than 0.3 ms per 1,000 labels in release.
+- A golden other than the new halo golden and `secondary_y` changes.
+
+## Out of Scope
+
+- A priority closure, label placement search (trying other anchors) and culling
+  against other layers, tick labels or marks.
+- Halos on guide text (ticks, titles, legends, tooltips).
+- Room at the plot edge for the halo (a halo at the plot edge is clipped).
+
 ## Acceptance Criteria
 
 - [ ] `TextLayer::halo(Px)` draws each label with an outline of that width in
