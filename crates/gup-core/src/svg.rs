@@ -367,7 +367,7 @@ impl SvgTarget {
                         };
                         writeln!(
                             s,
-                            r#"<text x="{}" y="{}" font-family="{}, sans-serif" font-size="{}"{} text-anchor="{anchor}" fill="{}"{}>{}</text>"#,
+                            r#"<text x="{}" y="{}" font-family="{}, sans-serif" font-size="{}"{} text-anchor="{anchor}" fill="{}"{}{}>{}</text>"#,
                             num(anchor_x),
                             num(baseline),
                             escape(self.options.font.name()),
@@ -378,6 +378,12 @@ impl SvgTarget {
                             },
                             hex(run.style.color),
                             opacity("fill-opacity", run.style.color),
+                            // A CSS property, so it goes through `style`.
+                            if run.role.features().contains(gup_text::Features::TNUM) {
+                                r#" style="font-variant-numeric:tabular-nums""#
+                            } else {
+                                ""
+                            },
                             escape(&run.text)
                         )?;
                     }

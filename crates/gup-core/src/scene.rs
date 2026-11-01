@@ -323,6 +323,18 @@ pub enum TextRole {
     Annotation,
 }
 
+impl TextRole {
+    /// The OpenType features runs of this role are measured and drawn with.
+    /// Tick labels are columns of numbers, so they use tabular figures; every
+    /// other role is prose and keeps proportional digits.
+    pub(crate) fn features(self) -> gup_text::Features {
+        match self {
+            TextRole::TickLabel => gup_text::Features::KERN | gup_text::Features::TNUM,
+            _ => gup_text::Features::KERN,
+        }
+    }
+}
+
 /// One line of horizontal text.
 #[derive(Clone, Debug, PartialEq)]
 pub struct TextRun {
@@ -347,7 +359,55 @@ impl TextRun {
             at: [self.at.x, self.at.y],
             anchor: self.anchor,
             weight: self.style.weight,
-            features: gup_text::Features::default(),
+            features: self.role.features(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn run(text: &str, role: TextRole) -> TextRun {
+        TextRun {
+            text: text.into(),
+            at: Point::new(100.0, 50.0),
+            anchor: Anchor::new(HAlign::End, VAlign::Middle),
+            style: TextStyle {
+                size: Px(16.0),
+                color: Color::BLACK,
+                weight: Weight::Regular,
+            },
+            role,
+        }
+    }
+
+    fn width(text: &str, role: TextRole) -> f32 {
+        let r = run(text, role);
+        gup_text::Font::inter().ink_bounds(&r.layout_run()).width
+    }
+
+    /// GUP-579: tick labels are tabular, other roles are proportional.
+    #[test]
+    fn only_tick_labels_have_tabular_figures() {
+        use gup_text::Features;
+        for role in [
+            TextRole::Title,
+            TextRole::Subtitle,
+            TextRole::AxisTitle,
+            TextRole::Legend,
+            TextRole::Tooltip,
+            TextRole::Annotation,
+        ] {
+            assert_eq!(role.features(), Features::KERN, "{role:?}");
+        }
+        assert_eq!(
+            TextRole::TickLabel.features(),
+            Features::KERN | Features::TNUM
+        );
+        let tick = (width("1111", TextRole::TickLabel) - width("1000", TextRole::TickLabel)).abs();
+        assert!(tick <= 1.0, "tabular widths differ by {tick}");
+        let title = (width("1111", TextRole::Title) - width("1000", TextRole::Title)).abs();
+        assert!(title >= 5.0, "proportional widths differ by only {title}");
     }
 }

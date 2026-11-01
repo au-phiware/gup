@@ -330,8 +330,15 @@ fn numeric_axis_bars_fit_and_a_derived_baseline_is_in_the_domain() {
     for i in [1.0, 3.0, 5.0] {
         let c = x.read().eval(i) as u32;
         let (a, b) = run(&image, c, row, true);
-        // The axis line may touch the first bar; a clipped one is 15 px.
-        assert!((30..=32).contains(&(b - a)), "bar at {i}: ink {a}..{b}");
+        // Bar ends are where the resolved scale puts them (centre +/- 15),
+        // to the nearest pixel centre, wherever the margin leaves them. The
+        // axis line may touch the first bar; a clipped one would be 15 px.
+        let centre = x.read().eval(i);
+        assert!(
+            (f64::from(a) - (centre - 15.0)).abs() <= 0.5 + 1e-6
+                && (f64::from(b) - (centre + 15.0)).abs() <= 0.5 + 1e-6,
+            "bar at {i}: ink {a}..{b}, centre {centre}"
+        );
         assert!(
             a as f32 >= p.left() - 2.0 && b as f32 <= p.right(),
             "{a}..{b} in {p:?}"

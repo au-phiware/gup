@@ -59,50 +59,50 @@ viewers to do the same.
 
 ### AC1: Tick labels are tabular, everything else is not
 
-- [ ] `TextRole::features(self) -> gup_text::Features` (`pub(crate)`) returns
+- [x] `TextRole::features(self) -> gup_text::Features` (`pub(crate)`) returns
       `KERN | TNUM` for `TickLabel` and `KERN` for every other role.
       `TextRun::layout_run` uses it, so drawing and `ink_bounds` agree.
-- [ ] Both tick-label measuring sites in `plot.rs` (`width_of` and `collides`)
+- [x] Both tick-label measuring sites in `plot.rs` (`width_of` and `collides`)
       call
       `text.measure_with(label, th.tick_size.0, weight, TextRole::TickLabel.features())`.
       A grep for `measure_weight(` in `plot.rs` finds no tick-label call left.
-- [ ] Unit test in `scene.rs`: a `TickLabel` run "1111" and a `TickLabel` run
+- [x] Unit test in `scene.rs`: a `TickLabel` run "1111" and a `TickLabel` run
       "1000" have equal `ink_bounds` widths ±1 px, and as `Title` runs they
       differ by at least 5 px at 16 px.
 
 ### AC2: The margin holds steady
 
-- [ ] Integration test `crates/gup-core/tests/tick_format.rs`
+- [x] Integration test `crates/gup-core/tests/tick_format.rs`
       `tabular_ticks_keep_the_y_margin`: a scatter with
       `y_tick_format(|v| format!("{v:.0}"))`, resolved at 480×320 with these
       explicit y domains in turn: 1000–2000, 1100–1200, 1110–1120, 1500–1600,
       1900–2000. `layout.plot.left()` is identical for all five.
-- [ ] The test also asserts that it would catch the bug: for the same labels,
+- [x] The test also asserts that it would catch the bug: for the same labels,
       `measure_with(.., Features::KERN)` widths differ by at least 3 px between
       the widest and narrowest label set. Seeded failure, recorded in the
       retrospective: with `TickLabel` mapped to `KERN` alone, the test fails.
 
 ### AC3: SVG
 
-- [ ] `SvgTarget` writes ` style="font-variant-numeric:tabular-nums"` on every
+- [x] `SvgTarget` writes ` style="font-variant-numeric:tabular-nums"` on every
       `<text>` whose run's role is `TickLabel`, and on no other. A test in
       `crates/gup-core/tests/svg.rs` checks a plot's SVG: every y tick label
       element has it, and the title element does not.
 
 ### AC4: Goldens (user-visible), with a cap
 
-- [ ] Before blessing, every failure is a `golden` check failure (no structural
+- [x] Before blessing, every failure is a `golden` check failure (no structural
       or `svg_marks` failure). After `GUP_BLESS=1`,
       `git diff --stat     tests/golden` lists only goldens that draw numeric
       tick labels. Give the count in the retrospective.
-- [ ] Read `scatter.png` and `secondary_y.png` before and after. The y labels
+- [x] Read `scatter.png` and `secondary_y.png` before and after. The y labels
       align digit for digit on the right edge. The left margin moves by at most
       3 px.
 
 ### AC5: Size
 
-- [ ] `mask wasm-size`: scatter grows by at most 1,500 B gz. Report the figures.
-- [ ] `mask wasm-browser` passes (margins move).
+- [x] `mask wasm-size`: scatter grows by at most 1,500 B gz. Report the figures.
+- [x] `mask wasm-browser` passes (margins move).
 
 ## Decisions
 
@@ -139,11 +139,11 @@ viewers to do the same.
 
 ## Technical Tasks
 
-- [ ] `TextRole::features` and `layout_run`; scene unit test.
-- [ ] The two `plot.rs` measuring sites.
-- [ ] SVG style attribute and its test.
-- [ ] `tabular_ticks_keep_the_y_margin`, with the seeded failure.
-- [ ] Re-bless, read the goldens, `mask wasm-size`, `mask wasm-browser`.
+- [x] `TextRole::features` and `layout_run`; scene unit test.
+- [x] The two `plot.rs` measuring sites.
+- [x] SVG style attribute and its test.
+- [x] `tabular_ticks_keep_the_y_margin`, with the seeded failure.
+- [x] Re-bless, read the goldens, `mask wasm-size`, `mask wasm-browser`.
 
 ## Dependencies
 
@@ -166,8 +166,8 @@ viewers to do the same.
 
 ## Success Metrics
 
-- [ ] The y margin of a four-digit axis is the same at every zoom.
-- [ ] WASM grows by at most 1,500 B gz.
+- [x] The y margin of a four-digit axis is the same at every zoom.
+- [x] WASM grows by at most 1,500 B gz.
 
 ## Risk Assessment
 
@@ -178,14 +178,78 @@ viewers to do the same.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -p gup-core -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (two goldens)
-- [ ] `mask wasm-browser` (layout changes)
-- [ ] WASM size: `mask wasm-size` scatter gz bytes
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -p gup-core -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye (two goldens)
+- [x] `mask wasm-browser` (layout changes)
+- [x] WASM size: `mask wasm-size` scatter gz bytes
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Resolved (2026-11-01)
+
+Orchestrator chose margin-independent tests. `rect_png` now checks bar ends
+against the resolved scale's centre +/- 15 px; `segment_png` starts the segment
+on a pixel centre of the resolved plot; `line_curves` places every vertex at a
+fixed sub-pixel position found by probing the scales. No tolerance was changed.
+`tests/fixtures/msaa_guides.svg` was regenerated.
+
+## Implementation Summary
+
+`TextRole::features()` (scene.rs) gives `KERN | TNUM` to `TickLabel` only;
+`layout_run`, the two tick-measuring sites in `plot.rs` and the SVG writer
+(`style="font-variant-numeric:tabular-nums"`) all ask it. Tests: a scene unit
+test, `tabular_ticks_keep_the_y_margin`, `tick_labels_ask_for_tabular_figures`.
+60 goldens re-blessed (all draw tick labels), plus
+`tests/fixtures/msaa_guides.svg`. Scatter WASM: 357,010 B gz before, 357,228 B
+after (+218 B). `mask wasm-browser`, `mask merge-check --dogfood` and
+`cargo test --doc -p gup` pass.
+
+## Retrospective
+
+**Completed**: 2026-11-01
+
+### Key Technical Learnings
+
+#### Pixel tests that hard-code the margin
+
+- **Challenge**: three non-golden tests (`rect_png`, `segment_png`,
+  `line_curves`) depended on the sub-pixel position of marks, which the 1-3 px
+  margin shift changed.
+- **Solution**: derive expected positions from the resolved scales, or place
+  vertices at a fixed sub-pixel offset by probing the scales. No tolerance
+  changed.
+- **Pattern**: probe the scale, then invert it to put a mark where you want it.
+
+#### Seeded failures
+
+- With `TickLabel` mapped to `KERN` alone, `tabular_ticks_keep_the_y_margin`
+  fails: plot left = [51, 48, 46, 48, 51].
+- Changing the bar width to 24 px makes the fixed `rect_png` test fail ("bar at
+  1: ink 41..65").
+
+### Architectural Decisions
+
+#### One rule in `TextRole::features`
+
+- **Decision**: tick-label features live in one function on the role.
+- **Trade-off**: value labels and legend ramp labels stay proportional (out of
+  scope).
+
+### Development Workflow Insights
+
+- 60 goldens changed (the margin moved at most 3 px). I read `scatter` and
+  `secondary_y` before and after: digits are tabular and the left margin moves
+  about 1 px.
+- A full workspace test run takes about 17 min; use `--no-fail-fast` to see
+  every failure at once.
+- The recorded scatter budget (354,964) is behind the tree's baseline (357,010),
+  so I measured the delta against the parent commit.
+
+### Follow-up Stories
+
+None. GUP-556 and GUP-557 were not needed.

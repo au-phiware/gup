@@ -66,6 +66,53 @@ fn xy_plot(
 
 const WIDE: fn(f64) -> String = |v| format!("{v:.0} million dollars");
 
+/// GUP-579: tick labels use tabular figures, so the y margin of a
+/// four-digit axis does not move with the digits on show.
+#[test]
+fn tabular_ticks_keep_the_y_margin() {
+    let cx = Context::new_blocking().unwrap();
+    let domains = [
+        (1000.0, 2000.0),
+        (1100.0, 1200.0),
+        (1110.0, 1120.0),
+        (1500.0, 1600.0),
+        (1900.0, 2000.0),
+    ];
+    let fmt: fn(f64) -> String = |v| format!("{v:.0}");
+    let font = gup_text::Font::inter();
+    let mut lefts = Vec::new();
+    let mut widest = Vec::new();
+    for (lo, hi) in domains {
+        let x = (Linear::new().domain(0.0, 100.0), None);
+        let y = (Linear::new().domain(lo, hi), Some(fmt));
+        let (mut plot, ..) = xy_plot(x, y, vec![(0.0, lo), (100.0, hi)]);
+        let layout = plot.resolve(&cx, 480.0, 320.0).unwrap().layout.clone();
+        let ys = labels(&layout, false);
+        assert!(
+            !ys.is_empty() && ys.iter().all(|l| l.len() == 4),
+            "{lo}-{hi}: {ys:?}"
+        );
+        lefts.push(layout.plot.left());
+        // What the same labels would measure without tabular figures.
+        let w = ys
+            .iter()
+            .map(|l| font.measure_with(l, 12.0, gup_text::Features::KERN).width)
+            .fold(0.0, f32::max);
+        widest.push(w);
+    }
+    assert!(
+        lefts.iter().all(|l| l.to_bits() == lefts[0].to_bits()),
+        "plot left moved: {lefts:?}"
+    );
+    let (min, max) = widest
+        .iter()
+        .fold((f32::MAX, 0.0f32), |(a, b), w| (a.min(*w), b.max(*w)));
+    assert!(
+        max - min >= 3.0,
+        "proportional widths should differ: {widest:?}"
+    );
+}
+
 #[test]
 fn a_format_labels_ticks_and_clones_share_it() {
     let x = ScaleRef::new(Linear::new().domain(0.0, 3.0e6));

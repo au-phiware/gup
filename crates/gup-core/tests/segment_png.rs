@@ -106,8 +106,21 @@ fn a_diagonal_segment_holds_its_area_of_ink() {
     let (w, h) = (500u32, 400u32);
     let (pw, ph) = plot_size(&cx, w as f32, h as f32);
     let d = 100.0 / 2f64.sqrt();
-    let (a, b) = (300.0, 300.0 + d * 1000.0 / pw);
-    let (c, e) = (300.0, 300.0 + d * 1000.0 / ph);
+    // Start on a pixel centre of the resolved plot, so the ink does not
+    // depend on the plot's margin.
+    let (mut p, x, y) = plot();
+    add_segments(&mut p, &x, &y, vec![[0.0; 4]], 1.0);
+    p.resolve(&cx, w as f32, h as f32).unwrap();
+    let (x0, y0) = (x.read().eval(0.0), y.read().eval(0.0));
+    let (sx, sy) = (
+        (x.read().eval(1000.0) - x0) / 1000.0,
+        (y.read().eval(1000.0) - y0) / 1000.0,
+    );
+    let (a, c) = (
+        ((x0 + 300.0 * sx).floor() + 0.5 - x0) / sx,
+        ((y0 + 300.0 * sy).floor() + 0.5 - y0) / sy,
+    );
+    let (b, e) = (a + d * 1000.0 / pw, c + d * 1000.0 / ph);
     let (mut p, x, y) = plot();
     add_segments(&mut p, &x, &y, vec![[a, c, b, e]], 3.0);
     let image = render(&cx, &mut p, w, h);
