@@ -204,7 +204,7 @@ cell labels, error bars, pie charts and facets.
   and `y_right_key` map labels through the plot's right y axis, with GUP-555's
   edge room on that axis, so dual-axis charts label both series. Edits
   `plot.rs`. Deps: GUP-542 ✅, GUP-555 ✅.
-- [GUP-527](GUP-527_Label_Halos_And_Overlap_Culling.md) 💡 — `halo(Px)` and
+- [GUP-527](GUP-527_Label_Halos_And_Overlap_Culling.md) 🚧 — `halo(Px)` and
   `hide_overlaps(true)` on text layers, so labels stay legible over dense marks.
   Deps: GUP-542 ✅, GUP-405 ✅ (soft).
 - [GUP-543](GUP-543_Horizontal_Bars_And_Group_Padding.md) ✅ — `gup::barh`
