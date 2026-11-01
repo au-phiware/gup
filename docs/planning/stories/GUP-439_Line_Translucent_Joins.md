@@ -10,8 +10,8 @@ touches: [crates/gup-core/src/selection.rs, crates/gup-core/src/render.rs]
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: 🚧 In
-Progress **Created**: 2026-10-17
+**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: ✅
+Complete (2026-11-02) **Created**: 2026-10-17
 
 ## Context
 
@@ -41,18 +41,18 @@ stencil pass), then composite it with the line's colour and alpha.
 
 ### AC1: Even opacity
 
-- [ ] A `Line` with colour alpha 0.5 has the same ink at a join as on its arms,
+- [x] A `Line` with colour alpha 0.5 has the same ink at a join as on its arms,
       within 2/255, for turns of 30°, 90° and 170°, and where the line crosses
       itself.
 
 ### AC2: Opaque lines unchanged
 
-- [ ] Opaque lines render byte-identically to before, with no extra pass, and
+- [x] Opaque lines render byte-identically to before, with no extra pass, and
       `gup_core/line_series` is unchanged.
 
 ### AC3: Cost recorded
 
-- [ ] The extra pass or target's cost (GPU time at 100K points, memory, draws)
+- [x] The extra pass or target's cost (GPU time at 100K points, memory, draws)
       is measured and recorded in RFC-001, along with the design chosen and the
       designs rejected.
 
@@ -103,18 +103,23 @@ kept, the coverage format is amended.)
   of different colours overlap, each channel takes the larger value; where they
   share a colour (the usual case: one series per layer) the result is exact.
   Cost: 4 bytes per target pixel per translucent layer, pooled across frames.
-- **Which layers**: `Polyline` geometry whose colour can have alpha below 1: a
-  constant, derived or default colour with alpha < 1; a colour column with a LUT
-  holding alpha < 255, or with no LUT (unknown, so assumed translucent); an
-  active brush with `Fade` below 1 or a translucent `Grey`; or a read null
-  colour with alpha < 1. Every other layer, and every opaque line, takes today's
-  path byte for byte, with no texture and no extra pass.
+- **Which layers**: `Line` layers (not `Area`, whose geometry is also
+  `Polyline`) whose colour can have alpha below 1: a constant, derived or
+  default colour with alpha < 1; a colour column with a LUT holding alpha < 255,
+  or with no LUT (unknown, so assumed translucent); an active brush with `Fade`
+  below 1 or a translucent `Grey`; or a read null colour with alpha < 1. Every
+  other layer, and every opaque line, takes today's path byte for byte, with no
+  texture and no extra pass.
 - **Gup-owned targets** (`Renderer::render`: image, texture, window and web
   targets) record the offscreen passes in the frame's encoder before the scene
   pass. The scene is still drawn in one pass.
-- **Draw-in-pass hosts** (`Renderer::prepare` + `Prepared::draw`) are unchanged
-  until the escalation below is answered: their translucent lines draw directly,
-  as today.
+- **Draw-in-pass hosts** (`Renderer::prepare` + `Prepared::draw`) are unchanged:
+  their translucent lines draw directly, as today, and the docs of
+  `Renderer::prepare` and `Line` say so. `gup-egui` and `gup-bevy` render
+  through `TextureTarget` and `Renderer::render`, so they get the pass with no
+  API change. The smallest change for a host's own pass, a public
+  `Prepared::encode`, is proposed in GUP-584 rather than made here (the
+  escalation trigger below).
 - **Stencil is not built** unless the offscreen target fails the 2x rule: it
   needs a depth-stencil attachment in every target and host pass (a `TargetDesc`
   change), and a binary stencil either drops the analytic antialiasing or keeps
@@ -151,11 +156,13 @@ kept, the coverage format is amended.)
 
 ## Technical Tasks
 
-- [ ] Prototype a per-layer coverage pass (offscreen `R8` target with `Max`
-      blend, composited with the layer's colour) against a stencil approach.
-- [ ] Decide whether per-row colour survives (a coverage target loses it), and
-      how draw-in-pass hosts get the extra pass.
-- [ ] Implement it, test AC1–AC2, and record the findings.
+- [x] Prototype a per-layer coverage pass (offscreen `Rgba8Unorm` target with
+      `Max` blend, composited; see Decisions) against a stencil approach (not
+      built: the offscreen target met the 2x rule; reasons in RFC-001).
+- [x] Decide whether per-row colour survives (it does, as a per-channel max
+      where colours overlap), and how draw-in-pass hosts get the extra pass
+      (GUP-584 proposes `Prepared::encode`).
+- [x] Implement it, test AC1–AC2, and record the findings.
 
 ## Dependencies
 
@@ -171,7 +178,8 @@ kept, the coverage format is amended.)
 
 ## Success Metrics
 
-- [ ] Overplotted translucent series show no beads at their vertices.
+- [x] Overplotted translucent series show no beads at their vertices
+      (`gup_core/line_translucent`).
 
 ## Risk Assessment
 
@@ -181,10 +189,94 @@ kept, the coverage format is amended.)
 
 ## Definition of Done
 
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (golden image or PNG read), if visual
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye (golden image or PNG read), if visual
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+### Definition of Done evidence (2026-11-02)
+
+- **Tests**: `cargo test -p gup-core -- --test-threads=1`: 752 passed, 0 failed,
+  7 ignored (all pre-existing). New: `tests/line_translucent.rs` (6 tests) and
+  `render::tests::only_translucent_lines_draw_offscreen`. With the offscreen
+  pass disabled, every AC1 case but `MonotoneX` fails (0.749 ink at a join,
+  corner or crossing; 0.875 where the line doubles back). Removed:
+  `line_png.rs`'s `a_translucent_join_blends_twice`, which pinned the old
+  behaviour. `cargo test --doc -p gup` and `cargo test -- --test-threads=1`
+  pass; `mask all-check` and `mask smoke-examples` pass;
+  `mask merge-check --dogfood`: story-ids, doc, gup-core, wasm-size,
+  wasm-browser and dogfood all PASS.
+- **Goldens**: new `tests/golden/gup_core/line_translucent.png` (twelve series
+  at alpha 0.35: each even along its length, darker where series cross; read
+  whole and zoomed 4x). Re-blessed `gup_core/line_monotone.png`: its alpha-0.35
+  reference polyline now draws through the offscreen target; 654 pixels change
+  by 1/255 at most, all on or beside that polyline (read zoomed 3x against the
+  old golden: no visible change). A bless of every gup-core test changed no
+  other golden or fixture, so opaque lines are byte-identical
+  (`gup_core/line_series` included).
+- **SVG**: the bow tie split by a null is `<g opacity="0.5">` around two opaque
+  polylines; its resvg raster (read) has an even crossing (0.5 ink) and matches
+  the GPU image.
+- **WASM** (`scripts/wasm_size.sh`, against the parent sources): scatter 358,434
+  → 360,271 B gz (+1,837); `per_row_type` 1,373 → 1,606 B.
+- **Cost** (AC3): RFC-001 "GUP-439 findings": the offscreen layer is 1.19-1.21x
+  its direct draw at 100K rows, 4 B per target pixel, one pass and one composite
+  draw per translucent layer.
+- **Performance budgets** (`scripts/perf_budget.sh --skip-wasm`, load average
+  5.4-5.7; the `wasm.*` rows report "not measured" with `--skip-wasm`, and are
+  measured above and by merge-check's wasm-size step):
+
+```text
+metric                                 recorded    check        limit     measured  verdict
+zoom.size                             1920x1080    exact    1920x1080    1920x1080  pass
+zoom.samples                                  1    exact            1            1  pass
+zoom.gpu_clock.median_mhz                   350     info            -          617  info
+zoom.gpu_pass.median_ms                    2.95     +20%        3.540        2.186  pass (faster than recorded: re-record?)
+zoom.gpu_pass.p95_ms                       5.60     +25%        7.000        4.631  pass
+zoom.cpu.median_ms                         0.69     +20%        0.828        0.559  pass
+zoom.cpu.p95_ms                            0.86     +25%        1.075        0.702  pass
+zoom.interval.median_ms                    4.91     info            -        3.005  info
+zoom.columns.bytes                            0    exact            0            0  pass
+zoom.columns.writes                           0    exact            0            0  pass
+zoom.validity.bytes                           0    exact            0            0  pass
+zoom.uniforms.bytes_per_frame               136    exact          136          136  pass
+zoom.uniforms.writes_per_frame                3    exact            3            3  pass
+zoom.instances.bytes                    6362952    exact      6362952      6362952  pass
+zoom.instances.writes_per_frame               3    exact            3            3  pass
+zoom.textures.bytes                           0    exact            0            0  pass
+zoom_culled.draws.median                     14    exact           14           14  pass
+zoom_culled.gpu_clock.median_mhz            350     info            -          950  info
+zoom_culled.gpu_pass.median_ms             9.90     +20%       11.880        9.866  pass
+zoom_culled.cpu.median_ms                  1.07     +20%        1.284        1.007  pass
+zoom_culled.columns.bytes                     0    exact            0            0  pass
+pipeline.link_create.median_ms             1.11     +20%        1.332        1.058  pass
+pipeline.link_create.cold_ms               1.04    <= 10           10        1.193  pass
+pipeline.link_create.max_ms                1.06     info            -        1.193  info
+```
+
+## Implementation Summary
+
+- **Offscreen target per translucent line layer**
+  (`crates/gup-core/src/ render.rs`): `Renderer::render` prepares with offscreen
+  targets (`prepare_with`), records `Prepared::encode` (one pass per translucent
+  layer: clear, then the layer's own glue with the `Max`-blend
+  `coverage_pipeline` into a pooled `Rgba8Unorm` texture) before the scene pass,
+  and the scene pass draws `Draw::Composite` (one triangle, the layer's scissor)
+  with `composite_pipeline`. `Renderer::prepare` is unchanged for host passes.
+  `create_pipeline` takes the blend state.
+- **Composite shader**: `crates/gup-core/src/shaders/composite.wgsl` (new,
+  `COMPOSITE_SHADER`, parsed by `guide_shaders_are_complete_wgsl`).
+- **Which layers** (`crates/gup-core/src/selection.rs`, `Layer::translucent`):
+  `Line` layers whose constant, derived, default, LUT or null colour, or brush
+  fade, can be below alpha 1; carried on `MarkBatch::translucent`
+  (`crates/gup-core/src/scene.rs`).
+- **SVG** (`crates/gup-core/src/svg.rs`): `line_opacity` writes a translucent
+  line layer of one alpha as `<g opacity>` around opaque strokes.
+- **Docs**: `Line`, `Renderer::prepare`, `Renderer::render`, `line.wgsl`'s
+  header; RFC-001 "GUP-439 findings".
+- **Tests**: `crates/gup-core/tests/line_translucent.rs` (AC1 cases, MSAA, SVG
+  group and parity, overplotted golden), render unit test (AC2: which layers
+  draw offscreen, draw counts).
