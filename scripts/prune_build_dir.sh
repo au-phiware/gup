@@ -58,8 +58,10 @@
 #      Fresh unit, so no stamp can record use, and atime is off.) A unit used
 #      within GUP_PRUNE_KEEP_MINUTES (default 60) is never evicted, nor is one
 #      in a profile whose lock could not be taken; if only those remain, it
-#      says how far over the cap it is. Under the cap rule 5 costs one
-#      `sync -f` and one `du -sk`.
+#      says how far over the cap it is. Fast path: when the filesystem holding
+#      the build directory uses less than the cap in total (`df`), the
+#      directory cannot exceed it and rule 5 does nothing, not even a `du`.
+#      Otherwise under the cap it costs one `sync -f` and one `du -sk`.
 #
 # A deleted incremental cache or evicted unit costs a rebuild of it (and of
 # its dependents). Cargo's freshness does not depend on the incremental cache,
@@ -414,6 +416,9 @@ graph_work() {
 report() {
   local total
   total=$(disk_kb)
+  if fs_below_cap; then
+    echo "prune: rule 5 would skip: the filesystem uses less than the cap in total"
+  fi
   graph_work
   awk -v now="$now" -v total="$total" -v cap="$total_cap_kb" -v build="$build" \
     -v cats="$work/cats" -v stats="$work/stats" '
@@ -499,6 +504,15 @@ evict() {
   return 0
 }
 
+# fs_below_cap: true when the filesystem holding the build directory uses less
+# than the cap in total. (`df` failing or odd output means false: measure.)
+fs_below_cap() {
+  local used
+  used=$(df -B1 --output=used -- "$build" 2>/dev/null | tail -n 1 | tr -d ' ')
+  [[ $used =~ ^[0-9]+$ ]] || return 1
+  [[ $used -lt $((total_cap_kb * 1024)) ]]
+}
+
 # Rule 5: evict least recently used units while the build directory is over
 # the cap, holding every profile's lock.
 prune_lru() {
@@ -506,6 +520,9 @@ prune_lru() {
   local -A held=()
   local -a fds=() cands=()
   [[ $build != *[[:space:]]* ]] || return 0
+  # Fast path: the build directory cannot be bigger than the filesystem's used
+  # space, so below the cap there is nothing to measure (no sync, no du).
+  if fs_below_cap; then return 0; fi
   # What rules 1-4 just deleted may not show in `du` yet (or, in a dry run,
   # never will): count it as gone. At worst this under-counts, so it never
   # evicts more than the cap needs.
