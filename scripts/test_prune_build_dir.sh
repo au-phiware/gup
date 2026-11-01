@@ -15,6 +15,14 @@
 # Also checked: without the prune rustc leaves two incremental sessions per
 # crate; a busy build directory is left alone; a warm checkout stays Fresh
 # while another prunes, idle and over-cap incremental caches included.
+#
+# Rule 5 (GUP-428, the cap on the whole directory): removed worktrees each
+# leave a distinct dependency (depw<n>, over 2 MB) that no owner record names.
+# With the cap off the directory grows by it every round. With the cap on it
+# stays at or under the cap across four rounds, nothing of a removed worktree's
+# dependency survives, the long-lived checkout stays Fresh (including `inner`,
+# which only `dep` uses), the keep window protects recent units, and a zero
+# cap still leaves a checkout that builds.
 set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
@@ -23,6 +31,7 @@ src=$PWD
 unset CARGO_BUILD_BUILD_DIR CARGO_BUILD_TARGET_DIR CARGO_TARGET_DIR \
   RUSTC_WORKSPACE_WRAPPER CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER CLIPPY_CONF_DIR \
   CARGO_INCREMENTAL GUP_PRUNE_IDLE_DAYS GUP_PRUNE_INCREMENTAL_MB GUP_PRUNE_WAIT \
+  GUP_PRUNE_CAP_MB GUP_PRUNE_KEEP_MINUTES \
   GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX GIT_COMMON_DIR \
   GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES \
   GUP_PRE_COMMIT_IN_SNAPSHOT GUP_PRE_COMMIT_SNAPSHOT_DIR
@@ -45,10 +54,16 @@ fail() {
 }
 
 # A dependency outside the workspace (shared) and a member with a test.
-mkdir -p "$tmp/dep/src"
-printf '[package]\nname = "dep"\nversion = "0.1.0"\nedition = "2021"\n' \
-  >"$tmp/dep/Cargo.toml"
-echo 'pub fn one() -> i32 { 1 }' >"$tmp/dep/src/lib.rs"
+mkdir -p "$tmp/dep/src" "$tmp/inner/src"
+printf '[package]\nname = "inner"\nversion = "0.1.0"\nedition = "2021"\n' \
+  >"$tmp/inner/Cargo.toml"
+echo 'pub fn one() -> i32 { 1 }' >"$tmp/inner/src/lib.rs"
+printf '[package]\nname = "dep"\nversion = "0.1.0"\nedition = "2021"\n[dependencies]\ninner = { path = "%s" }\n' \
+  "$tmp/inner" >"$tmp/dep/Cargo.toml"
+echo 'pub fn one() -> i32 { inner::one() }' >"$tmp/dep/src/lib.rs"
+# Old sources: the rule 5 cases backdate fingerprints, and cargo calls a unit
+# stale when a source is newer than its fingerprint.
+find "$tmp/dep" "$tmp/inner" -exec touch -d '-10 days' {} +
 
 repo=$tmp/A
 mkdir -p "$repo/a/src" "$repo/a/tests" "$repo/.cargo" "$repo/scripts"
@@ -62,6 +77,10 @@ printf '[package]\nname = "a"\nversion = "0.1.0"\nedition = "2021"\n[dependencie
 echo 'pub fn answer() -> i32 { dep::one() }' >a/src/lib.rs
 echo '#[test] fn answers() { assert!(a::answer() > 0); }' >a/tests/t.rs
 cp "$src/.cargo/config.toml" .cargo/
+# The rule 5 cases' dependencies come from a directory source (see make_depw).
+mkdir -p "$tmp/vendor"
+printf '\n[source.crates-io]\nreplace-with = "vendored"\n[source.vendored]\ndirectory = "%s"\n' \
+  "$tmp/vendor" >>.cargo/config.toml
 cp "$src/scripts/rustc_workspace_wrapper.sh" "$src/scripts/cargo_env.sh" \
   "$src/scripts/prune_build_dir.sh" "$src/scripts/pre_commit.sh" scripts/
 printf 'target\n' >.gitignore
@@ -176,6 +195,134 @@ grep -q 'Fresh dep ' <<<"$fresh_out" ||
   fail "the shared dependency was rebuilt: $fresh_out"
 a_out=$(at "$repo" cargo test -q 2>&1) ||
   fail "A's tests failed after the prunes: $a_out"
+
+# --- Rule 5: the cap on the whole build directory (GUP-428) -----------------
+
+# settle: ZFS allocates a write's blocks (and frees a delete's) at the next
+# transaction group, up to 5 s later, and neither `sync -f` nor `sync` waits
+# for that, so `du` lags. Wait it out, so that the prune and the checks below
+# see the same sizes.
+settle() {
+  sync -f "$build"
+  [[ $(stat -f -c %T "$build") != zfs ]] || sleep 6
+}
+
+# On-disk size.
+disk_kb() {
+  settle
+  du -sk "$build" | cut -f1
+}
+
+# prune_settled CHECKOUT [ARG...]: prune after the filesystem has settled.
+prune_settled() {
+  settle
+  prune "$@"
+}
+
+# make_depw N: a crate depw<N> holding 3 MB of random bytes
+# that nothing but a removed worktree uses, in the vendored directory source.
+# A vendored crate is not a path dependency, so cargo builds it without an
+# incremental cache (rules 2-4 would bound one, and this check is of rule 5).
+make_depw() {
+  local d=$tmp/vendor/depw$1
+  mkdir -p "$d/src"
+  printf '[package]\nname = "depw%s"\nversion = "0.1.0"\nedition = "2021"\n' \
+    "$1" >"$d/Cargo.toml"
+  echo '{"files":{},"package":null}' >"$d/.cargo-checksum.json"
+  # Random bytes do not compress (the filesystem may), in the rlib and, as a
+  # const, in the rmeta that clippy's check build leaves.
+  head -c 3000000 /dev/urandom >"$d/src/blob.bin"
+  cat >"$d/src/lib.rs" <<'RUST'
+pub const BLOB: &[u8] = include_bytes!("blob.bin");
+pub fn one() -> i32 { BLOB.len() as i32 }
+RUST
+}
+
+# round N: A commits, and so does a worktree that uses its own depw<N> and is
+# then removed, as an agent's is.
+round() {
+  local w=$tmp/W$1
+  commit "$repo" "r$1"
+  git -C "$repo" worktree add -q --detach "$w"
+  make_depw "$1"
+  sed -i "s|^dep = .*|dep = { package = \"depw$1\", version = \"0.1.0\" }|" \
+    "$w/a/Cargo.toml"
+  commit "$w" "w$1"
+  git -C "$repo" worktree remove --force "$w"
+}
+
+# Control: with the cap off, each round leaves a removed worktree's dependency
+# behind, which no owner record names, so rules 1-4 cannot see it.
+for n in 11 12; do
+  before=$(disk_kb)
+  round "$n"
+  GUP_PRUNE_CAP_MB=999999 prune_settled "$repo" >/dev/null
+  grew=$(($(disk_kb) - before))
+  echo "control round $n: $grew KB left after rules 1-4"
+  [[ $grew -ge 2048 ]] ||
+    fail "control round $n: left only $grew KB; the cap check would pass without rule 5"
+done
+
+# A fresh build directory, warm with A alone, sets the cap.
+build=$tmp/build2
+a_root=$(cd "$repo" && pwd -P)
+commit "$repo" b1
+commit "$repo" b2
+prune_settled "$repo" >/dev/null
+base_mb=$((($(disk_kb) + 1023) / 1024))
+cap_mb=$((base_mb + 1))
+echo "bound: warm size $base_mb MB, cap $cap_mb MB"
+
+# backdate: every fingerprint file two days old (a fixed time, so that ages
+# tie), except A's own units' (the checkout in use), which are now.
+backdate() {
+  local old owners unit hash profile
+  old=$(($(date +%s) - 172800))
+  find "$build" -path "$build/checkouts" -prune -o -path '*/.fingerprint/*' \
+    -type f -exec touch -d "@$old" {} +
+  while IFS= read -r owners; do
+    profile=${owners%/.gup-owners}
+    for unit in "$owners"/*; do
+      grep -qx "$a_root" "$unit" || continue
+      hash=${unit##*-}
+      touch -c "$profile"/.fingerprint/*-"$hash"/*
+    done
+  done < <(find "$build" -path "$build/checkouts" -prune -o -name .gup-owners -type d -print)
+}
+
+# Keep window: nothing is older than an hour, so nothing may be evicted.
+round 21
+keep_out=$(GUP_PRUNE_CAP_MB=$cap_mb GUP_PRUNE_KEEP_MINUTES=60 prune_settled "$repo")
+grep -q 'lru=' <<<"$keep_out" && fail "the keep window did not protect recent units: $keep_out"
+grep -q 'still over the cap by' <<<"$keep_out" ||
+  fail "no 'still over the cap' line within the keep window: $keep_out"
+
+# Bound: four rounds with the cap on.
+for n in 21 22 23 24; do
+  [[ $n -eq 21 ]] || round "$n"
+  backdate
+  out=$(GUP_PRUNE_CAP_MB=$cap_mb prune_settled "$repo")
+  size=$(disk_kb)
+  echo "bound round $n: $size KB on disk after the prune, cap $((cap_mb * 1024)) KB"
+  [[ $size -le $((cap_mb * 1024)) ]] ||
+    fail "round $n: $size KB on disk exceeds the cap of $((cap_mb * 1024)) KB: $out"
+  grep -q 'lru=' <<<"$out" || fail "round $n: rule 5 evicted nothing: $out"
+  left=$(find "$build" \( -path '*/deps/*' -o -path '*/.fingerprint/*' \) \
+    -name '*depw*' -print -quit)
+  [[ -z $left ]] || fail "round $n: a removed worktree's dependency survived: $left"
+done
+
+# Liveness: A's units, and `inner` that only `dep` uses, are still Fresh.
+fresh_out=$(at "$repo" cargo test -v --no-run 2>&1)
+for unit in a dep inner; do
+  grep -q "Fresh $unit " <<<"$fresh_out" ||
+    fail "rule 5 evicted a live unit: $unit was rebuilt: $fresh_out"
+done
+
+# Safety: with nothing kept, the next build only rebuilds.
+GUP_PRUNE_CAP_MB=0 GUP_PRUNE_KEEP_MINUTES=0 prune_settled "$repo" >/dev/null
+a_out=$(at "$repo" cargo test -q 2>&1) ||
+  fail "A's tests failed after a zero cap: $a_out"
 
 if [[ $failures -gt 0 ]]; then
   echo "test_prune_build_dir: $failures case(s) failed" >&2

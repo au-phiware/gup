@@ -88,7 +88,7 @@ may run together; GUP-397 touches only `dogfood/` and the harness crate. Run
 Unparked 2026-11-01 when the shared build directory filled the disk (184 GB).
 GUP-428 edits only `scripts/`, `maskfile.md` and `CLAUDE.md`.
 
-- [GUP-428](GUP-428_Prune_Superseded_Shared_Units.md) 📋 — Rule 5 for
+- [GUP-428](GUP-428_Prune_Superseded_Shared_Units.md) ✅ — Rule 5 for
   `prune_build_dir.sh`: an 80 GB cap on the build directory, enforced by
   evicting least recently used units (last use propagated through the dependency
   graph in cargo's fingerprints), plus `--report` and a seeded bound test across
@@ -313,6 +313,8 @@ GUP-566 edits `encoding.rs` (not beside GUP-562); GUP-567 edits `selection.rs`.
   benchmark, then builder keys encoded from a borrowed label (no second
   allocation) and a `foldhash` dictionary, each kept only if it helps: owned-key
   overhead from 52 to at most 30 ns per row. Deps: GUP-537 ✅.
+- [GUP-577](GUP-577_Cap_Evicts_Unowned_Incremental_Caches.md) 💡 — Rule 5 also
+  evicts incremental caches of unowned crates (GUP-428 follow-up).
 - [GUP-567](GUP-567_Cached_Edge_Extremes_For_Zoom.md) ✅ — Sorted per-chunk
   values cached for the edge-inset solve, so a programmatic zoom answers by
   binary search with identical insets: `zoom_culled.cpu` from 1.24 back under
