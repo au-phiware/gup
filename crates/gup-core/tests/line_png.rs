@@ -236,23 +236,6 @@ fn joins_have_no_wedge_gap_and_no_seam() {
     }
 }
 
-/// AC3, documented behaviour: a translucent line blends twice where two
-/// segments overlap at a join, so the join is darker than the arms.
-#[test]
-fn a_translucent_join_blends_twice() {
-    let half_red = Color { a: 0.5, ..RED };
-    let rows = vee(90.0);
-    let d = draw(&rows, (0.0, 500.0), (0.0, 400.0), 6.0, half_red, None);
-    let (apex, a) = (d.points[1].unwrap(), d.points[0].unwrap());
-    let arm = pixel(((apex.0 + a.0) / 2.0, (apex.1 + a.1) / 2.0));
-    let (join, arm) = (
-        ink(&d.image, apex.0 as u32, apex.1 as u32),
-        ink(&d.image, arm.0, arm.1),
-    );
-    assert!((arm - 0.5).abs() < 0.02, "arm {arm}");
-    assert!((join - 0.75).abs() < 0.02, "join {join}");
-}
-
 /// Assert that `d` has no ink within `width` of the gap from point `from`
 /// to point `to` except near the drawn segments.
 fn assert_gap(d: &Drawn, from: usize, to: usize, width: f64) {

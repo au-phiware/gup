@@ -157,6 +157,10 @@ pub struct MarkBatch {
     /// The layer's spans that can put a pixel inside the plot rect, in draw
     /// order (RFC-001 S9f): what a draw, a CPU pick and a GPU pick use.
     pub(crate) visible: Arc<[Span]>,
+    /// Whether the layer is a polyline whose colour can be translucent:
+    /// [`Renderer::render`](crate::Renderer::render) then draws it
+    /// through an offscreen target, so its overlaps blend once (GUP-439).
+    pub(crate) translucent: bool,
     /// What vector targets need to write the marks (GUP-467).
     #[cfg_attr(
         not(feature = "svg"),
@@ -182,8 +186,16 @@ impl MarkBatch {
             gpu,
             antialias,
             visible,
+            translucent: false,
             vector,
         }
+    }
+
+    /// This batch, drawn through an offscreen target if `translucent`
+    /// (the field's docs say when).
+    pub(crate) fn with_translucent(mut self, translucent: bool) -> Self {
+        self.translucent = translucent;
+        self
     }
 
     /// Number of mark instances, across every chunk.
