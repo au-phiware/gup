@@ -6,8 +6,10 @@
 // `width` wide. Every point within `width / 2` of the segment is inside,
 // so each end is a round cap and two segments meeting at a row overlap in
 // a disc there: a round join, from the two endpoints alone. The overlap
-// is drawn twice, which an opaque colour does not show; a translucent one
-// is darker where segments meet.
+// is drawn twice, which an opaque colour does not show; a translucent
+// layer is drawn into an offscreen target with `Max` blending and
+// composited once (GUP-439), so `shade` must output premultiplied colour
+// times coverage.
 //
 // A step curve (GUP-550) draws each instance as 2 or 3 pieces of the step
 // between the two rows, 6 vertices each: the glue calls `vertex_variant`

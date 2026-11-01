@@ -908,6 +908,51 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         }
     }
 
+    /// Whether a [`Line`] layer's colour can have an alpha below 1, so
+    /// overlapping segments would blend twice (GUP-439): a constant,
+    /// derived or default colour below 1; a colour column whose LUTs hold
+    /// an alpha below 255, or that has none (its colours are unknown); a
+    /// brush that fades or greys rows translucently; or the theme's null
+    /// colour below 1 where the glue reads it (`reads_null`). `luts` are
+    /// the layer's LUTs and `lut_channels` the channel of each. Always
+    /// false for other marks: an `Area`'s trapezoids share their edges.
+    fn translucent(
+        &self,
+        theme: &Theme,
+        reads_null: bool,
+        luts: &[Vec<[u8; 4]>],
+        lut_channels: &[usize],
+    ) -> bool {
+        if std::any::TypeId::of::<M>() != std::any::TypeId::of::<Line>() {
+            return false;
+        }
+        let below_one = |v: &ConstValue| matches!(v, ConstValue::Vec4(c) if c[3] < 1.0);
+        let colour = M::CHANNELS.iter().enumerate().any(|(i, desc)| {
+            if desc.role != Some(Role::Color) {
+                return false;
+            }
+            match &self.encodings[i] {
+                None => below_one(&desc.default),
+                Some(Encoding::Const(v)) => below_one(v),
+                Some(Encoding::Derived(f)) => below_one(&f()),
+                Some(Encoding::Column(_)) => {
+                    let mut own = luts
+                        .iter()
+                        .zip(lut_channels)
+                        .filter(|&(_, &c)| c == i)
+                        .peekable();
+                    own.peek().is_none() || own.any(|(lut, _)| lut.iter().any(|t| t[3] < 255))
+                }
+            }
+        });
+        let brush = self.brush.is_some()
+            && match self.unbrushed {
+                Unbrushed::Fade(o) => o < 1.0,
+                Unbrushed::Grey(c) => c.a < 1.0,
+            };
+        colour || brush || (reads_null && theme.null_color.a < 1.0)
+    }
+
     /// `Unbrushed::Grey`'s colour, for the vector mirror.
     #[cfg(feature = "svg")]
     fn grey(&self) -> Option<crate::Color> {
@@ -1933,7 +1978,8 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
                 bytemuck::bytes_of(&self.brush_dim()),
             )?;
         }
-        // The LUTs, in binding order.
+        // The LUTs, in binding order, and the channel of each.
+        let mut lut_channels = Vec::new();
         for lut in &glue.luts {
             let Some(Encoding::Column(c)) = &self.encodings[lut.channel] else {
                 unreachable!("LUTs belong to column channels")
@@ -1941,8 +1987,15 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             for r in c.links()[lut.link].resources() {
                 let Resource::Lut(data) = r;
                 luts.push(data);
+                lut_channels.push(lut.channel);
             }
         }
+        let translucent = self.translucent(
+            theme,
+            program.encodings.offset(glue::NULL_COLOR_FIELD).is_some(),
+            &luts,
+            &lut_channels,
+        );
 
         let chunks = self.chunk_uniform_bytes(&program.chunk, &glue.relative)?;
 
@@ -2034,7 +2087,8 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             // uniform values into the existing buffers.
             if gpu.draws_chunks(uploaded(), &spans) {
                 gpu.write_uniforms(cx, &encodings, &chunks);
-                return Ok(MarkBatch::new(Arc::clone(gpu), M::ANTIALIAS, vector));
+                return Ok(MarkBatch::new(Arc::clone(gpu), M::ANTIALIAS, vector)
+                    .with_translucent(translucent));
             }
             // Appended rows: new chunk draws and `Chunk` entries over the
             // same encodings, which take their new values in place.
@@ -2057,7 +2111,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             }
             self.bits_stale = false;
             self.gpu = Some((Arc::clone(&grown), luts));
-            return Ok(MarkBatch::new(grown, M::ANTIALIAS, vector));
+            return Ok(MarkBatch::new(grown, M::ANTIALIAS, vector).with_translucent(translucent));
         }
         #[cfg_attr(
             target_arch = "wasm32",
@@ -2088,7 +2142,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         self.write_bits(cx, &gpu);
         self.bits_stale = false;
         self.gpu = Some((Arc::clone(&gpu), luts));
-        Ok(MarkBatch::new(gpu, M::ANTIALIAS, vector))
+        Ok(MarkBatch::new(gpu, M::ANTIALIAS, vector).with_translucent(translucent))
     }
 
     fn write_brush(&mut self, cx: &Context, rows: Option<&[usize]>) -> Result<()> {

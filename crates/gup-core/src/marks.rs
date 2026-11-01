@@ -203,8 +203,12 @@ impl Segment {
 ///
 /// Ends and joins are round: each segment is a capsule (every point within
 /// `width / 2` of it), so consecutive segments overlap in a disc at their
-/// shared row. An opaque line shows no seam there; a translucent one is
-/// darker where segments meet, by the overlap blended twice. A row with a
+/// shared row. An opaque line shows no seam there. A translucent line is
+/// drawn once into an offscreen target that keeps each pixel's most
+/// covering segment, then blended into the chart, so its joins, overlaps
+/// and self-crossings have the opacity of its arms (GUP-439; a host
+/// drawing in its own pass with [`Prepared::draw`](crate::Prepared::draw)
+/// blends them twice). A row with a
 /// null position breaks the line: neither segment touching it is drawn, so a
 /// lone row between two nulls draws nothing. Width and colour come from a
 /// segment's first row. Rows with a column split across buffers (chunks)

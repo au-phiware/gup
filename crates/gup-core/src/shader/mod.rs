@@ -96,6 +96,7 @@ mod tests {
             ("rule", RULE_SHADER),
             ("rect", RECT_SHADER),
             ("gradient", GRADIENT_SHADER),
+            ("composite", COMPOSITE_SHADER),
         ] {
             let module = testing::parse(name, source);
             assert_eq!(module.entry_points.len(), 2, "{name}");

@@ -9,7 +9,9 @@ use crate::context::{Context, ContextId, Upload};
 use crate::error::{Error, Result};
 use crate::scene::{GradientDirection, ItemKind, Rule, Scene, TextRun};
 use crate::shader::glue::Glue;
-use crate::shader::{GRADIENT_SHADER, RECT_SHADER, RULE_SHADER, StructLayout, link};
+use crate::shader::{
+    COMPOSITE_SHADER, GRADIENT_SHADER, RECT_SHADER, RULE_SHADER, StructLayout, link,
+};
 use crate::target::{RenderTarget, check_samples, msaa_view};
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -229,6 +231,11 @@ enum PipelineKind {
     Mark(String),
     /// A mark's GPU pick variant (RFC-001 S9d), by glue signature.
     Pick(String),
+    /// A translucent line layer's draw into its offscreen target
+    /// (GUP-439), by glue signature: `Max` blending, [`COVERAGE_FORMAT`].
+    Coverage(String),
+    /// The draw that composites an offscreen target into the scene.
+    Composite,
     Rule,
     Rect,
     Gradient,
@@ -264,6 +271,7 @@ pub(crate) struct PipelineCache {
     view_bgl: Option<wgpu::BindGroupLayout>,
     lut_bgl: Option<wgpu::BindGroupLayout>,
     pick_bgl: Option<wgpu::BindGroupLayout>,
+    composite_bgl: Option<wgpu::BindGroupLayout>,
     programs: HashMap<String, Arc<GlueProgram>>,
     pipelines: HashMap<PipelineKey, wgpu::RenderPipeline>,
     pub stats: PipelineStats,
@@ -345,6 +353,28 @@ impl PipelineCache {
                 device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
                     label: Some("gup pick"),
                     entries: &[uniform_entry(0, true)],
+                })
+            })
+            .clone()
+    }
+
+    /// Group 0 of the composite pipeline: the offscreen target, loaded
+    /// texel by texel.
+    fn composite_bgl(&mut self, device: &wgpu::Device) -> wgpu::BindGroupLayout {
+        self.composite_bgl
+            .get_or_insert_with(|| {
+                device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+                    label: Some("gup composite"),
+                    entries: &[wgpu::BindGroupLayoutEntry {
+                        binding: 0,
+                        visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                        ty: wgpu::BindingType::Texture {
+                            sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                            view_dimension: wgpu::TextureViewDimension::D2,
+                            multisampled: false,
+                        },
+                        count: None,
+                    }],
                 })
             })
             .clone()
@@ -439,8 +469,38 @@ impl Context {
         program: &GlueProgram,
         desc: &TargetDesc,
     ) -> Result<wgpu::RenderPipeline> {
+        let kind = PipelineKind::Mark(program.glue.signature.clone());
+        self.glue_pipeline(program, kind, desc, PREMULTIPLIED_OVER)
+    }
+
+    /// The pipeline that draws `program`'s layer into its offscreen
+    /// target (GUP-439): one sample, [`COVERAGE_FORMAT`], and `Max`
+    /// blending, so each texel keeps the most covering fragment.
+    pub(crate) fn coverage_pipeline(
+        &self,
+        program: &GlueProgram,
+        desc: &TargetDesc,
+    ) -> Result<wgpu::RenderPipeline> {
+        let kind = PipelineKind::Coverage(program.glue.signature.clone());
+        let desc = TargetDesc {
+            format: COVERAGE_FORMAT,
+            samples: 1,
+            ..*desc
+        };
+        self.glue_pipeline(program, kind, &desc, MAX_BLEND)
+    }
+
+    /// A pipeline of `program`'s glue, keyed by `kind`, drawing into a
+    /// target like `desc` with `blend`.
+    fn glue_pipeline(
+        &self,
+        program: &GlueProgram,
+        kind: PipelineKind,
+        desc: &TargetDesc,
+        blend: wgpu::BlendState,
+    ) -> Result<wgpu::RenderPipeline> {
         let key = PipelineKey {
-            kind: PipelineKind::Mark(program.glue.signature.clone()),
+            kind,
             format: desc.format,
             samples: desc.samples,
         };
@@ -475,6 +535,7 @@ impl Context {
                     &module,
                     &buffers,
                     desc,
+                    blend,
                 );
                 let mut cache = self.pipelines();
                 cache.stats.pipelines_created += 1;
@@ -609,7 +670,10 @@ impl Context {
                 &wgpu::vertex_attr_array![0 => Float32x2, 1 => Float32x2, 2 => Uint32, 3 => Uint32],
                 std::mem::size_of::<GradientInstance>(),
             ),
-            PipelineKind::Mark(_) | PipelineKind::Pick(_) => {
+            PipelineKind::Mark(_)
+            | PipelineKind::Pick(_)
+            | PipelineKind::Coverage(_)
+            | PipelineKind::Composite => {
                 unreachable!("mark pipelines come from glue programs")
             }
         };
@@ -649,7 +713,72 @@ impl Context {
                     step_mode: wgpu::VertexStepMode::Instance,
                     attributes,
                 }];
-                let pipeline = create_pipeline(device, label, &layout, &module, &buffers, desc);
+                let pipeline = create_pipeline(
+                    device,
+                    label,
+                    &layout,
+                    &module,
+                    &buffers,
+                    desc,
+                    PREMULTIPLIED_OVER,
+                );
+                let mut cache = self.pipelines();
+                cache.stats.pipelines_created += 1;
+                cache.pipelines.insert(key.clone(), pipeline.clone());
+                Ok(pipeline)
+            },
+        )
+    }
+}
+
+impl Context {
+    /// The pipeline that composites a translucent line layer's offscreen
+    /// target into a target like `desc` (GUP-439): one triangle over the
+    /// target, no vertex buffers, the texture at group 0.
+    fn composite_pipeline(&self, desc: &TargetDesc) -> Result<wgpu::RenderPipeline> {
+        let key = PipelineKey {
+            kind: PipelineKind::Composite,
+            format: desc.format,
+            samples: desc.samples,
+        };
+        if let Some(p) = self.pipelines().hit(&key) {
+            return Ok(p);
+        }
+        let device = self.device();
+        self.scoped(
+            || {
+                format!(
+                    "composite pipeline ({:?}, {}× MSAA)",
+                    desc.format, desc.samples
+                )
+            },
+            || {
+                let bgl = {
+                    let mut cache = self.pipelines();
+                    if let Some(p) = cache.pipelines.get(&key) {
+                        return Ok(p.clone());
+                    }
+                    cache.composite_bgl(device)
+                };
+                let label = "gup composite";
+                let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+                    label: Some(label),
+                    source: wgpu::ShaderSource::Wgsl(Cow::Borrowed(COMPOSITE_SHADER)),
+                });
+                let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+                    label: Some(label),
+                    bind_group_layouts: &[&bgl],
+                    push_constant_ranges: &[],
+                });
+                let pipeline = create_pipeline(
+                    device,
+                    label,
+                    &layout,
+                    &module,
+                    &[],
+                    desc,
+                    PREMULTIPLIED_OVER,
+                );
                 let mut cache = self.pipelines();
                 cache.stats.pipelines_created += 1;
                 cache.pipelines.insert(key.clone(), pipeline.clone());
@@ -697,6 +826,30 @@ fn vertex_buffers(attributes: &[wgpu::VertexAttribute]) -> Vec<wgpu::VertexBuffe
         .collect()
 }
 
+/// How every scene draw blends: shaders output premultiplied
+/// sRGB-encoded colour.
+const PREMULTIPLIED_OVER: wgpu::BlendState = wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING;
+
+/// How a translucent line layer draws into its offscreen target: each
+/// channel keeps its largest value, so a pixel two segments cover holds
+/// the larger coverage, not the two blended (GUP-439).
+const MAX_BLEND: wgpu::BlendState = wgpu::BlendState {
+    color: wgpu::BlendComponent {
+        src_factor: wgpu::BlendFactor::One,
+        dst_factor: wgpu::BlendFactor::One,
+        operation: wgpu::BlendOperation::Max,
+    },
+    alpha: wgpu::BlendComponent {
+        src_factor: wgpu::BlendFactor::One,
+        dst_factor: wgpu::BlendFactor::One,
+        operation: wgpu::BlendOperation::Max,
+    },
+};
+
+/// The format of a translucent line layer's offscreen target: the
+/// premultiplied, sRGB-encoded colour the scene's own targets hold.
+pub(crate) const COVERAGE_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
+
 fn create_pipeline(
     device: &wgpu::Device,
     label: &str,
@@ -704,6 +857,7 @@ fn create_pipeline(
     module: &wgpu::ShaderModule,
     buffers: &[wgpu::VertexBufferLayout<'_>],
     desc: &TargetDesc,
+    blend: wgpu::BlendState,
 ) -> wgpu::RenderPipeline {
     device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
         label: Some(label),
@@ -720,8 +874,7 @@ fn create_pipeline(
             compilation_options: Default::default(),
             targets: &[Some(wgpu::ColorTargetState {
                 format: desc.format,
-                // Shaders output premultiplied sRGB-encoded colour.
-                blend: Some(wgpu::BlendState::PREMULTIPLIED_ALPHA_BLENDING),
+                blend: Some(blend),
                 write_mask: wgpu::ColorWrites::ALL,
             })],
         }),
@@ -1134,6 +1287,32 @@ enum Draw {
     },
     /// Glyph quads, drawn by `gup-text` (it binds its atlas at group 0).
     Text(gup_text::GlyphBatch),
+    /// A translucent line layer's offscreen target, blended into the
+    /// scene by one triangle (GUP-439); the layer itself is drawn by
+    /// [`Prepared::encode`] before the scene pass.
+    Composite {
+        pipeline: wgpu::RenderPipeline,
+        /// Group 0: the offscreen target.
+        target: wgpu::BindGroup,
+    },
+}
+
+/// A translucent line layer's draw into its offscreen target (GUP-439),
+/// recorded in a pass of its own before the scene pass.
+struct CoverageDraw {
+    pipeline: wgpu::RenderPipeline,
+    layer: Arc<LayerGpu>,
+    spans: Arc<[Span]>,
+    view: wgpu::TextureView,
+    scissor: Scissor,
+}
+
+/// A pooled offscreen target for one translucent line layer.
+struct CoverageTarget {
+    size: (u32, u32),
+    view: wgpu::TextureView,
+    /// Group 0 of the composite pipeline.
+    bind_group: wgpu::BindGroup,
 }
 
 impl Draw {
@@ -1170,6 +1349,10 @@ struct RendererGpu {
     /// target with fewer samples ([`Scene::min_samples`]), kept for the
     /// target it was made for.
     msaa: Option<(TargetDesc, wgpu::TextureView)>,
+    /// Offscreen targets of translucent line layers (GUP-439), one per
+    /// such layer of the largest scene drawn, reused while the target's
+    /// size stays the same.
+    coverage: Vec<CoverageTarget>,
 }
 
 /// Turns a [`Scene`] into GPU draws (RFC-001 §7).
@@ -1197,6 +1380,9 @@ impl std::fmt::Debug for Renderer {
 pub struct Prepared {
     view_bind_group: wgpu::BindGroup,
     draws: Vec<(Scissor, Draw)>,
+    /// Translucent line layers' offscreen draws, in scene order: empty
+    /// unless prepared by [`Renderer::render`] (GUP-439).
+    coverage: Vec<CoverageDraw>,
     clear: wgpu::Color,
 }
 
@@ -1241,6 +1427,7 @@ impl Renderer {
                 instances: Vec::new(),
                 luts: Vec::new(),
                 msaa: None,
+                coverage: Vec::new(),
             });
         }
         self.gpu.as_mut().expect("created above")
@@ -1256,7 +1443,25 @@ impl Renderer {
     /// [`Prepared::draw`] inside the host's pass. Gup writes uniforms and
     /// instances to the queue (flushed by the host's next submit) but
     /// never submits on the host's behalf (RFC-001 §2).
+    ///
+    /// A translucent [`Line`](crate::Line) layer is drawn directly here,
+    /// so it blends twice where its segments overlap (joins and
+    /// self-crossings); [`render`](Self::render) draws it once through an
+    /// offscreen target (GUP-439).
     pub fn prepare(&mut self, cx: &Context, scene: &Scene, desc: &TargetDesc) -> Result<Prepared> {
+        self.prepare_with(cx, scene, desc, false)
+    }
+
+    /// [`prepare`](Self::prepare), drawing translucent line layers through
+    /// offscreen targets when `offscreen` is set: the caller then records
+    /// [`Prepared::encode`] before the scene pass.
+    fn prepare_with(
+        &mut self,
+        cx: &Context,
+        scene: &Scene,
+        desc: &TargetDesc,
+        offscreen: bool,
+    ) -> Result<Prepared> {
         if !(desc.dpr.is_finite() && desc.dpr > 0.0) || desc.samples == 0 {
             return Err(Error::config(
                 "target",
@@ -1276,7 +1481,7 @@ impl Renderer {
                     desc.width, desc.height, desc.format, desc.samples
                 )
             },
-            || self.prepare_unscoped(cx, scene, desc),
+            || self.prepare_unscoped(cx, scene, desc, offscreen),
         )
     }
 
@@ -1285,6 +1490,7 @@ impl Renderer {
         cx: &Context,
         scene: &Scene,
         desc: &TargetDesc,
+        offscreen: bool,
     ) -> Result<Prepared> {
         let dpr = desc.dpr;
         let gpu = self.gpu(cx);
@@ -1301,6 +1507,7 @@ impl Renderer {
 
         let full = [0, 0, desc.width, desc.height];
         let mut draws = Vec::new();
+        let mut coverage = Vec::new();
         let mut next_instances = 0;
         let mut next_glyphs = 0;
         for item in &scene.items {
@@ -1316,12 +1523,27 @@ impl Renderer {
                              chart again with this context",
                         ));
                     }
-                    let pipeline = cx.mark_pipeline(&batch.gpu.program, desc)?;
-                    Some(Draw::Marks {
-                        pipeline,
-                        layer: Arc::clone(&batch.gpu),
-                        spans: Arc::clone(&batch.visible),
-                    })
+                    if offscreen && batch.translucent {
+                        let (view, target) = gpu.coverage_target(cx, coverage.len(), desc);
+                        coverage.push(CoverageDraw {
+                            pipeline: cx.coverage_pipeline(&batch.gpu.program, desc)?,
+                            layer: Arc::clone(&batch.gpu),
+                            spans: Arc::clone(&batch.visible),
+                            view,
+                            scissor,
+                        });
+                        Some(Draw::Composite {
+                            pipeline: cx.composite_pipeline(desc)?,
+                            target,
+                        })
+                    } else {
+                        let pipeline = cx.mark_pipeline(&batch.gpu.program, desc)?;
+                        Some(Draw::Marks {
+                            pipeline,
+                            layer: Arc::clone(&batch.gpu),
+                            spans: Arc::clone(&batch.visible),
+                        })
+                    }
                 }
                 ItemKind::Rules(rules) => {
                     let instances: Vec<RuleInstance> = rules.iter().map(rule_instance).collect();
@@ -1376,6 +1598,7 @@ impl Renderer {
         Ok(Prepared {
             view_bind_group: gpu.view_bind_group.clone(),
             draws,
+            coverage,
             clear: premultiplied_clear(scene.background),
         })
     }
@@ -1387,6 +1610,12 @@ impl Renderer {
     /// frame's texture. A scene that needs more samples than the target
     /// has ([`Scene::min_samples`]: an area or polygon mark) is drawn into
     /// a multisampled texture the renderer keeps for the target's size.
+    ///
+    /// A translucent [`Line`](crate::Line) layer is first drawn into an
+    /// offscreen texture the target's size, keeping each pixel's most
+    /// covering segment, then blended into the scene once, so its joins
+    /// and self-crossings have the opacity of its arms (GUP-439). Opaque
+    /// layers draw straight into the scene pass.
     ///
     /// [`ImageTarget`]: crate::ImageTarget
     /// [`TextureTarget`]: crate::TextureTarget
@@ -1416,13 +1645,14 @@ impl Renderer {
             },
             || {
                 let frame = target.acquire(cx)?;
-                let prepared = self.prepare(cx, scene, &desc)?;
+                let prepared = self.prepare_with(cx, scene, &desc, true)?;
                 let msaa = (desc.samples != own.samples).then(|| self.msaa_view(cx, &desc));
                 let mut encoder =
                     cx.device()
                         .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                             label: Some("gup scene"),
                         });
+                prepared.encode(&mut encoder);
                 {
                     let clear = prepared.clear_color();
                     let attachment = match &msaa {
@@ -1464,6 +1694,58 @@ impl Renderer {
 }
 
 impl RendererGpu {
+    /// The `index`th pooled offscreen target, the size of `desc`'s target
+    /// (made, or remade at a new size, on demand), and its composite bind
+    /// group.
+    fn coverage_target(
+        &mut self,
+        cx: &Context,
+        index: usize,
+        desc: &TargetDesc,
+    ) -> (wgpu::TextureView, wgpu::BindGroup) {
+        let size = (desc.width.max(1), desc.height.max(1));
+        if self.coverage.get(index).is_none_or(|t| t.size != size) {
+            let device = cx.device();
+            let texture = device.create_texture(&wgpu::TextureDescriptor {
+                label: Some("gup line coverage"),
+                size: wgpu::Extent3d {
+                    width: size.0,
+                    height: size.1,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: COVERAGE_FORMAT,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            });
+            let view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+            let layout = cx.pipelines().composite_bgl(device);
+            let bind_group = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("gup line coverage"),
+                layout: &layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: wgpu::BindingResource::TextureView(&view),
+                }],
+            });
+            let target = CoverageTarget {
+                size,
+                view,
+                bind_group,
+            };
+            if index < self.coverage.len() {
+                self.coverage[index] = target;
+            } else {
+                self.coverage.push(target);
+            }
+        }
+        let t = &self.coverage[index];
+        (t.view.clone(), t.bind_group.clone())
+    }
+
     /// Lay out `runs` and prepare their glyph draw in the next pooled glyph
     /// buffer. Holds only the `text` lock (RFC-001 S1 lock order); the
     /// returned batch draws without it.
@@ -1580,14 +1862,49 @@ impl Prepared {
     /// ordered by size and rows were appended) and one per guide or text
     /// batch. Tests pin
     /// it as a deterministic proxy for GPU cost (`PERF_BUDGETS.md`).
+    ///
+    /// A translucent line layer that [`Renderer::render`] draws through an
+    /// offscreen target counts its spans there plus one composite draw.
     pub fn draw_calls(&self) -> usize {
-        self.draws
-            .iter()
-            .map(|(_, draw)| match draw {
-                Draw::Marks { spans, .. } => spans.len(),
-                Draw::Instanced { .. } | Draw::Text(_) => 1,
-            })
-            .sum()
+        let offscreen: usize = self.coverage.iter().map(|c| c.spans.len()).sum();
+        offscreen
+            + self
+                .draws
+                .iter()
+                .map(|(_, draw)| match draw {
+                    Draw::Marks { spans, .. } => spans.len(),
+                    Draw::Instanced { .. } | Draw::Text(_) | Draw::Composite { .. } => 1,
+                })
+                .sum::<usize>()
+    }
+
+    /// Record each translucent line layer's offscreen pass into `encoder`
+    /// (GUP-439): clear its target, then draw the layer with `Max`
+    /// blending inside its clip. Must precede the scene pass, which
+    /// composites the targets. Records nothing for a scene without one.
+    pub(crate) fn encode(&self, encoder: &mut wgpu::CommandEncoder) {
+        for c in &self.coverage {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("gup line coverage"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view: &c.view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+            });
+            let [x, y, w, h] = c.scissor;
+            pass.set_scissor_rect(x, y, w, h);
+            pass.set_pipeline(&c.pipeline);
+            pass.set_bind_group(0, &self.view_bind_group, &[]);
+            c.layer.record(&mut pass, &c.spans);
+        }
     }
 
     /// Record every draw into `pass`. Allocates nothing, takes no locks
@@ -1622,6 +1939,12 @@ impl Prepared {
                 }
                 // Binds its atlas at group 0, so the others rebind the view.
                 Draw::Text(batch) => batch.draw(pass),
+                // Binds its target at group 0, likewise.
+                Draw::Composite { pipeline, target } => {
+                    pass.set_pipeline(pipeline);
+                    pass.set_bind_group(0, target, &[]);
+                    pass.draw(0..3, 0..1);
+                }
             }
         }
     }
@@ -1689,5 +2012,110 @@ impl PipelineCache {
     /// The view bind group layout (group 0 of every pipeline).
     pub(crate) fn view_layout(&mut self, device: &wgpu::Device) -> wgpu::BindGroupLayout {
         self.view_bgl(device)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::prelude::*;
+
+    type Row = (f64, f64);
+
+    const ROWS: [Row; 3] = [(0.0, 0.0), (1.0, 2.0), (2.0, 1.0)];
+
+    /// A scene of one line through `ROWS`, set up by `style`.
+    fn line(cx: &Context, style: impl Fn(&mut Selection<Row, Line>)) -> Scene {
+        let mut plot = Plot::new();
+        let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
+        let layer = plot.add(Selection::<Row, Line>::new(ROWS.to_vec()));
+        layer
+            .x_with(x.encode(|r: &Row| r.0))
+            .y_with(y.encode(|r: &Row| r.1));
+        style(layer);
+        plot.resolve(cx, 200.0, 100.0).unwrap().scene.clone()
+    }
+
+    /// GUP-439: only a translucent `Line` layer draws through an offscreen
+    /// target, and only when drawn by `Renderer::render`; opaque lines,
+    /// translucent areas and host passes keep the direct draw.
+    #[test]
+    fn only_translucent_lines_draw_offscreen() {
+        let cx = Context::new_blocking().unwrap();
+        let desc = TargetDesc {
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            width: 200,
+            height: 100,
+            dpr: 1.0,
+            samples: 1,
+        };
+        let half = Color {
+            a: 0.5,
+            ..Line::DEFAULT_COLOR
+        };
+        let palette = |a: f32| {
+            let red = Color {
+                a,
+                ..Color::hex(0xff0000)
+            };
+            Categorical::from_palette([red, Color::hex(0x00ff00)])
+        };
+        fn key(r: &Row) -> &str {
+            if r.0 > 1.0 { "b" } else { "a" }
+        }
+        let area = {
+            let mut plot = Plot::new();
+            let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
+            plot.add(Selection::<Row, Area>::new(ROWS.to_vec()))
+                .attr(Area::X, x.encode(|r: &Row| r.0))
+                .attr(Area::Y, y.encode(|r: &Row| r.1))
+                .attr(Area::Y_END, y.encode(|_: &Row| 0.0))
+                .attr(Area::FILL, half);
+            plot.resolve(&cx, 200.0, 100.0).unwrap().scene.clone()
+        };
+        let cases = [
+            ("default line", line(&cx, |_| {}), 0),
+            (
+                "opaque line",
+                line(&cx, |l| {
+                    l.color(Color::hex(0x123456));
+                }),
+                0,
+            ),
+            (
+                "translucent line",
+                line(&cx, |l| {
+                    l.color(half);
+                }),
+                1,
+            ),
+            (
+                "opaque palette",
+                line(&cx, |l| {
+                    l.color(palette(1.0).encode_key(key));
+                }),
+                0,
+            ),
+            (
+                "translucent palette",
+                line(&cx, |l| {
+                    l.color(palette(0.5).encode_key(key));
+                }),
+                1,
+            ),
+            ("translucent area", area, 0),
+        ];
+        let mut renderer = Renderer::new();
+        for (case, scene, offscreen) in cases {
+            let prepared = renderer.prepare_with(&cx, &scene, &desc, true).unwrap();
+            assert_eq!(prepared.coverage.len(), offscreen, "{case}");
+            let direct = renderer.prepare(&cx, &scene, &desc).unwrap();
+            assert!(direct.coverage.is_empty(), "{case}");
+            assert_eq!(
+                prepared.draw_calls(),
+                direct.draw_calls() + offscreen,
+                "{case}: the composite is one more draw"
+            );
+        }
     }
 }

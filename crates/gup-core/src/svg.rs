@@ -546,6 +546,21 @@ fn write_layer(
             );
         }
     };
+    // A translucent line whose strokes share one alpha is a group with
+    // that opacity around opaque strokes: the group is composited once,
+    // so its joins and crossings, between runs as well, blend once, as
+    // the GPU's offscreen target does (GUP-439).
+    let group = line_opacity(&marks);
+    if let Some(a) = group {
+        writeln!(s, r#"<g opacity="{}">"#, num(a))?;
+    }
+    let stroke = |c: Color| {
+        if group.is_some() {
+            Color { a: 1.0, ..c }
+        } else {
+            c
+        }
+    };
     for mark in &marks {
         match mark {
             VectorMark::Circle {
@@ -630,6 +645,7 @@ fn write_layer(
                 width,
                 color,
             } => {
+                let color = &stroke(*color);
                 s.push_str(r#"<polyline points=""#);
                 for (i, p) in points.iter().enumerate() {
                     if i > 0 {
@@ -651,6 +667,7 @@ fn write_layer(
                 width,
                 color,
             } => {
+                let color = &stroke(*color);
                 write!(s, r#"<path d="M{},{}"#, num2(start.x), num2(start.y))?;
                 for [k1, k2, b] in segments {
                     write!(
@@ -692,7 +709,27 @@ fn write_layer(
             }
         }
     }
+    if group.is_some() {
+        s.push_str("</g>\n");
+    }
     Ok(())
+}
+
+#[cfg(feature = "svg")]
+/// The alpha below 1 every stroke of a line layer's `marks` shares, if
+/// they are all line strokes and share one.
+fn line_opacity(marks: &[VectorMark]) -> Option<f32> {
+    let mut alpha = None;
+    for mark in marks {
+        let a = match mark {
+            VectorMark::Polyline { color, .. } | VectorMark::Cubic { color, .. } => color.a,
+            _ => return None,
+        };
+        if *alpha.get_or_insert(a) != a {
+            return None;
+        }
+    }
+    alpha.filter(|&a| a < 1.0)
 }
 
 #[cfg(feature = "svg")]
