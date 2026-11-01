@@ -542,8 +542,14 @@ impl CpuLayer {
                         }
                         let a = Point::new(p[0], p[1]);
                         // The segment's path after `a`: `b`, or a step's
-                        // corners then `b`.
-                        let (path, k) = curve.path([p[0], p[1]], [p[2], p[3]], [0.0; 2]);
+                        // corners then `b`. (A monotone curve is a cubic,
+                        // above, so its controls and pieces are unused.)
+                        let (path, k) = curve.path(
+                            [p[0], p[1]],
+                            [p[2], p[3]],
+                            [0.0; 2],
+                            crate::marks::MAX_MONOTONE_PIECES,
+                        );
                         let rest = path[1..k].iter().map(|q| Point::new(q[0], q[1]));
                         let col = color.at(d);
                         match &mut run {

@@ -109,17 +109,104 @@ pub(crate) fn controls(x: &[f64], y: &[f64]) -> (Vec<f64>, Vec<f64>) {
     (c1, c2)
 }
 
-/// The cubic's parameter at joint `j` (0 to 16) of a segment's pieces:
-/// the Chebyshev node `(1 - cos(pi j / 16)) / 2`, as `line.wgsl`'s
-/// `monotone_point`. The pieces are shortest at the rows, where a
-/// monotone cubic bends most (a level tangent at an extremum), so the
-/// pieces either side of a row both leave it along its tangent.
-pub(crate) fn joint(j: u32) -> f32 {
-    let n = crate::marks::MONOTONE_PIECES;
+/// The cubic's parameter at joint `j` (0 to `n`) of a segment drawn as
+/// `n` pieces: the Chebyshev node `(1 - cos(pi j / n)) / 2`, as
+/// `line.wgsl`'s `monotone_point`. The pieces are shortest at the rows,
+/// where a monotone cubic bends most (a level tangent at an extremum),
+/// so the pieces either side of a row both leave it along its tangent.
+pub(crate) fn joint(j: u32, n: u32) -> f32 {
     match j {
         0 => 0.0,
         j if j >= n => 1.0,
         j => 0.5 - 0.5 * (std::f32::consts::PI * j as f32 / n as f32).cos(),
+    }
+}
+
+/// The most ink a segment's pieces may misplace against its cubic
+/// (GUP-576): an eighth of a pixel's coverage, as a pixel-wide stretch
+/// of the line drawn an eighth of a pixel off.
+const TOLERANCE: f64 = 0.125;
+
+/// The ink `n` pieces misplace on a segment `width` logical pixels wide,
+/// as a fraction of a pixel's coverage. The pieces, at the Chebyshev
+/// nodes, stray from the cubic by about `width / n²` (GUP-551 measured
+/// 0.19 px for 16 pieces and 0.68 px for 8 at the sharpest knee of a
+/// 50 px segment; a monotone segment stays inside its rows' box, so one
+/// piece strays at most `width`). Across a segment narrower than a pixel
+/// that offset spans only `width` of a pixel's width, so it moves at
+/// most `width` of the ink an offset across the whole pixel would.
+fn misplaced(width: f64, n: u32) -> f64 {
+    let n = f64::from(n);
+    width / (n * n) * width.min(1.0)
+}
+
+/// The pieces a monotone segment `width` logical pixels wide is drawn as
+/// (GUP-576): the fewest, a power of two from 1 to
+/// [`MAX_MONOTONE_PIECES`](crate::marks::MAX_MONOTONE_PIECES), that
+/// misplace at most [`TOLERANCE`] of a pixel's ink ([`misplaced`]). So a
+/// segment wider than 8 px is drawn as 16 pieces, as GUP-551 drew every
+/// segment, and one narrower than 0.35 px (4600 rows or more across
+/// 1600 px) as one, at about the cost of a straight segment.
+/// Powers of two keep the pipelines a layer links while zooming to five.
+/// A width that is not a number (no CPU map of the x scale) draws the
+/// most.
+pub(crate) fn pieces_for(width: f64) -> u32 {
+    let most = crate::marks::MAX_MONOTONE_PIECES;
+    if width.is_nan() {
+        return most;
+    }
+    let mut n = 1;
+    while n < most && misplaced(width, n) > TOLERANCE {
+        n *= 2;
+    }
+    n
+}
+
+/// A monotone line's segment widths, in data units, summarised for
+/// choosing its pieces (GUP-576): in buckets of a quarter octave of
+/// width, the summed width of the segments in each and the x of the
+/// first one's rows. Appends add to it; it holds a few words per bucket,
+/// whatever the rows.
+#[derive(Clone, Debug, Default)]
+pub(crate) struct Widths {
+    buckets: std::collections::BTreeMap<i32, (f64, [f64; 2])>,
+    total: f64,
+}
+
+impl Widths {
+    /// Add the curved segments between consecutive rows of `x`, `y`:
+    /// finite rows whose x increases (any other segment is drawn
+    /// straight, whatever the count).
+    pub(crate) fn add(&mut self, x: &[f64], y: &[f64]) {
+        let n = x.len().min(y.len());
+        for i in 1..n {
+            let (a, b) = (x[i - 1], x[i]);
+            let finite = a.is_finite() && b.is_finite() && y[i - 1].is_finite() && y[i].is_finite();
+            if !finite || b <= a {
+                continue;
+            }
+            let w = b - a;
+            let key = (w.log2() * 4.0).floor() as i32;
+            self.buckets.entry(key).or_insert((0.0, [a, b])).0 += w;
+            self.total += w;
+        }
+    }
+
+    /// The x of the rows of a segment at the width-weighted median: the
+    /// segments in narrower buckets span less than half the curve's
+    /// extent in x, and those in wider ones at most half. Under an affine
+    /// x scale (linear or time) its pixel width is that median at every
+    /// zoom. A few wide gaps among dense rows do not raise it; a gap
+    /// spanning most of the chart does. `None` without a curved segment.
+    pub(crate) fn median(&self) -> Option<[f64; 2]> {
+        let mut sum = 0.0;
+        for &(w, segment) in self.buckets.values() {
+            sum += w;
+            if sum >= self.total * 0.5 {
+                return Some(segment);
+            }
+        }
+        None
     }
 }
 
@@ -297,6 +384,84 @@ mod tests {
                 assert_eq!(w2[k], c2[start + k], "c2 at {}", start + k);
             }
         }
+    }
+
+    /// GUP-576: the count rule. 16 pieces for the golden's ~50 px
+    /// segments, one for 100K rows in 1600 px, powers of two between.
+    #[test]
+    fn pieces_follow_pixel_width() {
+        let cases = [
+            (0.0, 1),
+            (0.016, 1),
+            (0.35, 1),
+            (0.36, 2),
+            (0.7, 2),
+            (0.71, 4),
+            (2.0, 4),
+            (2.1, 8),
+            (8.0, 8),
+            (8.1, 16),
+            (50.0, 16),
+            (f64::INFINITY, 16),
+            (f64::NAN, 16),
+        ];
+        for (w, n) in cases {
+            assert_eq!(pieces_for(w), n, "width {w}");
+        }
+        // Each count keeps the modelled misplaced ink in tolerance (below
+        // 16), and half the count would not.
+        for k in 1..400 {
+            let w = f64::from(k) * 0.05;
+            let n = pieces_for(w);
+            assert!(n == 16 || misplaced(w, n) <= TOLERANCE, "{w}");
+            assert!(n == 1 || misplaced(w, n / 2) > TOLERANCE, "{w}");
+        }
+        // Over a pixel wide, the offset itself.
+        assert_eq!(misplaced(8.0, 8), 0.125);
+        assert_eq!(misplaced(0.5, 1), 0.25);
+    }
+
+    /// The joints at every count: the ends exactly, the Chebyshev nodes
+    /// between, increasing and symmetric about the middle.
+    #[test]
+    fn joints_are_chebyshev_nodes_at_every_count() {
+        for n in [1, 2, 4, 8, 16] {
+            assert_eq!((joint(0, n), joint(n, n)), (0.0, 1.0));
+            for j in 1..n {
+                let t = joint(j, n);
+                assert!((t + joint(n - j, n) - 1.0).abs() < 1e-6, "{j}/{n}");
+                assert!(t > joint(j - 1, n), "{j}/{n}");
+            }
+        }
+        assert!((joint(1, 2) - 0.5).abs() < 1e-6);
+    }
+
+    /// The width-weighted median: uniform rows give their width; a few
+    /// gaps among dense rows do not count, a gap spanning most of the
+    /// extent does; straight and null segments are left out; appends add.
+    #[test]
+    fn widths_take_the_width_weighted_median() {
+        let x: Vec<f64> = (0..1000).map(f64::from).collect();
+        let mut w = Widths::default();
+        w.add(&x, &vec![1.0; x.len()]);
+        assert_eq!(w.median().map(|s| s[1] - s[0]), Some(1.0));
+        // Three gaps of 50: 150 of 1149 units.
+        let mut gaps = x.clone();
+        gaps.extend([1049.0, 1099.0, 1149.0]);
+        let mut w = Widths::default();
+        w.add(&gaps, &vec![1.0; gaps.len()]);
+        assert_eq!(w.median().map(|s| s[1] - s[0]), Some(1.0));
+        // Appending a gap of 5000 (after the last stored row).
+        w.add(&[1149.0, 6149.0], &[1.0, 1.0]);
+        assert_eq!(w.median(), Some([1149.0, 6149.0]));
+        // Nulls and x that does not increase are drawn straight.
+        let mut w = Widths::default();
+        w.add(
+            &[0.0, 10.0, 10.0, 5.0, 7.0, 8.0],
+            &[1.0, f64::NAN, 2.0, 2.0, 2.0, 2.0],
+        );
+        assert_eq!(w.median(), Some([5.0, 7.0]));
+        assert_eq!(Widths::default().median(), None);
     }
 
     #[test]

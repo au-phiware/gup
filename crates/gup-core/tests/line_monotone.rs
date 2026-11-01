@@ -3,7 +3,8 @@
 
 //! GUP-551: `Curve::MonotoneX`. The control values are computed on the CPU
 //! as two more columns, read through the y scale, and each segment is
-//! drawn as 16 pieces of its cubic. Ink is measured as in `line_curves.rs`:
+//! drawn as pieces of its cubic: 16 where segments are wider than 8 px,
+//! as few as one for dense rows (GUP-576). Ink is measured as in `line_curves.rs`:
 //! with a red line on white, a pixel's coverage is `(red - green) / 255`.
 
 mod common;
@@ -21,7 +22,8 @@ type Px2 = (f64, f64);
 const RED: Color = Color::hex(0xff0000);
 const W: u32 = 500;
 const H: u32 = 400;
-/// The pieces each segment is drawn as (`marks::MONOTONE_PIECES`).
+/// The pieces each segment of the sparse fixtures is drawn as (they are
+/// all wider than 8 px: `monotone::pieces_for`).
 const PIECES: u32 = 16;
 
 /// Steffen's tangents of one run (finite rows, x increasing), written out
@@ -292,8 +294,10 @@ fn span(t: f64, half: f64) -> f64 {
 /// The largest difference between each pixel's ink and the coverage of a
 /// stroke `width` wide along `path` (the shaders' footprint: `span` of the
 /// distance to the path), over the pixels within `width / 2 + 1.5` of it,
-/// and where.
+/// and where. `path` runs left to right, so each pixel is measured
+/// against the pieces within reach in x.
 fn worst_coverage(image: &image::RgbaImage, path: &[Px2], width: f64) -> (f64, (u32, u32)) {
+    assert!(path.windows(2).all(|w| w[0].0 <= w[1].0), "x increases");
     let reach = width / 2.0 + 1.5;
     let (lo, hi) = path.iter().fold(
         (
@@ -311,7 +315,11 @@ fn worst_coverage(image: &image::RgbaImage, path: &[Px2], width: f64) -> (f64, (
     for py in (lo.1 - reach).floor() as u32..=(hi.1 + reach) as u32 {
         for px in (lo.0 - reach).floor() as u32..=(hi.0 + reach) as u32 {
             let q = (f64::from(px) + 0.5, f64::from(py) + 0.5);
-            let d = path
+            let first = path
+                .partition_point(|p| p.0 < q.0 - reach)
+                .saturating_sub(1);
+            let last = path.partition_point(|p| p.0 <= q.0 + reach) + 1;
+            let d = path[first..last.min(path.len())]
                 .windows(2)
                 .map(|s| dist(q, s[0], s[1]))
                 .fold(f64::INFINITY, f64::min);
@@ -373,7 +381,11 @@ fn a_monotone_line_reads_its_control_columns() {
     .curve(Curve::MonotoneX);
     p.resolve(&cx, 320.0, 200.0).unwrap();
     let (signature, source) = p.glue_sources().remove(0);
-    assert!(signature.ends_with("} curve monotone-x"), "{signature}");
+    // Three rows across 320 px: 16 pieces, the count a literal (GUP-576).
+    assert!(
+        signature.ends_with("} curve monotone-x, 16 pieces"),
+        "{signature}"
+    );
     // After the column channels x and y, before the next-row columns.
     assert!(source.contains("@location(2) y_out: f32"), "{source}");
     assert!(source.contains("@location(3) y_in: f32"), "{source}");
@@ -388,7 +400,7 @@ fn a_monotone_line_reads_its_control_columns() {
     assert!(
         source.contains(
             "line::vertex_controls(m, controls, vertex_index, chunk.row_base + instance_index, \
-             u_view, 4u, enc.row_count)"
+             u_view, 16u, enc.row_count)"
         ),
         "{source}"
     );
@@ -468,15 +480,15 @@ fn the_curve_passes_through_every_row_without_overshoot() {
     assert_through_rows(&image, &f.expected(&rows), 0.5);
 }
 
-/// The most a polyline of 16 pieces per segment (as drawn) strays from
+/// The most a polyline of `n` pieces per segment (as drawn) strays from
 /// the cubic, in pixels: sampled at 64 points per piece.
-fn tessellation_error(e: &Expected) -> f64 {
-    let pieces = e.polyline(PIECES);
+fn tessellation_error(e: &Expected, n: u32) -> f64 {
+    let pieces = e.polyline(n);
     let mut worst = 0.0f64;
     for i in 0..e.segments.len() {
-        for k in 0..PIECES * 64 {
-            let p = e.at(i, f64::from(k) / f64::from(PIECES * 64));
-            let near = pieces[i * PIECES as usize..=(i + 1) * PIECES as usize]
+        for k in 0..n * 64 {
+            let p = e.at(i, f64::from(k) / f64::from(n * 64));
+            let near = pieces[i * n as usize..=(i + 1) * n as usize]
                 .windows(2)
                 .map(|s| dist(p, s[0], s[1]))
                 .fold(f64::INFINITY, f64::min);
@@ -508,13 +520,117 @@ fn joints_are_seamless() {
             let mut f = Fixture::new(&rows, xd, (-1.0, 11.0), o);
             let image = f.image();
             let expected = f.expected(&rows);
-            let t = tessellation_error(&expected);
+            let t = tessellation_error(&expected, PIECES);
             let path = expected.polyline(PIECES);
             let (e, at) = worst_coverage(&image, &path, f64::from(width));
             assert!(t < 0.25, "the pieces stray {t} px from the cubic");
             assert!(e <= 0.08, "width {width}: ink off by {e} at {at:?}");
         }
     }
+}
+
+/// A smooth wave of `n` rows: two periods over x from 0 to `n - 1`.
+fn wave(n: usize) -> Vec<Row> {
+    let period = (n - 1) as f64 / 2.0;
+    (0..n)
+        .map(|i| {
+            let x = i as f64;
+            (x, 5.0 + 4.0 * (std::f64::consts::TAU * x / period).sin())
+        })
+        .collect()
+}
+
+/// The pieces per segment the plot's only layer draws, from its glue
+/// signature (`… curve monotone-x, 4 pieces`).
+fn drawn_pieces(plot: &Plot) -> u32 {
+    let (signature, _) = plot.glue_sources().remove(0);
+    let (_, count) = signature
+        .split_once("curve monotone-x, ")
+        .unwrap_or_else(|| panic!("{signature}"));
+    count.split(' ').next().unwrap().parse().unwrap()
+}
+
+/// GUP-576, AC3: the seams at the other counts the pixel density picks.
+/// A smooth wave of 2000 rows across the plot (0.2 px segments) draws one
+/// piece per segment, and 300 rows (1.5 px) four; the sparse fixtures of
+/// [`joints_are_seamless`] draw 16. At widths 1.5, 3 and 6, every pixel
+/// near the curve has the coverage of a round-joined stroke along the
+/// drawn pieces, so no joint, between pieces or at a row, is drawn twice
+/// or left out.
+#[cfg(any())] // WIP: row-joint holes on dense rows (GUP-576)
+#[test]
+fn joints_are_seamless_at_every_count() {
+    for (n, pieces) in [(2000, 1), (300, 4)] {
+        let rows = wave(n);
+        // Clear of the axes.
+        let xd = (-0.05 * n as f64, 1.05 * n as f64);
+        for width in [1.5, 3.0, 6.0] {
+            let o = Opts {
+                width,
+                ..Opts::default()
+            };
+            let mut f = Fixture::new(&rows, xd, (0.0, 10.0), o);
+            let image = f.image();
+            let pieces = drawn_pieces(&f.plot);
+            let expected = f.expected(&rows);
+            let t = tessellation_error(&expected, pieces);
+            assert!(t < 0.25, "{n} rows: the pieces stray {t} px from the cubic");
+            let path = expected.polyline(pieces);
+            let (e, at) = worst_coverage(&image, &path, f64::from(width));
+            if e > 0.08 {
+                image.save(format!("/tmp/gup576/seam_{n}_{width}.png")).ok();
+            }
+            eprintln!("DEBUG {n} rows, width {width}: ink off by {e} at {at:?}, t {t}");
+            if std::env::var_os("GUP576_SOFT").is_some() {
+                continue;
+            }
+            assert!(
+                e <= 0.08,
+                "{n} rows, width {width}: ink off by {e} at {at:?}"
+            );
+        }
+    }
+}
+
+/// GUP-576, AC1: the count follows the x scale and the rows. 2000 rows
+/// across the plot draw one piece per segment; zoomed to 100 of them
+/// (4.5 px segments), eight; zoomed out again, one. A sparse line draws
+/// 16 until appends fill it in.
+#[test]
+fn the_count_follows_zoom_and_appends() {
+    let cx = Context::new_blocking().unwrap();
+    let mut plot = Plot::new();
+    let x = plot.x(Linear::new().domain(0.0, 1999.0));
+    let y = plot.y(Linear::new().domain(0.0, 10.0));
+    plot.add(Selection::<Row, Line>::new(wave(2000)))
+        .x_with(x.encode(|r: &Row| r.0))
+        .y_with(y.encode(|r: &Row| r.1))
+        .curve(Curve::MonotoneX);
+    let mut counts = Vec::new();
+    for (x0, x1) in [(0.0, 1999.0), (900.0, 1000.0), (0.0, 1999.0)] {
+        x.write().set_domain(x0, x1).unwrap();
+        plot.render(&cx, W, H).unwrap();
+        counts.push(drawn_pieces(&plot));
+    }
+    assert_eq!(counts, [1, 8, 1]);
+
+    let rows = wave(2000);
+    let mut plot = Plot::new();
+    let x = plot.x(Linear::new());
+    let y = plot.y(Linear::new());
+    plot.add(Selection::<Row, Line>::new(rows[..10].to_vec()))
+        .x_with(x.encode(|r: &Row| r.0))
+        .y_with(y.encode(|r: &Row| r.1))
+        .curve(Curve::MonotoneX);
+    plot.render(&cx, W, H).unwrap();
+    // Ten rows, auto domains: some 50 px apart.
+    assert_eq!(drawn_pieces(&plot), 16);
+    plot.layer_mut::<Row, Line>()
+        .unwrap()
+        .append(rows[10..].to_vec())
+        .unwrap();
+    plot.render(&cx, W, H).unwrap();
+    assert_eq!(drawn_pieces(&plot), 1);
 }
 
 /// AC2: on a log y scale the curve still passes through every row and

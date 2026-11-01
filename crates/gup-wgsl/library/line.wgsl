@@ -21,10 +21,12 @@
 // pieces are collinear) or keeps the half of its round cap outside the
 // butt piece (a corner, rounded on the outside).
 //
-// A monotone curve (GUP-551) draws each instance as 16 pieces of the cubic
-// Bezier from row to row: the glue calls `vertex_controls` with the row's
-// two control values (its control columns through the y scale), and the
-// control points lie at one and two thirds of the segment in x. Every
+// A monotone curve (GUP-551) draws each instance as 1 to 16 pieces of the
+// cubic Bezier from row to row: the glue calls `vertex_controls` with the
+// row's two control values (its control columns through the y scale) and
+// the layer's piece count, a literal its pipeline was linked with
+// (GUP-576: chosen from the data's pixel density). The control points
+// lie at one and two thirds of the segment in x. Every
 // joint, between pieces and at rows, is a plane through the joint point
 // perpendicular to the curve's tangent there: each piece draws its own
 // capsule's pixels on its side, so no pixel is drawn twice, none is left
@@ -70,15 +72,11 @@ struct Varyings {
     @location(6) @interpolate(flat) others: vec4<f32>,
 }
 
-// The curve a layer's glue passes to `vertex_variant` or
-// `vertex_controls` (`Curve::variant`).
+// The curve a layer's glue passes to `vertex_variant` (`Curve::variant`;
+// a monotone curve passes its piece count to `vertex_controls`).
 const CURVE_STEP: u32 = 1u;
 const CURVE_STEP_BEFORE: u32 = 2u;
 const CURVE_STEP_AFTER: u32 = 3u;
-const CURVE_MONOTONE_X: u32 = 4u;
-
-// The pieces a monotone segment is drawn as (`marks::MONOTONE_PIECES`).
-const MONOTONE_PIECES: u32 = 16u;
 
 // How a piece's end meets its neighbour.
 // A round cap: the line ends here.
@@ -236,20 +234,20 @@ fn bezier_tangent(p0: vec2<f32>, p1: vec2<f32>, p2: vec2<f32>, p3: vec2<f32>, t:
     return select(direction(p0, p3), d / len, len > 0.0);
 }
 
-// Joint `j` (0 to 16) of the monotone segment from `a` to `b` with
-// control points `p1`, `p2`: the cubic at the Chebyshev node
-// `(1 - cos(pi j / 16)) / 2`, `a` and `b` exactly at the ends (as
-// `Curve::path` on the CPU). The pieces are shortest at the rows, where
+// Joint `j` (0 to `n`) of the monotone segment from `a` to `b` with
+// control points `p1`, `p2`, drawn as `n` pieces: the cubic at the
+// Chebyshev node `(1 - cos(pi j / n)) / 2`, `a` and `b` exactly at the
+// ends (as `Curve::path` on the CPU). The pieces are shortest at the rows, where
 // a monotone cubic bends most (a level tangent at an extremum), so the
 // first and last pieces leave along the row's tangent.
-fn monotone_point(a: vec2<f32>, p1: vec2<f32>, p2: vec2<f32>, b: vec2<f32>, j: u32) -> vec2<f32> {
+fn monotone_point(a: vec2<f32>, p1: vec2<f32>, p2: vec2<f32>, b: vec2<f32>, n: u32, j: u32) -> vec2<f32> {
     if (j == 0u) {
         return a;
     }
-    if (j >= MONOTONE_PIECES) {
+    if (j >= n) {
         return b;
     }
-    let t = 0.5 - 0.5 * cos(3.14159265358979 * f32(j) / f32(MONOTONE_PIECES));
+    let t = 0.5 - 0.5 * cos(3.14159265358979 * f32(j) / f32(n));
     return bezier(a, p1, p2, b, t);
 }
 
@@ -261,9 +259,9 @@ fn bisector(p: vec2<f32>, q: vec2<f32>, r: vec2<f32>) -> vec2<f32> {
     return select(direction(p, q), sum / len, len > 0.0);
 }
 
-// Vertex `vertex_index` of a segment drawn as a monotone cubic (`curve`
-// is `CURVE_MONOTONE_X`): piece `vertex_index / 6` of 16, corner
-// `vertex_index % 6`. `controls` are the y values (logical pixels) of the
+// Vertex `vertex_index` of a segment drawn as a monotone cubic in
+// `pieces` pieces (a power of two from 1 to 16, the layer's literal):
+// piece `vertex_index / 6`, corner `vertex_index % 6`. `controls` are the y values (logical pixels) of the
 // control points at one and two thirds of the segment in x. `rows` is the
 // layer's stored row count: the first and last segments end in round
 // caps; every other end is a `JOIN_PLANE`. Between pieces the plane
@@ -272,7 +270,7 @@ fn bisector(p: vec2<f32>, q: vec2<f32>, r: vec2<f32>) -> vec2<f32> {
 // perpendicular to the curve's tangent, which both segments compute
 // alike under a linear or time y scale. A null row is not seen: the ends
 // either side of it end flat, at the row.
-fn vertex_controls(m: LineIn, controls: vec2<f32>, vertex_index: u32, row: u32, view: View, curve: u32, rows: u32) -> Varyings {
+fn vertex_controls(m: LineIn, controls: vec2<f32>, vertex_index: u32, row: u32, view: View, pieces: u32, rows: u32) -> Varyings {
     let a = vec2<f32>(m.x, m.y);
     let b = vec2<f32>(m.x_next, m.y_next);
     let dx = b.x - a.x;
@@ -280,10 +278,10 @@ fn vertex_controls(m: LineIn, controls: vec2<f32>, vertex_index: u32, row: u32, 
     let p2 = vec2<f32>(a.x + dx * 2.0 / 3.0, controls.y);
     let k = vertex_index / 6u;
     // The joints before, at the ends of, and after this piece.
-    let before = monotone_point(a, p1, p2, b, max(k, 1u) - 1u);
-    let start = monotone_point(a, p1, p2, b, k);
-    let stop = monotone_point(a, p1, p2, b, k + 1u);
-    let after = monotone_point(a, p1, p2, b, k + 2u);
+    let before = monotone_point(a, p1, p2, b, pieces, max(k, 1u) - 1u);
+    let start = monotone_point(a, p1, p2, b, pieces, k);
+    let stop = monotone_point(a, p1, p2, b, pieces, k + 1u);
+    let after = monotone_point(a, p1, p2, b, pieces, k + 2u);
     var out = capsule(m, start, stop, vertex_index % 6u, row, (a.x + b.x) * 0.5, view);
     // The row nearer in x: the fragment's x past the midpoint towards the
     // next row (exact, as the quad's position is linear in screen space).
@@ -300,7 +298,7 @@ fn vertex_controls(m: LineIn, controls: vec2<f32>, vertex_index: u32, row: u32, 
             start_join = JOIN_CAP;
         }
     }
-    if (k + 1u == MONOTONE_PIECES) {
+    if (k + 1u == pieces) {
         end_normal = bezier_tangent(a, p1, p2, b, 1.0);
         if (row + 2u >= rows) {
             end_join = JOIN_CAP;
