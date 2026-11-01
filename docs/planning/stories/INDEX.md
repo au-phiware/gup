@@ -245,7 +245,7 @@ cell labels, error bars, pie charts and facets.
 - [GUP-553](GUP-553_Dark_Theme.md) ✅ — `Theme::dark()` with contrast-checked
   colours and a theme palette (`OKABE_ITO_DARK`, black replaced) that
   `Categorical::okabe_ito()` follows. Deps: GUP-552 📋 (soft).
-- [GUP-524](GUP-524_Svg_Unbrushed_Dimming.md) 🚧 — `SvgTarget` dims unbrushed
+- [GUP-524](GUP-524_Svg_Unbrushed_Dimming.md) ✅ — `SvgTarget` dims unbrushed
   rows as the GPU does, through a CPU mirror of the brush state shared with the
   cached scene, so the three brushed goldens get the SVG parity check. Edits
   `selection.rs`. Deps: GUP-553 ✅.
