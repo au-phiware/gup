@@ -675,6 +675,26 @@ fn corners_are_drawn_once() {
     ];
     let width = 3.0f32;
     let r = f64::from(width) / 2.0;
+    // The plot rect (and so where a row lands) depends on the axis
+    // margins. Keep the sub-pixel position of every vertex fixed instead:
+    // probe the scales, then place each vertex on the pixel its original
+    // value would be at, plus that value's fraction.
+    let probe = draw(&rows, (0.0, 500.0), (0.0, 400.0), Opts::new(Curve::Step));
+    let (p0, p3) = (probe.points[0].unwrap(), probe.points[3].unwrap());
+    let (sx, sy) = (
+        (p3.0 - p0.0) / (rows[3].0 - rows[0].0),
+        (p3.1 - p0.1) / (rows[3].1 - rows[0].1),
+    );
+    let place = |v: f64, o: f64, s: f64| ((o + s * v).floor() + v.fract() - o) / s;
+    let rows: Vec<Row> = rows
+        .iter()
+        .map(|&(a, b)| {
+            (
+                place(a, p0.0 - sx * rows[0].0, sx),
+                place(b, p0.1 - sy * rows[0].1, sy),
+            )
+        })
+        .collect();
     for curve in STEPS {
         let d = draw(
             &rows,

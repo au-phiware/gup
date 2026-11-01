@@ -190,32 +190,10 @@ viewers to do the same.
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
 
-## Blocked (2026-11-01)
+## Resolved (2026-11-01)
 
-Question: three non-golden pixel tests and one SVG fixture fail because the y
-margin moved. May I change them? Two need a tolerance or an input change, and
-the story's Escalation Triggers say to stop.
-
-State: the code, the SVG test and `tabular_ticks_keep_the_y_margin` are in WIP
-commit c727e00d. Full run: /tmp/579-test.log (92 failing tests, at least 55 of
-them golden-only). Not yet done: seeded failure, bless, wasm-size, wasm-browser,
-retrospective.
-
-Non-golden failures (everything else is a `golden` check failure only, no
-structural failure):
-
-- `rect_png::numeric_axis_bars_fit_and_a_derived_baseline_is_in_the_domain`: a
-  30 px bar now inks 29 px (358..387), the assertion allows 30..=32. The bar's
-  fractional position moved with the margin.
-- `segment_png::a_diagonal_segment_holds_its_area_of_ink`: total image ink 316.0
-  against 309 +/- 6. Tick-label ink is in the sum.
-- `line_curves::corners_are_drawn_once`: ink error 0.249 against the 0.1 limit
-  at (241,245). It depends on the sub-pixel position of the path.
-- `msaa::svg_of_the_comparison_scene_is_unchanged`:
-  `tests/fixtures/msaa_guides.svg` needs the new `style` attribute. I would
-  simply regenerate it.
-
-Options: (a) re-pin the three pixel tests to a margin-independent position (for
-example, a fixed x domain that lands on whole pixels); (b) widen their
-tolerances. Recommendation: (a), done in this story; decide if (b) is
-acceptable.
+Orchestrator chose margin-independent tests. `rect_png` now checks bar ends
+against the resolved scale's centre +/- 15 px; `segment_png` starts the segment
+on a pixel centre of the resolved plot; `line_curves` places every vertex at a
+fixed sub-pixel position found by probing the scales. No tolerance was changed.
+`tests/fixtures/msaa_guides.svg` was regenerated.
