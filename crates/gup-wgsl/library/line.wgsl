@@ -26,14 +26,19 @@
 // row's two control values (its control columns through the y scale) and
 // the layer's piece count, a literal its pipeline was linked with
 // (GUP-576: chosen from the data's pixel density). The control points
-// lie at one and two thirds of the segment in x. Every
-// joint, between pieces and at rows, is a plane through the joint point
-// perpendicular to the curve's tangent there: each piece draws its own
-// capsule's pixels on its side, so no pixel is drawn twice, none is left
-// out, and the union has the coverage of round joins. Both pieces compute the same plane: within a segment
-// from the same cubic, and at a row because the curve's tangent there is
-// continuous under a linear or time y scale (the control values are
-// computed from one tangent per row).
+// lie at one and two thirds of the segment in x. Every joint, between
+// pieces and at rows, is a plane through the joint point perpendicular to
+// the curve's tangent there: each piece draws its own capsule's pixels on
+// its side, so no pixel is drawn twice, none is left out, and the union
+// has the coverage of round joins. Both pieces compute the same plane:
+// within a segment from the same cubic, and at a row because the curve's
+// tangent there is continuous under a linear or time y scale (the control
+// values are computed from one tangent per row). A pixel tests a plane at
+// its own centre on the target, which both pieces see exactly (their
+// interpolated frames differ by the rasterizer's snapping of their
+// vertices, which left whole pixels out on dense rows), and at a row
+// within the angle the two segments' planes may differ by rounding
+// (GUP-576).
 #define_import_path gup::marks::line
 
 #import gup::view::{View, px_to_clip}
@@ -67,9 +72,19 @@ struct Varyings {
     // and at the end (bits 2-3). A straight segment's are 0 (round caps).
     @location(5) @interpolate(flat) joins: u32,
     // For a `JOIN_KEEP` end, the butt piece's direction away from the
-    // joint, in the local (along, across) frame: the start's in `xy`, the
-    // end's in `zw`.
+    // joint, in the local (along, across) frame; for a `JOIN_PLANE` end,
+    // the plane's normal (pointing along the curve) on the target. The
+    // start's in `xy`, the end's in `zw`.
     @location(6) @interpolate(flat) others: vec4<f32>,
+    // For a `JOIN_PLANE` end at a row, how far (radians) the plane may
+    // turn by rounding, at the start (`x`) and the end (`y`): the pixels
+    // within that angle of it are this piece's too. 0 elsewhere.
+    @location(7) @interpolate(flat) slack: vec2<f32>,
+    // The vertex's position in physical pixels, from the target's corner.
+    @location(8) screen: vec2<f32>,
+    // For a `JOIN_PLANE` end, the joint, in physical pixels from the
+    // target's corner: the start's in `xy`, the end's in `zw`.
+    @location(9) @interpolate(flat) joints: vec4<f32>,
 }
 
 // The curve a layer's glue passes to `vertex_variant` (`Curve::variant`;
@@ -97,6 +112,12 @@ const JOIN_PLANE: u32 = 3u;
 // rounding error apart is never left out.
 const JOIN_SLACK: f32 = 0.01;
 
+// The units in the last place a coordinate may be off by, for
+// `plane_slack`. With 1 the dense seams of `line_monotone.rs` show no
+// hole on the Intel HD 630 either; 2 leaves a margin, and draws about one
+// rim pixel in 1400 twice there (GUP-576).
+const ROW_SLACK_ULPS: f32 = 2.0;
+
 // One capsule from `start` to `stop`, corner `corner` (0..5) of its quad,
 // its `side` the vertex's x right of `turn`, with round caps.
 fn capsule(m: LineIn, start: vec2<f32>, stop: vec2<f32>, corner: u32, row: u32, turn: f32, view: View) -> Varyings {
@@ -118,6 +139,9 @@ fn capsule(m: LineIn, start: vec2<f32>, stop: vec2<f32>, corner: u32, row: u32, 
     out.side = (q.position.x - turn) * view.dpr;
     out.joins = JOIN_CAP;
     out.others = vec4<f32>(0.0);
+    out.slack = vec2<f32>(0.0);
+    out.screen = q.position * view.dpr;
+    out.joints = vec4<f32>(0.0);
     return out;
 }
 
@@ -251,6 +275,18 @@ fn monotone_point(a: vec2<f32>, p1: vec2<f32>, p2: vec2<f32>, b: vec2<f32>, n: u
     return bezier(a, p1, p2, b, t);
 }
 
+// The most a row's joint plane, perpendicular to the tangent `t`
+// (logical pixels, before normalising) between points as far as `m` from
+// the origin, turns by rounding (radians): each coordinate is off by a
+// few units in the last place of `m`, which turns `t` by that over its
+// length. The two segments at a row each compute the plane from their own
+// control value, so their planes differ by up to twice this; each draws
+// the pixels within this angle past its plane, so none is left out
+// (GUP-576). Dense rows have short tangents, so a wider angle.
+fn plane_slack(t: vec2<f32>, m: f32) -> f32 {
+    return ROW_SLACK_ULPS * 1.1920929e-7 * m / max(length(t), 1e-20);
+}
+
 // The normal of the plane between the pieces `p`–`q` and `q`–`r`: the
 // bisector of their directions, the same for both pieces.
 fn bisector(p: vec2<f32>, q: vec2<f32>, r: vec2<f32>) -> vec2<f32> {
@@ -287,25 +323,31 @@ fn vertex_controls(m: LineIn, controls: vec2<f32>, vertex_index: u32, row: u32, 
     // next row (exact, as the quad's position is linear in screen space).
     out.side = out.side * sign(dx);
 
-    let axis = direction(start, stop);
     var start_join = JOIN_PLANE;
     var end_join = JOIN_PLANE;
     var start_normal = bisector(before, start, stop);
     var end_normal = bisector(start, stop, after);
+    // The farthest coordinate the tangents at the rows are computed from.
+    let far = max(max(abs(a.x), abs(a.y)), max(max(abs(b.x), abs(b.y)), max(abs(controls.x), abs(controls.y))));
     if (k == 0u) {
         start_normal = bezier_tangent(a, p1, p2, b, 0.0);
+        out.slack.x = plane_slack(p1 - a, far);
         if (row == 0u) {
             start_join = JOIN_CAP;
         }
     }
     if (k + 1u == pieces) {
         end_normal = bezier_tangent(a, p1, p2, b, 1.0);
+        out.slack.y = plane_slack(b - p2, far);
         if (row + 2u >= rows) {
             end_join = JOIN_CAP;
         }
     }
     out.joins = start_join | (end_join << 2u);
-    out.others = vec4<f32>(to_local(start_normal, axis), to_local(end_normal, axis));
+    // Planes are tested at the pixel's own centre, against the joint and
+    // normal both pieces compute alike (`owned`).
+    out.others = vec4<f32>(start_normal, end_normal);
+    out.joints = vec4<f32>(start, stop) * view.dpr;
     return out;
 }
 
@@ -332,13 +374,18 @@ fn owned(v: Varyings) -> bool {
     let e = v.joins >> 2u;
     let past_start = v.local.x < -v.half.x;
     let past_end = v.local.x > v.half.x;
+    // The pixel's centre, from the target's corner: its framebuffer
+    // position less the viewport's (whole-pixel) offset. Two pieces see
+    // the same centre exactly, where their interpolated frames differ by
+    // the rasterizer's snapping of their own vertices.
+    let at = v.clip.xy - round(v.clip.xy - v.screen);
     return !(
         (s == JOIN_BUTT && v.local.x < -v.half.x - JOIN_SLACK)
             || (e == JOIN_BUTT && v.local.x > v.half.x + JOIN_SLACK)
             || (s == JOIN_KEEP && past_start && dot(v.local - start, v.others.xy) > JOIN_SLACK)
             || (e == JOIN_KEEP && past_end && dot(v.local - end, v.others.zw) > JOIN_SLACK)
-            || (s == JOIN_PLANE && dot(v.local - start, v.others.xy) < 0.0)
-            || (e == JOIN_PLANE && dot(v.local - end, v.others.zw) > 0.0)
+            || (s == JOIN_PLANE && dot(at - v.joints.xy, v.others.xy) < -v.slack.x * length(at - v.joints.xy))
+            || (e == JOIN_PLANE && dot(at - v.joints.zw, v.others.zw) > v.slack.y * length(at - v.joints.zw))
     );
 }
 
