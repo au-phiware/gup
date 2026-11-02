@@ -72,71 +72,71 @@ them is an owner step (see INDEX.md, N3).
 
 ### AC1: Shared metadata
 
-- [ ] The root `Cargo.toml` has a `[workspace.package]` with exactly the values
+- [x] The root `Cargo.toml` has a `[workspace.package]` with exactly the values
       in Decisions. Every member listed in Decisions inherits `version`,
       `authors`, `edition`, `license`, `repository`, `homepage` and
       `rust-version` through `<field>.workspace = true`.
-- [ ] `[workspace.dependencies]` declares the six internal library crates with
+- [x] `[workspace.dependencies]` declares the six internal library crates with
       `path` and `version = "=0.1.0"`. Every internal dependency in every
       member's `[dependencies]` and `[build-dependencies]` uses
       `{ workspace = true }`, with its features where it has them today. So does
       every `[dev-dependencies]` entry naming one of the six.
       `gup-visual-regression` stays a path-only dev-dependency, which
       `cargo package` strips.
-- [ ] `publish = false` is removed from `gup-core`, `gup-core-macros`,
+- [x] `publish = false` is removed from `gup-core`, `gup-core-macros`,
       `gup-text` and `gup-wgsl`. `gup-visual-regression` keeps it.
-- [ ] `cargo metadata --format-version 1 --no-deps | jq -r '.packages[] | select(.publish == null) | .name' | sort`
+- [x] `cargo metadata --format-version 1 --no-deps | jq -r '.packages[] | select(.publish == null) | .name' | sort`
       prints exactly the seven published crates of Decisions.
 
 ### AC2: Descriptions, keywords, categories, READMEs
 
-- [ ] Each published crate's `description`, `keywords` and `categories` are
+- [x] Each published crate's `description`, `keywords` and `categories` are
       exactly those in the Decisions table.
       `grep -n 'RFC\|GUP-' */Cargo.toml crates/*/Cargo.toml Cargo.toml | grep -E '^[^:]+:[0-9]+:(description|keywords)'`
       prints nothing.
-- [ ] `crates/gup-core`, `crates/gup-core-macros`, `crates/gup-text` and
+- [x] `crates/gup-core`, `crates/gup-core-macros`, `crates/gup-text` and
       `crates/gup-wgsl` each have a `README.md` with the text of Decisions, and
       `readme = "README.md"`. `gup-text`'s `include` lists `README.md` and
       `COPYING`.
 
 ### AC3: Licence text and headers
 
-- [ ] Each published crate's directory has `COPYING`, a relative symlink to the
+- [x] Each published crate's directory has `COPYING`, a relative symlink to the
       root `COPYING`: `../COPYING` for `gup-egui` and `gup-bevy`, and
       `../../COPYING` for the four under `crates/`.
       `cargo package --list -p <crate> --allow-dirty` lists `COPYING` for all
       seven.
-- [ ] `scripts/check_headers.sh` exits 1 and names each git-tracked file that
+- [x] `scripts/check_headers.sh` exits 1 and names each git-tracked file that
       lacks `SPDX-License-Identifier: GPL-3.0-or-later` in its first 5 lines. It
       checks files matching `*.rs *.wgsl *.sh *.mjs *.js *.css *.html`, except
       the exemptions in Decisions. It exits 0 on this tree after the three fixes
       below. A seeded run proves it: a scratch copy of one `.rs` file with its
       header removed, passed as an argument, makes it exit 1.
-- [ ] `dogfood/src/main.rs` and `crates/gup-core/wasm-size/scatter/index.html`
+- [x] `dogfood/src/main.rs` and `crates/gup-core/wasm-size/scatter/index.html`
       have the header. `scripts/generate_gallery_html.sh` writes the header as
       an HTML comment on the generated page's second line, and the regenerated
       `docs/gallery/index.html` has it. The comment's text is in Decisions.
-- [ ] `mask all-check` runs `./scripts/check_headers.sh` in its `gallery` group
+- [x] `mask all-check` runs `./scripts/check_headers.sh` in its `gallery` group
       (after `check_story_ids.sh`), and the all-check prose mentions it in one
       sentence.
 
 ### AC4: What the root package ships
 
-- [ ] The root `[package]` has the `include` list of Decisions.
+- [x] The root `[package]` has the `include` list of Decisions.
       `cargo package --list -p gup --allow-dirty` lists no path under `docs/`
       other than the three included documents and `docs/tutorials/*.md`, and
       nothing under `scripts/`, `.github/`, `tests/`, `dogfood/` or
       `docs/planning/`.
-- [ ] `cargo package --workspace --allow-dirty --no-verify` succeeds. Each
+- [x] `cargo package --workspace --allow-dirty --no-verify` succeeds. Each
       `.crate` file it writes under `$CARGO_TARGET_DIR/package/` is under 5 MB:
       `ls -l` its output and paste the sizes into the Implementation Summary.
 
 ### AC5: Nothing else changes
 
-- [ ] `mask all-check` passes, and `cargo test -- --test-threads=1` at the root
+- [x] `mask all-check` passes, and `cargo test -- --test-threads=1` at the root
       passes. `Cargo.lock` changes only in the internal crates' entries, if at
       all: `git diff Cargo.lock` shows no external version change.
-- [ ] `git diff --stat` touches only the files in this story's `touches` list,
+- [x] `git diff --stat` touches only the files in this story's `touches` list,
       the four new READMEs, the six `COPYING` symlinks,
       `scripts/check_headers.sh`, `scripts/generate_gallery_html.sh`,
       `docs/gallery/index.html` and `dogfood/src/main.rs`.
@@ -295,15 +295,15 @@ them is an owner step (see INDEX.md, N3).
 
 ## Technical Tasks
 
-- [ ] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30
+- [x] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30
       minutes.
-- [ ] `[workspace.package]` and `[workspace.dependencies]`; convert each member;
+- [x] `[workspace.package]` and `[workspace.dependencies]`; convert each member;
       `cargo metadata` check (AC1). Commit.
-- [ ] Descriptions, keywords, categories, READMEs, `include` (AC2, AC4). Commit.
-- [ ] COPYING symlinks, `check_headers.sh`, the three header fixes, the
+- [x] Descriptions, keywords, categories, READMEs, `include` (AC2, AC4). Commit.
+- [x] COPYING symlinks, `check_headers.sh`, the three header fixes, the
       generator change and the regenerated page, the all-check entry (AC3).
       Commit.
-- [ ] `cargo package --workspace --allow-dirty --no-verify`; sizes; DoD
+- [x] `cargo package --workspace --allow-dirty --no-verify`; sizes; DoD
       commands.
 
 ## Dependencies
@@ -331,8 +331,8 @@ them is an owner step (see INDEX.md, N3).
 
 ## Success Metrics
 
-- [ ] Seven crates package without error; every `.crate` file is under 5 MB.
-- [ ] One header check guards every code file in CI and locally.
+- [x] Seven crates package without error; every `.crate` file is under 5 MB.
+- [x] One header check guards every code file in CI and locally.
 
 ## Risk Assessment
 
@@ -348,16 +348,80 @@ them is an owner step (see INDEX.md, N3).
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye: not applicable, nothing renders
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye: not applicable, nothing renders
       differently
-- [ ] `mask wasm-browser`: not needed; the only wasm-size change is an HTML
+- [x] `mask wasm-browser`: not needed; the only wasm-size change is an HTML
       comment
-- [ ] WASM size: unchanged, no library code change
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] WASM size: unchanged, no library code change
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- Root `[workspace.package]` and `[workspace.dependencies]` (`=0.1.0`); all
+  members inherit; `publish = false` removed from the four library crates.
+  `cargo metadata` lists exactly the seven published crates.
+- Descriptions, keywords and categories as in Decisions; four crate READMEs; six
+  `COPYING` symlinks; root `include` list; `gup-text` `include` adds `README.md`
+  and `COPYING`.
+- `scripts/check_headers.sh` (286 files clean; a seeded header-less copy exits
+  1), wired into the `gallery` group of `mask all-check`. Headers added to
+  `dogfood/src/main.rs`, the wasm-size scatter page and the generated gallery
+  page (via its generator).
+- `cargo package --workspace --allow-dirty --no-verify` succeeds. `.crate`
+  sizes: gup 90 KB, gup-bevy 52 KB, gup-core 633 KB, gup-core-macros 36 KB,
+  gup-egui 52 KB, gup-text 506 KB, gup-wgsl 49 KB (gup-visual-regression 32 KB,
+  unpublished). Files: gup 24, gup-core 220, gup-core-macros 10, gup-text 27,
+  gup-wgsl 28, gup-egui 13, gup-bevy 14; every one lists `COPYING` and
+  `README.md`. Warnings: `slab 0.4.10` yanked in `Cargo.lock` (pre-existing),
+  and the two ignored root tests (expected).
+- Verified: root `cargo test -- --test-threads=1`, `cargo check --examples`,
+  `mask all-check` (all groups exit 0), `mask merge-check` PASS. `Cargo.lock`
+  unchanged.
+
+## Retrospective
+
+**Completed**: 2026-11-02
+
+### Key Technical Learnings
+
+#### Self dev-dependency cannot carry a version
+
+- **Challenge**: `gup-wgsl` dev-depends on itself (`path = "."`) to turn on
+  `compose` in tests. With `workspace = true` it gains `version = "=0.1.0"`, and
+  `cargo package` then looks it up in the registry ("no matching package").
+- **Solution**: keep it path-only, which cargo strips when packaging.
+- **Pattern**: a path-only dev-dependency is packaged away; a versioned one is
+  resolved against crates.io.
+
+#### `include` patterns are gitignore-style
+
+- **Challenge**: `"README.md"` in the root `include` also matched
+  `docs/README.md` and `docs/archive/README.md`.
+- **Solution**: anchor the three root-only names (`/README.md`, `/COPYING`,
+  `/Cargo.toml`). Decisions listed them unanchored; this small deviation is
+  needed for the AC (nothing under `docs/` but the included documents).
+- **Pattern**: anchor root files in `include`.
+
+### Architectural Decisions
+
+#### gup-text include left unanchored
+
+- **Decision**: `README.md` and `COPYING` match only the crate root there (no
+  nested copies exist).
+- **Trade-off**: a future nested README would ship too.
+
+### Development Workflow Insights
+
+- The worktree sandbox refuses compound shell commands that mention git
+  alongside heredocs; use the Write tool for scripts.
+
+### Follow-up Stories
+
+None.

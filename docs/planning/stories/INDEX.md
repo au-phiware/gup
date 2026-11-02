@@ -320,7 +320,7 @@ accessibility in 0.1. Owner steps and the run order follow the list. GUP-557
 (track N2) is part of the run order because GUP-593 edits the same `svg.rs` code
 and WASM harness after it.
 
-- [GUP-588](GUP-588_Publish_Metadata_And_Licence_Headers.md) 🚧 — Workspace
+- [GUP-588](GUP-588_Publish_Metadata_And_Licence_Headers.md) ✅ — Workspace
   metadata and `=0.1.0` internal versions, plain descriptions, crate READMEs,
   licence symlinks, a header check in `all-check`, and a root `include` list, so
   all seven crates package.
