@@ -270,9 +270,10 @@ cell labels, error bars, pie charts and facets.
   fallback list, SVG `font-family` and embedding of the fallbacks a scene uses,
   and a mixed-script title golden. Edits `lib.rs` and `plot.rs`. Deps: GUP-416
   ✅.
-- [GUP-557](GUP-557_Svg_Text_Path_Out_Of_Wasm.md) 💡 — Keep `SvgTarget`'s text
-  path out of the WASM build, then ungate GUP-580's fallback code. Deps: GUP-580
-  ✅.
+- [GUP-557](GUP-557_Svg_Text_Path_Out_Of_Wasm.md) 📋 — The size harness's SVG
+  call moves behind an `svg-export` feature (its own `wasm.svg_export` metric),
+  so `wasm.scatter` measures a browser chart; then GUP-580's fallback code is
+  ungated, so every build writes the same SVG text. Deps: GUP-580 ✅.
 - [GUP-439](GUP-439_Line_Translucent_Joins.md) ✅ — Translucent lines with even
   opacity at rows, curve pieces and self-crossings (a per-layer coverage pass),
   opaque lines unchanged. Deps: GUP-432 ✅, GUP-550 📋, GUP-551 📋.
@@ -311,6 +312,76 @@ touches no hot file and runs beside any of them.
   background, so labels on coloured fills pass the standard check; the stacked
   bar golden's workaround is removed. Deps: GUP-544 ✅.
 
+## Track N3: Release 0.1
+
+Track N3 from the [November 2026 review](../STRATEGIC_REVIEW_2026-11.md), with
+the owner's decisions of 2026-10-24: GPL-3.0-or-later kept, minimal
+accessibility in 0.1. Owner steps and the run order follow the list. GUP-557
+(track N2) is part of the run order because GUP-593 edits the same `svg.rs` code
+and WASM harness after it.
+
+- [GUP-588](GUP-588_Publish_Metadata_And_Licence_Headers.md) 📋 — Workspace
+  metadata and `=0.1.0` internal versions, plain descriptions, crate READMEs,
+  licence symlinks, a header check in `all-check`, and a root `include` list, so
+  all seven crates package.
+- [GUP-589](GUP-589_Publish_Dry_Run_And_Docs_Rs_In_CI.md) 📋 — `gup` forwards
+  `window`, `svg` and `web`; docs.rs tables; `mask publish-check`,
+  `mask docs-rs` and a Release check workflow on every push. Deps: GUP-588 📋.
+- [GUP-590](GUP-590_Windows_Warp_Render_Smoke_Job.md) 📋 — A `platforms.yml`
+  Windows job on WARP (DX12): an adapter spike, then the root crate's golden
+  tests, diff images uploaded on failure. Deps: GUP-594 📋 (soft).
+- [GUP-591](GUP-591_Macos_Metal_Smoke_Spike.md) 📋 — The same job on `macos-15`
+  Metal, kept, made advisory or removed by a fixed rule. Deps: GUP-590 📋.
+- [GUP-592](GUP-592_Plot_Describe_Text_Alternative.md) 📋 — `Description`,
+  `Plot::describe`, `Chart::describe` and `.description(text)`: a text
+  alternative built at resolve from the title, kind, row counts, drawn tick
+  labels and legends, stored in `Scene`. Deps: GUP-552 ✅, GUP-554 ✅.
+- [GUP-593](GUP-593_Svg_Title_And_Canvas_Aria_Label.md) 📋 — SVG `role="img"`,
+  `<title>` and `<desc>`; `CanvasApp` sets `role` and `aria-label` unless the
+  page set its own, checked in the browser test. Deps: GUP-592 📋, GUP-557 📋.
+- [GUP-594](GUP-594_Flagship_Gallery_Part_One.md) 📋 — Five finished gallery
+  examples (bubbles, monotone lines, labelled grouped bars, ranked `barh`,
+  stacked areas), each a runnable example, a CI thumbnail and a golden in
+  `tests/gallery.rs`. Deps: GUP-536 📋.
+- [GUP-595](GUP-595_Flagship_Gallery_Part_Two_And_Hero.md) 📋 — Five more
+  (stacked histogram, heatmap, box plot, annotated `Plot`, dark lines) and the
+  README hero as a 1200 × 630 golden. Deps: GUP-594 📋.
+- [GUP-596](GUP-596_Changelog_And_Semver_Policy.md) 📋 — `CHANGELOG.md` (Keep a
+  Changelog) with 0.1.0's contents and limitations, and the 0.x policy: lockstep
+  versions, breaking means minor, wgpu and MSRV bumps are breaking. Deps:
+  GUP-592 📋 (soft), GUP-593 📋 (soft).
+- [GUP-597](GUP-597_Readme_For_Release_0_1.md) 📋 — The README at release
+  candidate: hero image, eight builders, browser features, a current "Not yet"
+  and platform line, CHANGELOG link, published-crates column. Deps: GUP-589 📋,
+  GUP-590 📋, GUP-591 📋, GUP-593 📋, GUP-595 📋, GUP-596 📋.
+- [GUP-598](GUP-598_Release_Checklist.md) 📋 — `mask release-check` (every gate,
+  publish dry run, docs.rs, one-version and slug checks, seeded) and
+  `docs/RELEASING.md`; ends at "ready to publish". Deps: GUP-536 📋, GUP-588–597
+  📋.
+- [GUP-599](GUP-599_Switch_Docs_To_Crates_Io.md) 📋 — After the owner publishes:
+  README, tutorial 1 and the egui and Bevy guides depend on `"0.1"` from
+  crates.io, proven by an external build. Deps: GUP-598 📋, owner publish.
+
+Owner steps (not worker stories), in GUP-598's `docs/RELEASING.md`: a crates.io
+token (`cargo login`); re-confirm the seven names are free (all were on
+2026-11-02); enable GitHub Pages and set `DEPLOY_GALLERY=true`; date the
+CHANGELOG; `cargo publish --workspace`; tag `v0.1.0` and a GitHub release.
+Billed macOS `-xlarge` runners are an owner decision only if GUP-591 finds the
+standard runner cannot draw.
+
+Run order (at most two build-heavy stories at once; hot files: Cargo.toml files,
+`README.md`, `.github/workflows/`, `src/lib.rs`, `maskfile.md`, `plot.rs`,
+`selection.rs`, `svg.rs`, the WASM scenes, this file):
+
+1. GUP-588 beside GUP-592; GUP-596 may run as a docs-only third.
+2. GUP-589 (after GUP-588) beside GUP-592, if still running, or GUP-557.
+3. GUP-590 (workflows) beside GUP-557 (`svg.rs`, WASM scenes).
+4. GUP-594 (root `Cargo.toml`; after GUP-536 and GUP-589) beside GUP-593 (after
+   GUP-592 and GUP-557).
+5. GUP-595 beside GUP-591 (after GUP-590).
+6. GUP-597 alone among `README.md` stories; then GUP-598 alone.
+7. The owner publishes; then GUP-599.
+
 ## Track N5: Performance at Scale
 
 Track N5 from the [November 2026 review](../STRATEGIC_REVIEW_2026-11.md):
@@ -323,8 +394,11 @@ GUP-566 edits `encoding.rs` (not beside GUP-562); GUP-567 edits `selection.rs`.
   benchmark, then builder keys encoded from a borrowed label (no second
   allocation) and a `foldhash` dictionary, each kept only if it helps: owned-key
   overhead from 52 to at most 30 ns per row. Deps: GUP-537 ✅.
-- [GUP-577](GUP-577_Cap_Evicts_Unowned_Incremental_Caches.md) 💡 — Rule 5 also
-  evicts incremental caches of unowned crates (GUP-428 follow-up).
+- [GUP-577](GUP-577_Cap_Evicts_Unowned_Incremental_Caches.md) 📋 — Rule 5's
+  least-recently-used queue holds incremental crate caches too (ties go to
+  caches), with a seeded path-dependency case and a control, so the cap can
+  always be met. Edits `scripts/`, `maskfile.md` and `CLAUDE.md`; runs beside
+  any story that does not edit `maskfile.md`. Deps: GUP-428 ✅.
 - [GUP-567](GUP-567_Cached_Edge_Extremes_For_Zoom.md) ✅ — Sorted per-chunk
   values cached for the edge-inset solve, so a programmatic zoom answers by
   binary search with identical insets: `zoom_culled.cpu` from 1.24 back under
