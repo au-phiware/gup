@@ -200,7 +200,6 @@ impl SvgTarget {
     /// Which of `scene.fallback_fonts` some text run needs: it has a
     /// character the run's primary lacks, and the font is the first
     /// fallback with a glyph for it.
-    #[cfg(feature = "svg")]
     fn used_fallbacks(&self, scene: &Scene) -> Vec<bool> {
         let mut used = vec![false; scene.fallback_fonts.len()];
         if scene.fallback_fonts.is_empty() {
@@ -222,20 +221,10 @@ impl SvgTarget {
         used
     }
 
-    /// Guides-only builds (no `svg` feature) name the primary family only:
-    /// the fallback bookkeeping stays out of the WASM build.
-    #[cfg(not(feature = "svg"))]
-    fn used_fallbacks(&self, _: &Scene) -> Vec<bool> {
-        Vec::new()
-    }
-
     fn write(&self, scene: &Scene) -> std::result::Result<String, std::fmt::Error> {
         let (w, h) = (num(scene.width), num(scene.height));
         let mut s = String::new();
-        #[cfg(feature = "svg")]
         let fallbacks: &[gup_text::Font] = &scene.fallback_fonts;
-        #[cfg(not(feature = "svg"))]
-        let fallbacks: &[gup_text::Font] = &[];
         let names = fallback_families(&self.options.font, fallbacks);
         let used = self.used_fallbacks(scene);
         // The font-family list: the primary, then every fallback.
@@ -472,20 +461,9 @@ impl SvgTarget {
     }
 }
 
-/// `font` with `fallbacks` after it (just `font` without the `svg` feature).
-#[cfg(feature = "svg")]
+/// `font` with `fallbacks` after it.
 fn chain(font: &gup_text::Font, fallbacks: &[gup_text::Font]) -> gup_text::Font {
     font.with_fallbacks(fallbacks)
-}
-
-#[cfg(not(feature = "svg"))]
-fn chain(font: &gup_text::Font, _: &[gup_text::Font]) -> gup_text::Font {
-    font.clone()
-}
-
-#[cfg(not(feature = "svg"))]
-fn fallback_families(_: &gup_text::Font, _: &[gup_text::Font]) -> Vec<String> {
-    Vec::new()
 }
 
 /// The family each fallback is written under, ready to sit inside a CSS
@@ -493,7 +471,6 @@ fn fallback_families(_: &gup_text::Font, _: &[gup_text::Font]) -> Vec<String> {
 /// that would repeat the primary's or an earlier fallback's
 /// (`Font::inter_full()` is named "Inter" like the subset, and two
 /// `@font-face` rules for one family would hide one).
-#[cfg(feature = "svg")]
 fn fallback_families(primary: &gup_text::Font, fallbacks: &[gup_text::Font]) -> Vec<String> {
     let mut names: Vec<String> = Vec::with_capacity(fallbacks.len());
     for (i, f) in fallbacks.iter().enumerate() {
@@ -843,7 +820,6 @@ fn escape(text: &str) -> String {
 mod tests {
     use super::*;
 
-    #[cfg(feature = "svg")]
     #[test]
     fn a_repeated_fallback_name_gets_its_chain_index() {
         use gup_text::Font;
