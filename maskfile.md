@@ -619,6 +619,27 @@ any doc warning, including broken intra-doc links
 RUSTDOCFLAGS="-D warnings" cargo doc --no-deps -p gup -p gup-core -p gup-core-macros -p gup-text -p gup-wgsl -p gup-egui -p gup-visual-regression
 ```
 
+## docs-rs
+
+Emulate the docs.rs build of every published crate (GUP-589): the targets,
+features and `rustdoc-args` of each `[package.metadata.docs.rs]` table, with
+`DOCS_RS=1` and `-D warnings`. Needs the network; not part of `mask all-check`
+
+```bash
+./scripts/docs_rs.sh
+```
+
+## publish-check
+
+Package and verify all seven crates as `cargo publish` would, against a local
+overlay of the members not yet on crates.io (GUP-589). Never publishes; needs
+the network and builds Bevy, so it takes minutes and is not part of
+`mask all-check`
+
+```bash
+cargo publish --workspace --dry-run --locked
+```
+
 ## watch
 
 Watch for changes and rebuild

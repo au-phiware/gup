@@ -333,7 +333,7 @@ impl Readback {
 /// pass resolves into that texture. The readback un-premultiplies alpha.
 ///
 /// Reading back is `async` on every platform; native code can use
-/// [`render_blocking`](Self::render_blocking). In a browser, await
+/// `render_blocking`. In a browser, await
 /// [`render`](Self::render) (or [`read`](Self::read)): the browser maps
 /// the buffer, so nothing blocks.
 #[derive(Debug)]

@@ -30,3 +30,7 @@ naga = { version = "27.0.3", features = ["wgsl-in"] }
 # The `Params` twin's `encase::ShaderType` impl, rooted at gup-core's
 # re-export so user crates need no `encase` dependency.
 encase_derive_impl = "0.12"
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+rustdoc-args = ["--cfg", "docsrs"]

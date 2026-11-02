@@ -61,7 +61,18 @@ crate-type = ["rlib"]
 
 # The facade has no code of its own: `src/lib.rs` is `pub use gup_core::*`.
 [dependencies]
-gup-core = { workspace = true }
+# Not `workspace = true`: a member cannot turn off default features that the
+# workspace entry leaves on, and gup-egui and gup-bevy want them on.
+gup-core = { path = "crates/gup-core", version = "=0.1.0", default-features = false }
+
+[features]
+default = ["window", "svg"]
+# A winit window target, `show` and `GupApp`.
+window = ["gup-core/window"]
+# Data marks in `SvgTarget`.
+svg = ["gup-core/svg"]
+# A `<canvas>` target and host (`web::CanvasApp`); wasm32 only.
+web = ["gup-core/web"]
 
 # Only what `tests/examples_smoke.rs` uses. The examples use `gup` alone.
 [dev-dependencies]
@@ -87,4 +98,5 @@ path = "examples/basic/04_bar_chart.rs"
 
 [package.metadata.docs.rs]
 all-features = true
+targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
 rustdoc-args = ["--cfg", "docsrs"]

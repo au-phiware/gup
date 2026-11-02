@@ -8,6 +8,23 @@
 //! [`prelude`], `wgpu`, the shader-function macros) is re-exported here, and
 //! this crate adds nothing of its own.
 //!
+//! ## Features
+//!
+//! The features mirror `gup-core`'s, so a browser user needs no direct
+//! `gup-core` dependency:
+//!
+//! | Feature | Default | Adds |
+//! | --- | --- | --- |
+//! | `window` | yes | a winit window target, `show`, `GupApp` |
+//! | `svg` | yes | data marks in `SvgTarget` (without it, guides and text only) |
+//! | `web` | no | `web::CanvasApp` and `CanvasTarget` (wasm32 only) |
+//!
+//! In the browser, turn the window off and the canvas on:
+//!
+//! ```toml
+//! gup = { version = "0.1", default-features = false, features = ["web", "svg"] }
+//! ```
+//!
 //! ## A scatter chart in a few lines
 //!
 //! ```
