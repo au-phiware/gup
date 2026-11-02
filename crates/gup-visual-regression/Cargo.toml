@@ -1,11 +1,13 @@
 [package]
 name = "gup-visual-regression"
-version = "0.1.0"
-authors = ["Corin Lawson <corin@phiware.com.au>"]
-edition = "2024"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
 description = "Target-agnostic visual regression harness: golden images, perceptual diff and structural checks over plain RGBA images"
-license = "GPL-3.0-or-later"
-repository = "https://github.com/au-phiware/gup"
 publish = false
 
 # Deliberately has no dependency on `gup` (or any future `gup-core`): every

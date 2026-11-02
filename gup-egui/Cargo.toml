@@ -1,17 +1,19 @@
 [package]
 name = "gup-egui"
-version = "0.1.0"
-authors = ["Corin Lawson <corin@phiware.com.au>"]
-edition = "2024"
-description = "egui integration for the Gup GPU-accelerated data visualization library"
-license = "GPL-3.0-or-later"
-repository = "https://github.com/au-phiware/gup"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+description = "An egui widget that draws gup charts"
 readme = "README.md"
-keywords = ["gpu", "visualization", "egui", "gui", "data"]
-categories = ["graphics", "visualization", "gui"]
+keywords = ["chart", "plot", "visualization", "egui", "gpu"]
+categories = ["visualization", "gui"]
 
 [dependencies]
-gup-core = { path = "../crates/gup-core" }
+gup-core = { workspace = true }
 egui = "0.33"
 eframe = { version = "0.33", features = ["wgpu"] }
 

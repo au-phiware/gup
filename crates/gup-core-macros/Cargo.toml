@@ -1,12 +1,16 @@
 [package]
 name = "gup-core-macros"
-version = "0.1.0"
-authors = ["Corin Lawson <corin@phiware.com.au>"]
-edition = "2024"
-description = "gup-core's `#[wgsl_function]` (RFC-001 §6, GUP-420): a user's WGSL function composed and checked at compile time, with its `ShaderFn` impl generated"
-license = "GPL-3.0-or-later"
-repository = "https://github.com/au-phiware/gup"
-publish = false
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+description = "Procedural macros for gup-core: #[wgsl_function] and #[derive(Mark)]"
+readme = "README.md"
+keywords = ["chart", "wgsl", "shader", "macro"]
+categories = ["visualization", "development-tools::procedural-macro-helpers"]
 
 # This macro takes authored WGSL,
 # composes it with naga_oil against Gup's library at expansion through
@@ -20,7 +24,7 @@ proc-macro-crate = "3"
 proc-macro2 = "1.0"
 quote = "1.0"
 syn = { version = "2.0", features = ["full"] }
-gup-wgsl = { path = "../gup-wgsl", features = ["compose"] }
+gup-wgsl = { workspace = true, features = ["compose"] }
 # Reads the composed module's entry point and `Params` layout.
 naga = { version = "27.0.3", features = ["wgsl-in"] }
 # The `Params` twin's `encase::ShaderType` impl, rooted at gup-core's

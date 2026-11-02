@@ -1,12 +1,16 @@
 [package]
 name = "gup-core"
-version = "0.1.0"
-authors = ["Corin Lawson <corin@phiware.com.au>"]
-edition = "2024"
-description = "The engine behind gup: a GPU column store, typed channels, scales with CPU mirrors, marks, layout and render targets"
-license = "GPL-3.0-or-later"
-repository = "https://github.com/au-phiware/gup"
-publish = false
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+description = "The engine of the gup charting library: a GPU column store, scales, marks, layout and render targets on wgpu"
+readme = "README.md"
+keywords = ["chart", "plot", "visualization", "gpu", "wgpu"]
+categories = ["visualization", "graphics", "rendering"]
 
 # `gup` re-exports `gup-core`, and `gup-core` never depends on `gup` or
 # reaches into its modules.
@@ -20,15 +24,15 @@ publish = false
 # gup-core binary.
 [dependencies]
 wgpu = { version = "27.0", features = ["wgsl"] }
-gup-wgsl = { path = "../gup-wgsl" }
+gup-wgsl = { workspace = true }
 # `#[wgsl_function]` (GUP-420): user WGSL composed at compile time.
-gup-core-macros = { path = "../gup-core-macros" }
+gup-core-macros = { workspace = true }
 encase = "0.12"
 bytemuck = { version = "1.23", features = ["derive"] }
 pollster = "0.3"
 futures-channel = "0.3"
 image = { version = "0.24", default-features = false, features = ["png"] }
-gup-text = { path = "../gup-text" }
+gup-text = { workspace = true }
 thiserror = "2.0"
 # Dictionary key hashing (GUP-566): faster than SipHash; seeded per process.
 foldhash = "=0.2.0"
@@ -81,7 +85,7 @@ trybuild = "1.0"
 # compose the reference glue through naga_oil directly, as an oracle for
 # the run-time linker. Never linked into a gup-core binary.
 naga = { version = "27.0.3", features = ["wgsl-in"] }
-gup-wgsl = { path = "../gup-wgsl", features = ["compose"] }
+gup-wgsl = { workspace = true, features = ["compose"] }
 
 [build-dependencies]
-gup-wgsl = { path = "../gup-wgsl", features = ["compose"] }
+gup-wgsl = { workspace = true, features = ["compose"] }

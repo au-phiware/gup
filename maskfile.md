@@ -309,7 +309,9 @@ throwaway repository, without hooks or remote refs (GUP-496). The story ID guard
 (GUP-504) checks `docs/planning/stories`: no two story files and no two index
 entries share an ID above GUP-315, every entry links a file, and every story's
 heading and file name agree. `test_check_story_ids.sh` seeds each violation in a
-throwaway directory.
+throwaway directory. The header check (`scripts/check_headers.sh`, GUP-588)
+fails on any tracked code file without the SPDX licence line in its first five
+lines.
 
 `shellcheck` lints every `scripts/*.sh` and `dogfood/run_all.sh` (GUP-517). A
 finding fails the gate; a `# shellcheck disable=` line must give its reason on
@@ -336,7 +338,7 @@ concurrently --group --names '\s,ignore,rs,nix,md,gha,sh,gallery,hook,doc' \
    'prettier --cache --log-level warn --check "**/*.md" && mdl --git-recurse .' \
    'actionlint .github/workflows/*.y*ml' \
    'shellcheck scripts/*.sh dogfood/run_all.sh' \
-   './scripts/check_gallery_sync.sh && ./scripts/check_gallery_links.sh && ./scripts/check_story_ids.sh' \
+   './scripts/check_gallery_sync.sh && ./scripts/check_gallery_links.sh && ./scripts/check_story_ids.sh && ./scripts/check_headers.sh' \
    './scripts/test_pre_commit.sh && ./scripts/test_shared_build_dir.sh && ./scripts/test_prune_build_dir.sh && ./scripts/test_checkpoint.sh && ./scripts/test_check_story_ids.sh' \
    'mask doc'
 ```

@@ -10,17 +10,50 @@ default-members = ["."]
 # in GUP-497.
 exclude = ["crates/gup-culling-lod"]
 
-[package]
-name = "gup"
+[workspace.package]
 version = "0.1.0"
 authors = ["Corin Lawson <corin@phiware.com.au>"]
 edition = "2024"
-description = "GPU-Accelerated Data Visualization Library"
 license = "GPL-3.0-or-later"
 repository = "https://github.com/au-phiware/gup"
+homepage = "https://github.com/au-phiware/gup"
+rust-version = "1.93"
+
+# The published crates release together, and each requires its siblings by an
+# exact version: the macro-generated code and the WGSL library text are an
+# internal contract between gup-core-macros, gup-wgsl and gup-core.
+[workspace.dependencies]
+gup-core = { path = "crates/gup-core", version = "=0.1.0" }
+gup-core-macros = { path = "crates/gup-core-macros", version = "=0.1.0" }
+gup-wgsl = { path = "crates/gup-wgsl", version = "=0.1.0" }
+gup-text = { path = "crates/gup-text", version = "=0.1.0" }
+
+[package]
+name = "gup"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+description = "Charts drawn on the GPU: scatter, line, bar, area, histogram, heatmap and box plots in a window, PNG, SVG, egui, Bevy or the browser"
 readme = "README.md"
-keywords = ["gpu", "visualization", "graphics", "webgpu", "data"]
-categories = ["graphics", "visualization", "wasm"]
+keywords = ["chart", "plot", "visualization", "gpu", "wgpu"]
+categories = ["visualization", "graphics", "wasm"]
+# What the facade ships: its source, examples and the documents its
+# `cfg(doctest)` modules include. `tests/` needs the unpublished
+# `gup-visual-regression`, and `docs/planning/` is history.
+include = [
+  "src/**",
+  "examples/**",
+  "/README.md",
+  "/COPYING",
+  "/Cargo.toml",
+  "docs/TECHNICAL_APPROACH.md",
+  "docs/IMPLEMENTATION_STRATEGY.md",
+  "docs/tutorials/*.md",
+]
 
 [lib]
 name = "gup"
@@ -28,7 +61,7 @@ crate-type = ["rlib"]
 
 # The facade has no code of its own: `src/lib.rs` is `pub use gup_core::*`.
 [dependencies]
-gup-core = { path = "crates/gup-core" }
+gup-core = { workspace = true }
 
 # Only what `tests/examples_smoke.rs` uses. The examples use `gup` alone.
 [dev-dependencies]
