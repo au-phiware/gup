@@ -344,7 +344,7 @@ and WASM harness after it.
 - [GUP-593](GUP-593_Svg_Title_And_Canvas_Aria_Label.md) 📋 — SVG `role="img"`,
   `<title>` and `<desc>`; `CanvasApp` sets `role` and `aria-label` unless the
   page set its own, checked in the browser test. Deps: GUP-592 📋, GUP-557 📋.
-- [GUP-594](GUP-594_Flagship_Gallery_Part_One.md) 📋 — Five finished gallery
+- [GUP-594](GUP-594_Flagship_Gallery_Part_One.md) 🚧 — Five finished gallery
   examples (bubbles, monotone lines, labelled grouped bars, ranked `barh`,
   stacked areas), each a runnable example, a CI thumbnail and a golden in
   `tests/gallery.rs`. Deps: GUP-536 📋.
