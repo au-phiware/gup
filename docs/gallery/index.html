@@ -16,12 +16,118 @@
     </p>
     <nav aria-label="Category navigation">
       <ul class="category-nav">
+        <li><a href="#gallery">Gallery</a></li>
         <li><a href="#basic">Basic</a></li>
         <li><a href="#charts--marks">Charts & Marks</a></li>
       </ul>
     </nav>
   </header>
   <main>
+    <section id="gallery">
+      <h2>Gallery</h2>
+      <div class="gallery-grid">
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">scatter_bubbles</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/gallery/scatter_bubbles.rs">scatter_bubbles</a></h3>
+            <p>Bubble chart: size, colour and a log axis</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">line_monotone</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/gallery/line_monotone.rs">line_monotone</a></h3>
+            <p>Three monotone-curve lines with month labels</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">bar_grouped_labels</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/gallery/bar_grouped_labels.rs">bar_grouped_labels</a></h3>
+            <p>Grouped bars with a value label on every bar</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">barh_ranked</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/gallery/barh_ranked.rs">barh_ranked</a></h3>
+            <p>A ranking as horizontal bars with value labels</p>
+          </div>
+        </article>
+        <article class="gallery-card pending">
+          <div class="thumb-placeholder" aria-label="Thumbnail not yet generated">
+            <span class="placeholder-label">area_stacked</span>
+            <span class="placeholder-note">Pending</span>
+          </div>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/gallery/area_stacked.rs">area_stacked</a></h3>
+            <p>Stacked areas with an outline</p>
+          </div>
+        </article>
+        <article class="gallery-card">
+          <a href="https://github.com/au-phiware/gup/blob/main/examples/gallery/histogram_stacked.rs" class="thumb-link">
+            <img src="thumbs/histogram_stacked.png" alt="Screenshot of histogram_stacked example"
+                 loading="lazy" width="640" height="480">
+          </a>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/gallery/histogram_stacked.rs">histogram_stacked</a></h3>
+            <p>A histogram stacked by mode, in bins of five</p>
+          </div>
+        </article>
+        <article class="gallery-card">
+          <a href="https://github.com/au-phiware/gup/blob/main/examples/gallery/heatmap_weekly.rs" class="thumb-link">
+            <img src="thumbs/heatmap_weekly.png" alt="Screenshot of heatmap_weekly example"
+                 loading="lazy" width="640" height="480">
+          </a>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/gallery/heatmap_weekly.rs">heatmap_weekly</a></h3>
+            <p>A weekday-by-hour heatmap through viridis</p>
+          </div>
+        </article>
+        <article class="gallery-card">
+          <a href="https://github.com/au-phiware/gup/blob/main/examples/gallery/boxplot_latency.rs" class="thumb-link">
+            <img src="thumbs/boxplot_latency.png" alt="Screenshot of boxplot_latency example"
+                 loading="lazy" width="640" height="480">
+          </a>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/gallery/boxplot_latency.rs">boxplot_latency</a></h3>
+            <p>Box plots of latency with outliers</p>
+          </div>
+        </article>
+        <article class="gallery-card">
+          <a href="https://github.com/au-phiware/gup/blob/main/examples/gallery/annotated_prices.rs" class="thumb-link">
+            <img src="thumbs/annotated_prices.png" alt="Screenshot of annotated_prices example"
+                 loading="lazy" width="640" height="480">
+          </a>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/gallery/annotated_prices.rs">annotated_prices</a></h3>
+            <p>The Plot API: a step line with event labels</p>
+          </div>
+        </article>
+        <article class="gallery-card">
+          <a href="https://github.com/au-phiware/gup/blob/main/examples/gallery/dark_multiline.rs" class="thumb-link">
+            <img src="thumbs/dark_multiline.png" alt="Screenshot of dark_multiline example"
+                 loading="lazy" width="640" height="480">
+          </a>
+          <div class="card-info">
+            <h3><a href="https://github.com/au-phiware/gup/blob/main/examples/gallery/dark_multiline.rs">dark_multiline</a></h3>
+            <p>Five lines in the dark theme</p>
+          </div>
+        </article>
+      </div>
+    </section>
     <section id="basic">
       <h2>Basic</h2>
       <div class="gallery-grid">
@@ -85,8 +191,8 @@
   </main>
   <footer>
     <p>
-      Generated on 2026-11-02T05:11:57Z &middot;
-      4 renderable / 5 total examples &middot;
+      Generated on 2026-11-02T23:27:44Z &middot;
+      14 renderable / 15 total examples &middot;
       <a href="https://github.com/au-phiware/gup">Gup on GitHub</a>
     </p>
   </footer>

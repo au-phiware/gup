@@ -18,6 +18,11 @@ Run any example with: `cargo run --example <name>`
 | `bar_grouped_labels` | Grouped bars with a value label on every bar   |
 | `barh_ranked`        | A ranking as horizontal bars with value labels |
 | `area_stacked`       | Stacked areas with an outline                  |
+| `histogram_stacked`  | A histogram stacked by mode, in bins of five   |
+| `heatmap_weekly`     | A weekday-by-hour heatmap through viridis      |
+| `boxplot_latency`    | Box plots of latency with outliers             |
+| `annotated_prices`   | The Plot API: a step line with event labels    |
+| `dark_multiline`     | Five lines in the dark theme                   |
 
 ---
 

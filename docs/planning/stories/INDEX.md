@@ -348,7 +348,7 @@ and WASM harness after it.
   examples (bubbles, monotone lines, labelled grouped bars, ranked `barh`,
   stacked areas), each a runnable example, a CI thumbnail and a golden in
   `tests/gallery.rs`. Deps: GUP-536 📋.
-- [GUP-595](GUP-595_Flagship_Gallery_Part_Two_And_Hero.md) 📋 — Five more
+- [GUP-595](GUP-595_Flagship_Gallery_Part_Two_And_Hero.md) ✅ — Five more
   (stacked histogram, heatmap, box plot, annotated `Plot`, dark lines) and the
   README hero as a 1200 × 630 golden. Deps: GUP-594 📋.
 - [GUP-596](GUP-596_Changelog_And_Semver_Policy.md) ✅ — `CHANGELOG.md` (Keep a
@@ -358,7 +358,7 @@ and WASM harness after it.
 - [GUP-597](GUP-597_Readme_For_Release_0_1.md) 📋 — The README at release
   candidate: hero image, eight builders, browser features, a current "Not yet"
   and platform line, CHANGELOG link, published-crates column. Deps: GUP-589 📋,
-  GUP-590 📋, GUP-591 📋, GUP-593 📋, GUP-595 📋, GUP-596 📋.
+  GUP-590 📋, GUP-591 📋, GUP-593 📋, GUP-596 📋.
 - [GUP-602](GUP-602_Feature_Combinations_Compile.md) ✅ — Every supported
   feature combination builds and tests (`window`-only lib tests fail today at
   `scope.rs:338`); `mask feature-matrix` in CI. Deps: GUP-589 ✅.

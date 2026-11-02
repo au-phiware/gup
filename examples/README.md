@@ -16,6 +16,11 @@ single frame to a PNG instead of opening a window.
 | `bar_grouped_labels`   | Grouped bars with a value label on every bar    | `cargo run --example bar_grouped_labels`   |
 | `barh_ranked`          | A ranking as horizontal bars with value labels  | `cargo run --example barh_ranked`          |
 | `area_stacked`         | Stacked areas with an outline                   | `cargo run --example area_stacked`         |
+| `histogram_stacked`    | A histogram stacked by mode, in bins of five    | `cargo run --example histogram_stacked`    |
+| `heatmap_weekly`       | A weekday-by-hour heatmap through viridis       | `cargo run --example heatmap_weekly`       |
+| `boxplot_latency`      | Box plots of latency with outliers              | `cargo run --example boxplot_latency`      |
+| `annotated_prices`     | The Plot API: a step line with event labels     | `cargo run --example annotated_prices`     |
+| `dark_multiline`       | Five lines in the dark theme                    | `cargo run --example dark_multiline`       |
 
 The examples that used the pre-flip render core were deleted in GUP-488; the
 history keeps them. The builders that exist today are scatter, line (with step
