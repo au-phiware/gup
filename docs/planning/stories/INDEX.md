@@ -387,8 +387,11 @@ GUP-566 edits `encoding.rs` (not beside GUP-562); GUP-567 edits `selection.rs`.
   benchmark, then builder keys encoded from a borrowed label (no second
   allocation) and a `foldhash` dictionary, each kept only if it helps: owned-key
   overhead from 52 to at most 30 ns per row. Deps: GUP-537 ✅.
-- [GUP-577](GUP-577_Cap_Evicts_Unowned_Incremental_Caches.md) 💡 — Rule 5 also
-  evicts incremental caches of unowned crates (GUP-428 follow-up).
+- [GUP-577](GUP-577_Cap_Evicts_Unowned_Incremental_Caches.md) 📋 — Rule 5's
+  least-recently-used queue holds incremental crate caches too (ties go to
+  caches), with a seeded path-dependency case and a control, so the cap can
+  always be met. Edits `scripts/`, `maskfile.md` and `CLAUDE.md`; runs beside
+  any story that does not edit `maskfile.md`. Deps: GUP-428 ✅.
 - [GUP-567](GUP-567_Cached_Edge_Extremes_For_Zoom.md) ✅ — Sorted per-chunk
   values cached for the edge-inset solve, so a programmatic zoom answers by
   binary search with identical insets: `zoom_culled.cpu` from 1.24 back under
