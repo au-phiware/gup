@@ -329,6 +329,13 @@ accessibility in 0.1. Run order: see below once the track is complete.
 - [GUP-593](GUP-593_Svg_Title_And_Canvas_Aria_Label.md) 📋 — SVG `role="img"`,
   `<title>` and `<desc>`; `CanvasApp` sets `role` and `aria-label` unless the
   page set its own, checked in the browser test. Deps: GUP-592 📋, GUP-557 📋.
+- [GUP-594](GUP-594_Flagship_Gallery_Part_One.md) 📋 — Five finished gallery
+  examples (bubbles, monotone lines, labelled grouped bars, ranked `barh`,
+  stacked areas), each a runnable example, a CI thumbnail and a golden in
+  `tests/gallery.rs`. Deps: GUP-536 📋.
+- [GUP-595](GUP-595_Flagship_Gallery_Part_Two_And_Hero.md) 📋 — Five more
+  (stacked histogram, heatmap, box plot, annotated `Plot`, dark lines) and the
+  README hero as a 1200 × 630 golden. Deps: GUP-594 📋.
 
 ## Track N5: Performance at Scale
 
