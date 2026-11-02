@@ -322,6 +322,10 @@ accessibility in 0.1. Run order: see below once the track is complete.
   tests, diff images uploaded on failure. Deps: GUP-594 📋 (soft).
 - [GUP-591](GUP-591_Macos_Metal_Smoke_Spike.md) 📋 — The same job on `macos-15`
   Metal, kept, made advisory or removed by a fixed rule. Deps: GUP-590 📋.
+- [GUP-592](GUP-592_Plot_Describe_Text_Alternative.md) 📋 — `Description`,
+  `Plot::describe`, `Chart::describe` and `.description(text)`: a text
+  alternative built at resolve from the title, kind, row counts, drawn tick
+  labels and legends, stored in `Scene`. Deps: GUP-552 ✅, GUP-554 ✅.
 
 ## Track N5: Performance at Scale
 
