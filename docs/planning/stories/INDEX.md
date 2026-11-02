@@ -304,6 +304,20 @@ touches no hot file and runs beside any of them.
   background, so labels on coloured fills pass the standard check; the stacked
   bar golden's workaround is removed. Deps: GUP-544 ✅.
 
+## Track N3: Release 0.1
+
+Track N3 from the [November 2026 review](../STRATEGIC_REVIEW_2026-11.md), with
+the owner's decisions of 2026-10-24: GPL-3.0-or-later kept, minimal
+accessibility in 0.1. Run order: see below once the track is complete.
+
+- [GUP-588](GUP-588_Publish_Metadata_And_Licence_Headers.md) 📋 — Workspace
+  metadata and `=0.1.0` internal versions, plain descriptions, crate READMEs,
+  licence symlinks, a header check in `all-check`, and a root `include` list, so
+  all seven crates package.
+- [GUP-589](GUP-589_Publish_Dry_Run_And_Docs_Rs_In_CI.md) 📋 — `gup` forwards
+  `window`, `svg` and `web`; docs.rs tables; `mask publish-check`,
+  `mask docs-rs` and a Release check workflow on every push. Deps: GUP-588 📋.
+
 ## Track N5: Performance at Scale
 
 Track N5 from the [November 2026 review](../STRATEGIC_REVIEW_2026-11.md):
