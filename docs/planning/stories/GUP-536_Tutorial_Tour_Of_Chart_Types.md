@@ -10,8 +10,8 @@ touches: [src/lib.rs]
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N1 Docs and Tutorials) **Status**: 📋
-Planned **Created**: 2026-10-24
+**Initiative**: Strategic Review 2026-11 (N1 Docs and Tutorials) **Status**: 🚧
+In Progress Planned **Created**: 2026-10-24
 
 ## Context
 
@@ -40,7 +40,7 @@ promised this page.
 
 ### AC1: The tutorial
 
-- [ ] `docs/tutorials/07_chart_types.md`, "A Tour of Chart Types", has one
+- [x] `docs/tutorials/07_chart_types.md`, "A Tour of Chart Types", has one
       section per chart in this order: scatter, line (with a step or monotone
       curve when GUP-550/551 are merged), bar (grouped, with value labels),
       horizontal bar, stacked area, histogram, heatmap, box plot (when GUP-554
@@ -48,15 +48,15 @@ promised this page.
       `Theme::dark()` (when GUP-553 is merged). Each section is a short
       paragraph on when to use the chart, one tested `rust` block of at most 20
       lines, and its image.
-- [ ] Every image is a golden `tutorials/07_<chart>` in `tests/tutorials.rs`,
+- [x] Every image is a golden `tutorials/07_<chart>` in `tests/tutorials.rs`,
       read by eye and described.
-- [ ] `src/lib.rs`'s `mod tutorials` gains `ChartTypes`;
+- [x] `src/lib.rs`'s `mod tutorials` gains `ChartTypes`;
       `cargo test --doc -p gup -- tutorials` passes; the GUP-530 `awk` and
       `grep` checks print nothing for the file.
 
 ### AC2: Links
 
-- [ ] Tutorial 1's "other chart types" paragraph links this page instead of
+- [x] Tutorial 1's "other chart types" paragraph links this page instead of
       listing what N2 will add; `docs/tutorials/README.md` lists tutorial 7;
       `examples/README.md`'s "More builders … return in track N2" sentence links
       this page and names the builders that exist.
@@ -80,9 +80,9 @@ promised this page.
 
 ## Technical Tasks
 
-- [ ] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30 min.
-- [ ] Sections and goldens, a few at a time; commit after each three.
-- [ ] Links; DoD commands.
+- [x] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30 min.
+- [x] Sections and goldens, a few at a time; commit after each three.
+- [x] Links; DoD commands.
 
 ## Dependencies
 
@@ -106,7 +106,7 @@ promised this page.
 
 ## Success Metrics
 
-- [ ] Every builder in the crate has a tested example on one page.
+- [x] Every builder in the crate has a tested example on one page.
 
 ## Risk Assessment
 
@@ -115,14 +115,63 @@ promised this page.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (the tutorial goldens)
-- [ ] `mask wasm-browser`: not needed, docs only
-- [ ] WASM size: unchanged, no library code change
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye (the tutorial goldens)
+- [x] `mask wasm-browser`: not needed, docs only
+- [x] WASM size: unchanged, no library code change
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `docs/tutorials/07_chart_types.md`: a "how to choose" table and ten sections
+  (scatter, line with `Curve::MonotoneX` and a note on `StepAfter`, grouped bar
+  with `value_labels` and `group_padding`, `barh` with owned keys, stacked area,
+  histogram, heatmap, box plot, `Plot::text` annotations, dark theme with
+  `subtitle`). Each block is a whole program of at most 20 lines.
+- `tests/tutorials.rs`: ten `tutorial_7_*` goldens under
+  `tests/golden/tutorials/07_*.png`; `check_on` takes a background so the dark
+  chart's confinement check uses the theme's colour.
+- Links: tutorial 1 ("Other Chart Types", "Where Next"), the tutorials README
+  (row and learning path), `examples/README.md`; `ChartTypes` in `src/lib.rs`.
+- Nothing skipped: every builder had merged. Sketch differences: the builders
+  have no `.text`; annotations go through `chart.plot_mut().text(rows)`, and
+  `radius` takes `f32`, not `Px`.
+- Evidence: `cargo test --doc -p gup` 66 + 4 pass (10 are ChartTypes), tutorials
+  test 17 pass, `mask merge-check` PASS, `awk`/`grep` checks print nothing.
+
+## Retrospective
+
+**Completed**: 2026-11-02
+
+### Key Technical Learnings
+
+#### Doctests as programs
+
+- **Challenge**: 20 lines per block including `fn main` and no hidden lines.
+- **Solution**: generate rows with iterators/formulas, render with a bare
+  `chart.render(..)?;`, put short setters on shared lines.
+- **Pattern**: write the test body first, view the golden, then copy the block.
+
+### Architectural Decisions
+
+#### Dark golden background
+
+- **Decision**: `check_on(name, chart, background)`; `check` keeps white.
+- **Trade-off**: none; the harness already took a background.
+
+### Development Workflow Insights
+
+- A scripted `index()` replace hit tutorial 1's similarly named test; the
+  compile error caught it. Match on unique anchors.
+- `group_padding` defaults to 0.1, so showing it needed a different value.
+
+### Follow-up Stories
+
+None. The default single-colour bar/histogram/boxplot fill is the theme's blue
+rather than the palette's first colour; not a defect, noted only.

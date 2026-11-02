@@ -24,6 +24,7 @@ Before you begin, make sure you have:
 | 4   | [Interactions](04_interactions.md)                       | Tooltips, hover and click on rows, wheel zoom, drag pan, brushing, and testing it all by sending `Input`.    |
 | 5   | [Streaming Data](05_streaming_data.md)                   | Push rows from another thread with an `Appender`, bound memory with `Window::LastRows`, grow keyed lines.    |
 | 6   | [Custom Marks](06_custom_marks.md)                       | Write a new mark with `#[derive(Mark)]` and WGSL: channel roles, setters, CPU and GPU picking.               |
+| 7   | [A Tour of Chart Types](07_chart_types.md)               | Every chart Gup draws, when to choose it and the few lines that make it: copy the closest one.               |
 
 ## Learning Path
 
@@ -43,7 +44,9 @@ Tutorial 2 ─── Plots and Selections
      │
      ├──── Tutorial 5 ─── Streaming Data
      │
-     └──── Tutorial 6 ─── Custom Marks
+     ├──── Tutorial 6 ─── Custom Marks
+     │
+     └──── Tutorial 7 ─── A Tour of Chart Types
 ```
 
 ## Images

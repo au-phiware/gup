@@ -12,7 +12,10 @@ single frame to a PNG instead of opening a window.
 | `04_bar_chart`         | Grouped (or stacked) bar chart                  | `cargo run --example 04_bar_chart`         |
 | `composite_mixed_data` | One plot over two row types                     | `cargo run --example composite_mixed_data` |
 
-The examples that used the pre-flip render core were deleted in GUP-488; git
-history keeps them. `gup::area` (single, overlapping and stacked) is the first
-of them; more builders (boxplot, violin, density, heatmap, choropleth) return in
-track N2 (strategic review 2026-11).
+The examples that used the pre-flip render core were deleted in GUP-488; the
+history keeps them. The builders that exist today are scatter, line (with step
+and smooth curves), bar and barh (grouped, stacked, with value labels), area
+(single, overlapping and stacked), histogram, heatmap and boxplot, with text
+labels (`Plot::text`), a subtitle and `Theme::dark()`; the
+[tour of chart types](../docs/tutorials/07_chart_types.md) shows each with its
+code and picture. Violin, density and choropleth charts are not built yet.

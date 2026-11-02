@@ -366,10 +366,11 @@ bar made of three coloured parts.
 
 ## Other Chart Types
 
-Scatter, line and bar are the builders available today. Area charts, histograms,
-heatmaps and annotations arrive with track N2 of the
-[strategic review](../planning/STRATEGIC_REVIEW_2026-10.md), and this page will
-gain a tour of them when they do. Until then, anything the builders cannot say
+Scatter, line and bar are the three common charts, and Gup draws more: stacked
+areas, histograms, heatmaps, box plots, horizontal bars with value labels, step
+and smooth lines, text labels at data positions and a dark theme.
+[Tutorial 7: A Tour of Chart Types](07_chart_types.md) shows each with the few
+lines that make it and says when to choose it. Anything the builders cannot say
 you can build from the same marks one level down, which is the next tutorial.
 
 ## Where Next
@@ -387,5 +388,7 @@ continue:
 - [Tutorial 5: Streaming Data](05_streaming_data.md) appends rows to a running
   chart.
 - [Tutorial 6: Custom Marks](06_custom_marks.md) defines a new mark.
+- [Tutorial 7: A Tour of Chart Types](07_chart_types.md) is every chart Gup
+  draws, each with a copyable block.
 
 Tutorials 3 to 6 are being rewritten; their banners say so.
