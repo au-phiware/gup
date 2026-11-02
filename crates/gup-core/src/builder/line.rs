@@ -58,6 +58,7 @@ enum ColorSpec<T> {
 /// See the [module docs](crate::builder) for the pattern.
 pub fn line<T: Send + Sync + 'static>(rows: impl IntoIterator<Item = T>) -> LineChart<T> {
     let mut plot = Plot::new();
+    plot.set_kind("Line chart");
     plot.x(Linear::new());
     plot.y(Linear::new());
     LineChart {
@@ -462,6 +463,9 @@ impl<T: Send + Sync + 'static> Chart for LineChart<T> {
     }
     fn title_text(&self) -> Option<&str> {
         self.plot.title_text()
+    }
+    fn describe(&self) -> Option<&crate::Description> {
+        self.plot.describe()
     }
     fn as_any(&self) -> &dyn Any {
         self

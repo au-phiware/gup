@@ -36,6 +36,7 @@ enum SizeSpec<T> {
 /// See the [module docs](crate::builder) for the pattern and an example.
 pub fn scatter<T: Send + Sync + 'static>(rows: impl IntoIterator<Item = T>) -> ScatterChart<T> {
     let mut plot = Plot::new();
+    plot.set_kind("Scatter chart");
     plot.x(Linear::new());
     plot.y(Linear::new());
     ScatterChart {
@@ -371,6 +372,9 @@ impl<T: Send + Sync + 'static> Chart for ScatterChart<T> {
     }
     fn title_text(&self) -> Option<&str> {
         self.plot.title_text()
+    }
+    fn describe(&self) -> Option<&crate::Description> {
+        self.plot.describe()
     }
     fn as_any(&self) -> &dyn Any {
         self

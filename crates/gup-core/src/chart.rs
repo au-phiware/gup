@@ -83,6 +83,12 @@ pub trait Chart: 'static {
     }
     /// The chart's title, if any (a window title).
     fn title_text(&self) -> Option<&str>;
+    /// The chart's text alternative as of the last successful resolve
+    /// ([`Plot::describe`](crate::Plot::describe)); `None` before one, and
+    /// for a chart that makes none.
+    fn describe(&self) -> Option<&crate::Description> {
+        None
+    }
     /// The chart as [`Any`], to downcast to its concrete type.
     fn as_any(&self) -> &dyn Any;
     /// The chart as mutable [`Any`], to downcast to its concrete type.

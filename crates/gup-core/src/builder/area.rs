@@ -124,6 +124,7 @@ enum ColorSpec<T> {
 /// See the [module docs](crate::builder) for the pattern.
 pub fn area<T: Send + Sync + 'static>(rows: impl IntoIterator<Item = T>) -> AreaChart<T> {
     let mut plot = Plot::new();
+    plot.set_kind("Area chart");
     plot.x(Linear::new());
     plot.y(Linear::new());
     AreaChart {
@@ -561,6 +562,9 @@ impl<T: Send + Sync + 'static> Chart for AreaChart<T> {
     }
     fn title_text(&self) -> Option<&str> {
         self.plot.title_text()
+    }
+    fn describe(&self) -> Option<&crate::Description> {
+        self.plot.describe()
     }
     fn as_any(&self) -> &dyn Any {
         self

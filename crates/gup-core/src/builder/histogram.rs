@@ -76,6 +76,7 @@ pub struct HistogramBin {
 /// See the [module docs](crate::builder) for the pattern.
 pub fn histogram<T: Send + Sync + 'static>(rows: impl IntoIterator<Item = T>) -> HistogramChart<T> {
     let mut plot = Plot::new();
+    plot.set_kind("Histogram");
     plot.y(Linear::new());
     plot.round_to_ticks(1);
     plot.y_title("Count");
@@ -460,6 +461,9 @@ impl<T: Send + Sync + 'static> Chart for HistogramChart<T> {
     }
     fn title_text(&self) -> Option<&str> {
         self.plot.title_text()
+    }
+    fn describe(&self) -> Option<&crate::Description> {
+        self.plot.describe()
     }
     fn as_any(&self) -> &dyn Any {
         self

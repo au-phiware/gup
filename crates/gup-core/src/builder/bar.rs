@@ -326,6 +326,11 @@ impl<T: Send + Sync + 'static> BarChart<T, Horizontal> {
 impl<T: Send + Sync + 'static, O: Orientation> BarChart<T, O> {
     fn new(rows: impl IntoIterator<Item = T>) -> Self {
         let mut plot = Plot::new();
+        plot.set_kind(if O::HORIZONTAL {
+            "Horizontal bar chart"
+        } else {
+            "Bar chart"
+        });
         let band = if O::HORIZONTAL {
             plot.x(Linear::new());
             plot.round_to_ticks(0);
@@ -965,6 +970,9 @@ impl<T: Send + Sync + 'static, O: Orientation> Chart for BarChart<T, O> {
     }
     fn title_text(&self) -> Option<&str> {
         self.plot.title_text()
+    }
+    fn describe(&self) -> Option<&crate::Description> {
+        self.plot.describe()
     }
     fn as_any(&self) -> &dyn Any {
         self

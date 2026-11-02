@@ -40,6 +40,9 @@ pub struct Scene {
     /// (`Context::add_fallback_font`): a vector target names and embeds the
     /// ones its text uses.
     pub fallback_fonts: Vec<gup_text::Font>,
+    /// The chart's text alternative (GUP-592), set by `Plot::resolve`; a
+    /// vector or canvas target writes it as a title and description.
+    pub description: Option<crate::Description>,
 }
 
 impl Scene {
@@ -52,6 +55,7 @@ impl Scene {
             items: Vec::new(),
             clips: Vec::new(),
             fallback_fonts: Vec::new(),
+            description: None,
         }
     }
 
@@ -90,6 +94,7 @@ impl Scene {
             background: self.background,
             clips: self.clips.clone(),
             fallback_fonts: self.fallback_fonts.clone(),
+            description: self.description.clone(),
         }
     }
 
