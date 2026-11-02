@@ -251,6 +251,10 @@ struct State {
     /// The app was dropped; outstanding frames do nothing.
     closed: bool,
     last_error: Option<String>,
+    /// Gup names the canvas: the page set no `aria-label` of its own.
+    label_canvas: bool,
+    /// The `aria-label` last written (empty before the first).
+    label: String,
 }
 
 impl State {
@@ -265,7 +269,30 @@ impl State {
         let (w, h) = target.size();
         let dpr = target.dpr();
         let resolved = chart.resolve(cx, w as f32 / dpr, h as f32 / dpr)?;
-        renderer.render(cx, &resolved.scene, target)
+        renderer.render(cx, &resolved.scene, target)?;
+        self.update_label();
+        Ok(())
+    }
+
+    /// Give the canvas the chart's description as its accessible name
+    /// (`role="img"` and `aria-label`), unless the page named it. The DOM
+    /// is written only when the text changes.
+    fn update_label(&mut self) {
+        if !self.label_canvas {
+            return;
+        }
+        let Some(alt) = self.chart.describe().map(|d| d.alt_text()) else {
+            return;
+        };
+        if alt == self.label {
+            return;
+        }
+        let canvas: &web_sys::Element = self.target.canvas();
+        if self.label.is_empty() {
+            let _ = canvas.set_attribute("role", "img");
+        }
+        let _ = canvas.set_attribute("aria-label", &alt);
+        self.label = alt;
     }
 }
 
@@ -405,6 +432,8 @@ impl CanvasApp {
             pending: false,
             closed: false,
             last_error: None,
+            label_canvas: !canvas.has_attribute("aria-label"),
+            label: String::new(),
         };
         st.draw()?;
         cx.settle_gpu_errors().await?;
