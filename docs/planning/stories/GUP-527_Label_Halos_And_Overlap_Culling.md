@@ -16,8 +16,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: 🚧 In
-Progress **Created**: 2026-10-26
+**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: ✅
+Complete (2026-11-02) **Created**: 2026-10-26
 
 ## Context
 
@@ -113,20 +113,20 @@ Set by the implementer on 2026-11-02 (the story had none).
 
 ## Acceptance Criteria
 
-- [ ] `TextLayer::halo(Px)` draws each label with an outline of that width in
+- [x] `TextLayer::halo(Px)` draws each label with an outline of that width in
       the theme's background colour, identically in PNG, window and SVG
       (`stroke` with `paint-order="stroke"` in SVG). Default: no halo.
-- [ ] `TextLayer::hide_overlaps(true)` keeps a label only if its ink box
+- [x] `TextLayer::hide_overlaps(true)` keeps a label only if its ink box
       overlaps no box kept before it (row order). It is documented, it is tested
       on `Layout::texts`, and its cost is measured with 1,000 labels.
-- [ ] A golden with halos over dense discs, read by eye.
+- [x] A golden with halos over dense discs, read by eye.
 
 ## Technical Tasks
 
-- [ ] Choose how the glyph pipeline draws a halo (a dilated atlas sample, or a
+- [x] Choose how the glyph pipeline draws a halo (a dilated atlas sample, or a
       second pass of offset glyphs) and record why; escalate if it changes the
       glyph atlas format.
-- [ ] Culling with a grid of kept boxes; tests; golden; commit.
+- [x] Culling with a grid of kept boxes; tests; golden; commit.
 
 ## Dependencies
 
@@ -142,7 +142,7 @@ Set by the implementer on 2026-11-02 (the story had none).
 
 ## Success Metrics
 
-- [ ] A 1,000-point labelled scatter shows readable, non-overlapping labels.
+- [x] A 1,000-point labelled scatter shows readable, non-overlapping labels.
 
 ## Risk Assessment
 
@@ -152,12 +152,148 @@ Set by the implementer on 2026-11-02 (the story had none).
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -p gup-core -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] Rendered output verified by eye
-- [ ] `mask wasm-size` scatter gz bytes reported
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -p gup-core -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] Rendered output verified by eye
+- [x] `mask wasm-size` scatter gz bytes reported
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+Delivered as the Decisions describe; nothing differs from them.
+
+- **`gup-text`** (`atlas.rs`, `system.rs`): `GlyphAtlas::halo` rasterises a
+  glyph, dilates it (`dilate`, a disc of the radius with a one-pixel ramp) onto
+  a bitmap `margin = ceil(radius)` texels larger per side, and caches it in the
+  same R8 atlas under `(face, glyph, size, radius)`. `TextSystem::layout_halo`
+  lays those quads out, offset by the margin. The shader, pipeline and atlas
+  format are unchanged.
+- **`gup-core`**: `scene::Halo { width, color }` and `TextStyle::halo` (`None`
+  for all guide text); `RendererGpu::text` lays out a run's halo just before the
+  run; `SvgTarget` writes `stroke`, `stroke-width` (2 × width),
+  `stroke-linejoin="round"` and `paint-order="stroke"`. `TextLayer::halo(Px)`
+  (panics on a negative or non-finite width) takes its colour from
+  `Theme::background`; `TextLayer::hide_overlaps(bool)` culls with `Kept`, a
+  uniform grid (cells 4 × the font size, at most 64 × 64) over the plot rect.
+  `Plot::text`'s docs point at both.
+- **Tests**: `crates/gup-core/tests/text_halo.rs` (6): halo pixels in the
+  background colour beside the glyphs on the light and dark themes, with the
+  text colour kept and the mark back 5 px out; `halo(Px(0.0))` renders
+  byte-for-byte what no halo renders; the SVG attributes, and on the resvg
+  raster the text drawn over its stroke (a mutation to `paint-order="normal"`
+  fails it with 0 text pixels); the greedy rule replayed over the uncut labels
+  of a 1,000-point scatter equals `Layout::texts`, with and without a halo; more
+  labels kept on a larger plot; the golden. Two `gup-text` unit tests (the
+  dilation's values, the halo's cache entry), a `hide_overlaps` doctest, and the
+  1,000-label cost test measures culling. `secondary_y` turns `halo(Px(2.0))`
+  on.
+
+### Evidence
+
+- **Goldens**: `tests/golden/gup_core/text_halo.png` (new, 640×400), read by eye
+  at 4× zoom: 300 blue discs (r 4 px) with a 2 px orange line across them. The
+  values sit 6 px above their discs, and labels that would overlap an earlier
+  one are hidden (the test asserts 40–300 kept). Each label's white halo cuts
+  the line ("36.8", "43.9") and the edges of neighbouring discs ("37.5", "30.4")
+  cleanly, with round corners. No two labels overlap.
+  `tests/golden/gup_core/secondary_y.png` (re-blessed): "48" and "90" now sit on
+  a white outline that breaks the temperature line behind their digits. The
+  other labels are unchanged, and so is every other golden (`mask merge-check`
+  passed with no other golden diff).
+- **SVG parity** (block ΔE, limit 5.5): `text_halo` 3.1, `secondary_y` 5.4 (as
+  before this story, from the line's antialiasing).
+- **Culling cost** (release, median of 21 full resolves, 1,000 labels on
+  800×600): +0.061, +0.047, +0.051 and +0.052 ms over the same layer without
+  culling (0.27 ms), under the 0.3 ms limit. About half the labels are kept.
+- **WASM** (`mask wasm-size` in merge-check): scatter **361,673 B gz**, +1,402 B
+  over main's 360,271 (GUP-439's measurement); over wgpu 329,313 B.
+- **`mask merge-check --dogfood`**: PASS (story-ids, doc, gup-core, wasm-size,
+  wasm-browser, dogfood). **`cargo test --doc -p gup`**: 56 + 4 passed.
+- **`scripts/perf_budget.sh --skip-wasm`**: run 1 (load average 7.4) failed
+  `zoom.cpu.p95_ms` alone (1.096 against 1.075). Run 2 (load 6.7): every timing
+  row passed (`zoom.cpu.median` 0.572, `zoom.cpu.p95` 0.762,
+  `zoom_culled.cpu.median` 0.770, `pipeline.link_create.median` 1.171). The WASM
+  rows report "not measured" because of `--skip-wasm`. The zoom scene has no
+  halo, so its path changes only by one `Option` check per run.
+
+## Retrospective
+
+**Completed**: 2026-11-02
+
+### Key Technical Learnings
+
+#### A halo is a cached bitmap, not a shader effect
+
+- **Challenge**: draw an outline that matches an SVG stroke without touching the
+  glyph shader, the atlas format or the cost of text that has no halo.
+- **Solution**: dilate the coverage bitmap on the CPU once per (glyph, size,
+  radius) and store it as another atlas entry. The halo is then ordinary glyph
+  quads in another colour, so the GPU, window and image targets need no new
+  pipeline. Treating a pixel's coverage as the outline's distance from its
+  centre (`c + r − d`) gives a one-pixel antialiased edge with one `max` per
+  offset.
+- **Pattern**: an effect that depends only on the glyph and its size belongs in
+  the rasterised bitmap. Shader work pays per fragment every frame;
+  rasterisation work is paid once.
+
+#### `paint-order` per element equals draw order per run
+
+- **Challenge**: the GPU and SVG must agree where labels overlap.
+- **Solution**: in one instanced draw, instances blend in order, so laying out
+  halo-then-text per run reproduces `paint-order="stroke"` on each `<text>`.
+  resvg 0.45 honours `paint-order` on text spans. The unmasked raster check
+  proves it: without the attribute, a 3 px stroke covers the 1.6 px stems and no
+  text pixels are left.
+- **Pattern**: the SVG parity harness masks text regions, so text effects need
+  their own unmasked assertion on the resvg raster.
+
+#### The greedy rule is easiest to test by replaying it
+
+- **Solution**: resolve the same layer with and without `hide_overlaps`, run the
+  rule naively (O(n²)) over the uncut labels, and compare with `Layout::texts`.
+  This checks both the grid's correctness and the "row order" promise, and it
+  needs no hand-placed fixtures.
+
+### Architectural Decisions
+
+#### `TextStyle::halo: Option<Halo>` in the scene
+
+- **Decision**: the halo is part of the scene's text style, with its colour
+  resolved at plot resolve from `Theme::background`.
+- **Reasoning**: every target (GPU, SVG) reads the same scene, and the theme
+  stays a plot-level concern.
+- **Trade-off**: thirteen `TextStyle` literals gained `halo: None`.
+- **Future**: guide text (tick labels over gridlines, legends over marks) can
+  turn halos on without another scene change.
+
+#### Culling by the clipped ink box, grown by the halo
+
+- **Decision**: the culling box is `PlacedText::bounds` grown by the halo width.
+  A halo therefore never covers kept ink, and with no halo the box is exactly
+  the AC's ink box.
+- **Trade-off**: edge room (GUP-555) still counts every label, culled or not,
+  and a halo at the plot edge is clipped.
+
+### Development Workflow Insights
+
+- My worktree started 5 commits behind main (without the GUP-439 merge).
+  Fast-forwarding before the first commit avoided a merge later.
+- The worktree sandbox refuses compound shell commands that mix heredocs, `cd`
+  or variables with `git`. Plain commands and the Edit tool work.
+- A session rate limit stopped the work mid-implementation. The checkpoint ref
+  and the WIP commit straight after the restart meant nothing was lost.
+- Mutation-testing the SVG assertion took two minutes and showed that the raster
+  check was not vacuous.
+- `perf_budget.sh` timing rows are noisy under a load of about 7: one p95
+  failure in run 1, none in run 2.
+
+### Follow-up Stories
+
+1. **GUP-611: Label placement tries other anchors before hiding a label**: with
+   `hide_overlaps`, a label that collides above its point could still fit to its
+   right, left or below. A ranked list of anchors, tried with the same grid,
+   would keep more labels on dense scatters.
