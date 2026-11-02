@@ -158,6 +158,10 @@ N1, tested tutorials; N2, more chart types; then N3, release 0.1. See
 Gup is developed in the open with community input. See the documentation above
 for technical details and architectural decisions.
 
+Building the workspace from source on Windows: `.cargo/config.toml` sets a bash
+rustc wrapper that Windows cannot run, so set
+`CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER=""` (empty unsets it) first.
+
 ## Examples
 
 ```bash
