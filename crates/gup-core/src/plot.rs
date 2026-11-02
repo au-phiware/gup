@@ -170,6 +170,9 @@ pub struct Plot {
     subtitle: Option<String>,
     /// The chart's kind ("Scatter chart"), set by a builder (GUP-592).
     kind: Option<&'static str>,
+    /// A builder's account of its chart for the description, in place of the
+    /// generic row clause (GUP-600).
+    kind_summary: Option<String>,
     /// The text set through [`description`](Plot::description).
     description: Option<String>,
     x: Box<dyn DynPositionScale>,
@@ -466,6 +469,7 @@ impl Plot {
             title: None,
             subtitle: None,
             kind: None,
+            kind_summary: None,
             description: None,
             x: Box::new(ScaleRef::new(Linear::new())),
             y: Box::new(ScaleRef::new(Linear::new())),
@@ -544,6 +548,12 @@ impl Plot {
     /// [description](Self::describe).
     pub(crate) fn set_kind(&mut self, kind: &'static str) {
         self.kind = Some(kind);
+    }
+
+    /// A builder's summary of its chart, which the [description](Self::describe)
+    /// reads in place of the row and layer counts.
+    pub(crate) fn set_kind_summary(&mut self, summary: String) {
+        self.kind_summary = Some(summary);
     }
 
     /// Replace the generated text of the [description](Self::describe) with
@@ -2857,6 +2867,7 @@ impl Plot {
             subtitle: self.subtitle.as_deref(),
             kind: self.kind,
             text_override: self.description.as_deref(),
+            summary: self.kind_summary.as_deref(),
             layers: self
                 .layers
                 .iter()

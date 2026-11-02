@@ -343,6 +343,25 @@ impl<T: Send + Sync + 'static> HistogramChart<T> {
             edges,
             layers: tables,
         } = tallied;
+        if let (Some(&lo), Some(&hi)) = (edges.first(), edges.last()) {
+            let stacks: Vec<Arc<str>> = if key_of.is_some() {
+                tables
+                    .iter()
+                    .filter_map(|bars| bars.first()?.key.clone())
+                    .collect()
+            } else {
+                Vec::new()
+            };
+            let values = tables.iter().flatten().map(|b| b.count).sum();
+            self.plot
+                .set_kind_summary(crate::describe::histogram_summary(
+                    values,
+                    edges.len() - 1,
+                    (lo, hi),
+                    self.legend_title.as_deref(),
+                    &stacks,
+                ));
+        }
         let x = match (edges.first(), edges.last()) {
             (Some(&lo), Some(&hi)) => {
                 let mut scale = Linear::new().domain(lo, hi);
