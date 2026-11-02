@@ -566,7 +566,7 @@ impl Plot {
 
     /// The chart's text alternative, as of the last successful resolve
     /// (`None` before one): its title, then sentences naming its kind, data
-    /// rows and layers, its axes (with the tick labels as drawn) and its
+    /// rows, its axes (with the tick labels as drawn) and its
     /// colour legends. It reads the stored value and does no work.
     ///
     /// ```
@@ -603,7 +603,7 @@ impl Plot {
     /// assert_eq!(
     ///     d.text,
     ///     format!(
-    ///         "Scatter chart, 3 data rows in 1 layer. X axis \"GDP ($k)\": {}. \
+    ///         "Scatter chart, 3 data rows. X axis \"GDP ($k)\": {}. \
     ///          Y axis \"Life expectancy\": {}. Colour legend: Africa, Europe and Asia.",
     ///         range(x),
     ///         range(y),
