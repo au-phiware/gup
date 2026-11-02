@@ -13,7 +13,9 @@
 # RFC-001's "≤ +400 KB gz"). The scatter is built twice, with the harness's
 # `extra-row-type` feature first (`gup-core-scatter+T`: one more Selection row
 # type) and without it second; the difference is `wasm.per_row_type.gz_bytes`
-# (GUP-450). `mask wasm-size` and the Visual regression
+# (GUP-450). A third build adds the harness's `svg-export` feature (the SVG
+# guides export); the default build, which measures a browser chart, is last,
+# and the difference is `wasm.svg_export.gz_bytes` (GUP-557). `mask wasm-size` and the Visual regression
 # workflow's browser job both run this script. It then checks the `wasm.*` rows
 # of crates/gup-core/PERF_BUDGETS.md (the scatter's +2%) through
 # `perf_budget.sh --wasm-only`, unless GUP_WASM_SIZE_NO_BUDGET=1.
@@ -65,12 +67,16 @@ measure() { # name, crate dir, crate file name, extra cargo args
 }
 measure wgpu baseline gup_core_wasm_size_baseline
 base_raw=$raw base_gz=$gz
-# One more Selection row type first (GUP-450), then the default build, so the
-# artifact left in $release is the one wasm_browser.sh loads.
+# One more Selection row type first (GUP-450), then the SVG export (GUP-557),
+# then the default build, so the artifact left in $release is the one
+# wasm_browser.sh loads.
 measure gup-core-scatter+T scatter gup_core_wasm_size_scatter --features extra-row-type
 extra_gz=$gz
+measure gup-core-scatter+svg scatter gup_core_wasm_size_scatter --features svg-export
+svg_gz=$gz
 measure gup-core-scatter scatter gup_core_wasm_size_scatter
 per_row_type_gz=$((extra_gz - gz))
+svg_export_gz=$((svg_gz - gz))
 over_raw=$((raw - base_raw)) over_gz=$((gz - base_gz))
 printf '%-26s %10d B raw %9d B gz\n' "(gup-core over wgpu)" "$over_raw" "$over_gz"
 font="$root/crates/gup-text/fonts/Inter-Regular-Subset.ttf"
@@ -83,7 +89,8 @@ printf '%-26s %10d B raw %9d B gz\n' "(Inter SemiBold subset)" \
 metrics="metric wasm.wgpu.gz_bytes $base_gz
 metric wasm.scatter.gz_bytes $gz
 metric wasm.over_wgpu.gz_bytes $over_gz
-metric wasm.per_row_type.gz_bytes $per_row_type_gz"
+metric wasm.per_row_type.gz_bytes $per_row_type_gz
+metric wasm.svg_export.gz_bytes $svg_export_gz"
 echo "$metrics"
 
 status=0

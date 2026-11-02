@@ -4,7 +4,7 @@
 //! The reference scatter (linear x, log y, viridis fill, title and tick
 //! labels) on a tinted plot background with a viridis legend bar, drawn
 //! through gup-core into an `ImageTarget` and read back asynchronously,
-//! plus its guides as SVG: everything a browser chart needs from gup-core
+//! (with `svg-export`, plus its guides as SVG): everything a browser chart needs from gup-core
 //! today, and every pipeline kind (marks, rules, rects, gradients, text). A
 //! second scene colours points by a dictionary-encoded key, with nulls
 //! (RFC-001 S4b). A third draws the numeric scales of RFC-001 S5a (`Time`,
@@ -21,7 +21,9 @@ use gup_core::scale::PositionScale;
 use gup_core::scene::{
     GradientBar, GradientDirection, Item, ItemKind, RectPrim, TextRole, Z_GRID, Z_TITLE,
 };
-use gup_core::{ImageTarget, Resolved, RowId, SvgTarget, VectorTarget};
+use gup_core::{ImageTarget, Resolved, RowId};
+#[cfg(feature = "svg-export")]
+use gup_core::{SvgTarget, VectorTarget};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicI32, AtomicU32, Ordering};
 use wasm_bindgen::prelude::*;
@@ -122,12 +124,17 @@ pub async fn render_scatter(
         .render(&cx, &scene)
         .await
         .map_err(js)?;
-    let mut svg = SvgTarget::new();
-    // Guides only, on purpose: the size budget measures the SVG guides path
-    // as recorded (GUP-467 writes marks too; `render(&scene)` would add
-    // that code to the budget).
-    svg.render(&scene.guides()).map_err(js)?;
-    web_log(svg.svg().len());
+    // The default build measures a browser chart, which never links
+    // `SvgTarget::write`. `svg-export` adds the SVG guides export on top
+    // (GUP-557); `mask wasm-size` reports the difference as
+    // `wasm.svg_export.gz_bytes`. Guides only, on purpose: GUP-467 writes
+    // marks too, and `render(&scene)` would add that code to the number.
+    #[cfg(feature = "svg-export")]
+    {
+        let mut svg = SvgTarget::new();
+        svg.render(&scene.guides()).map_err(js)?;
+        web_log(svg.svg().len());
+    }
     Ok(image.into_raw())
 }
 
@@ -754,6 +761,7 @@ struct Place {
 #[wasm_bindgen]
 extern "C" {
     #[wasm_bindgen(js_namespace = console, js_name = log)]
+    #[cfg(feature = "svg-export")]
     fn web_log(n: usize);
     #[wasm_bindgen(js_namespace = console, js_name = log)]
     fn web_log_text(message: &str);
