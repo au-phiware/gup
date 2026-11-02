@@ -238,10 +238,22 @@ impl SvgTarget {
         };
         let regular = chain(&self.options.font, fallbacks);
         let semibold = chain(&self.options.semibold_font, fallbacks);
+        // A described scene is one image to a screen reader: `role="img"`,
+        // then the name (`<title>`) and description (`<desc>`) as the first
+        // children.
+        let role = if scene.description.is_some() {
+            r#" role="img""#
+        } else {
+            ""
+        };
         writeln!(
             s,
-            r#"<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}">"#
+            r#"<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" viewBox="0 0 {w} {h}"{role}>"#
         )?;
+        if let Some(d) = &scene.description {
+            writeln!(s, "<title>{}</title>", escape(&d.title))?;
+            writeln!(s, "<desc>{}</desc>", escape(&d.text))?;
+        }
         // Definitions: one clip path per scene clip, one gradient per bar.
         s.push_str("<defs>\n");
         if self.options.embed_font && scene.text_runs().next().is_some() {

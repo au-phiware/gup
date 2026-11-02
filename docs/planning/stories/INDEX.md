@@ -341,7 +341,7 @@ and WASM harness after it.
   `Plot::describe`, `Chart::describe` and `.description(text)`: a text
   alternative built at resolve from the title, kind, row counts, drawn tick
   labels and legends, stored in `Scene`. Deps: GUP-552 ✅, GUP-554 ✅.
-- [GUP-593](GUP-593_Svg_Title_And_Canvas_Aria_Label.md) 📋 — SVG `role="img"`,
+- [GUP-593](GUP-593_Svg_Title_And_Canvas_Aria_Label.md) ✅ — SVG `role="img"`,
   `<title>` and `<desc>`; `CanvasApp` sets `role` and `aria-label` unless the
   page set its own, checked in the browser test. Deps: GUP-592 📋, GUP-557 📋.
 - [GUP-594](GUP-594_Flagship_Gallery_Part_One.md) ✅ — Five finished gallery

@@ -197,6 +197,34 @@
             if (interactive !== "ok") return;
             if (!(await check())) interactive = name;
           };
+          // GUP-593: the canvas is named by the chart's description (the
+          // scatter's title leads) ...
+          await frames();
+          await step(
+            "aria-label",
+            async () =>
+              canvas.getAttribute("role") === "img" &&
+              (canvas.getAttribute("aria-label") ?? "").startsWith(
+                "Interactive scatter. Chart, 6 data rows."
+              )
+          );
+          // ... unless the page named it first.
+          {
+            const mine = document.createElement("canvas");
+            mine.style.cssText = `width:${w}px;height:${h}px;display:block`;
+            mine.setAttribute("aria-label", "Mine");
+            document.body.appendChild(mine);
+            const other = await show_scatter(mine);
+            await frames();
+            await frames();
+            await step(
+              "aria-kept",
+              async () =>
+                mine.getAttribute("aria-label") === "Mine" &&
+                !mine.hasAttribute("role")
+            );
+            other.free();
+          }
           const [rx, ry] = app.row_px(3);
           fire("pointermove", rx, ry);
           await frames();
