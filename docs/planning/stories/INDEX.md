@@ -332,7 +332,7 @@ and WASM harness after it.
 - [GUP-589](GUP-589_Publish_Dry_Run_And_Docs_Rs_In_CI.md) ✅ — `gup` forwards
   `window`, `svg` and `web`; docs.rs tables; `mask publish-check`,
   `mask docs-rs` and a Release check workflow on every push. Deps: GUP-588 📋.
-- [GUP-590](GUP-590_Windows_Warp_Render_Smoke_Job.md) 🚧 — A `platforms.yml`
+- [GUP-590](GUP-590_Windows_Warp_Render_Smoke_Job.md) ✅ — A `platforms.yml`
   Windows job on WARP (DX12): an adapter spike, then the root crate's golden
   tests, diff images uploaded on failure. Deps: GUP-594 📋 (soft).
 - [GUP-591](GUP-591_Macos_Metal_Smoke_Spike.md) 📋 — The same job on `macos-15`

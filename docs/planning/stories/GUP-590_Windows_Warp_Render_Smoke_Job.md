@@ -10,8 +10,8 @@ touches: [.github/workflows/]
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N3 Release 0.1) **Status**: 🚧 In
-Progress **Created**: 2026-11-02
+**Initiative**: Strategic Review 2026-11 (N3 Release 0.1) **Status**: ✅
+Complete (2026-11-03) **Created**: 2026-11-02
 
 ## Context
 
@@ -225,3 +225,60 @@ Written 2026-11-03 by a worker that cannot run Windows or push.
   no `.gitattributes` was added.
 - `tests/examples_smoke.rs` has two GPU-free tests that run under `--tests`; the
   ignored one is skipped.
+
+### CI results (added after the first runs)
+
+- AC1: adapter line from the run:
+  `adapter: name="Microsoft Basic Render Driver" backend=Dx12 device_type=Cpu driver="10.0.26100.33648"`.
+  That is WARP on DX12, so the spike rule says continue.
+- AC2: run
+  [41546565827](https://github.com/au-phiware/gup/actions/runs/41546565827)
+  passed; job wall time 2 min 19 s (23:35:14 to 23:37:33). Gallery 5, tutorials
+  17, examples_smoke 2 (1 ignored), adapter 1: no golden failed on WARP, so no
+  tolerance or per-platform golden was needed.
+- AC3: no path or CRLF failure appeared; no `.gitattributes` change.
+- The first run (41545716014) failed before building: `.cargo/config.toml` sets
+  a bash `rustc-workspace-wrapper` that Windows cannot execute (os error 193).
+  Fixed in the Windows job with `CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER: ""` (empty
+  unsets it, verified on Linux), and documented in CLAUDE.md and README.md.
+
+## Retrospective
+
+**Completed**: 2026-11-03
+
+### Key Technical Learnings
+
+#### A repo-level cargo config can break other platforms
+
+- **Challenge**: The GUP-411 wrapper is a bash script in the checked-in
+  `.cargo/config.toml`; it cannot be written off as Linux-only once CI runs
+  Windows. Nothing local could reveal it.
+- **Solution**: Empty `CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER` unsets it.
+- **Pattern**: A new platform's first CI run finds config-level breakage before
+  any test; print or run something trivial first.
+
+#### Goldens blessed on Linux pass on WARP
+
+- **Challenge**: Risk that WARP's antialiasing differs beyond ΔE 3.
+- **Solution**: None needed; all 22 golden cases passed unchanged.
+- **Pattern**: Three rasterisers (Intel, lavapipe, WARP) now agree.
+
+### Architectural Decisions
+
+#### Separate workflow, adapter test first
+
+- **Decision**: `platforms.yml`, with an adapter-printing test as step one.
+- **Reasoning**: Failure logs read against the adapter; Linux Tests are not held
+  up.
+- **Trade-off**: The job cannot run under `mask ci`.
+- **Future**: GUP-591 adds macOS to the same file.
+
+### Development Workflow Insights
+
+- Writing a Windows workflow without a Windows machine needed one orchestrator
+  round trip for the wrapper failure; unavoidable.
+
+### Follow-up Stories
+
+None. Windows contributors building from source need the documented override; a
+cross-platform wrapper would be a separate decision.
