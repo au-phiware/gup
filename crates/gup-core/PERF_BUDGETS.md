@@ -80,8 +80,8 @@ X) or `info` (printed, never fails).
 | `pipeline.link_create.cold_ms`     | 1.04      | <= 10     | `pipeline_timings`, its first run                   |
 | `pipeline.link_create.max_ms`      | 1.06      | info      | `pipeline_timings`                                  |
 | `wasm.wgpu.gz_bytes`               | 32,360    | info      | `scripts/wasm_size.sh`, bare wgpu                   |
-| `wasm.scatter.gz_bytes`            | 354,964   | +2%       | `scripts/wasm_size.sh`, the reference scatter       |
-| `wasm.over_wgpu.gz_bytes`          | 322,604   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10         |
+| `wasm.scatter.gz_bytes`            | 361,737   | +2%       | `scripts/wasm_size.sh`, the reference scatter       |
+| `wasm.over_wgpu.gz_bytes`          | 329,377   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10         |
 | `wasm.per_row_type.gz_bytes`       | 1,730     | <= 2600   | `scripts/wasm_size.sh`, one more Selection row type |
 
 A legitimate change that moves a number (a new guide, a bigger feature) records
@@ -535,3 +535,9 @@ seeded violation (GUP-417 retrospective).
   worker measured 0.80–0.89 at load 3–7 and 1.99 at the parent.
   `zoom.cpu.median_ms` read 0.849, 0.878 and 0.590 in the same session (0.829 at
   the parent): machine drift, not re-recorded.
+- **N2 merges to GUP-527 (2026-11-02, orchestrator)**: GUP-567, 416 (+90), 579
+  (+218), 524 (+5), 580 (+406 after gating), 576, 526, 564, 536, 439
+  (translucent line pass, +1,837), 588 and 527 (label halos and culling, +1,402)
+  take the WASM scatter from 354,964 to 361,737 B gz (+6,773, +1.9%), and over
+  bare wgpu from 322,604 to 329,377 (71 KB of headroom under the 400,000 cap).
+  GUP-557 will move the SVG export out of the measured scatter.
