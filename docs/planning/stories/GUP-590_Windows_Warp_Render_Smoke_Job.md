@@ -194,3 +194,34 @@ pixels. That makes it plausible, not certain, that WARP passes too.
 - [ ] WASM size: unchanged, no library code change
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
+
+## Implementation Summary
+
+Written 2026-11-03 by a worker that cannot run Windows or push.
+
+- `.github/workflows/platforms.yml` (name "Platforms"): job `windows` on
+  `windows-latest`, triggers push to `main`, pull requests and
+  `workflow_dispatch`; `WGPU_BACKEND=dx12`, `CARGO_INCREMENTAL=0`;
+  `rustup toolchain install`; registry-only cache; 90 minute timeout. Steps:
+  adapter test, then `cargo test -p gup --tests -- --test-threads=1`; on failure
+  uploads `target/visual-regression` as `windows-golden-diffs`. Every action is
+  pinned (`checkout@v4`, `cache@v4`, `upload-artifact@v4`). The file header says
+  `mask ci` cannot run it.
+- `tests/platform_adapter.rs`: prints name, backend, device type and driver of
+  `Context::shared()`; asserts the backend is `Dx12` only when `WGPU_BACKEND` is
+  `dx12`/`d3d12`. Both steps use `--nocapture`, so the adapter is the first
+  thing in the log.
+- Local evidence (Linux, Vulkan, Intel HD 630): the same filtered command passes
+  (2 + 1 + 17 tests); `actionlint` and `mask all-check` clean.
+
+### What only CI can prove (open until the first run)
+
+- AC1: the printed adapter (expected WARP, "Microsoft Basic Render Driver"). The
+  spike rule applies to what it prints.
+- AC2: the goldens pass on WARP; run link and wall time; the artifact upload
+  path (`target/visual-regression` assumes no `CARGO_TARGET_DIR` on the runner).
+- AC3: no path or CRLF failures were found by reading (tests use `Path::join`
+  and the `include`d fixtures are binary or TOML). Windows may still show some;
+  no `.gitattributes` was added.
+- `tests/examples_smoke.rs` has two GPU-free tests that run under `--tests`; the
+  ignored one is skipped.

@@ -1,0 +1,66 @@
+# Platforms: render smoke tests on operating systems other than Linux
+# (GUP-590). The Linux workflows run locally through `mask ci`; this one
+# cannot, because it needs a Windows runner, so `maskfile.md` has no
+# counterpart. Reproduce a step by hand on Linux with the same `cargo test`
+# command (set WGPU_BACKEND=vulkan there).
+name: Platforms
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: platforms-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Windows render smoke (WARP, DX12)
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      # The only adapter on a runner is WARP, the software D3D12 rasteriser.
+      WGPU_BACKEND: dx12
+      CARGO_INCREMENTAL: "0"
+      CARGO_TERM_COLOR: always
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # rust-toolchain.toml pins the toolchain; rustup reads it.
+      - name: Install Rust toolchain (rust-toolchain.toml)
+        run: rustup toolchain install
+
+      # Registry only: the Windows test build is several GB and would evict
+      # the other caches.
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: platforms-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            platforms-${{ runner.os }}-cargo-
+
+      # Spike: print the adapter first, so every later failure reads against
+      # it. Fails if the backend is not DX12.
+      - name: Adapter (must be DX12)
+        run: cargo test -p gup --test platform_adapter -- --test-threads=1 --nocapture
+
+      # Every root integration test: tutorial goldens, and the gallery
+      # goldens when they exist. Doctests are not run on Windows.
+      - name: Integration tests (goldens on WARP)
+        run: cargo test -p gup --tests -- --test-threads=1 --nocapture
+
+      # The harness writes actual and diff images under
+      # <target dir>/visual-regression.
+      - name: Upload golden diffs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-golden-diffs
+          path: target/visual-regression
+          if-no-files-found: warn
