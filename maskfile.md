@@ -557,9 +557,9 @@ Prune the build directory (GUP-427): delete what checkouts that no longer exist
 built, superseded and idle incremental caches, and the least recently compiled
 caches over the size cap. Rule 5 (GUP-428) caps the whole directory: over
 `GUP_PRUNE_CAP_MB` (default 81920) it evicts the least recently used units
-(dependencies and clippy's included), never one used within
-`GUP_PRUNE_KEEP_MINUTES` (default 60). The pre-commit hook runs it after its
-Rust checks. The rules, the knobs (`GUP_PRUNE_IDLE_DAYS`,
+(dependencies and clippy's included) and incremental crate caches (GUP-577),
+never one used within `GUP_PRUNE_KEEP_MINUTES` (default 60). The pre-commit hook
+runs it after its Rust checks. The rules, the knobs (`GUP_PRUNE_IDLE_DAYS`,
 `GUP_PRUNE_INCREMENTAL_MB`, `GUP_PRUNE_WAIT`, `GUP_PRUNE_CAP_MB`,
 `GUP_PRUNE_KEEP_MINUTES`) and why they are safe are in
 `scripts/prune_build_dir.sh`.
