@@ -308,7 +308,9 @@ touches no hot file and runs beside any of them.
 
 Track N3 from the [November 2026 review](../STRATEGIC_REVIEW_2026-11.md), with
 the owner's decisions of 2026-10-24: GPL-3.0-or-later kept, minimal
-accessibility in 0.1. Run order: see below once the track is complete.
+accessibility in 0.1. Owner steps and the run order follow the list. GUP-557
+(track N2) is part of the run order because GUP-593 edits the same `svg.rs` code
+and WASM harness after it.
 
 - [GUP-588](GUP-588_Publish_Metadata_And_Licence_Headers.md) 📋 — Workspace
   metadata and `=0.1.0` internal versions, plain descriptions, crate READMEs,
@@ -336,6 +338,41 @@ accessibility in 0.1. Run order: see below once the track is complete.
 - [GUP-595](GUP-595_Flagship_Gallery_Part_Two_And_Hero.md) 📋 — Five more
   (stacked histogram, heatmap, box plot, annotated `Plot`, dark lines) and the
   README hero as a 1200 × 630 golden. Deps: GUP-594 📋.
+- [GUP-596](GUP-596_Changelog_And_Semver_Policy.md) 📋 — `CHANGELOG.md` (Keep a
+  Changelog) with 0.1.0's contents and limitations, and the 0.x policy: lockstep
+  versions, breaking means minor, wgpu and MSRV bumps are breaking. Deps:
+  GUP-592 📋 (soft), GUP-593 📋 (soft).
+- [GUP-597](GUP-597_Readme_For_Release_0_1.md) 📋 — The README at release
+  candidate: hero image, eight builders, browser features, a current "Not yet"
+  and platform line, CHANGELOG link, published-crates column. Deps: GUP-589 📋,
+  GUP-590 📋, GUP-591 📋, GUP-593 📋, GUP-595 📋, GUP-596 📋.
+- [GUP-598](GUP-598_Release_Checklist.md) 📋 — `mask release-check` (every gate,
+  publish dry run, docs.rs, one-version and slug checks, seeded) and
+  `docs/RELEASING.md`; ends at "ready to publish". Deps: GUP-536 📋, GUP-588–597
+  📋.
+- [GUP-599](GUP-599_Switch_Docs_To_Crates_Io.md) 📋 — After the owner publishes:
+  README, tutorial 1 and the egui and Bevy guides depend on `"0.1"` from
+  crates.io, proven by an external build. Deps: GUP-598 📋, owner publish.
+
+Owner steps (not worker stories), in GUP-598's `docs/RELEASING.md`: a crates.io
+token (`cargo login`); re-confirm the seven names are free (all were on
+2026-11-02); enable GitHub Pages and set `DEPLOY_GALLERY=true`; date the
+CHANGELOG; `cargo publish --workspace`; tag `v0.1.0` and a GitHub release.
+Billed macOS `-xlarge` runners are an owner decision only if GUP-591 finds the
+standard runner cannot draw.
+
+Run order (at most two build-heavy stories at once; hot files: Cargo.toml files,
+`README.md`, `.github/workflows/`, `src/lib.rs`, `maskfile.md`, `plot.rs`,
+`selection.rs`, `svg.rs`, the WASM scenes, this file):
+
+1. GUP-588 beside GUP-592; GUP-596 may run as a docs-only third.
+2. GUP-589 (after GUP-588) beside GUP-592, if still running, or GUP-557.
+3. GUP-590 (workflows) beside GUP-557 (`svg.rs`, WASM scenes).
+4. GUP-594 (root `Cargo.toml`; after GUP-536 and GUP-589) beside GUP-593 (after
+   GUP-592 and GUP-557).
+5. GUP-595 beside GUP-591 (after GUP-590).
+6. GUP-597 alone among `README.md` stories; then GUP-598 alone.
+7. The owner publishes; then GUP-599.
 
 ## Track N5: Performance at Scale
 
