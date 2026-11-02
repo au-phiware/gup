@@ -335,7 +335,7 @@ and WASM harness after it.
 - [GUP-590](GUP-590_Windows_Warp_Render_Smoke_Job.md) ✅ — A `platforms.yml`
   Windows job on WARP (DX12): an adapter spike, then the root crate's golden
   tests, diff images uploaded on failure. Deps: GUP-594 📋 (soft).
-- [GUP-591](GUP-591_Macos_Metal_Smoke_Spike.md) 📋 — The same job on `macos-15`
+- [GUP-591](GUP-591_Macos_Metal_Smoke_Spike.md) 🚧 — The same job on `macos-15`
   Metal, kept, made advisory or removed by a fixed rule. Deps: GUP-590 📋.
 - [GUP-592](GUP-592_Plot_Describe_Text_Alternative.md) ✅ — `Description`,
   `Plot::describe`, `Chart::describe` and `.description(text)`: a text
