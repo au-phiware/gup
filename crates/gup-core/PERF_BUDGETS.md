@@ -53,36 +53,37 @@ script says when that happened and its timing checks were weak. Under `Fifo`
 pass, flagged for re-recording when it is more than N% faster), `<= X` (at most
 X) or `info` (printed, never fails).
 
-| Metric                             | Recorded  | Check     | Measured by                                         |
-| ---------------------------------- | --------- | --------- | --------------------------------------------------- |
-| `zoom.size`                        | 1920x1080 | exact     | `zoom_bench` (fullscreen; other sizes: re-record)   |
-| `zoom.samples`                     | 1         | exact     | `zoom_bench` (`DEFAULT_SAMPLES`)                    |
-| `zoom.gpu_clock.median_mhz`        | 350       | info      | `scripts/perf_budget.sh` (i915 sysfs)               |
-| `zoom.gpu_pass.median_ms`          | 2.95      | +20%      | `zoom_bench`, timestamp queries                     |
-| `zoom.gpu_pass.p95_ms`             | 5.60      | +25%      | `zoom_bench`, timestamp queries                     |
-| `zoom.cpu.median_ms`               | 0.69      | +20%      | `zoom_bench`, resolve + prepare + submit            |
-| `zoom.cpu.p95_ms`                  | 0.86      | +25%      | `zoom_bench`, resolve + prepare + submit            |
-| `zoom.interval.median_ms`          | 4.91      | info      | `zoom_bench` (GPU-bound: follows the GPU pass)      |
-| `zoom.columns.bytes`               | 0         | exact     | `zoom_bench`, over the 600 measured frames          |
-| `zoom.columns.writes`              | 0         | exact     | `zoom_bench`                                        |
-| `zoom.validity.bytes`              | 0         | exact     | `zoom_bench`                                        |
-| `zoom.uniforms.bytes_per_frame`    | 136       | exact     | `zoom_bench`                                        |
-| `zoom.uniforms.writes_per_frame`   | 3         | exact     | `zoom_bench`                                        |
-| `zoom.instances.bytes`             | 6,362,952 | exact     | `zoom_bench`, over the 600 measured frames          |
-| `zoom.instances.writes_per_frame`  | 3         | exact     | `zoom_bench`                                        |
-| `zoom.textures.bytes`              | 0         | exact     | `zoom_bench`                                        |
-| `zoom_culled.draws.median`         | 14        | exact     | `zoom_bench` on 4M sorted rows, 64 chunks (GUP-457) |
-| `zoom_culled.gpu_clock.median_mhz` | 350       | info      | `scripts/perf_budget.sh` (i915 sysfs)               |
-| `zoom_culled.gpu_pass.median_ms`   | 9.90      | +20%      | `zoom_bench` on 4M sorted rows, 64 chunks           |
-| `zoom_culled.cpu.median_ms`        | 1.07      | +20%      | `zoom_bench` on 4M sorted rows, 64 chunks           |
-| `zoom_culled.columns.bytes`        | 0         | exact     | `zoom_bench` on 4M sorted rows, 64 chunks           |
-| `pipeline.link_create.median_ms`   | 1.11      | +20%      | `pipeline_timings`, 20 runs, fresh cache each       |
-| `pipeline.link_create.cold_ms`     | 1.04      | <= 10     | `pipeline_timings`, its first run                   |
-| `pipeline.link_create.max_ms`      | 1.06      | info      | `pipeline_timings`                                  |
-| `wasm.wgpu.gz_bytes`               | 32,360    | info      | `scripts/wasm_size.sh`, bare wgpu                   |
-| `wasm.scatter.gz_bytes`            | 361,737   | +2%       | `scripts/wasm_size.sh`, the reference scatter       |
-| `wasm.over_wgpu.gz_bytes`          | 329,377   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10         |
-| `wasm.per_row_type.gz_bytes`       | 1,730     | <= 2600   | `scripts/wasm_size.sh`, one more Selection row type |
+| Metric                             | Recorded  | Check     | Measured by                                                                   |
+| ---------------------------------- | --------- | --------- | ----------------------------------------------------------------------------- |
+| `zoom.size`                        | 1920x1080 | exact     | `zoom_bench` (fullscreen; other sizes: re-record)                             |
+| `zoom.samples`                     | 1         | exact     | `zoom_bench` (`DEFAULT_SAMPLES`)                                              |
+| `zoom.gpu_clock.median_mhz`        | 350       | info      | `scripts/perf_budget.sh` (i915 sysfs)                                         |
+| `zoom.gpu_pass.median_ms`          | 2.95      | +20%      | `zoom_bench`, timestamp queries                                               |
+| `zoom.gpu_pass.p95_ms`             | 5.60      | +25%      | `zoom_bench`, timestamp queries                                               |
+| `zoom.cpu.median_ms`               | 0.69      | +20%      | `zoom_bench`, resolve + prepare + submit                                      |
+| `zoom.cpu.p95_ms`                  | 0.86      | +25%      | `zoom_bench`, resolve + prepare + submit                                      |
+| `zoom.interval.median_ms`          | 4.91      | info      | `zoom_bench` (GPU-bound: follows the GPU pass)                                |
+| `zoom.columns.bytes`               | 0         | exact     | `zoom_bench`, over the 600 measured frames                                    |
+| `zoom.columns.writes`              | 0         | exact     | `zoom_bench`                                                                  |
+| `zoom.validity.bytes`              | 0         | exact     | `zoom_bench`                                                                  |
+| `zoom.uniforms.bytes_per_frame`    | 136       | exact     | `zoom_bench`                                                                  |
+| `zoom.uniforms.writes_per_frame`   | 3         | exact     | `zoom_bench`                                                                  |
+| `zoom.instances.bytes`             | 6,362,952 | exact     | `zoom_bench`, over the 600 measured frames                                    |
+| `zoom.instances.writes_per_frame`  | 3         | exact     | `zoom_bench`                                                                  |
+| `zoom.textures.bytes`              | 0         | exact     | `zoom_bench`                                                                  |
+| `zoom_culled.draws.median`         | 14        | exact     | `zoom_bench` on 4M sorted rows, 64 chunks (GUP-457)                           |
+| `zoom_culled.gpu_clock.median_mhz` | 350       | info      | `scripts/perf_budget.sh` (i915 sysfs)                                         |
+| `zoom_culled.gpu_pass.median_ms`   | 9.90      | +20%      | `zoom_bench` on 4M sorted rows, 64 chunks                                     |
+| `zoom_culled.cpu.median_ms`        | 1.07      | +20%      | `zoom_bench` on 4M sorted rows, 64 chunks                                     |
+| `zoom_culled.columns.bytes`        | 0         | exact     | `zoom_bench` on 4M sorted rows, 64 chunks                                     |
+| `pipeline.link_create.median_ms`   | 1.11      | +20%      | `pipeline_timings`, 20 runs, fresh cache each                                 |
+| `pipeline.link_create.cold_ms`     | 1.04      | <= 10     | `pipeline_timings`, its first run                                             |
+| `pipeline.link_create.max_ms`      | 1.06      | info      | `pipeline_timings`                                                            |
+| `wasm.wgpu.gz_bytes`               | 32,360    | info      | `scripts/wasm_size.sh`, bare wgpu                                             |
+| `wasm.scatter.gz_bytes`            | 360,399   | +2%       | `scripts/wasm_size.sh`, the reference scatter                                 |
+| `wasm.over_wgpu.gz_bytes`          | 328,039   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10                                   |
+| `wasm.per_row_type.gz_bytes`       | 1,730     | <= 2600   | `scripts/wasm_size.sh`, one more Selection row type                           |
+| `wasm.svg_export.gz_bytes`         | 4,057     | info      | `scripts/wasm_size.sh`, the scatter with `svg-export` minus without (GUP-557) |
 
 A legitimate change that moves a number (a new guide, a bigger feature) records
 the new value here, in the same commit, with the reason in the story.
@@ -541,3 +542,9 @@ seeded violation (GUP-417 retrospective).
   take the WASM scatter from 354,964 to 361,737 B gz (+6,773, +1.9%), and over
   bare wgpu from 322,604 to 329,377 (71 KB of headroom under the 400,000 cap).
   GUP-557 will move the SVG export out of the measured scatter.
+- **GUP-592 and 557 merged (2026-11-03, orchestrator)**: GUP-557 moves the
+  harness's SVG export behind its `svg-export` feature, so `wasm.scatter`
+  measures a browser chart (about -4,000 B gz) and the SVG cost is its own
+  `info` row, `wasm.svg_export.gz_bytes` (4,057). GUP-592's `Plot::describe`
+  adds about 2,500. The scatter reads 360,399 B gz, over bare wgpu 328,039 (72
+  KB of headroom under the 400,000 cap).
