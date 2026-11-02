@@ -270,9 +270,10 @@ cell labels, error bars, pie charts and facets.
   fallback list, SVG `font-family` and embedding of the fallbacks a scene uses,
   and a mixed-script title golden. Edits `lib.rs` and `plot.rs`. Deps: GUP-416
   ✅.
-- [GUP-557](GUP-557_Svg_Text_Path_Out_Of_Wasm.md) 💡 — Keep `SvgTarget`'s text
-  path out of the WASM build, then ungate GUP-580's fallback code. Deps: GUP-580
-  ✅.
+- [GUP-557](GUP-557_Svg_Text_Path_Out_Of_Wasm.md) 📋 — The size harness's SVG
+  call moves behind an `svg-export` feature (its own `wasm.svg_export` metric),
+  so `wasm.scatter` measures a browser chart; then GUP-580's fallback code is
+  ungated, so every build writes the same SVG text. Deps: GUP-580 ✅.
 - [GUP-439](GUP-439_Line_Translucent_Joins.md) 📋 — Translucent lines with even
   opacity at rows, curve pieces and self-crossings (a per-layer coverage pass),
   opaque lines unchanged. Deps: GUP-432 ✅, GUP-550 📋, GUP-551 📋.
