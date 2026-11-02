@@ -25,6 +25,10 @@ jobs:
       WGPU_BACKEND: dx12
       CARGO_INCREMENTAL: "0"
       CARGO_TERM_COLOR: always
+      # .cargo/config.toml sets a bash rustc wrapper (GUP-411, per-checkout
+      # artifacts); Windows cannot execute it, and CI has one checkout. An
+      # empty value unsets it (checked with cargo 1.93: rustc runs unwrapped).
+      CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER: ""
 
     steps:
       - uses: actions/checkout@v4

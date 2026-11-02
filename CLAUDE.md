@@ -106,6 +106,9 @@ one build directory (GUP-411):
   2.1 GB, in a third 0.4 GB; building gup-core's tests adds 1 GB per checkout.
   Clippy artifacts are shared, so a checkout re-lints when another checkout
   linted last: `mask all-check` then takes about 90 s instead of 26 s.
+- **Windows**: the wrapper is a bash script, which Windows cannot execute.
+  Building from source there needs `CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER=""` (an
+  empty value unsets it); the Platforms workflow sets it.
 - Never `cargo clean` a shared build directory: it deletes every checkout's
   artifacts, dependencies included. `mask clean` deletes only this checkout's.
 - **Pruning** (GUP-427): the pre-commit hook runs `scripts/prune_build_dir.sh`
