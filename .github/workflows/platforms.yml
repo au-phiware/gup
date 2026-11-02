@@ -68,3 +68,63 @@ jobs:
           name: windows-golden-diffs
           path: target/visual-regression
           if-no-files-found: warn
+
+  # GUP-591 spike. GitHub's standard macOS runners are virtual machines; the
+  # Metal adapter they expose may be a reduced "Apple Paravirtual device" or
+  # absent. The job is advisory (continue-on-error) until the spike's rule
+  # (GUP-591 Decisions) is applied to the first runs' results. Standard
+  # runner only: never `-xlarge` or self-hosted (an owner decision).
+  macos:
+    name: macOS render smoke (Metal)
+    runs-on: macos-15
+    timeout-minutes: 90
+    continue-on-error: true
+    env:
+      WGPU_BACKEND: metal
+      CARGO_INCREMENTAL: "0"
+      CARGO_TERM_COLOR: always
+      # The bash wrapper in .cargo/config.toml would run on macOS, but it
+      # calls sha256sum (not on macOS) and CI has one checkout, so unset it
+      # as on Windows.
+      CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER: ""
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain (rust-toolchain.toml)
+        run: rustup toolchain install
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: platforms-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            platforms-${{ runner.os }}-cargo-
+
+      # Print the adapter before any golden test. If there is no Metal
+      # adapter or it is a software one, the goldens are skipped with a
+      # message (the spike rule then removes the job) rather than failing.
+      - name: Adapter (must be Metal)
+        id: adapter
+        continue-on-error: true
+        run: cargo test -p gup --test platform_adapter -- --test-threads=1 --nocapture
+
+      - name: No usable Metal adapter
+        if: steps.adapter.outcome != 'success'
+        run: |
+          echo "::warning::No usable Metal adapter on this runner; goldens skipped (GUP-591 rule: remove the job and record the result)."
+
+      - name: Integration tests (goldens on Metal)
+        if: steps.adapter.outcome == 'success'
+        run: cargo test -p gup --tests -- --test-threads=1 --nocapture
+
+      - name: Upload golden diffs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-golden-diffs
+          path: target/visual-regression
+          if-no-files-found: warn
