@@ -275,6 +275,13 @@ macro_rules! plot_setters {
             self
         }
 
+        /// Replace the generated text alternative (see
+        /// [`Plot::description`](crate::Plot::description)).
+        pub fn description(mut self, text: impl Into<String>) -> Self {
+            self.plot.description(text);
+            self
+        }
+
         /// Set the x axis title.
         pub fn x_title(mut self, title: impl Into<String>) -> Self {
             self.plot.x_title(title);

@@ -168,6 +168,10 @@ impl AxisFormat {
 pub struct Plot {
     title: Option<String>,
     subtitle: Option<String>,
+    /// The chart's kind ("Scatter chart"), set by a builder (GUP-592).
+    kind: Option<&'static str>,
+    /// The text set through [`description`](Plot::description).
+    description: Option<String>,
     x: Box<dyn DynPositionScale>,
     y: Box<dyn DynPositionScale>,
     /// The scale of the right y axis, if the plot has one.
@@ -397,6 +401,9 @@ impl crate::chart::Chart for Plot {
     fn title_text(&self) -> Option<&str> {
         Plot::title_text(self)
     }
+    fn describe(&self) -> Option<&crate::Description> {
+        Plot::describe(self)
+    }
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -458,6 +465,8 @@ impl Plot {
         Self {
             title: None,
             subtitle: None,
+            kind: None,
+            description: None,
             x: Box::new(ScaleRef::new(Linear::new())),
             y: Box::new(ScaleRef::new(Linear::new())),
             y_right: None,
@@ -529,6 +538,74 @@ impl Plot {
         self.revision = self.revision.wrapping_add(1);
         self.title = Some(title.into());
         self
+    }
+
+    /// Name the kind of chart a builder makes ("Scatter chart"), for the
+    /// [description](Self::describe).
+    pub(crate) fn set_kind(&mut self, kind: &'static str) {
+        self.kind = Some(kind);
+    }
+
+    /// Replace the generated text of the [description](Self::describe) with
+    /// `text`. The description's title is still derived.
+    pub fn description(&mut self, text: impl Into<String>) -> &mut Self {
+        self.revision = self.revision.wrapping_add(1);
+        self.description = Some(text.into());
+        self
+    }
+
+    /// The chart's text alternative, as of the last successful resolve
+    /// (`None` before one): its title, then sentences naming its kind, data
+    /// rows and layers, its axes (with the tick labels as drawn) and its
+    /// colour legends. It reads the stored value and does no work.
+    ///
+    /// ```
+    /// use gup_core::scene::TextRole;
+    /// use gup_core::{Chart, Context};
+    /// # fn main() -> gup_core::Result<()> {
+    /// let mut chart = gup_core::scatter(vec![
+    ///     (1.0, 55.0, "Africa"),
+    ///     (20.0, 74.0, "Europe"),
+    ///     (60.0, 81.0, "Asia"),
+    /// ])
+    /// .x(|r| r.0)
+    /// .y(|r| r.1)
+    /// .color(|r| r.2)
+    /// .title("Wealth and health")
+    /// .x_title("GDP ($k)")
+    /// .y_title("Life expectancy");
+    /// assert!(chart.describe().is_none());
+    ///
+    /// let cx = Context::new_blocking()?;
+    /// let layout = chart.resolve(&cx, 640.0, 400.0)?.layout.clone();
+    /// // The tick labels as drawn: the x axis's first, then the y axis's.
+    /// let ticks: Vec<String> = layout
+    ///     .texts
+    ///     .iter()
+    ///     .filter(|t| t.run.role == TextRole::TickLabel)
+    ///     .map(|t| t.run.text.to_string())
+    ///     .collect();
+    /// let (x, y) = ticks.split_at(layout.x_ticks.len());
+    /// let range = |l: &[String]| format!("{} to {}", l[0], l[l.len() - 1]);
+    ///
+    /// let d = chart.describe().expect("resolved");
+    /// assert_eq!(d.title, "Wealth and health");
+    /// assert_eq!(
+    ///     d.text,
+    ///     format!(
+    ///         "Scatter chart, 3 data rows in 1 layer. X axis \"GDP ($k)\": {}. \
+    ///          Y axis \"Life expectancy\": {}. Colour legend: Africa, Europe and Asia.",
+    ///         range(x),
+    ///         range(y),
+    ///     )
+    /// );
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn describe(&self) -> Option<&crate::Description> {
+        self.cache
+            .as_ref()
+            .and_then(|(_, r)| r.scene.description.as_ref())
     }
 
     /// Set the subtitle: a line of lighter, smaller text under the title
@@ -2774,6 +2851,36 @@ impl Plot {
                 scene.push(item);
             }
         }
+
+        scene.description = Some(crate::describe::describe(&crate::describe::DescribeInput {
+            title: self.title.as_deref(),
+            subtitle: self.subtitle.as_deref(),
+            kind: self.kind,
+            text_override: self.description.as_deref(),
+            layers: self
+                .layers
+                .iter()
+                .map(|l| (l.mark_name(), l.len()))
+                .collect(),
+            axes: [
+                Some(crate::describe::AxisText {
+                    title: self.x_title.as_deref(),
+                    keyed: x.reads_keys(),
+                    labels: &x_ticks.labels,
+                }),
+                Some(crate::describe::AxisText {
+                    title: self.y_title.as_deref(),
+                    keyed: y.reads_keys(),
+                    labels: &y_ticks.labels,
+                }),
+                right.map(|r| crate::describe::AxisText {
+                    title: self.y_right_title.as_deref(),
+                    keyed: r.reads_keys(),
+                    labels: y_right_ticks.as_ref().map_or(&[], |t| &t.labels),
+                }),
+            ],
+            legends: &legends,
+        }));
 
         Ok(Resolved {
             layout: Layout {

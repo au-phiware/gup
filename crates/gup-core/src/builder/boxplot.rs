@@ -86,6 +86,7 @@ struct Part {
 /// See the [module docs](crate::builder) for the pattern.
 pub fn boxplot<T: Send + Sync + 'static>(rows: impl IntoIterator<Item = T>) -> BoxPlotChart<T> {
     let mut plot = Plot::new();
+    plot.set_kind("Box plot");
     plot.y(Linear::new());
     let band = plot.x(Band::new());
     BoxPlotChart {
@@ -447,6 +448,9 @@ impl<T: Send + Sync + 'static> Chart for BoxPlotChart<T> {
     }
     fn title_text(&self) -> Option<&str> {
         self.plot.title_text()
+    }
+    fn describe(&self) -> Option<&crate::Description> {
+        self.plot.describe()
     }
     fn as_any(&self) -> &dyn Any {
         self

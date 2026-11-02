@@ -337,7 +337,7 @@ and WASM harness after it.
   tests, diff images uploaded on failure. Deps: GUP-594 📋 (soft).
 - [GUP-591](GUP-591_Macos_Metal_Smoke_Spike.md) 📋 — The same job on `macos-15`
   Metal, kept, made advisory or removed by a fixed rule. Deps: GUP-590 📋.
-- [GUP-592](GUP-592_Plot_Describe_Text_Alternative.md) 📋 — `Description`,
+- [GUP-592](GUP-592_Plot_Describe_Text_Alternative.md) ✅ — `Description`,
   `Plot::describe`, `Chart::describe` and `.description(text)`: a text
   alternative built at resolve from the title, kind, row counts, drawn tick
   labels and legends, stored in `Scene`. Deps: GUP-552 ✅, GUP-554 ✅.
@@ -366,6 +366,10 @@ and WASM harness after it.
 - [GUP-599](GUP-599_Switch_Docs_To_Crates_Io.md) 📋 — After the owner publishes:
   README, tutorial 1 and the egui and Bevy guides depend on `"0.1"` from
   crates.io, proven by an external build. Deps: GUP-598 📋, owner publish.
+- [GUP-600](GUP-600_Describe_Composite_Marks.md) 📋 — Chart descriptions merge
+  same-named layers and name a box plot by its boxes. Deps: GUP-592 ✅.
+- [GUP-601](GUP-601_Describe_Vertical_Band_Order.md) 📋 — Chart descriptions
+  read vertical band axes top to bottom. Deps: GUP-592 ✅.
 
 Owner steps (not worker stories), in GUP-598's `docs/RELEASING.md`: a crates.io
 token (`cargo login`); re-confirm the seven names are free (all were on

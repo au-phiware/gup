@@ -55,6 +55,7 @@ const GAP_FROM_PX: f32 = 8.0;
 /// See the [module docs](crate::builder) for the pattern.
 pub fn heatmap<T: Send + Sync + 'static>(rows: impl IntoIterator<Item = T>) -> HeatmapChart<T> {
     let mut plot = Plot::new();
+    plot.set_kind("Heatmap");
     let x = plot.x(Band::new().padding(0.0));
     let y = plot.y(Band::new().padding(0.0));
     HeatmapChart {
@@ -282,6 +283,9 @@ impl<T: Send + Sync + 'static> Chart for HeatmapChart<T> {
     }
     fn title_text(&self) -> Option<&str> {
         self.plot.title_text()
+    }
+    fn describe(&self) -> Option<&crate::Description> {
+        self.plot.describe()
     }
     fn as_any(&self) -> &dyn Any {
         self

@@ -1269,6 +1269,10 @@ pub(crate) trait Layer: wgpu::WasmNotSendSync {
     /// (RFC-001 S7): each `Color`-role channel encoded by a column of one
     /// link that has a legend. Chains have none.
     fn legends(&self) -> Vec<(Option<String>, Legend)>;
+    /// The mark's name (`Mark::NAME`), for the chart's description.
+    fn mark_name(&self) -> &'static str;
+    /// The rows the selection was given.
+    fn len(&self) -> usize;
     /// Push the layer's drawn marks as pick items (RFC-001 §9): nothing for
     /// an unpickable mark, an unevaluated layer, or one whose rows and CPU
     /// columns were both released.
@@ -1871,6 +1875,12 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         }
     }
 
+    fn mark_name(&self) -> &'static str {
+        M::NAME
+    }
+    fn len(&self) -> usize {
+        Selection::len(self)
+    }
     fn legends(&self) -> Vec<(Option<String>, Legend)> {
         let mut out = Vec::new();
         for (i, enc) in self.encodings.iter().enumerate() {
