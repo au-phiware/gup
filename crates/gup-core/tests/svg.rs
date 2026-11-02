@@ -401,3 +401,64 @@ fn fallback_fonts_are_named_and_embedded_when_used() {
     assert!(svg.contains(family));
     assert_eq!(svg.matches("@font-face").count(), 0);
 }
+
+/// GUP-593: a described scene is one named image.
+#[test]
+fn described_scene_writes_role_title_and_desc() {
+    use gup_core::prelude::*;
+    let cx = Context::new_blocking().unwrap();
+    let mut chart = gup_core::scatter(vec![(1.0, 2.0), (3.0, 4.0)])
+        .x(|r| r.0)
+        .y(|r| r.1)
+        .title("Sales & costs <2026>");
+    let scene = chart.resolve(&cx, 320.0, 200.0).unwrap().scene.clone();
+    let d = chart.describe().unwrap().clone();
+    assert_eq!(d.title, "Sales & costs <2026>");
+
+    let write = |scene: &Scene| {
+        let mut target = SvgTarget::new();
+        target.render(scene).unwrap();
+        target.svg().to_owned()
+    };
+    let escaped = |t: &str| {
+        t.replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;")
+    };
+    for svg in [write(&scene), write(&scene.guides())] {
+        let mut lines = svg.lines();
+        let root = lines.next().unwrap();
+        assert!(
+            root.starts_with("<svg ") && root.ends_with(r#" role="img">"#),
+            "{root}"
+        );
+        assert_eq!(
+            lines.next().unwrap(),
+            "<title>Sales &amp; costs &lt;2026&gt;</title>"
+        );
+        assert_eq!(
+            lines.next().unwrap(),
+            format!("<desc>{}</desc>", escaped(&d.text))
+        );
+        assert_eq!(lines.next().unwrap(), "<defs>");
+        assert!(!svg.contains("aria-labelledby"), "no ids to collide");
+    }
+}
+
+#[test]
+fn undescribed_scene_has_no_title_desc_or_role() {
+    let mut target = SvgTarget::new();
+    target
+        .render(&Scene::new(100.0, 50.0, Color::WHITE))
+        .unwrap();
+    let svg = target.svg();
+    assert!(
+        svg.starts_with(
+            r#"<svg xmlns="http://www.w3.org/2000/svg" width="100" height="50" viewBox="0 0 100 50">"#
+        ),
+        "{svg}"
+    );
+    for needle in ["<title", "<desc", "role="] {
+        assert!(!svg.contains(needle), "{needle} in {svg}");
+    }
+}
