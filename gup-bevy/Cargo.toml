@@ -33,3 +33,7 @@ gup-visual-regression = { path = "../crates/gup-visual-regression" }
 [[example]]
 name = "bevy_scatter"
 path = "examples/bevy_scatter.rs"
+
+[package.metadata.docs.rs]
+targets = ["x86_64-unknown-linux-gnu"]
+rustdoc-args = ["--cfg", "docsrs"]

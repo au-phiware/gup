@@ -426,6 +426,7 @@ mask ci wasm
 mask ci visual-regression
 mask ci tests
 mask ci dogfood
+mask ci release-check
 echo "mask ci: all workflows passed locally"
 ```
 
@@ -502,6 +503,18 @@ GUP_SCREENSHOT_PATH="$shot" timeout 300 ./scripts/headless_env.sh --run \
   cargo run -p gup-egui --example egui_chart
 GUP_EGUI_SCREENSHOT="$shot" ./scripts/headless_env.sh --run \
   cargo test -p gup-egui --test screenshot_parity -- --ignored --test-threads=1
+```
+
+### ci release-check
+
+> Release check workflow: the publish dry run and the docs.rs build (GUP-589)
+
+Needs the network. The dry run builds Bevy and egui, so expect several minutes.
+
+```bash
+set -euo pipefail
+cargo publish --workspace --dry-run --locked
+./scripts/docs_rs.sh
 ```
 
 ### ci dogfood
@@ -617,6 +630,27 @@ any doc warning, including broken intra-doc links
 
 ```bash
 RUSTDOCFLAGS="-D warnings" cargo doc --no-deps -p gup -p gup-core -p gup-core-macros -p gup-text -p gup-wgsl -p gup-egui -p gup-visual-regression
+```
+
+## docs-rs
+
+Emulate the docs.rs build of every published crate (GUP-589): the targets,
+features and `rustdoc-args` of each `[package.metadata.docs.rs]` table, with
+`DOCS_RS=1` and `-D warnings`. Needs the network; not part of `mask all-check`
+
+```bash
+./scripts/docs_rs.sh
+```
+
+## publish-check
+
+Package and verify all seven crates as `cargo publish` would, against a local
+overlay of the members not yet on crates.io (GUP-589). Never publishes; needs
+the network and builds Bevy, so it takes minutes and is not part of
+`mask all-check`
+
+```bash
+cargo publish --workspace --dry-run --locked
 ```
 
 ## watch

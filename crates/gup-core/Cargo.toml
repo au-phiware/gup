@@ -89,3 +89,8 @@ gup-wgsl = { workspace = true, features = ["compose"] }
 
 [build-dependencies]
 gup-wgsl = { workspace = true, features = ["compose"] }
+
+[package.metadata.docs.rs]
+all-features = true
+targets = ["x86_64-unknown-linux-gnu", "wasm32-unknown-unknown"]
+rustdoc-args = ["--cfg", "docsrs"]

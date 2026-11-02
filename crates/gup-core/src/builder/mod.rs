@@ -92,7 +92,7 @@
 //!
 //! # Showing it
 //!
-//! Hand a finished chart to [`show`](crate::show) to open a window:
+//! Hand a finished chart to `show` to open a window:
 //!
 //! ```no_run
 //! let chart = gup_core::scatter([(1.0, 2.0), (2.0, 3.0)]).x(|p| p.0).y(|p| p.1);

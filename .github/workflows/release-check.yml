@@ -1,0 +1,86 @@
+# Release check (GUP-589): on every push, prove that the workspace would
+# publish and that docs.rs would document it.
+#
+# - publish-dry-run: `cargo publish --workspace --dry-run --locked` packages
+#   all seven crates in dependency order and builds each packaged crate
+#   against the others as packaged (a local overlay of the members not yet on
+#   crates.io). It never uploads. It builds Bevy and egui, so it takes minutes.
+# - docs-rs: `scripts/docs_rs.sh` runs `cargo doc` for each crate's
+#   `[package.metadata.docs.rs]` targets and features, with `--cfg docsrs`,
+#   `DOCS_RS=1` and `-D warnings`.
+#
+# Neither is part of `mask all-check` (both need the network). No system
+# package was needed to build the seven crates on the dev machine; if a runner
+# build asks for one, install it with apt-get here and name the package and
+# the error that needed it in a comment.
+#
+# `mask ci release-check` runs the same commands locally.
+
+name: Release check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  # Without debug info the Bevy and egui builds fit the runner's disk.
+  CARGO_PROFILE_DEV_DEBUG: "0"
+  CARGO_PROFILE_DEV_STRIP: "debuginfo"
+  CARGO_INCREMENTAL: "0"
+
+concurrency:
+  group: release-check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish-dry-run:
+    name: cargo publish --workspace --dry-run
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # rust-toolchain.toml pins the toolchain (GUP-403); rustup reads it.
+      - name: Install Rust toolchain (rust-toolchain.toml)
+        run: rustup toolchain install
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: release-check-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            release-check-${{ runner.os }}-cargo-
+
+      - name: cargo publish --workspace --dry-run --locked
+        run: cargo publish --workspace --dry-run --locked
+
+  docs-rs:
+    name: docs.rs build (scripts/docs_rs.sh)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain (rust-toolchain.toml)
+        run: rustup toolchain install
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: release-check-${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            release-check-${{ runner.os }}-cargo-
+
+      - name: docs.rs build
+        run: ./scripts/docs_rs.sh

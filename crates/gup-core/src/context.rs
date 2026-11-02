@@ -190,7 +190,7 @@ struct Inner {
 
 /// Gup's GPU context: a device, its queue and the device-scoped caches.
 ///
-/// Create one with [`Context::new_blocking`] (or [`Context::new`] in async
+/// Create one with `Context::new_blocking` (or [`Context::new`] in async
 /// code), or wrap a device the host already owns with
 /// [`Context::from_wgpu`].
 #[derive(Clone)]
@@ -266,7 +266,7 @@ impl Context {
     /// hardware (RFC-001 §2). Respects `WGPU_BACKEND` and friends.
     ///
     /// Every context has its own pipeline cache and glyph atlas. Callers
-    /// that just need a device should use [`Context::shared`] instead.
+    /// that just need a device should use `Context::shared` instead.
     pub async fn new() -> Result<Self> {
         Self::with_options(ContextOptions::default()).await
     }
@@ -523,7 +523,7 @@ impl Context {
     /// Add `font` to the end of this context's fallback chain: characters the
     /// bundled Inter lacks draw from the first fallback that has them. Parsed
     /// on first use. Affects every plot drawn with this context (all users of
-    /// [`Context::shared`]), from its next full resolve.
+    /// `Context::shared`), from its next full resolve.
     ///
     /// ```
     /// # use gup_core::{Context, Font};

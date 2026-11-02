@@ -329,7 +329,7 @@ and WASM harness after it.
   metadata and `=0.1.0` internal versions, plain descriptions, crate READMEs,
   licence symlinks, a header check in `all-check`, and a root `include` list, so
   all seven crates package.
-- [GUP-589](GUP-589_Publish_Dry_Run_And_Docs_Rs_In_CI.md) 📋 — `gup` forwards
+- [GUP-589](GUP-589_Publish_Dry_Run_And_Docs_Rs_In_CI.md) ✅ — `gup` forwards
   `window`, `svg` and `web`; docs.rs tables; `mask publish-check`,
   `mask docs-rs` and a Release check workflow on every push. Deps: GUP-588 📋.
 - [GUP-590](GUP-590_Windows_Warp_Render_Smoke_Job.md) 📋 — A `platforms.yml`

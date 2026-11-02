@@ -96,7 +96,7 @@
 //!
 //! ## Contracts
 //!
-//! - **One device per process by default.** [`Context::shared`] is the
+//! - **One device per process by default.** `Context::shared` is the
 //!   process-wide context; host integrations wrap their host's device with
 //!   [`Context::from_wgpu`] instead.
 //! - **Every GPU write is counted.** All buffer and texture writes go

@@ -23,7 +23,7 @@ use winit::window::Window;
 ///
 /// [`capture_next_frame`](Self::capture_next_frame) copies the next
 /// presented frame back to the CPU (the `GUP_SCREENSHOT_PATH` path of
-/// [`show`](crate::show)).
+/// `show`).
 pub struct WindowTarget {
     window: Arc<Window>,
     surface: wgpu::Surface<'static>,
