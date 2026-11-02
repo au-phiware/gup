@@ -62,51 +62,76 @@ fn ends_sentence(s: &str) -> bool {
     s.ends_with(['.', '!', '?'])
 }
 
-/// `12000` as `12,000`.
-fn thousands(n: usize) -> String {
-    let digits = n.to_string();
-    let mut out = String::with_capacity(digits.len() + digits.len() / 3);
-    for (i, c) in digits.chars().enumerate() {
-        if i > 0 && (digits.len() - i).is_multiple_of(3) {
+/// Append `n` with `,` thousands separators (`12,000`).
+fn push_count(out: &mut String, n: usize) {
+    let mut digits = [0u8; 20];
+    let mut len = 0;
+    let mut rest = n;
+    loop {
+        digits[len] = b'0' + (rest % 10) as u8;
+        len += 1;
+        rest /= 10;
+        if rest == 0 {
+            break;
+        }
+    }
+    for i in (0..len).rev() {
+        out.push(char::from(digits[i]));
+        if i > 0 && i % 3 == 0 {
             out.push(',');
         }
-        out.push(c);
     }
+}
+
+#[cfg(test)]
+fn thousands(n: usize) -> String {
+    let mut out = String::new();
+    push_count(&mut out, n);
     out
 }
 
-fn plural(n: usize, one: &str, many: &str) -> String {
-    format!("{} {}", thousands(n), if n == 1 { one } else { many })
+/// Append `{n} {one|many}`.
+fn push_plural(out: &mut String, n: usize, one: &str, many: &str) {
+    push_count(out, n);
+    out.push(' ');
+    out.push_str(if n == 1 { one } else { many });
 }
 
-/// `a`; `a and b`; `a, b and c` (up to eight); else the first six and
-/// `and {n - 6} more`.
-fn list<S: AsRef<str>>(items: &[S]) -> String {
-    let at = |i: usize| items[i].as_ref();
-    match items.len() {
-        0 => String::new(),
-        1 => at(0).to_string(),
-        2 => format!("{} and {}", at(0), at(1)),
-        n if n <= 8 => format!("{} and {}", join(&items[..n - 1]), at(n - 1)),
-        n => format!("{} and {} more", join(&items[..6]), n - 6),
+/// Append the items: `a`; `a and b`; `a, b and c` (up to eight); else the
+/// first six and `and {n - 6} more`.
+fn push_list<S: AsRef<str>>(out: &mut String, items: &[S]) {
+    let n = items.len();
+    let shown = if n > 8 { 6 } else { n.saturating_sub(1) };
+    for (i, item) in items[..shown].iter().enumerate() {
+        if i > 0 {
+            out.push_str(", ");
+        }
+        out.push_str(item.as_ref());
+    }
+    if n > 8 {
+        out.push_str(" and ");
+        push_count(out, n - 6);
+        out.push_str(" more");
+    } else if n > 0 {
+        if n > 1 {
+            out.push_str(" and ");
+        }
+        out.push_str(items[n - 1].as_ref());
     }
 }
 
-fn join<S: AsRef<str>>(items: &[S]) -> String {
-    items
-        .iter()
-        .map(|s| s.as_ref())
-        .collect::<Vec<_>>()
-        .join(", ")
+fn quoted(out: &mut String, title: Option<&str>) {
+    if let Some(t) = title {
+        out.push_str(" \"");
+        out.push_str(t);
+        out.push('"');
+    }
 }
 
 /// Build the description of a resolved chart.
 pub(crate) fn describe(input: &DescribeInput<'_>) -> Description {
     let kind = input.kind.unwrap_or("Chart");
-    let title = input
-        .title
-        .map(str::to_string)
-        .unwrap_or_else(|| kind.to_string());
+    let title = input.title.unwrap_or(kind).to_string();
 
     if let Some(text) = input.text_override {
         return Description {
@@ -115,94 +140,104 @@ pub(crate) fn describe(input: &DescribeInput<'_>) -> Description {
         };
     }
 
-    let mut sentences: Vec<String> = Vec::new();
+    let mut text = String::new();
     if let Some(sub) = input.subtitle.filter(|s| !s.is_empty()) {
-        sentences.push(if ends_sentence(sub) {
-            sub.to_string()
-        } else {
-            format!("{sub}.")
-        });
+        text.push_str(sub);
+        if !ends_sentence(sub) {
+            text.push('.');
+        }
+        text.push(' ');
     }
 
     let rows: usize = input.layers.iter().map(|l| l.1).sum();
     let layers = input.layers.len();
     let titled = input.title.is_some();
-    sentences.push(if layers == 0 {
+    if layers == 0 {
         if titled {
-            format!("{kind} with no data.")
+            text.push_str(kind);
+            text.push_str(" with no data.");
         } else {
-            "No data.".to_string()
+            text.push_str("No data.");
         }
     } else {
-        let mut s = format!(
-            "{} in {}",
-            plural(rows, "data row", "data rows"),
-            plural(layers, "layer", "layers")
-        );
         if titled {
-            s = format!("{kind}, {s}");
+            text.push_str(kind);
+            text.push_str(", ");
         }
+        push_plural(&mut text, rows, "data row", "data rows");
+        text.push_str(" in ");
+        push_plural(&mut text, layers, "layer", "layers");
         if input.layers.iter().any(|l| l.0 != input.layers[0].0) {
-            let parts: Vec<String> = input
-                .layers
-                .iter()
-                .map(|(m, n)| format!("{} {}", m.to_lowercase(), thousands(*n)))
-                .collect();
-            s = format!("{s} ({})", list(&parts));
+            let mut parts: Vec<String> = Vec::with_capacity(layers);
+            for (mark, n) in &input.layers {
+                let mut part = mark.to_ascii_lowercase();
+                part.push(' ');
+                push_count(&mut part, *n);
+                parts.push(part);
+            }
+            text.push_str(" (");
+            push_list(&mut text, &parts);
+            text.push(')');
         }
-        s.push('.');
-        s
-    });
+        text.push('.');
+    }
 
     for (axis, name) in input.axes.iter().zip(["X axis", "Y axis", "Right y axis"]) {
         let Some(axis) = axis else { continue };
-        let mut s = name.to_string();
-        if let Some(t) = axis.title {
-            s = format!("{s} \"{t}\"");
+        if axis.labels.is_empty() && axis.title.is_none() {
+            continue;
         }
+        text.push(' ');
+        text.push_str(name);
+        quoted(&mut text, axis.title);
         match (axis.labels, axis.keyed) {
-            ([], _) if axis.title.is_none() => continue,
-            ([], _) => s.push('.'),
+            ([], _) => {}
             (labels, true) => {
-                s = format!(
-                    "{s}: {}, {}.",
-                    plural(labels.len(), "category", "categories"),
-                    list(labels)
-                );
+                text.push_str(": ");
+                push_plural(&mut text, labels.len(), "category", "categories");
+                text.push_str(", ");
+                push_list(&mut text, labels);
             }
-            ([only], false) => s = format!("{s}: {only}."),
-            ([first, .., last], false) => s = format!("{s}: {first} to {last}."),
+            ([only], false) => {
+                text.push_str(": ");
+                text.push_str(only);
+            }
+            ([first, .., last], false) => {
+                text.push_str(": ");
+                text.push_str(first);
+                text.push_str(" to ");
+                text.push_str(last);
+            }
         }
-        sentences.push(s);
+        text.push('.');
     }
 
     for (legend_title, legend) in input.legends {
-        let mut s = "Colour legend".to_string();
-        if let Some(t) = legend_title {
-            s = format!("{s} \"{t}\"");
-        }
+        text.push_str(" Colour legend");
+        quoted(&mut text, legend_title.as_deref());
         match legend {
             Legend::Swatches(swatches) if !swatches.is_empty() => {
                 let labels: Vec<&str> = swatches.iter().map(|w| &*w.label).collect();
-                s = format!("{s}: {}.", list(&labels));
+                text.push_str(": ");
+                push_list(&mut text, &labels);
             }
             Legend::Ramp(ramp) if !ramp.ticks().is_empty() => {
                 let ticks = ramp.ticks();
-                let (first, last) = (&ticks[0].label, &ticks[ticks.len() - 1].label);
-                s = if ticks.len() == 1 {
-                    format!("{s}: {first}.")
-                } else {
-                    format!("{s}: {first} to {last}.")
-                };
+                text.push_str(": ");
+                text.push_str(&ticks[0].label);
+                if ticks.len() > 1 {
+                    text.push_str(" to ");
+                    text.push_str(&ticks[ticks.len() - 1].label);
+                }
             }
-            _ => s.push('.'),
+            _ => {}
         }
-        sentences.push(s);
+        text.push('.');
     }
 
     Description {
         title,
-        text: sentences.join(" "),
+        text: text.trim_start().to_string(),
     }
 }
 
