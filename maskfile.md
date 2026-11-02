@@ -426,6 +426,7 @@ mask ci wasm
 mask ci visual-regression
 mask ci tests
 mask ci dogfood
+mask ci release-check
 echo "mask ci: all workflows passed locally"
 ```
 
@@ -502,6 +503,18 @@ GUP_SCREENSHOT_PATH="$shot" timeout 300 ./scripts/headless_env.sh --run \
   cargo run -p gup-egui --example egui_chart
 GUP_EGUI_SCREENSHOT="$shot" ./scripts/headless_env.sh --run \
   cargo test -p gup-egui --test screenshot_parity -- --ignored --test-threads=1
+```
+
+### ci release-check
+
+> Release check workflow: the publish dry run and the docs.rs build (GUP-589)
+
+Needs the network. The dry run builds Bevy and egui, so expect several minutes.
+
+```bash
+set -euo pipefail
+cargo publish --workspace --dry-run --locked
+./scripts/docs_rs.sh
 ```
 
 ### ci dogfood

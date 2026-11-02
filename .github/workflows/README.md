@@ -23,6 +23,17 @@ whitespace, nixfmt/statix, prettier/mdl, gallery sync and the pre-commit hook's
 scoping tests. The local hook (`mask pre-commit`) scopes its checks to the
 staged files; this workflow never does. `mask ci lint` runs it locally.
 
+### Release check (`release-check.yml`)
+
+Two jobs (GUP-589). `publish-dry-run` runs
+`cargo publish --workspace --dry-run --locked`: it packages all seven crates in
+dependency order and builds each against the others as packaged, without
+uploading. `docs-rs` runs `scripts/docs_rs.sh`, which builds each crate's
+documentation for the targets and features in its `[package.metadata.docs.rs]`
+table, with `--cfg docsrs`, `DOCS_RS=1` and `-D warnings`. Both need the
+network, so neither is in `mask all-check`. `mask ci release-check` runs both
+locally, or `mask publish-check` and `mask docs-rs` one at a time.
+
 ### Visual regression (`visual-regression.yml`)
 
 The `visual-regression` job renders the chart-builder goldens, gup-core, and
