@@ -525,7 +525,8 @@ fn svg_writes_every_visible_label_inside_the_plot_clip() {
 
 /// AC4: the cost of 1,000 labels on a 1,000-point scatter, as the median
 /// full resolve (a resize each time) with and without the text layer, and
-/// a render of every label (the glyph atlas holds them). The numbers mean
+/// with `hide_overlaps` (GUP-527), and a render of every label (the glyph
+/// atlas holds them). The numbers mean
 /// something in release: `cargo test -p gup-core --release --test
 /// text_layer resolve_cost -- --nocapture`.
 #[test]
@@ -540,7 +541,7 @@ fn resolve_cost_of_a_thousand_labels() {
             )
         })
         .collect();
-    let make = |labelled: bool| {
+    let make = |labelled: bool, cull: bool| {
         let mut plot = Plot::new();
         plot.circles(rows.clone())
             .x(|r: &(f64, f64)| r.0)
@@ -551,7 +552,8 @@ fn resolve_cost_of_a_thousand_labels() {
                 .y(|r: &(f64, f64)| r.1)
                 .text(|r: &(f64, f64)| format!("{:.1}", r.0))
                 .anchor(Anchor::BOTTOM)
-                .dy(-4.0);
+                .dy(-4.0)
+                .hide_overlaps(cull);
         }
         plot
     };
@@ -567,12 +569,21 @@ fn resolve_cost_of_a_thousand_labels() {
         times.sort_by(f64::total_cmp);
         times[times.len() / 2]
     };
-    let (without, with) = (median(&mut make(false)), median(&mut make(true)));
+    let (without, with) = (
+        median(&mut make(false, false)),
+        median(&mut make(true, false)),
+    );
     println!(
         "metric text_layer.resolve_ms without={without:.3} with={with:.3} delta={:.3}",
         with - without
     );
-    let mut plot = make(true);
+    // GUP-527: what `hide_overlaps` adds to the same resolve.
+    let culled = median(&mut make(true, true));
+    println!(
+        "metric text_layer.cull_ms with={with:.3} culled={culled:.3} delta={:.3}",
+        culled - with
+    );
+    let mut plot = make(true, false);
     let resolved = plot.resolve(&cx, 800.0, 600.0).unwrap().clone();
     let drawn = labels(&resolved.layout).len();
     assert!(drawn > 900, "{drawn} of 1000 labels drawn");

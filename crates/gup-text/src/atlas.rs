@@ -48,8 +48,9 @@ pub(crate) struct GlyphAtlas {
     size: u32,
     max_size: u32,
     pixels: Vec<u8>,
-    /// By face, glyph index and size in physical pixels (`f32` bits).
-    glyphs: HashMap<(FaceId, u16, u32), AtlasRect>,
+    /// By face, glyph index, size in physical pixels and halo radius in
+    /// physical pixels (`f32` bits; 0 for the glyph itself).
+    glyphs: HashMap<(FaceId, u16, u32, u32), AtlasRect>,
     cursor: (u32, u32),
     row_height: u32,
     dirty: Option<Dirty>,
@@ -106,12 +107,55 @@ impl GlyphAtlas {
         ch: char,
         px: f32,
     ) -> Result<AtlasRect> {
-        let key = (face.id, glyph, px.to_bits());
+        let key = (face.id, glyph, px.to_bits(), 0);
         if let Some(r) = self.glyphs.get(&key) {
             return Ok(*r);
         }
         let (metrics, bitmap) = face.glyphs.rasterize_indexed(glyph, px);
-        let (w, h) = (metrics.width as u32, metrics.height as u32);
+        self.insert(
+            key,
+            metrics.width as u32,
+            metrics.height as u32,
+            &bitmap,
+            ch,
+            px,
+        )
+    }
+
+    /// The atlas rectangle of `glyph`'s halo: its coverage dilated by
+    /// `radius` physical pixels ([`dilate`]), rasterised on first use. The
+    /// rectangle is [`margin`]`(radius)` texels larger than the glyph's on
+    /// every side.
+    pub(crate) fn halo(
+        &mut self,
+        face: &Face,
+        glyph: u16,
+        ch: char,
+        px: f32,
+        radius: f32,
+    ) -> Result<AtlasRect> {
+        let key = (face.id, glyph, px.to_bits(), radius.to_bits());
+        if let Some(r) = self.glyphs.get(&key) {
+            return Ok(*r);
+        }
+        let (metrics, bitmap) = face.glyphs.rasterize_indexed(glyph, px);
+        let (w, h) = (metrics.width, metrics.height);
+        let halo = dilate(&bitmap, w, h, radius);
+        let m = margin(radius) as usize;
+        self.insert(key, (w + 2 * m) as u32, (h + 2 * m) as u32, &halo, ch, px)
+    }
+
+    /// Copy a `w` × `h` bitmap into newly allocated room and remember it
+    /// under `key`.
+    fn insert(
+        &mut self,
+        key: (FaceId, u16, u32, u32),
+        w: u32,
+        h: u32,
+        bitmap: &[u8],
+        ch: char,
+        px: f32,
+    ) -> Result<AtlasRect> {
         let (x, y) = self.allocate(w, h).ok_or(Error::AtlasFull {
             ch,
             px,
@@ -189,6 +233,51 @@ impl GlyphAtlas {
     }
 }
 
+/// How many texels a halo of `radius` physical pixels adds on each side
+/// of its glyph: the dilation reaches pixels nearer than `radius + 1`.
+pub(crate) fn margin(radius: f32) -> u32 {
+    radius.ceil() as u32
+}
+
+/// `bitmap` (`w` × `h` coverage) dilated by a disc of `radius` pixels, with
+/// a one-pixel antialiased edge, on a bitmap [`margin`]`(radius)` larger
+/// on each side: each pixel is `clamp(max_q c(q) + radius − |p − q|, 0, 1)`
+/// over the source pixels `q`. A pixel's coverage stands for where the
+/// outline crosses it, so this is the outside half of a round-joined
+/// stroke `2 × radius` wide, as an SVG stroke draws a halo.
+pub(crate) fn dilate(bitmap: &[u8], w: usize, h: usize, radius: f32) -> Vec<u8> {
+    let m = margin(radius) as usize;
+    let (dw, dh) = (w + 2 * m, h + 2 * m);
+    // Each offset within reach (from the source pixel's place in the
+    // output), with what it adds to that pixel's coverage.
+    let mut offsets = Vec::new();
+    for oy in 0..=2 * m {
+        for ox in 0..=2 * m {
+            let (dx, dy) = (ox as f32 - m as f32, oy as f32 - m as f32);
+            let gain = radius - (dx * dx + dy * dy).sqrt();
+            if gain > -1.0 {
+                offsets.push((ox, oy, gain));
+            }
+        }
+    }
+    let mut out = vec![0.0f32; dw * dh];
+    for y in 0..h {
+        for x in 0..w {
+            let c = f32::from(bitmap[y * w + x]) / 255.0;
+            if c == 0.0 {
+                continue;
+            }
+            for &(ox, oy, gain) in &offsets {
+                let i = (y + oy) * dw + x + ox;
+                out[i] = out[i].max(c + gain);
+            }
+        }
+    }
+    out.into_iter()
+        .map(|v| (v.clamp(0.0, 1.0) * 255.0).round() as u8)
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -211,6 +300,53 @@ mod tests {
         assert_ne!(a, c);
         assert_eq!(atlas.len(), 2);
         assert!(c.height > a.height);
+    }
+
+    /// A halo is a disc dilation: one full pixel grows into a disc of the
+    /// radius, with a one-pixel ramp beyond it; a half-covered pixel's
+    /// disc is half a pixel smaller. The source pixel stays covered.
+    #[test]
+    fn a_halo_dilates_coverage_by_a_disc() {
+        let r = 2.0;
+        assert_eq!(margin(r), 2);
+        let out = dilate(&[255], 1, 1, r);
+        assert_eq!(out.len(), 5 * 5);
+        let at = |x: usize, y: usize| out[y * 5 + x];
+        assert_eq!(at(2, 2), 255);
+        // Two pixels away along an axis: on the disc's edge, still full.
+        assert_eq!(
+            (at(0, 2), at(4, 2), at(2, 0), at(2, 4)),
+            (255, 255, 255, 255)
+        );
+        // The corner, √8 ≈ 2.83 px away: 0.17 of a pixel inside the ramp.
+        assert_eq!(at(0, 0), ((1.0f32 + r - 8f32.sqrt()) * 255.0).round() as u8);
+        // A fractional radius reaches one more pixel, faintly.
+        let out = dilate(&[255], 1, 1, 2.5);
+        assert_eq!(out.len(), 7 * 7);
+        assert_eq!(out[3 * 7], 128, "3 px left: half of the ramp");
+        // Half coverage: the disc's edge moves in by half a pixel.
+        let out = dilate(&[128], 1, 1, 2.0);
+        assert!((i32::from(out[2 * 5]) - 128).abs() <= 1, "{}", out[2 * 5]);
+    }
+
+    /// A glyph's halo has its own atlas rectangle, `margin` larger on each
+    /// side, rasterised once per radius; the glyph itself is untouched.
+    #[test]
+    fn a_halo_is_cached_beside_its_glyph() {
+        let font = Font::inter();
+        let face = font.face_for('A');
+        let g = face.glyphs.lookup_glyph_index('A');
+        let mut atlas = GlyphAtlas::new(4096);
+        let plain = atlas.glyph(face, g, 'A', 16.0).unwrap();
+        let halo = atlas.halo(face, g, 'A', 16.0, 2.0).unwrap();
+        assert_eq!(
+            (halo.width, halo.height),
+            (plain.width + 4, plain.height + 4)
+        );
+        assert_eq!(atlas.halo(face, g, 'A', 16.0, 2.0).unwrap(), halo);
+        assert_ne!(atlas.halo(face, g, 'A', 16.0, 3.0).unwrap(), halo);
+        assert_eq!(atlas.glyph(face, g, 'A', 16.0).unwrap(), plain);
+        assert_eq!(atlas.len(), 3);
     }
 
     #[test]

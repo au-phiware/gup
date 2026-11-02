@@ -311,7 +311,7 @@ impl GradientBar {
 // Text anchors come from `gup-text`, which lays the runs out.
 pub use gup_text::{Anchor, HAlign, VAlign, Weight};
 
-/// Font size, weight and colour.
+/// Font size, weight, colour and halo.
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct TextStyle {
     /// Font size.
@@ -320,6 +320,22 @@ pub struct TextStyle {
     pub color: Color,
     /// Weight.
     pub weight: Weight,
+    /// An outline drawn under the text, or `None`.
+    pub halo: Option<Halo>,
+}
+
+/// An outline around each glyph, drawn under the text, so text stays
+/// legible over marks: `width` logical pixels outside the glyph's outline,
+/// round at the corners, in `color` (a text layer's
+/// [`halo`](crate::TextLayer::halo) uses the theme's background). The GPU
+/// draws each glyph's coverage dilated by `width`; SVG strokes the text
+/// `2 × width` wide under its fill (`paint-order="stroke"`).
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct Halo {
+    /// How far the halo reaches outside the glyphs.
+    pub width: Px,
+    /// The halo's colour.
+    pub color: Color,
 }
 
 /// What a text run is for.
@@ -395,6 +411,7 @@ mod tests {
                 size: Px(16.0),
                 color: Color::BLACK,
                 weight: Weight::Regular,
+                halo: None,
             },
             role,
         }

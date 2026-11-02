@@ -290,6 +290,7 @@ fn semibold_runs_set_the_weight_and_embed_the_second_face() {
             size: Px(12.0),
             color: Color::hex(0x333333),
             weight,
+            halo: None,
         },
         role: TextRole::TickLabel,
     };
@@ -356,6 +357,7 @@ fn fallback_fonts_are_named_and_embedded_when_used() {
                     size: Px(16.0),
                     color: Color::hex(0x333333),
                     weight: Weight::Regular,
+                    halo: None,
                 },
                 role: TextRole::Title,
             }]),

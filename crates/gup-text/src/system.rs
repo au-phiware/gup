@@ -399,6 +399,47 @@ impl TextSystem {
         result
     }
 
+    /// Lay out the halo of `run`: each glyph's coverage dilated by `width`
+    /// logical pixels (an outline that far outside the glyph, round at the
+    /// corners), in `color`, appended to `glyphs`. Call it before
+    /// [`layout`](Self::layout) for the same run, so the text draws over
+    /// its halo; quads draw in the order they were laid out. Halo bitmaps
+    /// live in the same atlas, rasterised once per glyph, size and width.
+    /// A `width` that is not positive lays out nothing.
+    pub fn layout_halo(
+        &mut self,
+        run: &Run<'_>,
+        width: f32,
+        color: [f32; 4],
+        glyphs: &mut Glyphs,
+    ) -> Result<()> {
+        let radius = width * glyphs.scale;
+        if radius.is_nan() || radius <= 0.0 {
+            return Ok(());
+        }
+        let m = crate::atlas::margin(radius) as f32;
+        let font = self.font_weight(run.weight).clone();
+        let mut result = Ok(());
+        font.walk(run, glyphs.scale, |g| {
+            if result.is_err() || g.metrics.width == 0 || g.metrics.height == 0 {
+                return;
+            }
+            match self.atlas.halo(g.face, g.glyph, g.c, g.px, radius) {
+                Ok(r) => {
+                    let [u, v, w, h] = [r.x, r.y, r.width, r.height].map(|t| t as f32);
+                    let (x, y) = (g.x - m, g.y - m);
+                    glyphs.quads.push(GlyphInstance {
+                        rect: [x, y, x + w, y + h],
+                        uv: [u, v, u + w, v + h],
+                        color,
+                    });
+                }
+                Err(e) => result = Err(e),
+            }
+        });
+        result
+    }
+
     /// Upload new glyphs, write `glyphs` into `buffer` and return a batch
     /// that draws them into a pass on `target`. `None` if there is nothing
     /// to draw.

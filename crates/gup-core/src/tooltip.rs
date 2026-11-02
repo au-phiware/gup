@@ -64,6 +64,7 @@ pub(crate) fn overlay(
         size: theme.tooltip_size,
         color: theme.tooltip_text,
         weight: Weight::Regular,
+        halo: None,
     };
     let runs = lines
         .iter()

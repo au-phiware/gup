@@ -818,7 +818,9 @@ impl Plot {
     /// whose point is outside the domain (or moved there by a zoom or pan)
     /// or that reaches past the cap is cut off.
     /// The layer is laid out on the CPU, for tens to thousands of labels;
-    /// it is not pickable (no hover, tooltip or brush).
+    /// it is not pickable (no hover, tooltip or brush). Over busy marks,
+    /// `.halo(Px(2.0))` outlines each label in the background colour and
+    /// `.hide_overlaps(true)` drops labels that would overlap earlier ones.
     ///
     /// ```
     /// use gup_core::prelude::*;
@@ -1987,6 +1989,7 @@ impl Plot {
             size: Px(th.tick_size.0),
             color: th.label,
             weight: Weight::Regular,
+            halo: None,
         };
         let legend_w = if legends.is_empty() {
             0.0
@@ -2527,6 +2530,7 @@ impl Plot {
                 anchor: Anchor::new(HAlign::Middle, VAlign::Top),
                 style: TextStyle {
                     weight: x_ticks.weight(i),
+                    halo: None,
                     ..tick_style
                 },
                 role: TextRole::TickLabel,
@@ -2547,6 +2551,7 @@ impl Plot {
                 anchor: Anchor::new(HAlign::End, VAlign::Middle),
                 style: TextStyle {
                     weight: y_ticks.weight(i),
+                    halo: None,
                     ..tick_style
                 },
                 role: TextRole::TickLabel,
@@ -2568,6 +2573,7 @@ impl Plot {
                     anchor: Anchor::new(HAlign::Start, VAlign::Middle),
                     style: TextStyle {
                         weight: ticks.weight(i),
+                        halo: None,
                         ..tick_style
                     },
                     role: TextRole::TickLabel,
@@ -2585,6 +2591,7 @@ impl Plot {
                     size: th.title_size,
                     color: th.title,
                     weight: Weight::Regular,
+                    halo: None,
                 },
                 role: TextRole::Title,
             });
@@ -2599,6 +2606,7 @@ impl Plot {
                         size: th.subtitle_size,
                         color: th.subtitle,
                         weight: Weight::Regular,
+                        halo: None,
                     },
                     role: TextRole::Subtitle,
                 };
@@ -2613,6 +2621,7 @@ impl Plot {
                 size: th.axis_title_size,
                 color: th.label,
                 weight: Weight::Regular,
+                halo: None,
             };
             let mut axis_titles = Vec::new();
             if let Some(t) = &self.x_title {

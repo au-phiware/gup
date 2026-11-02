@@ -26,7 +26,7 @@ use crate::geom::{Point, Rect};
 use crate::plot::PlacedText;
 use crate::plot::inset::{Edge, EdgeAxis};
 use crate::scale::DynPositionScale;
-use crate::scene::{Anchor, TextRole, TextRun, TextStyle, Weight, Z_AXES};
+use crate::scene::{Anchor, Halo, TextRole, TextRun, TextStyle, Weight, Z_AXES};
 use crate::theme::Theme;
 use gup_text::{Bounds, TextSystem};
 use std::any::Any;
@@ -142,6 +142,10 @@ pub struct TextLayer<T> {
     within_x: Option<RowFn<T, (f64, f64)>>,
     within_y: Option<RowFn<T, (f64, f64)>>,
     z: i32,
+    /// The halo's width in logical pixels; 0 for none.
+    halo: f32,
+    /// Whether a label overlapping one kept before it is dropped.
+    hide_overlaps: bool,
     /// Bumped by every setter; part of the plot's revision sum.
     revision: u64,
     /// The closures' results, until a setter clears them.
@@ -165,6 +169,8 @@ impl<T: Send + Sync + 'static> TextLayer<T> {
             within_x: None,
             within_y: None,
             z: Z_AXES - 1,
+            halo: 0.0,
+            hide_overlaps: false,
             revision: 0,
             evaluated: None,
         }
@@ -376,6 +382,72 @@ impl<T: Send + Sync + 'static> TextLayer<T> {
         self.changed()
     }
 
+    /// Draw each label over a halo: an outline `width` logical pixels
+    /// outside its glyphs, round at the corners, in the theme's
+    /// [`background`](crate::Theme::background) colour, so a label stays
+    /// legible over lines and discs (default: none; `Px(0.0)` turns it
+    /// off). A label's halo is drawn just before its text, so a later
+    /// label's halo covers an earlier label's text where the two overlap,
+    /// in every target and in SVG (a background-coloured stroke under the
+    /// fill, `paint-order="stroke"`). 1.5 to 2 px suits 11–12 px text.
+    ///
+    /// # Panics
+    ///
+    /// If `width` is negative or not finite.
+    pub fn halo(&mut self, width: Px) -> &mut Self {
+        assert!(
+            width.0.is_finite() && width.0 >= 0.0,
+            "a halo's width must be finite and at least 0, not {}",
+            width.0
+        );
+        self.halo = width.0;
+        self.changed()
+    }
+
+    /// Drop every label whose box overlaps the box of a label kept before
+    /// it (default `false`: every label is drawn). Labels are taken in row
+    /// order, so sort the rows to rank them: the first row's label is
+    /// always kept, if it is drawn at all. A label's box is its ink box cut
+    /// to the plot rect ([`PlacedText::bounds`](crate::PlacedText)), grown
+    /// by the [`halo`](Self::halo) width; boxes that only touch do not
+    /// overlap. Labels hidden for any other reason (outside the plot, too
+    /// big for their `within` span, no ink) take no room. Every full
+    /// resolve culls again, so zooming in shows more labels. Other layers,
+    /// tick labels and marks are not considered.
+    ///
+    /// ```
+    /// use gup_core::prelude::*;
+    /// use gup_core::scene::TextRole;
+    ///
+    /// // Three labels on top of each other, and one apart.
+    /// let rows = vec![(5.0, 5.0), (5.05, 5.0), (5.1, 5.05), (2.0, 2.0)];
+    /// let cx = Context::new_blocking()?;
+    /// let mut plot = Plot::new();
+    /// plot.x(Linear::new().domain(0.0, 10.0));
+    /// plot.y(Linear::new().domain(0.0, 10.0));
+    /// plot.circles(rows.clone())
+    ///     .x(|r: &(f64, f64)| r.0)
+    ///     .y(|r: &(f64, f64)| r.1);
+    /// plot.text(rows)
+    ///     .x(|r: &(f64, f64)| r.0)
+    ///     .y(|r: &(f64, f64)| r.1)
+    ///     .text(|r: &(f64, f64)| format!("{:.2}", r.0))
+    ///     .hide_overlaps(true);
+    /// let layout = plot.resolve(&cx, 480.0, 300.0)?.layout.clone();
+    /// let kept: Vec<&str> = layout
+    ///     .texts
+    ///     .iter()
+    ///     .filter(|t| t.run.role == TextRole::Annotation)
+    ///     .map(|t| &*t.run.text)
+    ///     .collect();
+    /// assert_eq!(kept, ["5.00", "2.00"]);
+    /// # Ok::<(), gup_core::Error>(())
+    /// ```
+    pub fn hide_overlaps(&mut self, hide: bool) -> &mut Self {
+        self.hide_overlaps = hide;
+        self.changed()
+    }
+
     /// How many rows (labels) the layer has.
     pub fn len(&self) -> usize {
         self.rows.len()
@@ -513,6 +585,69 @@ fn intersect(a: Rect, b: Rect) -> Option<Rect> {
     (r > l && bo > t).then(|| Rect::from_edges(l, t, r, bo))
 }
 
+/// The boxes of the labels kept so far, in a uniform grid over an area so
+/// a new box is tested only against the boxes in the cells it covers.
+struct Kept {
+    area: Rect,
+    cell: f32,
+    cols: usize,
+    rows: usize,
+    /// Per cell, indices into `boxes`.
+    cells: Vec<Vec<u32>>,
+    boxes: Vec<Rect>,
+}
+
+impl Kept {
+    /// An empty grid over `area`, in square cells of side `cell` (at
+    /// least 1 px) and at most 64 × 64 of them.
+    fn new(area: Rect, cell: f32) -> Self {
+        let cell = cell.max(1.0).max(area.width / 64.0).max(area.height / 64.0);
+        let cols = ((area.width / cell).ceil() as usize).max(1);
+        let rows = ((area.height / cell).ceil() as usize).max(1);
+        Self {
+            area,
+            cell,
+            cols,
+            rows,
+            cells: vec![Vec::new(); cols * rows],
+            boxes: Vec::new(),
+        }
+    }
+
+    /// The cells `b` covers, clamped to the grid: `(x0..=x1, y0..=y1)`.
+    fn span(&self, b: Rect) -> (usize, usize, usize, usize) {
+        let col =
+            |x: f32| (((x - self.area.left()) / self.cell).max(0.0) as usize).min(self.cols - 1);
+        let row =
+            |y: f32| (((y - self.area.top()) / self.cell).max(0.0) as usize).min(self.rows - 1);
+        (col(b.left()), col(b.right()), row(b.top()), row(b.bottom()))
+    }
+
+    /// Keep `b` and return `true` if it overlaps no kept box (shares no
+    /// area with one); otherwise `false`.
+    fn insert(&mut self, b: Rect) -> bool {
+        let (x0, x1, y0, y1) = self.span(b);
+        for y in y0..=y1 {
+            for x in x0..=x1 {
+                if self.cells[y * self.cols + x]
+                    .iter()
+                    .any(|&k| intersect(self.boxes[k as usize], b).is_some())
+                {
+                    return false;
+                }
+            }
+        }
+        let k = self.boxes.len() as u32;
+        self.boxes.push(b);
+        for y in y0..=y1 {
+            for x in x0..=x1 {
+                self.cells[y * self.cols + x].push(k);
+            }
+        }
+        true
+    }
+}
+
 /// A plot's text layer, without its row type (the plot keeps them as
 /// trait objects; internal).
 pub(crate) trait AnnotationLayer: Send + Sync {
@@ -602,6 +737,10 @@ impl<T: Send + Sync + 'static> AnnotationLayer for TextLayer<T> {
             Paint::Const(c) => Some(*c),
             _ => None,
         };
+        let halo = (self.halo > 0.0).then_some(Px(self.halo));
+        let mut kept = self
+            .hide_overlaps
+            .then(|| Kept::new(plot.inflate(self.halo), 4.0 * size));
         let mut out = Vec::new();
         for (i, s) in ev.text.iter().enumerate() {
             if s.is_empty() {
@@ -629,6 +768,10 @@ impl<T: Send + Sync + 'static> AnnotationLayer for TextLayer<T> {
                         .or_else(|| ev.color.as_ref().map(|c| c[i]))
                         .unwrap_or(theme.label),
                     weight: self.weight,
+                    halo: halo.map(|width| Halo {
+                        width,
+                        color: theme.background,
+                    }),
                 },
                 role: TextRole::Annotation,
             };
@@ -649,6 +792,11 @@ impl<T: Send + Sync + 'static> AnnotationLayer for TextLayer<T> {
             let Some(bounds) = intersect(ink.into(), plot) else {
                 continue;
             };
+            if let Some(kept) = &mut kept
+                && !kept.insert(bounds.inflate(self.halo))
+            {
+                continue;
+            }
             out.push(PlacedText { run, bounds });
         }
         Ok(out)

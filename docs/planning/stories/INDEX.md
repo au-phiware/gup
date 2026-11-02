@@ -204,9 +204,14 @@ cell labels, error bars, pie charts and facets.
   and `y_right_key` map labels through the plot's right y axis, with GUP-555's
   edge room on that axis, so dual-axis charts label both series. Edits
   `plot.rs`. Deps: GUP-542 ✅, GUP-555 ✅.
-- [GUP-527](GUP-527_Label_Halos_And_Overlap_Culling.md) 💡 — `halo(Px)` and
-  `hide_overlaps(true)` on text layers, so labels stay legible over dense marks.
-  Deps: GUP-542 ✅, GUP-405 ✅ (soft).
+- [GUP-527](GUP-527_Label_Halos_And_Overlap_Culling.md) ✅ — `halo(Px)` (dilated
+  glyph bitmaps in the same atlas; SVG stroke with `paint-order="stroke"`) in
+  the theme's background colour, and `hide_overlaps(true)` (greedy in row order,
+  grid of kept boxes, +0.05 ms per 1,000 labels) on text layers. Default: no
+  halo. Deps: GUP-542 ✅, GUP-405 ✅ (soft).
+- [GUP-611](GUP-611_Label_Placement_Tries_Other_Anchors.md) 💡 — A ranked list
+  of anchors per label, tried against GUP-527's grid before a label is hidden.
+  Deps: GUP-527 ✅.
 - [GUP-543](GUP-543_Horizontal_Bars_And_Group_Padding.md) ✅ — `gup::barh`
   (`BarChart<T, Horizontal>`, categories top to bottom) and
   `BarChart::group_padding`. Deps: GUP-537 📋.
