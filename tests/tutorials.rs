@@ -7,71 +7,22 @@
 //! whose chart changes fails here instead of showing a stale picture. Bless
 //! with `GUP_BLESS=1 cargo test -p gup --test tutorials -- --test-threads=1`.
 
+mod common;
+
 use gup::prelude::*;
-use gup::scene::TextRole;
-use gup_visual_regression::golden::default_artifact_dir;
-use gup_visual_regression::{
-    ExpectedFailures, GoldenStore, Harness, LayoutMetadata, PxRect, Rgba8, RgbaImage,
-    TextRole as VrTextRole,
-};
-use std::path::Path;
+use gup_visual_regression::Rgba8;
 
 const WIDTH: u32 = 640;
 const HEIGHT: u32 = 400;
 
-fn rect(r: gup::geom::Rect) -> PxRect {
-    PxRect::new(r.x, r.y, r.width, r.height)
-}
-
-/// Layout metadata from gup's own `Layout` (a copy of the adapter in
-/// `crates/gup-core/tests/common/vr.rs`, which this crate cannot import).
-fn layout_metadata(layout: &gup::Layout, background: Rgba8) -> LayoutMetadata {
-    let mut meta = LayoutMetadata::new(rect(layout.plot)).with_background(background);
-    for t in &layout.texts {
-        let role = match t.run.role {
-            TextRole::Title => VrTextRole::Title,
-            TextRole::TickLabel => VrTextRole::TickLabel,
-            TextRole::AxisTitle => VrTextRole::AxisTitle,
-            TextRole::Legend => VrTextRole::Legend,
-            TextRole::Subtitle | TextRole::Tooltip | TextRole::Annotation => VrTextRole::Other,
-        };
-        let [r, g, b, _] = t.run.style.color.to_rgba8();
-        meta = meta.with_text(
-            role,
-            t.run.text.to_string(),
-            rect(t.bounds),
-            Rgba8::rgb(r, g, b),
-        );
-    }
-    for g in &layout.guides {
-        meta = meta.with_guide(rect(*g).inflate(0.5));
-    }
-    meta
-}
-
-fn harness() -> Harness {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"));
-    let golden = GoldenStore::new(root.join("tests/golden"), default_artifact_dir(root));
-    let expected =
-        ExpectedFailures::load(root.join("tests/visual_regression/expected_failures.toml"))
-            .expect("expected-failure list parses");
-    Harness::new(golden, expected)
-}
-
 /// Render `chart` at the tutorials' size and check it against the golden.
 fn check(name: &str, chart: &mut impl Chart) {
-    check_on(name, chart, Rgba8::WHITE);
+    common::check(name, chart, WIDTH, HEIGHT);
 }
 
 /// Like [`check`], for a chart drawn on `background`.
 fn check_on(name: &str, chart: &mut impl Chart, background: Rgba8) {
-    let cx = Context::shared().unwrap();
-    let (image, layout) = chart.render_resolved(&cx, WIDTH, HEIGHT).unwrap();
-    assert_eq!(image.dimensions(), (WIDTH, HEIGHT));
-    let image = RgbaImage::new(WIDTH, HEIGHT, image.into_raw()).unwrap();
-    harness()
-        .run(name, Ok((image, layout_metadata(&layout, background))))
-        .assert_ok();
+    common::check_on(name, chart, WIDTH, HEIGHT, background);
 }
 
 /// Tutorial 1 (`01_getting_started.md`), "Step 5: Titles, a Grid and a Log

@@ -15,6 +15,45 @@ output_dir = "docs/gallery/thumbs"
 github_base = "https://github.com/au-phiware/gup/blob/main"
 
 # ---------------------------------------------------------------------------
+# Gallery
+# ---------------------------------------------------------------------------
+
+[[examples]]
+name = "scatter_bubbles"
+source = "examples/gallery/scatter_bubbles.rs"
+description = "Bubble chart: size, colour and a log axis"
+category = "Gallery"
+skip = false
+
+[[examples]]
+name = "line_monotone"
+source = "examples/gallery/line_monotone.rs"
+description = "Three monotone-curve lines with month labels"
+category = "Gallery"
+skip = false
+
+[[examples]]
+name = "bar_grouped_labels"
+source = "examples/gallery/bar_grouped_labels.rs"
+description = "Grouped bars with a value label on every bar"
+category = "Gallery"
+skip = false
+
+[[examples]]
+name = "barh_ranked"
+source = "examples/gallery/barh_ranked.rs"
+description = "A ranking as horizontal bars with value labels"
+category = "Gallery"
+skip = false
+
+[[examples]]
+name = "area_stacked"
+source = "examples/gallery/area_stacked.rs"
+description = "Stacked areas with an outline"
+category = "Gallery"
+skip = false
+
+# ---------------------------------------------------------------------------
 # Basic
 # ---------------------------------------------------------------------------
 
