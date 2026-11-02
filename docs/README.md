@@ -26,6 +26,10 @@ compares to existing solutions and its market opportunity.
 How work is done (stories, gates, dogfood), what RFC-001 built, and the tracks
 N0–N6 that come next.
 
+### [📝 Changelog](../CHANGELOG.md)
+
+What each release contains, and what a version number promises before 1.0.
+
 ## Research Documents
 
 The following research documents provide foundational analysis that informed

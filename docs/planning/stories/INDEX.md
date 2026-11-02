@@ -346,7 +346,7 @@ and WASM harness after it.
 - [GUP-595](GUP-595_Flagship_Gallery_Part_Two_And_Hero.md) 📋 — Five more
   (stacked histogram, heatmap, box plot, annotated `Plot`, dark lines) and the
   README hero as a 1200 × 630 golden. Deps: GUP-594 📋.
-- [GUP-596](GUP-596_Changelog_And_Semver_Policy.md) 🚧 — `CHANGELOG.md` (Keep a
+- [GUP-596](GUP-596_Changelog_And_Semver_Policy.md) ✅ — `CHANGELOG.md` (Keep a
   Changelog) with 0.1.0's contents and limitations, and the 0.x policy: lockstep
   versions, breaking means minor, wgpu and MSRV bumps are breaking. Deps:
   GUP-592 📋 (soft), GUP-593 📋 (soft).
