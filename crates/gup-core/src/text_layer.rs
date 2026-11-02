@@ -425,6 +425,9 @@ impl<T: Send + Sync + 'static> TextLayer<T> {
     /// let mut plot = Plot::new();
     /// plot.x(Linear::new().domain(0.0, 10.0));
     /// plot.y(Linear::new().domain(0.0, 10.0));
+    /// plot.circles(rows.clone())
+    ///     .x(|r: &(f64, f64)| r.0)
+    ///     .y(|r: &(f64, f64)| r.1);
     /// plot.text(rows)
     ///     .x(|r: &(f64, f64)| r.0)
     ///     .y(|r: &(f64, f64)| r.1)

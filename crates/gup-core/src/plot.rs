@@ -818,7 +818,9 @@ impl Plot {
     /// whose point is outside the domain (or moved there by a zoom or pan)
     /// or that reaches past the cap is cut off.
     /// The layer is laid out on the CPU, for tens to thousands of labels;
-    /// it is not pickable (no hover, tooltip or brush).
+    /// it is not pickable (no hover, tooltip or brush). Over busy marks,
+    /// `.halo(Px(2.0))` outlines each label in the background colour and
+    /// `.hide_overlaps(true)` drops labels that would overlap earlier ones.
     ///
     /// ```
     /// use gup_core::prelude::*;
