@@ -23,6 +23,12 @@
 # dependency survives, the long-lived checkout stays Fresh (including `inner`,
 # which only `dep` uses), the keep window protects recent units, and a zero
 # cap still leaves a checkout that builds.
+#
+# Rule 5 also evicts incremental caches (GUP-577): removed worktrees each leave
+# a path dependency outside the workspace (pathw<n>, whose incremental cache
+# no checkout directory holds). The cap must hold with the caches as
+# candidates, none of pathw<n> survives, and with the cache candidates off
+# (GUP_PRUNE_CAP_CACHES=0) the same state stays over the cap.
 set -euo pipefail
 
 cd "$(git rev-parse --show-toplevel)"
@@ -31,7 +37,7 @@ src=$PWD
 unset CARGO_BUILD_BUILD_DIR CARGO_BUILD_TARGET_DIR CARGO_TARGET_DIR \
   RUSTC_WORKSPACE_WRAPPER CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER CLIPPY_CONF_DIR \
   CARGO_INCREMENTAL GUP_PRUNE_IDLE_DAYS GUP_PRUNE_INCREMENTAL_MB GUP_PRUNE_WAIT \
-  GUP_PRUNE_CAP_MB GUP_PRUNE_KEEP_MINUTES \
+  GUP_PRUNE_CAP_MB GUP_PRUNE_KEEP_MINUTES GUP_PRUNE_CAP_CACHES \
   GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_PREFIX GIT_COMMON_DIR \
   GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES \
   GUP_PRE_COMMIT_IN_SNAPSHOT GUP_PRE_COMMIT_SNAPSHOT_DIR
@@ -274,10 +280,17 @@ cap_mb=$((base_mb + 1))
 echo "bound: warm size $base_mb MB, cap $cap_mb MB"
 
 # backdate: every fingerprint file two days old (a fixed time, so that ages
-# tie), except A's own units' (the checkout in use), which are now.
+# tie), except A's own units' (the checkout in use), which are now. So is every
+# incremental session, except those in A's own checkout directory.
 backdate() {
-  local old owners unit hash profile
+  local old owners unit hash profile marker
+  local -a own_caches=()
   old=$(($(date +%s) - 172800))
+  while IFS= read -r marker; do
+    [[ $(head -n 1 "$marker") != "$a_root" ]] || own_caches+=(-path "${marker%/*}" -prune -o)
+  done < <(find "$build" -path "$build/checkouts" -prune -o -name .gup-checkout -type f -print)
+  find "$build" -path "$build/checkouts" -prune -o "${own_caches[@]}" \
+    -path '*/incremental/*' -type d -name 's-*-*' -exec touch -d "@$old" {} +
   find "$build" -path "$build/checkouts" -prune -o -path '*/.fingerprint/*' \
     -type f -exec touch -d "@$old" {} +
   while IFS= read -r owners; do
@@ -310,6 +323,63 @@ for n in 21 22 23 24; do
   left=$(find "$build" \( -path '*/deps/*' -o -path '*/.fingerprint/*' \) \
     -name '*depw*' -print -quit)
   [[ -z $left ]] || fail "round $n: a removed worktree's dependency survived: $left"
+done
+
+# Rule 5 with caches (GUP-577): path dependencies outside the workspace are
+# built incrementally, so a removed worktree leaves their caches in
+# incremental/<crate>-<id>/, which no owner record or checkout directory names.
+
+# make_pathw N: the crate pathw<N> (make_depw's 3 MB blob) as a path dependency.
+make_pathw() {
+  local d=$tmp/pathw$1
+  mkdir -p "$d/src"
+  printf '[package]\nname = "pathw%s"\nversion = "0.1.0"\nedition = "2021"\n' \
+    "$1" >"$d/Cargo.toml"
+  head -c 3000000 /dev/urandom >"$d/src/blob.bin"
+  cat >"$d/src/lib.rs" <<'RUST'
+pub const BLOB: &[u8] = include_bytes!("blob.bin");
+pub fn one() -> i32 { BLOB.len() as i32 }
+RUST
+  # Old sources, as for dep: backdated fingerprints must not look stale.
+  find "$d" -exec touch -d '-10 days' {} +
+}
+
+# round_path N: round, with a path dependency.
+round_path() {
+  local w=$tmp/W$1
+  commit "$repo" "r$1"
+  git -C "$repo" worktree add -q --detach "$w"
+  make_pathw "$1"
+  sed -i "s|^dep = .*|dep = { package = \"pathw$1\", path = \"$tmp/pathw$1\" }|" "$w/a/Cargo.toml"
+  commit "$w" "w$1"
+  git -C "$repo" worktree remove --force "$w"
+}
+
+for n in 31 32; do
+  round_path "$n"
+  backdate
+  settle # ZFS: du lags the writes by up to 5 s
+  pathw_kb=$(find "$build" -path "*/incremental/pathw$n-*" -type d -prune \
+    -exec du -sk {} + | awk '{ s += $1 } END { print s + 0 }')
+  echo "cache round $n: pathw$n's incremental cache holds $pathw_kb KB"
+  [[ $pathw_kb -ge 2048 ]] ||
+    fail "cache round $n: pathw$n's cache is only $pathw_kb KB; the case cannot show the cap at work"
+  # Control: units alone cannot get under the cap.
+  ctl_out=$(GUP_PRUNE_CAP_CACHES=0 GUP_PRUNE_CAP_MB=$cap_mb prune_settled "$repo")
+  ctl_size=$(disk_kb)
+  echo "cache round $n control (caches not candidates): $ctl_size KB on disk, cap $((cap_mb * 1024)) KB"
+  [[ $ctl_size -gt $((cap_mb * 1024)) ]] ||
+    fail "cache round $n: the control ended at $ctl_size KB, within the cap: the change is not needed"
+  grep -q 'still over the cap by' <<<"$ctl_out" ||
+    fail "cache round $n: the control printed no 'still over the cap' line: $ctl_out"
+  out=$(GUP_PRUNE_CAP_MB=$cap_mb prune_settled "$repo")
+  size=$(disk_kb)
+  echo "cache round $n: $size KB on disk after the prune, cap $((cap_mb * 1024)) KB"
+  [[ $size -le $((cap_mb * 1024)) ]] ||
+    fail "cache round $n: $size KB on disk exceeds the cap of $((cap_mb * 1024)) KB: $out"
+  left=$(find "$build" -path '*/incremental/pathw*' -print -quit)
+  [[ -z $left ]] || fail "cache round $n: a path dependency's cache survived: $left"
+  grep -q 'lru-cache=' <<<"$out" || fail "cache round $n: rule 5 evicted no cache: $out"
 done
 
 # Liveness: A's units, and `inner` that only `dep` uses, are still Fresh.

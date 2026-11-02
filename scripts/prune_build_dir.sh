@@ -62,6 +62,12 @@
 #      the build directory uses less than the cap in total (`df`), the
 #      directory cannot exceed it and rule 5 does nothing, not even a `du`.
 #      Otherwise under the cap it costs one `sync -f` and one `du -sk`.
+#      Incremental crate caches are candidates too (GUP-577), owned or not: the
+#      whole of a crate's directory goes, in the same least-recently-used order
+#      (its last use is its newest session's mtime), with the same keep window
+#      and locks, and on a tie a cache goes before a unit (it costs one
+#      non-incremental compile of one crate). GUP_PRUNE_CAP_CACHES=0 turns the
+#      cache candidates off; it exists for the test's control only.
 #
 # A deleted incremental cache or evicted unit costs a rebuild of it (and of
 # its dependents). Cargo's freshness does not depend on the incremental cache,
@@ -112,12 +118,13 @@ cap_kb=$((${GUP_PRUNE_INCREMENTAL_MB:-8192} * 1024))
 wait_secs=${GUP_PRUNE_WAIT:-20}
 total_cap_kb=$((${GUP_PRUNE_CAP_MB:-81920} * 1024))
 keep_minutes=${GUP_PRUNE_KEEP_MINUTES:-60}
+cap_caches=${GUP_PRUNE_CAP_CACHES:-1} # test-only: 0 = rule 5 evicts units only
 now=$(date +%s)
 idle_before=$((now - idle_days * 86400))
 working_before=$((now - 86400))
 
 freed_kb=0
-declare -A count=()
+declare -A count=() would_remove=()
 skipped=()
 shopt -s nullglob
 
@@ -140,6 +147,7 @@ remove() {
     count[$kind]=$((${count[$kind]:-0} + 1))
     if [[ $dry_run -eq 1 ]]; then
       echo "prune: would delete ($kind) $p"
+      would_remove[$p]=1
     else
       rm -rf -- "$p"
     fi
@@ -404,12 +412,44 @@ units() {
   ' "$work/sizes" "$work/owners" "$work/eff" >"$work/units"
 }
 
+# cache_candidates: appends one line per incremental crate cache to
+# $work/units, as for a unit but with position 0 and owner "cache": its last
+# use is its newest session's mtime (the crate directory's, with no session).
+# Crates are incremental/<crate>-<id>/ and incremental/<checkout>/<crate>-<id>/.
+# (A dry run still has the caches rules 1-4 said they would delete: skip them.)
+cache_candidates() {
+  local inc path crate mtime kb
+  [[ $cap_caches -eq 1 ]] || return 0
+  local -a crates=()
+  for inc in "$build"/*/incremental "$build"/*/*/incremental; do
+    [[ -d $inc ]] || continue
+    for path in "$inc"/*/; do
+      path=${path%/}
+      if [[ -f $path/.gup-checkout ]]; then
+        for crate in "$path"/*/; do crates+=("${crate%/}"); done
+      else
+        crates+=("$path")
+      fi
+    done
+  done
+  for crate in "${crates[@]}"; do
+    [[ -z ${would_remove[$crate]:-} && -z ${would_remove[${crate%/*}]:-} ]] || continue
+    mtime=$(find "$crate" -mindepth 1 -maxdepth 1 -type d -name 's-*-*' \
+      -printf '%T@\n' 2>/dev/null | sort -n | tail -n 1)
+    mtime=${mtime%.*}
+    [[ -n $mtime ]] || mtime=$(stat -c %Y -- "$crate")
+    kb=$(du -sk -- "$crate" | cut -f1)
+    echo "$mtime 0 $kb cache $crate" >>"$work/units"
+  done
+}
+
 # graph_work: the three steps above, in a scratch directory.
 graph_work() {
   work=$(mktemp -d)
   inventory
   unit_graph
   units
+  cache_candidates
 }
 
 # report: where the space is. Takes no lock and deletes nothing.
@@ -428,6 +468,7 @@ report() {
       getline line < stats
       split(line, st, " ")
     }
+    $4 == "cache" { next } # counted under "incremental caches"
     {
       kb[$4] += $3; n[$4]++
       used += $3
@@ -453,8 +494,11 @@ report() {
   sort -k1,1n -k2,2n "$work/units" |
     awk -v total="$total" -v cap="$total_cap_kb" \
       -v keep="$((now - keep_minutes * 60))" '
-      total > cap && $1 < keep { total -= $3; n++; freed += $3 }
-      END { printf "  rule 5 would evict: %d units, %.1f GB\n", n, freed / 1048576 }'
+      total > cap && $1 < keep {
+        total -= $3; freed += $3
+        if ($4 == "cache") c++; else u++
+      }
+      END { printf "  rule 5 would evict: %d units, %d caches, %.1f GB\n", u, c, freed / 1048576 }'
 }
 
 # Dependent files of a hard link: INODE -> checkouts/ paths linking it.
@@ -551,11 +595,16 @@ prune_lru() {
   # The estimate counts files only, so the directory is at or under the cap
   # by at least the directories' overhead.
   while [[ $i -lt ${#cands[@]} && $total -gt $total_cap_kb ]]; do
-    read -r eff _ kb _ dir <<<"${cands[i]}"
+    read -r eff _ kb owner dir <<<"${cands[i]}"
     i=$((i + 1))
     [[ $eff -lt $cutoff ]] || continue
-    [[ -n ${held[${dir%/.fingerprint/*}]:-} ]] || continue
-    evict "$dir" "$kb"
+    if [[ $owner == cache ]]; then
+      [[ -n ${held[${dir%%/incremental/*}]:-} ]] || continue
+      remove lru-cache "$dir"
+    else
+      [[ -n ${held[${dir%/.fingerprint/*}]:-} ]] || continue
+      evict "$dir" "$kb"
+    fi
     total=$((total - kb))
   done
   if [[ $total -gt $total_cap_kb ]]; then
@@ -598,7 +647,7 @@ done
 prune_lru
 
 summary=""
-for kind in dead-unit dead-cache dead-checkout session idle capped lru; do
+for kind in dead-unit dead-cache dead-checkout session idle capped lru lru-cache; do
   [[ -n ${count[$kind]:-} ]] && summary+=" $kind=${count[$kind]}"
 done
 verb=freed

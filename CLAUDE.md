@@ -113,11 +113,12 @@ one build directory (GUP-411):
   look). It deletes the units, incremental caches and target directory of
   checkouts that no longer exist (the workspace wrapper records which checkout
   built what), every incremental session but the newest per crate, caches idle
-  for 3 days, and the least recently compiled caches over 8 GB per profile. It
-  holds cargo's build-directory lock while it works and skips a directory
-  another build holds for more than 10 s. A deleted cache costs one
-  non-incremental compile; a live checkout's artifacts are never touched by
-  rules 1–4. Rule 5 (GUP-428) caps the whole directory at 80 GB
+  for 3 days, the least recently compiled caches over 8 GB per profile, and,
+  over an 80 GB cap on the whole directory, the least recently used units and
+  caches (GUP-577). It holds cargo's build-directory lock while it works and
+  skips a directory another build holds for more than 10 s. A deleted cache
+  costs one non-incremental compile; a live checkout's artifacts are never
+  touched by rules 1–4. Rule 5 (GUP-428) caps the whole directory at 80 GB
   (`GUP_PRUNE_CAP_MB`): over it, the least recently used units (dependencies and
   clippy's too; last use comes from cargo's fingerprint graph) are evicted,
   except those used in the last hour. `mask prune-build --report` shows where

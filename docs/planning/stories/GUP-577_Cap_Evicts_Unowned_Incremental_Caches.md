@@ -16,8 +16,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (Track N0) **Status**: 📋 Planned
-**Created**: 2026-11-01 (made decision-complete 2026-11-02)
+**Initiative**: Strategic Review 2026-11 (Track N0) **Status**: ✅ Complete
+(2026-11-02) **Created**: 2026-11-01 (made decision-complete 2026-11-02)
 
 ## Context
 
@@ -63,7 +63,7 @@ vendored directory source, which cargo builds without incremental caches.
 
 ### AC1: Caches are rule 5 candidates
 
-- [ ] A new function, `cache_candidates`, appends one line per incremental crate
+- [x] A new function, `cache_candidates`, appends one line per incremental crate
       cache to `$work/units`, in the existing format
       `"<last use> <position> <kb> <owner> <directory>"`. Last use is the newest
       session directory's mtime (`s-*`, seconds), or the crate directory's mtime
@@ -71,19 +71,19 @@ vendored directory source, which cargo builds without incremental caches.
       `cache`. It covers both layouts: crate directories directly under
       `<profile>/incremental/`, and those under a checkout's
       `<profile>/incremental/<checkout>/` (a directory holding `.gup-checkout`).
-- [ ] `prune_lru`'s loop evicts a `cache` line with `remove lru-cache "$dir"`.
+- [x] `prune_lru`'s loop evicts a `cache` line with `remove lru-cache "$dir"`.
       `remove` counts the freed kB itself, so the loop subtracts the line's kb
       from `total` as it does for units. Every other line still goes through
       `evict`. The keep window and the held-lock test apply to both kinds. A
       cache's profile is the part of its path before `/incremental/`.
-- [ ] The summary line lists `lru-cache=N` beside `lru=N`. `--dry-run` prints
+- [x] The summary line lists `lru-cache=N` beside `lru=N`. `--dry-run` prints
       `prune: would delete (lru-cache) <dir>`.
-- [ ] `--report` prints `  rule 5 would evict: U units, C caches, X GB`,
+- [x] `--report` prints `  rule 5 would evict: U units, C caches, X GB`,
       computed over both kinds.
 
 ### AC2: Seeded case
 
-- [ ] `scripts/test_prune_build_dir.sh` gains a rule 5 case with path
+- [x] `scripts/test_prune_build_dir.sh` gains a rule 5 case with path
       dependencies, after the existing bound rounds. A `make_pathw N` function
       writes a crate `pathw<N>` with `make_depw`'s 3 MB `include_bytes!` blob,
       as a path dependency outside the workspace (not vendored), so cargo builds
@@ -94,19 +94,19 @@ vendored directory source, which cargo builds without incremental caches.
       three things: (a) the directory is at or under the cap; (b)
       `find "$build" -path '*/incremental/pathw*'` finds nothing; (c) the
       prune's output contains `lru-cache=`.
-- [ ] A control in the same case proves the change is needed: with rule 5's
+- [x] A control in the same case proves the change is needed: with rule 5's
       cache candidates turned off by `GUP_PRUNE_CAP_CACHES=0` (a test-only knob,
       documented in the script header as such), the same round ends over the
       cap. The existing "still over the cap by" line is printed.
-- [ ] The existing liveness check still passes after the new rounds: A's `a`,
+- [x] The existing liveness check still passes after the new rounds: A's `a`,
       `dep` and `inner` are `Fresh`.
-- [ ] `scripts/test_prune_build_dir.sh` passes on the default scratch directory,
+- [x] `scripts/test_prune_build_dir.sh` passes on the default scratch directory,
       and on tmpfs (`GUP_TEST_SCRATCH=/dev/shm/gup-prune-test`) when `/dev/shm`
       has 2 GB free. Paste both summaries.
 
 ### AC3: Live dry run
 
-- [ ] On the live directory, read-only:
+- [x] On the live directory, read-only:
       `GUP_PRUNE_CAP_MB=1 GUP_PRUNE_KEEP_MINUTES=0 GUP_PRUNE_WAIT=1 scripts/prune_build_dir.sh --dry-run`.
       Either it prints no "still over the cap" line, or the amount it prints is
       at most the "checkouts' own files" plus "other" lines of a `--report` run
@@ -114,7 +114,7 @@ vendored directory source, which cargo builds without incremental caches.
 
 ### AC4: Docs
 
-- [ ] The script's rule 5 header paragraph says caches are candidates too, with
+- [x] The script's rule 5 header paragraph says caches are candidates too, with
       the same keep window, locks and least-recently-used order. `maskfile.md`
       "## prune-build" and `CLAUDE.md`'s "Pruning" bullet each get the same fact
       in one clause.
@@ -159,12 +159,12 @@ vendored directory source, which cargo builds without incremental caches.
 
 ## Technical Tasks
 
-- [ ] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30
+- [x] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30
       minutes.
-- [ ] `cache_candidates`, the loop change, summary and report lines (AC1).
+- [x] `cache_candidates`, the loop change, summary and report lines (AC1).
       Commit.
-- [ ] `make_pathw`, `backdate` change, rounds 31–32, the control (AC2). Commit.
-- [ ] Live dry run (AC3); docs (AC4); `shellcheck scripts/*.sh`;
+- [x] `make_pathw`, `backdate` change, rounds 31–32, the control (AC2). Commit.
+- [x] Live dry run (AC3); docs (AC4); `shellcheck scripts/*.sh`;
       `mask all-check`.
 
 ## Dependencies
@@ -185,7 +185,7 @@ vendored directory source, which cargo builds without incremental caches.
 
 ## Success Metrics
 
-- [ ] Over the cap, rule 5 can always get the directory down to its checkouts'
+- [x] Over the cap, rule 5 can always get the directory down to its checkouts'
       own files plus whatever the keep window protects.
 
 ## Risk Assessment
@@ -196,14 +196,84 @@ vendored directory source, which cargo builds without incremental caches.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `scripts/test_prune_build_dir.sh` and `mask all-check`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: not affected
-- [ ] Rendered output verified by eye: not applicable
-- [ ] `mask wasm-browser`: not needed, scripts only
-- [ ] WASM size: unchanged, no library code change
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `scripts/test_prune_build_dir.sh` and `mask all-check`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: not affected
+- [x] Rendered output verified by eye: not applicable
+- [x] `mask wasm-browser`: not needed, scripts only
+- [x] WASM size: unchanged, no library code change
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `scripts/prune_build_dir.sh`: `cache_candidates` appends one `cache` line per
+  incremental crate directory (both layouts) to `$work/units`; `prune_lru`
+  evicts them with `remove lru-cache`; summary shows `lru-cache=N`; `--report`
+  prints `rule 5 would evict: U units, C caches, X GB`; `GUP_PRUNE_CAP_CACHES=0`
+  (test-only) turns them off. In a dry run, `remove` records what it would
+  delete (`would_remove`) so rules 1-4's caches are not counted again by rule 5.
+  The report's per-owner table skips `cache` lines (they are in "incremental
+  caches").
+- `scripts/test_prune_build_dir.sh`: `make_pathw`, `round_path`, `backdate`
+  backdates incremental sessions outside A's checkout directory, and rounds 31
+  and 32 with a control (`GUP_PRUNE_CAP_CACHES=0` ends over the cap).
+- Docs: script header, `maskfile.md`, `CLAUDE.md`.
+
+### Evidence
+
+Test, ZFS scratch (default): `all cases passed`; pathw cache 27488 KB; control
+34308 / 34347 KB on disk over the 8192 KB cap; after the prune 6820 / 6860 KB.
+
+Test, tmpfs (`GUP_TEST_SCRATCH=/dev/shm/gup577`): `all cases passed`; pathw
+cache 31612 KB; control 44612 / 44680 KB over the 14336 KB cap; after the prune
+13000 / 13084 KB.
+
+Live (read-only), `--report`: on disk 55.5 GB; checkouts' own files 0.1 GB,
+other 0.2 GB; `rule 5 would evict: 0 units, 0 caches` (filesystem below cap).
+Dry run (`CAP_MB=1 KEEP_MINUTES=0 WAIT=1`): `still over the cap by 333 MB`,
+`would free 56606.8 MB (lru=9650 lru-cache=986)`. 333 MB is within the rounding
+of 0.1 + 0.2 GB.
+
+## Retrospective
+
+**Completed**: 2026-11-02
+
+### Key Technical Learnings
+
+#### ZFS `du` lag also hits the new assertion
+
+- **Challenge**: the first ZFS run measured pathw's cache as 8 KB and tripped
+  the "cache at least 2 MB" guard (the escalation trigger), although the cache
+  was 27 MB.
+- **Solution**: `settle` before measuring. Not a real escalation: lz4 does not
+  shrink random blobs, and the control's later reading showed the real size.
+- **Pattern**: every size assertion in this test needs `settle` first.
+
+#### Dry runs must not count a deletion twice
+
+- **Challenge**: rule 5's candidates are enumerated after rules 1-4, but a dry
+  run deleted nothing, so their caches reappeared as candidates.
+- **Solution**: `remove` records dry-run paths; `cache_candidates` skips them.
+
+### Architectural Decisions
+
+#### Caches share the unit queue
+
+- **Decision**: one sort, caches at position 0 (ties to caches), as specified.
+- **Trade-off**: an unowned live cache can go when the cap is hit, costing one
+  non-incremental compile.
+
+### Development Workflow Insights
+
+- Both filesystems take about 8 minutes per run; running them in parallel is
+  fine (different scratch directories).
+- The agent shell refuses compound commands with heredocs containing `git`; use
+  the Edit tool for script edits.
+
+### Follow-up Stories
+
+None.
