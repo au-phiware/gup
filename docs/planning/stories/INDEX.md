@@ -326,6 +326,9 @@ accessibility in 0.1. Run order: see below once the track is complete.
   `Plot::describe`, `Chart::describe` and `.description(text)`: a text
   alternative built at resolve from the title, kind, row counts, drawn tick
   labels and legends, stored in `Scene`. Deps: GUP-552 ✅, GUP-554 ✅.
+- [GUP-593](GUP-593_Svg_Title_And_Canvas_Aria_Label.md) 📋 — SVG `role="img"`,
+  `<title>` and `<desc>`; `CanvasApp` sets `role` and `aria-label` unless the
+  page set its own, checked in the browser test. Deps: GUP-592 📋, GUP-557 📋.
 
 ## Track N5: Performance at Scale
 
