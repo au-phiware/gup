@@ -170,6 +170,9 @@ pub struct Plot {
     subtitle: Option<String>,
     /// The chart's kind ("Scatter chart"), set by a builder (GUP-592).
     kind: Option<&'static str>,
+    /// A builder's account of its chart for the description, in place of the
+    /// generic row clause (GUP-600).
+    kind_summary: Option<String>,
     /// The text set through [`description`](Plot::description).
     description: Option<String>,
     x: Box<dyn DynPositionScale>,
@@ -466,6 +469,7 @@ impl Plot {
             title: None,
             subtitle: None,
             kind: None,
+            kind_summary: None,
             description: None,
             x: Box::new(ScaleRef::new(Linear::new())),
             y: Box::new(ScaleRef::new(Linear::new())),
@@ -546,6 +550,12 @@ impl Plot {
         self.kind = Some(kind);
     }
 
+    /// A builder's summary of its chart, which the [description](Self::describe)
+    /// reads in place of the row and layer counts.
+    pub(crate) fn set_kind_summary(&mut self, summary: String) {
+        self.kind_summary = Some(summary);
+    }
+
     /// Replace the generated text of the [description](Self::describe) with
     /// `text`. The description's title is still derived.
     pub fn description(&mut self, text: impl Into<String>) -> &mut Self {
@@ -556,7 +566,7 @@ impl Plot {
 
     /// The chart's text alternative, as of the last successful resolve
     /// (`None` before one): its title, then sentences naming its kind, data
-    /// rows and layers, its axes (with the tick labels as drawn) and its
+    /// rows, its axes (with the tick labels as drawn) and its
     /// colour legends. It reads the stored value and does no work.
     ///
     /// ```
@@ -593,7 +603,7 @@ impl Plot {
     /// assert_eq!(
     ///     d.text,
     ///     format!(
-    ///         "Scatter chart, 3 data rows in 1 layer. X axis \"GDP ($k)\": {}. \
+    ///         "Scatter chart, 3 data rows. X axis \"GDP ($k)\": {}. \
     ///          Y axis \"Life expectancy\": {}. Colour legend: Africa, Europe and Asia.",
     ///         range(x),
     ///         range(y),
@@ -2857,6 +2867,7 @@ impl Plot {
             subtitle: self.subtitle.as_deref(),
             kind: self.kind,
             text_override: self.description.as_deref(),
+            summary: self.kind_summary.as_deref(),
             layers: self
                 .layers
                 .iter()

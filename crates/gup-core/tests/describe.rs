@@ -27,7 +27,7 @@ fn scatter() {
         .x_title("Hours");
     let d = described(&mut chart);
     assert_eq!(d.title, "Scatter chart");
-    assert!(d.text.starts_with("2 data rows in 1 layer. "), "{}", d.text);
+    assert!(d.text.starts_with("2 data rows. "), "{}", d.text);
     assert!(d.text.contains("X axis \"Hours\": "), "{}", d.text);
     assert!(d.text.contains(" Y axis: "), "{}", d.text);
 }
@@ -43,7 +43,7 @@ fn line() {
     assert_eq!(d.title, "Growth");
     assert!(
         d.text
-            .starts_with("Squares. Line chart, 30 data rows in 1 layer. X axis: "),
+            .starts_with("Squares. Line chart, 30 data rows. X axis: "),
         "{}",
         d.text
     );
@@ -80,9 +80,8 @@ fn bar_with_tick_format() {
         .y_tick_format(|v| format!("${v:.0}"));
     let d = described(&mut chart);
     assert!(
-        d.text.starts_with(
-            "Bar chart, 3 data rows in 1 layer. X axis: 3 categories, Apple, Pear and Plum."
-        ),
+        d.text
+            .starts_with("Bar chart, 3 data rows. X axis: 3 categories, Apple, Pear and Plum."),
         "{}",
         d.text
     );
@@ -98,14 +97,13 @@ fn barh() {
         .title("Sales");
     let d = described(&mut chart);
     assert!(
-        d.text
-            .starts_with("Horizontal bar chart, 3 data rows in 1 layer. "),
+        d.text.starts_with("Horizontal bar chart, 3 data rows. "),
         "{}",
         d.text
     );
     assert!(
         d.text
-            .contains("Y axis: 3 categories, Plum, Pear and Apple."),
+            .contains("Y axis: 3 categories, Apple, Pear and Plum."),
         "{}",
         d.text
     );
@@ -119,8 +117,7 @@ fn area() {
         .title("Area");
     let d = described(&mut chart);
     assert!(
-        d.text
-            .starts_with("Area chart, 12 data rows in 1 layer. X axis: "),
+        d.text.starts_with("Area chart, 12 data rows. X axis: "),
         "{}",
         d.text
     );
@@ -150,7 +147,12 @@ fn histogram() {
         .x(|v| *v)
         .title("Trips");
     let d = described(&mut chart);
-    assert!(d.text.starts_with("Histogram, "), "{}", d.text);
+    assert!(
+        d.text
+            .starts_with("Histogram of 100 values in 8 bins from 0 to 16."),
+        "{}",
+        d.text
+    );
     assert!(d.text.contains(" X axis: "), "{}", d.text);
 }
 
@@ -166,13 +168,9 @@ fn heatmap() {
         .legend_title("Visits")
         .title("Visits");
     let d = described(&mut chart);
+    assert!(d.text.starts_with("Heatmap, 12 data rows. "), "{}", d.text);
     assert!(
-        d.text.starts_with("Heatmap, 12 data rows in 1 layer. "),
-        "{}",
-        d.text
-    );
-    assert!(
-        d.text.contains("Y axis: 3 categories, Wed, Tue and Mon."),
+        d.text.contains("Y axis: 3 categories, Mon, Tue and Wed."),
         "{}",
         d.text
     );
@@ -193,7 +191,13 @@ fn boxplot() {
         .y(|r| r.1)
         .title("Latency");
     let d = described(&mut chart);
-    assert!(d.text.starts_with("Box plot, "), "{}", d.text);
+    assert!(
+        d.text.starts_with("Box plot of 2 groups: api, median 57, "),
+        "{}",
+        d.text
+    );
+    assert!(!d.text.contains("layer"), "{}", d.text);
+    println!("{}", d.alt_text());
     assert!(
         d.text.contains("X axis: 2 categories, api and web."),
         "{}",
@@ -228,7 +232,7 @@ fn plot_layers_and_right_axis() {
     assert_eq!(d.title, "Climate");
     assert!(
         d.text
-            .starts_with("Chart, 30 data rows in 2 layers (circle 20 and line 10). "),
+            .starts_with("Chart, 30 data rows: circle 20, line 10. "),
         "{}",
         d.text
     );
@@ -272,4 +276,29 @@ fn scene_carries_it() {
     let scene = chart.resolve(&cx, 320.0, 200.0).unwrap().scene.clone();
     assert_eq!(scene.description.as_ref(), chart.describe());
     assert_eq!(scene.guides().description, scene.description);
+}
+
+#[test]
+fn stacked_histogram() {
+    let rows: Vec<(f64, &str)> = (0..60)
+        .map(|i| {
+            (
+                f64::from(i % 30),
+                if i % 3 == 0 { "Morning" } else { "Evening" },
+            )
+        })
+        .collect();
+    let mut chart = gup_core::histogram(rows)
+        .x(|r| r.0)
+        .color(|r| r.1)
+        .legend_title("Session")
+        .title("Trips");
+    let d = described(&mut chart);
+    assert!(
+        d.text
+            .contains(", stacked by Session: Morning and Evening."),
+        "{}",
+        d.text
+    );
+    println!("{}", d.alt_text());
 }

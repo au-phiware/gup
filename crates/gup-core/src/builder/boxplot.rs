@@ -262,6 +262,12 @@ impl<T: Send + Sync + 'static> BoxPlotChart<T> {
         if boxes.is_empty() {
             return;
         }
+        let groups: Vec<(&str, &BoxStats)> = boxes
+            .iter()
+            .map(|b| (&*b.summary.key, &b.summary.stats))
+            .collect();
+        self.plot
+            .set_kind_summary(crate::describe::box_summary(&groups));
         let categories: Vec<Arc<str>> = boxes.iter().map(|b| Arc::clone(&b.summary.key)).collect();
         let colours = ScaleRef::new(self.color_scale.clone());
         let band = self.band.clone();
