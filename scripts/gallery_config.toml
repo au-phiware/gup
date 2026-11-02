@@ -53,6 +53,41 @@ description = "Stacked areas with an outline"
 category = "Gallery"
 skip = false
 
+[[examples]]
+name = "histogram_stacked"
+source = "examples/gallery/histogram_stacked.rs"
+description = "A histogram stacked by mode, in bins of five"
+category = "Gallery"
+skip = false
+
+[[examples]]
+name = "heatmap_weekly"
+source = "examples/gallery/heatmap_weekly.rs"
+description = "A weekday-by-hour heatmap through viridis"
+category = "Gallery"
+skip = false
+
+[[examples]]
+name = "boxplot_latency"
+source = "examples/gallery/boxplot_latency.rs"
+description = "Box plots of latency with outliers"
+category = "Gallery"
+skip = false
+
+[[examples]]
+name = "annotated_prices"
+source = "examples/gallery/annotated_prices.rs"
+description = "The Plot API: a step line with event labels"
+category = "Gallery"
+skip = false
+
+[[examples]]
+name = "dark_multiline"
+source = "examples/gallery/dark_multiline.rs"
+description = "Five lines in the dark theme"
+category = "Gallery"
+skip = false
+
 # ---------------------------------------------------------------------------
 # Basic
 # ---------------------------------------------------------------------------

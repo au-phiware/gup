@@ -101,6 +101,26 @@ name = "area_stacked"
 path = "examples/gallery/area_stacked.rs"
 
 [[example]]
+name = "histogram_stacked"
+path = "examples/gallery/histogram_stacked.rs"
+
+[[example]]
+name = "heatmap_weekly"
+path = "examples/gallery/heatmap_weekly.rs"
+
+[[example]]
+name = "boxplot_latency"
+path = "examples/gallery/boxplot_latency.rs"
+
+[[example]]
+name = "annotated_prices"
+path = "examples/gallery/annotated_prices.rs"
+
+[[example]]
+name = "dark_multiline"
+path = "examples/gallery/dark_multiline.rs"
+
+[[example]]
 name = "hello_world"
 path = "examples/hello_world.rs"
 
