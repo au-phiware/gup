@@ -21,8 +21,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N3 Release 0.1) **Status**: 🚧 In
-Progress **Created**: 2026-11-02
+**Initiative**: Strategic Review 2026-11 (N3 Release 0.1) **Status**: ✅
+Complete (2026-11-02) **Created**: 2026-11-02
 
 ## Context
 
@@ -70,11 +70,11 @@ cannot turn on `web` through `gup`, or turn off `window`. They must depend on
 
 ### AC1: The facade's features
 
-- [ ] The root `Cargo.toml` has the `[features]` table of Decisions, and its
+- [x] The root `Cargo.toml` has the `[features]` table of Decisions, and its
       `gup-core` dependency sets `default-features = false`.
-- [ ] `cargo check -p gup --target wasm32-unknown-unknown --no-default-features --features web`
+- [x] `cargo check -p gup --target wasm32-unknown-unknown --no-default-features --features web`
       passes. So does `cargo check -p gup` (default features, host).
-- [ ] A doctest, or the crate docs' features table, shows the browser dependency
+- [x] A doctest, or the crate docs' features table, shows the browser dependency
       line:
       `gup = { version = "0.1", default-features = false, features = ["web", "svg"] }`.
       `src/lib.rs` gains a "## Features" section with the table of Decisions,
@@ -82,37 +82,37 @@ cannot turn on `web` through `gup`, or turn off `window`. They must depend on
 
 ### AC2: docs.rs metadata
 
-- [ ] Each of the seven published crates has the `[package.metadata.docs.rs]`
+- [x] Each of the seven published crates has the `[package.metadata.docs.rs]`
       table of Decisions.
-- [ ] `scripts/docs_rs.sh` reads each published crate's docs.rs table with
+- [x] `scripts/docs_rs.sh` reads each published crate's docs.rs table with
       `cargo metadata` and `jq`. For each listed target, it runs
       `cargo doc --no-deps -p <crate> --target <t>`, with `--all-features` when
       `all-features = true`. It sets `RUSTDOCFLAGS` to the table's
       `rustdoc-args` plus `-D warnings`, and `DOCS_RS=1`. It exits non-zero on
       the first failure and names the crate and target. `mask docs-rs` runs it,
       and it passes locally.
-- [ ] After `mask docs-rs`, the wasm32 docs of `gup-core` contain
+- [x] After `mask docs-rs`, the wasm32 docs of `gup-core` contain
       `web/struct.CanvasApp.html`:
       `test -f "$CARGO_TARGET_DIR/wasm32-unknown-unknown/doc/gup_core/web/struct.CanvasApp.html"`.
 
 ### AC3: Publish dry run
 
-- [ ] `mask publish-check` runs `cargo publish --workspace --dry-run --locked`.
+- [x] `mask publish-check` runs `cargo publish --workspace --dry-run --locked`.
       Run it locally: it packages and verifies all seven crates. Paste the last
       ten lines into the Implementation Summary.
 
 ### AC4: The workflow
 
-- [ ] `.github/workflows/release-check.yml` (name "Release check") runs on push
+- [x] `.github/workflows/release-check.yml` (name "Release check") runs on push
       to `main`, on pull requests and on `workflow_dispatch`. It has two jobs,
       `publish-dry-run` (`mask publish-check`'s command) and `docs-rs`
       (`./scripts/docs_rs.sh`). Each job installs the toolchain from
       `rust-toolchain.toml` with `rustup toolchain install` and caches the cargo
       registry as `lint.yml` does. Each has a 60-minute timeout.
-- [ ] `actionlint .github/workflows/*.y*ml` passes (it is in `mask all-check`).
+- [x] `actionlint .github/workflows/*.y*ml` passes (it is in `mask all-check`).
       `maskfile.md` gains `### ci release-check`, running both commands, beside
       the other `mask ci` subtasks.
-- [ ] The workflow passes on GitHub for the story's branch. Link the run in the
+- [x] The workflow passes on GitHub for the story's branch. Link the run in the
       Implementation Summary. If the branch cannot be pushed from the worker,
       say so; the orchestrator links it after the merge.
 
@@ -194,13 +194,13 @@ cannot turn on `web` through `gup`, or turn off `window`. They must depend on
 
 ## Technical Tasks
 
-- [ ] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30
+- [x] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30
       minutes.
-- [ ] Facade features, the wasm32 and host checks, and the features section
+- [x] Facade features, the wasm32 and host checks, and the features section
       (AC1). Commit.
-- [ ] docs.rs tables, `scripts/docs_rs.sh`, `mask docs-rs` (AC2). Commit.
-- [ ] `mask publish-check` and its local run (AC3). Commit.
-- [ ] The workflow and `mask ci release-check` (AC4); actionlint; DoD commands.
+- [x] docs.rs tables, `scripts/docs_rs.sh`, `mask docs-rs` (AC2). Commit.
+- [x] `mask publish-check` and its local run (AC3). Commit.
+- [x] The workflow and `mask ci release-check` (AC4); actionlint; DoD commands.
 
 ## Dependencies
 
@@ -222,8 +222,8 @@ cannot turn on `web` through `gup`, or turn off `window`. They must depend on
 
 ## Success Metrics
 
-- [ ] Every push proves that the seven crates publish and document.
-- [ ] `gup` works in the browser without a direct `gup-core` dependency.
+- [x] Every push proves that the seven crates publish and document.
+- [x] `gup` works in the browser without a direct `gup-core` dependency.
 
 ## Risk Assessment
 
@@ -237,17 +237,98 @@ cannot turn on `web` through `gup`, or turn off `window`. They must depend on
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye: not applicable, nothing renders
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye: not applicable, nothing renders
       differently
-- [ ] `mask wasm-browser`: not needed; no layout, input or `gup-core` wasm code
+- [x] `mask wasm-browser`: not needed; no layout, input or `gup-core` wasm code
       changes (the facade's features only forward)
-- [ ] WASM size: unchanged, no library code change (the harness uses `gup-core`
+- [x] WASM size: unchanged, no library code change (the harness uses `gup-core`
       directly)
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `gup` has `window`, `svg` and `web` features (default `window`, `svg`),
+  forwarding to `gup-core`, which it now depends on with
+  `default-features = false`. `src/lib.rs` has a "Features" section with the
+  table and the browser dependency line.
+- Every published crate has a `[package.metadata.docs.rs]` table (`gup`,
+  `gup-core`: all features, host and wasm32 targets).
+- `scripts/docs_rs.sh` (`mask docs-rs`) builds each crate's docs from its table
+  with `DOCS_RS=1`, `--cfg docsrs` and `-D warnings`. It passes; wasm32 docs of
+  `gup-core` contain `web/struct.CanvasApp.html`.
+- `mask publish-check` runs `cargo publish --workspace --dry-run --locked` and
+  passes for all seven crates.
+- `.github/workflows/release-check.yml` (jobs `publish-dry-run` and `docs-rs`)
+  and `mask ci release-check` (also in the `mask ci` aggregate).
+- Seven intra-doc links to items that do not exist on wasm32 (`Context::shared`,
+  `Context::new_blocking`, `render_blocking`, `show`) became plain code spans,
+  in `gup-core`'s `lib.rs`, `builder/mod.rs`, `context.rs`, `target.rs` and
+  `window.rs`. The story allows fixing a doc link; `mask doc` (host) never saw
+  them.
+- No system packages were needed locally; none are installed in the workflow.
+
+Last lines of `mask publish-check` (exit 0):
+
+```text
+   Uploading gup-text v0.1.0 (.../crates/gup-text)
+warning: aborting upload due to dry run
+   Uploading gup-wgsl v0.1.0 (.../crates/gup-wgsl)
+warning: aborting upload due to dry run
+   Uploading gup-core-macros v0.1.0 (.../crates/gup-core-macros)
+warning: aborting upload due to dry run
+   Uploading gup-core v0.1.0 (.../crates/gup-core)
+warning: aborting upload due to dry run
+   Uploading gup v0.1.0 (...)
+warning: aborting upload due to dry run
+   Uploading gup-bevy v0.1.0 (.../gup-bevy)
+warning: aborting upload due to dry run
+   Uploading gup-egui v0.1.0 (.../gup-egui)
+warning: aborting upload due to dry run
+```
+
+Checks: `mask all-check` and `mask merge-check` pass (gup-core, wasm-size,
+wasm-browser, doc, story-ids; dogfood skipped); root `cargo test` passes;
+`cargo check --examples` passes; the wasm32
+`--no-default-features --features web` check passes. The workflow has not run on
+GitHub: the worker did not push the branch, so the orchestrator links the run
+after the merge.
+
+## Retrospective
+
+**Completed**: 2026-11-02
+
+### Key Technical Learnings
+
+#### Doc links differ per target
+
+- **Challenge**: `mask doc` builds the host only; the wasm32 docs.rs build
+  failed on links to native-only items.
+- **Solution**: plain code spans for those references.
+- **Pattern**: a docs.rs emulation must build every listed target; the host
+  build proves little for cfg-gated items.
+
+### Architectural Decisions
+
+#### Facade depends on gup-core without default features
+
+- **Decision**: as the story's Decisions say.
+- **Trade-off**: the version `=0.1.0` is held in a place besides the workspace
+  table (GUP-598's version check must count it).
+
+### Development Workflow Insights
+
+- The worktree was cut before GUP-588 merged; rebasing onto `main` resolved it
+  (conflicts only in the two `Cargo.toml` files).
+- The sandbox refuses git commands built with runtime-computed paths or
+  variables; literal paths work.
+
+### Follow-up Stories
+
+None. GUP-602 and GUP-603 were not needed.
