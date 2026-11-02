@@ -168,7 +168,7 @@ pub struct MarkBatch {
     pub(crate) translucent: bool,
     /// What vector targets need to write the marks (GUP-467).
     #[cfg_attr(
-        not(feature = "svg"),
+        all(not(feature = "svg"), not(test)),
         expect(dead_code, reason = "only vector targets read it")
     )]
     pub(crate) vector: VectorSlot,
