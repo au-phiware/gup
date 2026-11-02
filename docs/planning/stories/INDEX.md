@@ -359,6 +359,9 @@ and WASM harness after it.
   candidate: hero image, eight builders, browser features, a current "Not yet"
   and platform line, CHANGELOG link, published-crates column. Deps: GUP-589 📋,
   GUP-590 📋, GUP-591 📋, GUP-593 📋, GUP-595 📋, GUP-596 📋.
+- [GUP-602](GUP-602_Feature_Combinations_Compile.md) 📋 — Every supported
+  feature combination builds and tests (`window`-only lib tests fail today at
+  `scope.rs:338`); `mask feature-matrix` in CI. Deps: GUP-589 ✅.
 - [GUP-598](GUP-598_Release_Checklist.md) 📋 — `mask release-check` (every gate,
   publish dry run, docs.rs, one-version and slug checks, seeded) and
   `docs/RELEASING.md`; ends at "ready to publish". Deps: GUP-536 📋, GUP-588–597
