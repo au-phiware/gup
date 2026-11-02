@@ -335,7 +335,7 @@ mod tests {
                 *batch = MarkBatch::new(
                     Arc::new(batch.gpu.with_program(bad)),
                     batch.antialias,
-                    Arc::clone(&batch.vector),
+                    batch.vector.clone(),
                 );
             }
         }

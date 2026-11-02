@@ -25,6 +25,54 @@ Run tests (single-threaded to avoid GPU resource conflicts)
 cargo test -- --test-threads=1
 ```
 
+## feature-matrix
+
+> Build and lib-test gup-core and gup in every supported feature combination
+> (GUP-602)
+
+`gup` and `gup-core` have the features `window`, `svg` and `web` (GUP-589), and
+a user may pick any of these combinations. The default build is the only one the
+rest of the gate tests, so this builds and runs the lib tests of both crates in
+each of: default; `--no-default-features`;
+`--no-default-features --features window`;
+`--no-default-features --features svg`. It then checks (no tests, the target has
+no GPU test runner) `--no-default-features --features web` on wasm32. It prints
+one line per combination with the seconds it took, runs every combination even
+after a failure, and exits non-zero if any failed. A `#[cfg(test)]` item that
+needs a feature must be gated on it: gate the test function, not the module,
+unless the whole module needs the feature.
+
+```bash
+set -uo pipefail
+eval "$(./scripts/headless_env.sh)"
+failed=0
+total_start=$SECONDS
+combo() {
+  local name="$1" start=$SECONDS
+  shift
+  local log
+  log="$(mktemp)"
+  if "$@" >"$log" 2>&1; then
+    printf 'feature-matrix: ok    %-56s %4ss\n' "$name" "$((SECONDS - start))"
+  else
+    printf 'feature-matrix: FAIL  %-56s %4ss\n' "$name" "$((SECONDS - start))"
+    tail -n 40 "$log"
+    failed=1
+  fi
+  rm -f "$log"
+}
+for flags in "" "--no-default-features" "--no-default-features --features window" "--no-default-features --features svg"; do
+  # shellcheck disable=SC2086 # flags are words, split on purpose
+  combo "test ${flags:-default}" \
+    cargo test -p gup-core -p gup --lib $flags -- --test-threads=1
+done
+combo "check wasm32 --no-default-features --features web" \
+  cargo check --target wasm32-unknown-unknown -p gup-core -p gup --lib \
+  --no-default-features --features web
+printf 'feature-matrix: total %ss\n' "$((SECONDS - total_start))"
+exit "$failed"
+```
+
 ## gup-core-window
 
 The gup-core checks that need a display (GUP-396): window/PNG ΔE parity, then
