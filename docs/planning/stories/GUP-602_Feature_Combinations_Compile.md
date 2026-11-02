@@ -43,12 +43,12 @@ before 0.1, every combination a user can pick must build and test.
 ## Acceptance Criteria
 
 - [ ] **AC1**:
-      `cargo test -p gup-core --no-default-features --features window     --lib -- --test-threads=1`
+      `cargo test -p gup-core --no-default-features --features window --lib -- --test-threads=1`
       compiles and passes. Fix by gating the test code that needs `svg` (or
       making it feature-neutral), never by enabling `svg` in the test.
 - [ ] **AC2**: a `mask feature-matrix` task builds and lib-tests gup-core and
       `gup` in each of: default; `--no-default-features`;
-      `--no-default-features     --features window`;
+      `--no-default-features --features window`;
       `--no-default-features --features svg`; and checks (no tests) wasm32
       `--no-default-features --features web`. It prints one line per combination
       and exits non-zero on any failure.
