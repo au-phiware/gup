@@ -23,6 +23,10 @@ wasm-bindgen-futures = "0.4"
 # One more `Selection` row type, linked so `mask wasm-size` can measure what an
 # additional `T` costs (GUP-450). Off in the default build.
 extra-row-type = []
+# The scatter's SVG guides export on top of the browser chart (GUP-557), so
+# `mask wasm-size` can report its cost as `wasm.svg_export.gz_bytes`. Off in
+# the default build.
+svg-export = []
 
 # GUP-451 AC1: a size-conscious release profile (default profile: 356,914 B gz
 # over wgpu; s+LTO 310,259; z+LTO 292,592, 5.7% under s, so z).
