@@ -18,8 +18,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N3 Release 0.1) **Status**: 🚧 In
-Progress **Created**: 2026-11-02
+**Initiative**: Strategic Review 2026-11 (N3 Release 0.1) **Status**: ✅
+Complete (2026-11-02) **Created**: 2026-11-02
 
 ## Context
 
@@ -67,23 +67,23 @@ exact and cheap, and it can never disagree with the picture.
 
 ### AC1: The API
 
-- [ ] `gup_core::Description` (and so `gup::Description`) is the struct of
+- [x] `gup_core::Description` (and so `gup::Description`) is the struct of
       Decisions, with `Description::alt_text`. It is in the prelude.
-- [ ] `Plot::describe(&self) -> Option<&Description>` returns the description of
+- [x] `Plot::describe(&self) -> Option<&Description>` returns the description of
       the last successful resolve (`None` before one).
       `Plot::description(&mut self, text: impl Into<String>) -> &mut Self`
       replaces the generated `text`; the title is still derived.
-- [ ] `Chart::describe(&self) -> Option<&Description>` is a provided trait
+- [x] `Chart::describe(&self) -> Option<&Description>` is a provided trait
       method returning `None`. `Plot` and all seven builders implement it by
       delegating to their plot. Every builder gains `.description(text)` through
       `plot_setters!(titles)`.
-- [ ] `Scene` gains `pub description: Option<Description>`. `Scene::new` leaves
+- [x] `Scene` gains `pub description: Option<Description>`. `Scene::new` leaves
       it `None`, `Plot::resolve` fills it, and `Scene::guides` and the tooltip
       overlay's composed scene keep it.
 
 ### AC2: The text
 
-- [ ] `crates/gup-core/src/describe.rs` holds a pure
+- [x] `crates/gup-core/src/describe.rs` holds a pure
       `pub(crate) fn describe(input: &DescribeInput<'_>) -> Description`, with
       the input struct of Decisions, and unit tests for each sentence rule in
       Decisions: singular and plural rows and layers, a keyed axis of 4 keys and
@@ -91,13 +91,13 @@ exact and cheap, and it can never disagree with the picture.
       ticks, a swatch legend, a ramp legend, a subtitle ending in a full stop,
       an override text, a plot with no layers, a plot without a title (with and
       without a kind), and `alt_text`'s three joining cases.
-- [ ] `resolve_full` builds a `DescribeInput` from its locals just before it
+- [x] `resolve_full` builds a `DescribeInput` from its locals just before it
       returns, and stores the result in `scene.description`.
-- [ ] Doctest on `Plot::describe`, through `gup`, running headless. It is the
+- [x] Doctest on `Plot::describe`, through `gup`, running headless. It is the
       scatter of Decisions' worked example. It asserts `title` exactly, and
       asserts `text` equal to the whole expected string, built from the drawn
       tick labels as the worked example says.
-- [ ] An integration test, `crates/gup-core/tests/describe.rs`, covers one chart
+- [x] An integration test, `crates/gup-core/tests/describe.rs`, covers one chart
       per builder (scatter, line, bar, barh, area, histogram, heatmap, box
       plot). Each asserts the kind sentence and one axis or legend sentence, so
       the builders' kinds and keyed axes are exercised. The bar case sets
@@ -106,14 +106,14 @@ exact and cheap, and it can never disagree with the picture.
 
 ### AC3: Cost
 
-- [ ] `Plot::describe` does no work: it reads the stored value. A cached resolve
+- [x] `Plot::describe` does no work: it reads the stored value. A cached resolve
       (nothing changed) does not rebuild the description. Test: two resolves in
       a row return `Description`s at the same address (`std::ptr::eq` on
       `describe()`).
-- [ ] `mask wasm-size`: `wasm.scatter.gz_bytes` grows by at most 3,000 B over
+- [x] `mask wasm-size`: `wasm.scatter.gz_bytes` grows by at most 3,000 B over
       the parent commit; report both numbers. Do not re-record `PERF_BUDGETS.md`
       (the orchestrator does).
-- [ ] `mask perf-budget`'s exact counters are unchanged. Timing rows are
+- [x] `mask perf-budget`'s exact counters are unchanged. Timing rows are
       advisory in worker runs.
 
 ## Decisions
@@ -244,15 +244,15 @@ exact and cheap, and it can never disagree with the picture.
 
 ## Technical Tasks
 
-- [ ] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30
+- [x] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30
       minutes.
-- [ ] `describe.rs`: the types, the formatter, unit tests (AC2, first item).
+- [x] `describe.rs`: the types, the formatter, unit tests (AC2, first item).
       Commit.
-- [ ] `Layer::mark_name`/`len`, `Plot::kind`, `set_kind` in builders,
+- [x] `Layer::mark_name`/`len`, `Plot::kind`, `set_kind` in builders,
       `Scene::description`, the `resolve_full` hook (AC1, AC2). Commit.
-- [ ] `Plot::describe`/`description`, `Chart::describe`, builder setter, prelude
+- [x] `Plot::describe`/`description`, `Chart::describe`, builder setter, prelude
       and doctest (AC1, AC2). Commit.
-- [ ] `tests/describe.rs`; the cache test; `mask wasm-size` (AC2, AC3). DoD
+- [x] `tests/describe.rs`; the cache test; `mask wasm-size` (AC2, AC3). DoD
       commands.
 
 ## Dependencies
@@ -277,7 +277,7 @@ exact and cheap, and it can never disagree with the picture.
 
 ## Success Metrics
 
-- [ ] Every chart a builder or a `Plot` draws has a description that names its
+- [x] Every chart a builder or a `Plot` draws has a description that names its
       title, kind, row count, axes and legends.
 
 ## Risk Assessment
@@ -291,16 +291,107 @@ exact and cheap, and it can never disagree with the picture.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1` and
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1` and
       `cargo test -p gup-core -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye: not applicable; goldens unchanged
-- [ ] `mask wasm-browser`: run it (the resolve changes in the browser build); it
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye: not applicable; goldens unchanged
+- [x] `mask wasm-browser`: run it (the resolve changes in the browser build); it
       passes unchanged
-- [ ] WASM size: `mask wasm-size` scatter gz bytes, parent and after
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] WASM size: `mask wasm-size` scatter gz bytes, parent and after
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+**Completed**: 2026-11-02
+
+- `crates/gup-core/src/describe.rs`: `Description` (+ `alt_text`),
+  `DescribeInput`, `AxisText`, `describe()` and 13 unit tests.
+- `Layer::mark_name`/`len`; `Plot::kind` (`set_kind` in all seven builder
+  constructors; bar/barh choose by orientation); `Scene::description`
+  (`Scene::new` `None`, `guides()` keeps it; the overlay clones it);
+  `Plot::describe`/`description`; `Chart::describe` (provided, `None`) with all
+  seven builders delegating; `.description(text)` through
+  `plot_setters!(titles)`; `Description` in the prelude and crate root.
+- `resolve_full` builds the input from its locals just before returning.
+- Tests: 13 unit, `tests/describe.rs` (13: one per builder, stacked-area legend,
+  a two-layer `Plot` with a right axis, tick format, override, cache `ptr::eq`,
+  scene), doctest on `Plot::describe`. Workspace tests,
+  `cargo test --doc -p gup` (66 + 4) and `cargo check --examples` pass.
+- WASM: `wasm.scatter.gz_bytes` parent (f9293c6e) 360,424 B, after 362,922 B:
+  +2,498 B (limit 3,000). The first cut was 371,811 B (+11,387):
+  `str::to_lowercase` pulls Unicode tables (use `to_ascii_lowercase`), and
+  `format!` chains cost the rest. `mask merge-check`: wasm-size FAIL only
+  because the recorded 354,964 B is stale (the parent already measures 360,424
+  B, over its +2% limit); the orchestrator re-records. The other checks pass,
+  `wasm-browser` included.
+- Deviation: the doctest uses `gup_core::scatter` (a `gup-core` doctest cannot
+  depend on `gup`, which re-exports it). Tick labels come from `layout().texts`
+  (`TextRole::TickLabel`; the first `x_ticks.len()` are x), because
+  `Layout::x_ticks` holds values and pixels, not labels.
+
+Descriptions as a screen reader hears them (`alt_text`):
+
+1. Heatmap: "Visits. Heatmap, 12 data rows in 1 layer. X axis: 4 categories, 0,
+   1, 2 and 3. Y axis: 3 categories, Wed, Tue and Mon. Colour legend "Visits": 0
+   to 30."
+2. Plot (circle + line, right axis): "Climate. Chart, 30 data rows in 2 layers
+   (circle 20 and line 10). X axis: 0 to 20. Y axis: 0 to 20. Right y axis "Rain
+   (mm)": 0 to 9."
+3. Box plot: "Latency. Box plot, 12 data rows in 4 layers (rect 2, segment 4,
+   segment 4 and segment 2). X axis: 2 categories, api and web. Y axis: 0 to
+   120."
+
+The third shows the wording gaps follow-ups GUP-600 and GUP-601 address.
+
+## Retrospective
+
+**Completed**: 2026-11-02
+
+### Key Technical Learnings
+
+#### WASM size of string code
+
+- **Challenge**: The first cut grew the scatter by 11.4 KB gz, over the 3 KB
+  cap.
+- **Solution**: `to_ascii_lowercase` instead of `to_lowercase` (-8 KB), then
+  `String::push_str` and a hand-written digit loop instead of `format!` chains
+  (-0.7 KB).
+- **Pattern**: Avoid Unicode-aware `str` methods in code reached from the WASM
+  scatter; measure with `mask wasm-size` after each formatting change.
+
+#### Labels as drawn
+
+- **Challenge**: `Layout` has no tick labels, only values and pixels.
+- **Solution**: the formatter takes `Ticks::labels` from `resolve_full` (which
+  also set the text runs), so the text and picture share one source.
+- **Pattern**: Band axes list labels in drawn order, so a vertical band axis
+  reads bottom to top ("Wed, Tue and Mon").
+
+### Architectural Decisions
+
+#### Description lives in the cache's Scene
+
+- **Decision**: `Plot::describe` reads `cache.scene.description`; no separate
+  field.
+- **Reasoning**: A cached resolve keeps the same address (tested), and the
+  overlay clone carries it for free.
+- **Trade-off**: `Plot::description(text)` bumps the revision, so it forces a
+  full re-resolve.
+- **Future**: GUP-593 reads `scene.description`.
+
+### Development Workflow Insights
+
+- The pre-commit `md` check rejects an unformatted story: run `prettier --write`
+  on it before the Start commit.
+- Measuring the parent's WASM size needs a second worktree; `git worktree add` a
+  sibling and remove it after.
+
+### Follow-up Stories
+
+1. **GUP-600**: group same-named marks and describe composite marks (box plot).
+2. **GUP-601**: read vertical band axes top to bottom.
