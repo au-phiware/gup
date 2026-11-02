@@ -73,6 +73,10 @@ publish". The owner runs `cargo publish`.
       marked "Owner". `docs/README.md` links it in one line.
 - [ ] The CHANGELOG's `## [0.1.0] - Unreleased` heading is left as it is;
       RELEASING.md's step 5 says to date it.
+- [ ] Re-read `CHANGELOG.md`'s "Added" and "Known limitations" against what
+      merged (GUP-596 left accessibility, the gallery and the Windows smoke job
+      out because they had not landed): every shipped feature is listed, every
+      listed feature exists, and no limitation is stale. Commit the fix.
 
 ## Decisions
 
