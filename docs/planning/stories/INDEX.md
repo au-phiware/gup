@@ -348,7 +348,7 @@ and WASM harness after it.
   examples (bubbles, monotone lines, labelled grouped bars, ranked `barh`,
   stacked areas), each a runnable example, a CI thumbnail and a golden in
   `tests/gallery.rs`. Deps: GUP-536 📋.
-- [GUP-595](GUP-595_Flagship_Gallery_Part_Two_And_Hero.md) 📋 — Five more
+- [GUP-595](GUP-595_Flagship_Gallery_Part_Two_And_Hero.md) 🚧 — Five more
   (stacked histogram, heatmap, box plot, annotated `Plot`, dark lines) and the
   README hero as a 1200 × 630 golden. Deps: GUP-594 📋.
 - [GUP-596](GUP-596_Changelog_And_Semver_Policy.md) ✅ — `CHANGELOG.md` (Keep a
