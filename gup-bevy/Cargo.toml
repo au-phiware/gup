@@ -1,17 +1,19 @@
 [package]
 name = "gup-bevy"
-version = "0.1.0"
-authors = ["Corin Lawson <corin@phiware.com.au>"]
-edition = "2024"
-description = "Bevy integration for the Gup GPU-accelerated data visualization library"
-license = "GPL-3.0-or-later"
-repository = "https://github.com/au-phiware/gup"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+description = "A Bevy plugin that draws gup charts"
 readme = "README.md"
-keywords = ["gpu", "visualization", "bevy", "gamedev", "data"]
-categories = ["graphics", "visualization", "game-engines"]
+keywords = ["chart", "plot", "visualization", "bevy", "gpu"]
+categories = ["visualization", "game-engines"]
 
 [dependencies]
-gup-core = { path = "../crates/gup-core" }
+gup-core = { workspace = true }
 bevy = { version = "0.18", default-features = false, features = [
     "2d_bevy_render",
     "bevy_asset",

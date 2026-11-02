@@ -1,12 +1,16 @@
 [package]
 name = "gup-wgsl"
-version = "0.1.0"
-authors = ["Corin Lawson <corin@phiware.com.au>"]
-edition = "2024"
-description = "Gup's shader composition (RFC-001 §6, GUP-406): WGSL library modules flattened at build time by naga_oil, and the run-time linker that joins generated glue to them"
-license = "GPL-3.0-or-later"
-repository = "https://github.com/au-phiware/gup"
-publish = false
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+rust-version.workspace = true
+description = "The WGSL shader library of the gup charting library, with build-time composition and a run-time linker"
+readme = "README.md"
+keywords = ["wgsl", "shader", "webgpu", "wgpu"]
+categories = ["graphics", "rendering"]
 
 # One composition path on every target (RFC-001 "Decisions (2026-10-09)").
 # Without features this crate is the run-time half: plain string handling,

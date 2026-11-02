@@ -57,6 +57,7 @@ done < <(parse_config)
 # Start generating HTML.
 cat > "$OUTPUT" <<'HEADER'
 <!DOCTYPE html>
+<!-- Copyright (C) 2024 Corin Lawson. SPDX-License-Identifier: GPL-3.0-or-later -->
 <html lang="en">
 <head>
   <meta charset="utf-8">
