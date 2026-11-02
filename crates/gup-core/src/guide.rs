@@ -126,6 +126,7 @@ pub(crate) fn place(
         size: Px(size),
         color: th.label,
         weight: Weight::Regular,
+        halo: None,
     };
     let run = |s: &str, at: Point, anchor: Anchor| TextRun {
         text: s.into(),

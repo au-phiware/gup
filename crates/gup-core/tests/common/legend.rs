@@ -79,6 +79,7 @@ pub fn scene(cx: &Context) -> LegendScene {
             size: Px(LEGEND_SIZE),
             color: Color::hex(0x333333),
             weight: Weight::Regular,
+            halo: None,
         },
         role: TextRole::Legend,
     };

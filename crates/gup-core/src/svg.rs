@@ -431,7 +431,7 @@ impl SvgTarget {
                         };
                         writeln!(
                             s,
-                            r#"<text x="{}" y="{}" font-family="{family}" font-size="{}"{} text-anchor="{anchor}" fill="{}"{}{}>{}</text>"#,
+                            r#"<text x="{}" y="{}" font-family="{family}" font-size="{}"{} text-anchor="{anchor}" fill="{}"{}{}{}>{}</text>"#,
                             num(anchor_x),
                             num(baseline),
                             num(run.style.size.0),
@@ -441,6 +441,17 @@ impl SvgTarget {
                             },
                             hex(run.style.color),
                             opacity("fill-opacity", run.style.color),
+                            // The halo: a stroke reaching `width` outside
+                            // the outline, painted under the fill.
+                            match run.style.halo {
+                                Some(h) => format!(
+                                    r#" stroke="{}"{} stroke-width="{}" stroke-linejoin="round" paint-order="stroke""#,
+                                    hex(h.color),
+                                    opacity("stroke-opacity", h.color),
+                                    num(2.0 * h.width.0)
+                                ),
+                                None => String::new(),
+                            },
                             // A CSS property, so it goes through `style`.
                             if run.role.features().contains(gup_text::Features::TNUM) {
                                 r#" style="font-variant-numeric:tabular-nums""#

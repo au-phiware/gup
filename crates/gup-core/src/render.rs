@@ -1765,6 +1765,16 @@ impl RendererGpu {
         self.glyphs.clear(dpr);
         let mut text = cx.text();
         for run in runs {
+            // The halo first, so the text draws over it (instances blend
+            // in order), as SVG's `paint-order="stroke"`.
+            if let Some(halo) = run.style.halo {
+                text.layout_halo(
+                    &run.layout_run(),
+                    halo.width.0,
+                    halo.color.to_array(),
+                    &mut self.glyphs,
+                )?;
+            }
             text.layout(
                 &run.layout_run(),
                 run.style.color.to_array(),
