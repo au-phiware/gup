@@ -9,6 +9,18 @@ Run any example with: `cargo run --example <name>`
 
 ---
 
+## Gallery (`gallery/`)
+
+| Example              | Description                                    |
+| -------------------- | ---------------------------------------------- |
+| `scatter_bubbles`    | Bubble chart: size, colour and a log axis      |
+| `line_monotone`      | Three monotone-curve lines with month labels   |
+| `bar_grouped_labels` | Grouped bars with a value label on every bar   |
+| `barh_ranked`        | A ranking as horizontal bars with value labels |
+| `area_stacked`       | Stacked areas with an outline                  |
+
+---
+
 ## Basic (`basic/`)
 
 | Example          | Description                                                 |

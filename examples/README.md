@@ -11,6 +11,11 @@ single frame to a PNG instead of opening a window.
 | `03_line_chart`        | Line chart with two colour series               | `cargo run --example 03_line_chart`        |
 | `04_bar_chart`         | Grouped (or stacked) bar chart                  | `cargo run --example 04_bar_chart`         |
 | `composite_mixed_data` | One plot over two row types                     | `cargo run --example composite_mixed_data` |
+| `scatter_bubbles`      | Bubble chart: size, colour and a log axis       | `cargo run --example scatter_bubbles`      |
+| `line_monotone`        | Three monotone-curve lines with month labels    | `cargo run --example line_monotone`        |
+| `bar_grouped_labels`   | Grouped bars with a value label on every bar    | `cargo run --example bar_grouped_labels`   |
+| `barh_ranked`          | A ranking as horizontal bars with value labels  | `cargo run --example barh_ranked`          |
+| `area_stacked`         | Stacked areas with an outline                   | `cargo run --example area_stacked`         |
 
 The examples that used the pre-flip render core were deleted in GUP-488; the
 history keeps them. The builders that exist today are scatter, line (with step
