@@ -50,7 +50,9 @@ EOF
     ;;
   esac
 fi
-id=${root##*/}-$(printf '%s' "$root" | sha256sum | cut -c1-8)
+# sha256sum (GNU) or shasum -a 256 (macOS).
+sha256() { if command -v sha256sum >/dev/null; then sha256sum; else shasum -a 256; fi; }
+id=${root##*/}-$(printf '%s' "$root" | sha256 | cut -c1-8)
 crate='' extra='' outdir='' inc='' prev=''
 for arg in "$@"; do
   shift

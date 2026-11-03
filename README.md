@@ -38,6 +38,9 @@ The timings apply to that machine; measure on yours before comparing.
   does not compile.
 - **Builders that do not trap you.** Start from `gup::scatter`, then drop to the
   typed `Selection` API.
+- **The same pixels on every platform.** CI renders every gallery and tutorial
+  chart on Linux (Vulkan), Windows (DX12) and macOS (Metal) and compares them
+  with the same golden images.
 - **A text alternative for every chart.** `Plot::describe()` gives a title and
   description; SVG files and canvases carry them for screen readers.
 
@@ -51,8 +54,6 @@ Each item names its track in
 - No PDF export (N6).
 - Accessibility beyond a text alternative (keyboard navigation, a data table, a
   high-contrast theme) (N4).
-- CI draws on Linux (Vulkan) and Windows (DX12); macOS (Metal) is a fix in
-  progress and not yet verified.
 - No pie, violin, density or choropleth charts, and no facets.
 
 ## Quick Start

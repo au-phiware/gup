@@ -25,7 +25,9 @@ set -euo pipefail
 top=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 build=${1:-${CARGO_BUILD_BUILD_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}/gup/build}}
 [[ $build == /* ]] || build=$PWD/$build
-hash=$(printf '%s' "$top" | sha256sum | cut -c1-8)
+# sha256sum (GNU) or shasum -a 256 (macOS).
+sha256() { if command -v sha256sum >/dev/null; then sha256sum; else shasum -a 256; fi; }
+hash=$(printf '%s' "$top" | sha256 | cut -c1-8)
 target=$build/checkouts/${top##*/}-$hash
 # Which checkout the target directory belongs to, so that
 # scripts/prune_build_dir.sh can delete it once the checkout is gone (GUP-427).
