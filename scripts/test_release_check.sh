@@ -19,6 +19,22 @@ script=$root/scripts/release_check.sh
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
+# Nothing here may read or change the user's git configuration or the real
+# repository (a `git init` with GIT_DIR set once rewrote the shared config).
+export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
+export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@example.com
+export GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@example.com
+
+# Every git command in this script runs through this function, which refuses
+# anything that is not `git -C <directory under $tmp> ...`.
+git() {
+  if [[ ${1:-} != -C || ${2:-} != "$tmp"/* ]]; then
+    echo "FAIL: test_release_check.sh ran git outside its scratch directory: git $*" >&2
+    exit 1
+  fi
+  command git "$@"
+}
+
 fails=0
 fail() {
   echo "FAIL: $*" >&2
@@ -154,6 +170,11 @@ if grep -n 'cargo publish' "$script" | grep -v -e '--dry-run' -e '^[0-9]*:#'; th
 fi
 if grep -nE 'git (tag|push)|cargo login' "$script" | grep -v '^[0-9]*:#'; then
   fail "release_check.sh must not tag, push or log in"
+fi
+
+# The real repository must still be a work tree.
+if [[ $(command git -C "$root" rev-parse --is-bare-repository) != false ]]; then
+  fail "the real repository reports itself bare"
 fi
 
 if ((fails > 0)); then
