@@ -232,24 +232,24 @@ fn tutorial_6_squares() {
         struct Varyings {
             @builtin(position) clip: vec4<f32>,
             @location(0) local: vec2<f32>,
-            @location(1) half: vec2<f32>,
+            @location(1) half_size: vec2<f32>,
             @location(2) fill: vec4<f32>,
         }
 
         fn vertex(m: SquareIn, vertex_index: u32, row: u32, view: View) -> Varyings {
             let centre = vec2<f32>(m.x, m.y);
-            let half = vec2<f32>(m.size * 0.5);
-            let q = rect_quad(centre - half, centre + half, vertex_index, view.dpr);
+            let half_size = vec2<f32>(m.size * 0.5);
+            let q = rect_quad(centre - half_size, centre + half_size, vertex_index, view.dpr);
             var out: Varyings;
             out.clip = px_to_clip(q.position, view);
             out.local = q.local;
-            out.half = q.half;
+            out.half_size = q.half_size;
             out.fill = m.fill;
             return out;
         }
 
         fn shade(v: Varyings) -> vec4<f32> {
-            let alpha = v.fill.a * box_coverage(v.local, v.half);
+            let alpha = v.fill.a * box_coverage(v.local, v.half_size);
             if (alpha <= 0.0) {
                 discard;
             }

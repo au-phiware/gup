@@ -3,7 +3,7 @@
 
 // Analytic edge coverage for boxes: axis-aligned rects and lines of any
 // direction with a real width (GUP-421). A shader expands its instance quad
-// with `rect_quad` or `line_quad`, passes `local` and `half` to its
+// with `rect_quad` or `line_quad`, passes `local` and `half_size` to its
 // fragment stage and multiplies its alpha by `box_coverage`. The coverage
 // is the fraction of a one-physical-pixel footprint, centred on the
 // fragment, inside the box, measured along each of the box's own axes:
@@ -31,7 +31,7 @@ struct Quad {
     // (along the line, across it), in physical pixels.
     local: vec2<f32>,
     // Half the box's extent along the same axes, in physical pixels.
-    half: vec2<f32>,
+    half_size: vec2<f32>,
     // The box's first axis (unit length), in logical pixels.
     axis: vec2<f32>,
 }
@@ -50,20 +50,20 @@ fn corner(vertex_index: u32) -> vec2<f32> {
 }
 
 // The quad of a box centred on `centre` with axes `axis` (unit length, the
-// box's first axis) and its perpendicular, `half` logical pixels to each
+// box's first axis) and its perpendicular, `half_size` logical pixels to each
 // side, grown by one physical pixel on every side for the coverage ramp.
-fn oriented_quad(centre: vec2<f32>, axis: vec2<f32>, half: vec2<f32>, vertex_index: u32, dpr: f32) -> Quad {
+fn oriented_quad(centre: vec2<f32>, axis: vec2<f32>, half_size: vec2<f32>, vertex_index: u32, dpr: f32) -> Quad {
     let normal = vec2<f32>(-axis.y, axis.x);
-    let offset = corner(vertex_index) * (half + vec2<f32>(1.0 / dpr));
+    let offset = corner(vertex_index) * (half_size + vec2<f32>(1.0 / dpr));
     var q: Quad;
     q.position = centre + axis * offset.x + normal * offset.y;
     q.local = offset * dpr;
-    q.half = half * dpr;
+    q.half_size = half_size * dpr;
     q.axis = axis;
     return q;
 }
 
-// `q` grown by `by` logical pixels on every side, its `half` unchanged:
+// `q` grown by `by` logical pixels on every side, its `half_size` unchanged:
 // a pick pass grows each quad by the pick tolerance so fragments up to
 // that far outside the box measure their distance (RFC-001 S9d). Growing
 // by 0 changes nothing.
@@ -76,10 +76,10 @@ fn grow_quad(q: Quad, by: f32, vertex_index: u32, dpr: f32) -> Quad {
     return g;
 }
 
-// The signed distance from `local` to the box `half` (both from a `Quad`,
+// The signed distance from `local` to the box `half_size` (both from a `Quad`,
 // interpolated, physical pixels): negative inside, 0 on the edge.
-fn box_distance(local: vec2<f32>, half: vec2<f32>) -> f32 {
-    let q = abs(local) - half;
+fn box_distance(local: vec2<f32>, half_size: vec2<f32>) -> f32 {
+    let q = abs(local) - half_size;
     return length(max(q, vec2<f32>(0.0))) + min(max(q.x, q.y), 0.0);
 }
 
@@ -98,18 +98,18 @@ fn line_quad(start: vec2<f32>, stop: vec2<f32>, width: f32, cap: f32, vertex_ind
     let d = stop - start;
     let len = length(d);
     let axis = select(vec2<f32>(1.0, 0.0), d / len, len > 0.0);
-    let half = vec2<f32>(len * 0.5 + cap, width * 0.5);
-    return oriented_quad((start + stop) * 0.5, axis, half, vertex_index, dpr);
+    let half_size = vec2<f32>(len * 0.5 + cap, width * 0.5);
+    return oriented_quad((start + stop) * 0.5, axis, half_size, vertex_index, dpr);
 }
 
 // The fraction of the one-pixel footprint centred on `t` inside
-// `-half..half` (physical pixels).
-fn span(t: f32, half: f32) -> f32 {
-    return clamp(min(t + 0.5, half) - max(t - 0.5, -half), 0.0, 1.0);
+// `-half_size..half_size` (physical pixels).
+fn span(t: f32, half_size: f32) -> f32 {
+    return clamp(min(t + 0.5, half_size) - max(t - 0.5, -half_size), 0.0, 1.0);
 }
 
-// The coverage of the pixel centred on `local` by the box `half` (both
+// The coverage of the pixel centred on `local` by the box `half_size` (both
 // from a `Quad`, interpolated), in 0..1.
-fn box_coverage(local: vec2<f32>, half: vec2<f32>) -> f32 {
-    return span(local.x, half.x) * span(local.y, half.y);
+fn box_coverage(local: vec2<f32>, half_size: vec2<f32>) -> f32 {
+    return span(local.x, half_size.x) * span(local.y, half_size.y);
 }

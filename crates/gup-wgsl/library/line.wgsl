@@ -63,7 +63,7 @@ struct Varyings {
     // Offset from the segment's centre (along, across), in physical pixels.
     @location(0) local: vec2<f32>,
     // Half the segment's length and half its width, in physical pixels.
-    @location(1) half: vec2<f32>,
+    @location(1) half_size: vec2<f32>,
     // sRGB-encoded, straight alpha.
     @location(2) color: vec4<f32>,
     @location(3) @interpolate(flat) row: u32,
@@ -135,7 +135,7 @@ fn capsule(m: LineIn, start: vec2<f32>, stop: vec2<f32>, corner: u32, row: u32, 
     var out: Varyings;
     out.clip = px_to_clip(q.position, view);
     out.local = q.local;
-    out.half = vec2<f32>(q.half.x - q.half.y, q.half.y);
+    out.half_size = vec2<f32>(q.half_size.x - q.half_size.y, q.half_size.y);
     out.color = m.color;
     out.row = row;
     out.side = (q.position.x - turn) * view.dpr;
@@ -151,7 +151,7 @@ fn vertex(m: LineIn, vertex_index: u32, row: u32, view: View) -> Varyings {
     var out = capsule(m, vec2<f32>(m.x, m.y), vec2<f32>(m.x_next, m.y_next), vertex_index, row, 0.0, view);
     // The nearer end: this row at or before the middle, else the next. A
     // segment of no length reports this row.
-    out.side = select(out.local.x, -1.0, out.half.x <= 0.0);
+    out.side = select(out.local.x, -1.0, out.half_size.x <= 0.0);
     return out;
 }
 
@@ -354,36 +354,36 @@ fn vertex_controls(m: LineIn, controls: vec2<f32>, vertex_index: u32, row: u32, 
 }
 
 // The coverage of the pixel centred on `local` by the capsule of half
-// length `half.x` and radius `half.y`: the box coverage across the
+// length `half_size.x` and radius `half_size.y`: the box coverage across the
 // segment, taken at the distance from the segment, so the body matches
 // the Segment mark's profile and the caps are round. A butt end has no
 // cap and no ramp: the segment runs on past it at full coverage, and the
 // pixels past it are the neighbour's (`owned`).
-fn capsule_coverage(local: vec2<f32>, half: vec2<f32>, joins: u32) -> f32 {
+fn capsule_coverage(local: vec2<f32>, half_size: vec2<f32>, joins: u32) -> f32 {
     let s = joins & 3u;
     let e = joins >> 2u;
-    let before = select(max(-local.x - half.x, 0.0), 0.0, s == JOIN_BUTT);
-    let after = select(max(local.x - half.x, 0.0), 0.0, e == JOIN_BUTT);
-    return span(length(vec2<f32>(before + after, local.y)), half.y);
+    let before = select(max(-local.x - half_size.x, 0.0), 0.0, s == JOIN_BUTT);
+    let after = select(max(local.x - half_size.x, 0.0), 0.0, e == JOIN_BUTT);
+    return span(length(vec2<f32>(before + after, local.y)), half_size.y);
 }
 
 // Whether this piece draws the pixel centred on `local`, or its
 // neighbour at a joint does.
 fn owned(v: Varyings) -> bool {
-    let start = vec2<f32>(-v.half.x, 0.0);
-    let end = vec2<f32>(v.half.x, 0.0);
+    let start = vec2<f32>(-v.half_size.x, 0.0);
+    let end = vec2<f32>(v.half_size.x, 0.0);
     let s = v.joins & 3u;
     let e = v.joins >> 2u;
-    let past_start = v.local.x < -v.half.x;
-    let past_end = v.local.x > v.half.x;
+    let past_start = v.local.x < -v.half_size.x;
+    let past_end = v.local.x > v.half_size.x;
     // The pixel's centre, from the target's corner: its framebuffer
     // position less the viewport's (whole-pixel) offset. Two pieces see
     // the same centre exactly, where their interpolated frames differ by
     // the rasterizer's snapping of their own vertices.
     let at = v.clip.xy - round(v.clip.xy - v.screen);
     return !(
-        (s == JOIN_BUTT && v.local.x < -v.half.x - JOIN_SLACK)
-            || (e == JOIN_BUTT && v.local.x > v.half.x + JOIN_SLACK)
+        (s == JOIN_BUTT && v.local.x < -v.half_size.x - JOIN_SLACK)
+            || (e == JOIN_BUTT && v.local.x > v.half_size.x + JOIN_SLACK)
             || (s == JOIN_KEEP && past_start && dot(v.local - start, v.others.xy) > JOIN_SLACK)
             || (e == JOIN_KEEP && past_end && dot(v.local - end, v.others.zw) > JOIN_SLACK)
             || (s == JOIN_PLANE && dot(at - v.joints.xy, v.others.xy) < -v.slack.x * length(at - v.joints.xy))
@@ -392,7 +392,7 @@ fn owned(v: Varyings) -> bool {
 }
 
 fn shade(v: Varyings) -> vec4<f32> {
-    let alpha = v.color.a * capsule_coverage(v.local, v.half, v.joins);
+    let alpha = v.color.a * capsule_coverage(v.local, v.half_size, v.joins);
     if (alpha <= 0.0 || !owned(v)) {
         discard;
     }
@@ -403,8 +403,8 @@ fn shade(v: Varyings) -> vec4<f32> {
 // in physical pixels: negative inside the capsule. A negative width is
 // never hit (RFC-001 S9d).
 fn hit_distance(v: Varyings) -> f32 {
-    let beyond = max(abs(v.local.x) - v.half.x, 0.0);
-    return select(length(vec2<f32>(beyond, v.local.y)) - v.half.y, 1e30, v.half.y < 0.0);
+    let beyond = max(abs(v.local.x) - v.half_size.x, 0.0);
+    return select(length(vec2<f32>(beyond, v.local.y)) - v.half_size.y, 1e30, v.half_size.y < 0.0);
 }
 
 // The row a fragment picks (`side`): for a straight segment the end

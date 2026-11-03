@@ -30,7 +30,7 @@ struct Varyings {
     // Offset from the centre, in physical pixels.
     @location(0) local: vec2<f32>,
     // Half the extent, in physical pixels.
-    @location(1) half: vec2<f32>,
+    @location(1) half_size: vec2<f32>,
     // sRGB-encoded, straight alpha.
     @location(2) fill: vec4<f32>,
     // Straight alpha, stroke inside the edge, width in physical pixels.
@@ -60,7 +60,7 @@ fn vertex(m: RectIn, vertex_index: u32, row: u32, view: View) -> Varyings {
     var out: Varyings;
     out.clip = px_to_clip(q.position, view);
     out.local = q.local;
-    out.half = q.half;
+    out.half_size = q.half_size;
     out.fill = vec4<f32>(m.fill.rgb, m.fill.a * m.fill_opacity);
     out.stroke = m.stroke;
     out.stroke_width = m.stroke_width * view.dpr;
@@ -81,15 +81,15 @@ fn compose(fill: vec4<f32>, stroke: vec4<f32>, outer: f32, ring: f32) -> vec4<f3
 }
 
 fn shade(v: Varyings) -> vec4<f32> {
-    let outer = box_coverage(v.local, v.half);
-    let inner = box_coverage(v.local, max(v.half - vec2<f32>(v.stroke_width), vec2<f32>(0.0)));
+    let outer = box_coverage(v.local, v.half_size);
+    let inner = box_coverage(v.local, max(v.half_size - vec2<f32>(v.stroke_width), vec2<f32>(0.0)));
     return compose(v.fill, v.stroke, outer, outer - inner);
 }
 
 // The signed distance from the fragment to the rect (its outer edge; the
 // stroke is inside), in physical pixels: negative inside (RFC-001 S9d).
 fn hit_distance(v: Varyings) -> f32 {
-    return box_distance(v.local, v.half);
+    return box_distance(v.local, v.half_size);
 }
 
 // The row a pick of this rect reports.

@@ -103,9 +103,9 @@ fn gup_marks_circle_corner(vertex_index: u32) -> vec2<f32> {
 fn gup_marks_circle_vertex(m: gup_marks_circle_CircleIn, vertex_index_1: u32, row: u32, view_1: gup_view_View) -> gup_marks_circle_Varyings {
     var out: gup_marks_circle_Varyings;
 
-    let half = ((m.radius + (1f / view_1.dpr)) + view_1.pick_margin);
+    let half_size = ((m.radius + (1f / view_1.dpr)) + view_1.pick_margin);
     let _e10 = gup_marks_circle_corner(vertex_index_1);
-    let offset = (_e10 * half);
+    let offset = (_e10 * half_size);
     let _e18 = gup_view_px_to_clip((vec2<f32>(m.x, m.y) + offset), view_1);
     out.clip = _e18;
     out.local = (offset * view_1.dpr);

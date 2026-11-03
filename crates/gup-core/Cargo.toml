@@ -84,7 +84,7 @@ trybuild = "1.0"
 # Tests re-parse the linked WGSL (uniform layouts, struct checks) and
 # compose the reference glue through naga_oil directly, as an oracle for
 # the run-time linker. Never linked into a gup-core binary.
-naga = { version = "27.0.3", features = ["wgsl-in"] }
+naga = { version = "27.0.3", features = ["wgsl-in", "msl-out"] }
 gup-wgsl = { workspace = true, features = ["compose"] }
 
 [build-dependencies]
