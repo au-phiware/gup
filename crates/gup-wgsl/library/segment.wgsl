@@ -25,7 +25,7 @@ struct Varyings {
     // Offset from the centre (along, across), in physical pixels.
     @location(0) local: vec2<f32>,
     // Half the extent (caps included), in physical pixels.
-    @location(1) half: vec2<f32>,
+    @location(1) half_size: vec2<f32>,
     // sRGB-encoded, straight alpha.
     @location(2) color: vec4<f32>,
     @location(3) @interpolate(flat) row: u32,
@@ -48,14 +48,14 @@ fn vertex(m: SegmentIn, vertex_index: u32, row: u32, view: View) -> Varyings {
     var out: Varyings;
     out.clip = px_to_clip(q.position, view);
     out.local = q.local;
-    out.half = q.half;
+    out.half_size = q.half_size;
     out.color = m.color;
     out.row = row;
     return out;
 }
 
 fn shade(v: Varyings) -> vec4<f32> {
-    let alpha = v.color.a * box_coverage(v.local, v.half);
+    let alpha = v.color.a * box_coverage(v.local, v.half_size);
     if (alpha <= 0.0) {
         discard;
     }
@@ -66,7 +66,7 @@ fn shade(v: Varyings) -> vec4<f32> {
 // included), in physical pixels: negative inside. A negative width is
 // never hit (RFC-001 S9d).
 fn hit_distance(v: Varyings) -> f32 {
-    return select(box_distance(v.local, v.half), 1e30, v.half.y < 0.0);
+    return select(box_distance(v.local, v.half_size), 1e30, v.half_size.y < 0.0);
 }
 
 // The row a pick of this segment reports.

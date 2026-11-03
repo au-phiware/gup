@@ -50,8 +50,8 @@ fn corner(vertex_index: u32) -> vec2<f32> {
 
 fn vertex(m: CircleIn, vertex_index: u32, row: u32, view: View) -> Varyings {
     // One extra pixel for the anti-aliased edge, and the pick margin.
-    let half = m.radius + 1.0 / view.dpr + view.pick_margin;
-    let offset = corner(vertex_index) * half;
+    let half_size = m.radius + 1.0 / view.dpr + view.pick_margin;
+    let offset = corner(vertex_index) * half_size;
     var out: Varyings;
     out.clip = px_to_clip(vec2<f32>(m.x, m.y) + offset, view);
     out.local = offset * view.dpr;

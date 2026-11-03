@@ -26,7 +26,7 @@ struct RuleOut {
     // Offset from the rule's centre (along, across), physical pixels.
     @location(1) local: vec2<f32>,
     // Half length (caps included) and half width, physical pixels.
-    @location(2) @interpolate(flat) half: vec2<f32>,
+    @location(2) @interpolate(flat) half_size: vec2<f32>,
 }
 
 @vertex
@@ -36,13 +36,13 @@ fn vs_main(@builtin(vertex_index) vertex_index: u32, r: RuleIn) -> RuleOut {
     out.clip = px_to_clip(q.position, u_view);
     out.color = vec4<f32>(r.color.rgb * r.color.a, r.color.a);
     out.local = q.local;
-    out.half = q.half;
+    out.half_size = q.half_size;
     return out;
 }
 
 @fragment
 fn fs_main(v: RuleOut) -> @location(0) vec4<f32> {
-    let coverage = box_coverage(v.local, v.half);
+    let coverage = box_coverage(v.local, v.half_size);
     if (coverage <= 0.0) {
         discard;
     }

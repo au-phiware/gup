@@ -130,3 +130,18 @@ adds the same job on macOS and settles, by a rule, whether it stays.
 - [ ] WASM size: unchanged, no library code change
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
+
+## Scope widened (2026-11-03)
+
+First macOS run (41548875429): adapter `Apple Paravirtual device`, backend
+Metal, `IntegratedGpu`, so the free runner has a Metal GPU. Six golden tests
+failed creating pipelines: naga's MSL backend emitted a WGSL varying named
+`half` unrenamed (`metal::float2 half [[user(loc2), flat]];`), and `half` is an
+MSL type. Fixed in this story: every `half` identifier in
+`crates/gup-wgsl/library`, `crates/gup-core/src/shaders`, the tutorial marks
+(`docs/tutorials/06_custom_marks.md`, `tests/tutorials.rs`) and `derive_mark.rs`
+became `half_size`; the `scatter_linked.wgsl` fixture was re-blessed. Guard:
+`crates/gup-core/tests/msl_reserved_words.rs` (naga `msl-out` dev-dependency)
+checks every library module and guide shader for MSL reserved identifiers,
+translates each to MSL, and has a seeded `half` case. The `macos` job stays
+`continue-on-error` until a run is green.
