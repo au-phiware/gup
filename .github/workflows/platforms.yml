@@ -70,15 +70,13 @@ jobs:
           if-no-files-found: warn
 
   # GUP-591 spike. GitHub's standard macOS runners are virtual machines; the
-  # Metal adapter they expose may be a reduced "Apple Paravirtual device" or
-  # absent. The job is advisory (continue-on-error) until the spike's rule
-  # (GUP-591 Decisions) is applied to the first runs' results. Standard
-  # runner only: never `-xlarge` or self-hosted (an owner decision).
+  # Metal adapter they expose is an "Apple Paravirtual device" (runs
+  # 41548875429 and 41555919578). Standard runner only: never `-xlarge` or
+  # self-hosted (an owner decision).
   macos:
     name: macOS render smoke (Metal)
     runs-on: macos-15
     timeout-minutes: 90
-    continue-on-error: true
     env:
       WGPU_BACKEND: metal
       CARGO_INCREMENTAL: "0"
@@ -104,21 +102,12 @@ jobs:
           restore-keys: |
             platforms-${{ runner.os }}-cargo-
 
-      # Print the adapter before any golden test. If there is no Metal
-      # adapter or it is a software one, the goldens are skipped with a
-      # message (the spike rule then removes the job) rather than failing.
+      # Print the adapter before any golden test; fails if it is not a
+      # hardware Metal adapter.
       - name: Adapter (must be Metal)
-        id: adapter
-        continue-on-error: true
         run: cargo test -p gup --test platform_adapter -- --test-threads=1 --nocapture
 
-      - name: No usable Metal adapter
-        if: steps.adapter.outcome != 'success'
-        run: |
-          echo "::warning::No usable Metal adapter on this runner; goldens skipped (GUP-591 rule: remove the job and record the result)."
-
       - name: Integration tests (goldens on Metal)
-        if: steps.adapter.outcome == 'success'
         run: cargo test -p gup --tests -- --test-threads=1 --nocapture
 
       - name: Upload golden diffs

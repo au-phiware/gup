@@ -42,18 +42,18 @@ adds the same job on macOS and settles, by a rule, whether it stays.
 
 ### AC1: Spike
 
-- [ ] `platforms.yml` gains a `macos` job on `macos-15`, with the Windows job's
+- [x] `platforms.yml` gains a `macos` job on `macos-15`, with the Windows job's
       steps, `WGPU_BACKEND: metal` in place of `dx12`, and
       `tests/platform_adapter.rs` asserting `Metal` when that variable is set.
       Upload artifacts as `macos-golden-diffs`.
-- [ ] Push it and record the adapter's name, device type, and the result of the
+- [x] Push it and record the adapter's name, device type, and the result of the
       smoke step, case by case, in the Implementation Summary.
 
 ### AC2: The rule applied
 
-- [ ] Exactly one outcome of the rule in Decisions is applied, and the
+- [x] Exactly one outcome of the rule in Decisions is applied, and the
       Implementation Summary says which.
-- [ ] `actionlint .github/workflows/*.y*ml` passes.
+- [x] `actionlint .github/workflows/*.y*ml` passes.
 
 ## Decisions
 
@@ -86,10 +86,10 @@ adds the same job on macOS and settles, by a rule, whether it stays.
 
 ## Technical Tasks
 
-- [ ] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30
+- [x] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30
       minutes.
-- [ ] The job; push; record (AC1). Commit.
-- [ ] Apply the rule; follow-up story if one is needed (AC2). Commit.
+- [x] The job; push; record (AC1). Commit.
+- [x] Apply the rule; follow-up story if one is needed (AC2). Commit.
 
 ## Dependencies
 
@@ -109,7 +109,7 @@ adds the same job on macOS and settles, by a rule, whether it stays.
 
 ## Success Metrics
 
-- [ ] It is known, with evidence, whether hosted macOS runners can test Gup.
+- [x] It is known, with evidence, whether hosted macOS runners can test Gup.
 
 ## Risk Assessment
 
@@ -119,17 +119,17 @@ adds the same job on macOS and settles, by a rule, whether it stays.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye: diff images read if any golden failed
-- [ ] `mask wasm-browser`: not needed; no layout, input or wasm code changes
-- [ ] WASM size: unchanged, no library code change
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye: diff images read if any golden failed
+- [x] `mask wasm-browser`: not needed; no layout, input or wasm code changes
+- [x] WASM size: unchanged, no library code change
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
 
 ## Scope widened (2026-11-03)
 
@@ -145,3 +145,69 @@ became `half_size`; the `scatter_linked.wgsl` fixture was re-blessed. Guard:
 checks every library module and guide shader for MSL reserved identifiers,
 translates each to MSL, and has a seeded `half` case. The `macos` job stays
 `continue-on-error` until a run is green.
+
+## Implementation Summary
+
+Completed 2026-11-03. Outcome of the rule: **A Metal adapter exists and every
+test passes**, so the `macos` job stays as a required job, like Windows
+(`continue-on-error` removed). Standard `macos-15` runner only.
+
+- Run 1,
+  [41548875429](https://github.com/au-phiware/gup/actions/runs/41548875429):
+  adapter `name="Apple Paravirtual device" backend=Metal`
+  `device_type=IntegratedGpu`. Six golden tests failed creating pipelines: the
+  WGSL varying `half` reached MSL unrenamed
+  (`metal::float2 half [[user(loc2), flat]];`; `half` is an MSL type). A real
+  platform bug, fixed in this story.
+- Run 2,
+  [41555919578](https://github.com/au-phiware/gup/actions/runs/41555919578)
+  after the fix: passed in 1 min 42 s (00:52:26 to 00:54:08), same adapter;
+  gallery 11, tutorials 17, examples_smoke 2 (1 ignored), adapter 1. No
+  tolerance or golden changed; Linux goldens pass unchanged on Metal.
+- Files: `.github/workflows/platforms.yml` (`macos` job; the rustc workspace
+  wrapper is unset as on Windows because it calls `sha256sum`),
+  `tests/platform_adapter.rs` (asserts Metal, rejects a Cpu device),
+  `crates/gup-core/tests/msl_reserved_words.rs` (guard), the `half` to
+  `half_size` rename (see "Scope widened").
+
+## Retrospective
+
+**Completed**: 2026-11-03
+
+### Key Technical Learnings
+
+#### naga's MSL backend does not rename every identifier
+
+- **Challenge**: Only Metal exposed that a WGSL name can be an MSL type.
+- **Solution**: Rename to `half_size`; a test translates every library module
+  and guide shader with naga `msl-out` and checks identifiers against an MSL
+  reserved list (seeded with `half`).
+- **Pattern**: A new backend's first CI run finds shader-level bugs Linux never
+  can; check identifiers against the target language's reserved words.
+
+#### The free macOS runner has a Metal GPU
+
+- **Challenge**: Reports suggested the paravirtual device might fail.
+- **Solution**: It passed all 22 golden cases after the fix.
+- **Pattern**: Four rasterisers (Intel, lavapipe, WARP, Apple paravirtual) now
+  agree within ΔE 3.
+
+### Architectural Decisions
+
+#### Wrapper unset on macOS
+
+- **Decision**: `CARGO_BUILD_RUSTC_WORKSPACE_WRAPPER: ""` on macOS.
+- **Reasoning**: The script uses `sha256sum`, absent on macOS; CI has one
+  checkout.
+- **Trade-off**: macOS developers building locally need the same override or
+  `shasum`.
+- **Future**: A portable wrapper would be a separate decision.
+
+### Development Workflow Insights
+
+- Two orchestrator round trips (run, fix, run), as expected for a CI-only spike.
+- The guard cannot compile MSL on Linux; it checks names, which is what failed.
+
+### Follow-up Stories
+
+None. The `sha256sum` portability of the wrapper is noted above, not storied.
