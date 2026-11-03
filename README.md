@@ -21,7 +21,7 @@ build, Intel HD Graphics 630 (an integrated GPU), Mesa 26.0.0, Vulkan:
 - Zooming writes no column bytes: `zoom.columns.bytes` is 0 over 600 frames.
 - Culling by chunk: 4M sorted rows draw in about 10 ms of GPU time with 14 draws
   (`zoom_culled.gpu_pass.median_ms`, `zoom_culled.draws.median`).
-- The reference scatter's WASM build is about 340 KB gzipped, under a 400 KB cap
+- The reference scatter's WASM build is about 360 KB gzipped, under a 400 KB cap
   for gup-core over wgpu (`wasm.scatter.gz_bytes`, `wasm.over_wgpu.gz_bytes`).
 
 The timings apply to that machine; measure on yours before comparing.
@@ -193,19 +193,20 @@ A plain `cargo build` or `cargo test` at the repository root builds only the
 `gup` crate (`default-members = ["."]`), a facade over `gup-core`. The other
 workspace members are built with `-p`:
 
-| Crate                          | Status                                                                | Published |
-| ------------------------------ | --------------------------------------------------------------------- | --------- |
-| `crates/gup-core`              | The core: context, column store, scales, marks, plot, scene, targets. | yes       |
-| `crates/gup-core-macros`       | `#[wgsl_function]` and `#[derive(Mark)]`.                             | yes       |
-| `crates/gup-wgsl`              | WGSL library, build-time composition and the run-time linker.         | yes       |
-| `crates/gup-text`              | Font loading, shaping and the glyph atlas.                            | yes       |
-| `crates/gup-visual-regression` | Golden-image and structural check harness (`mask visual-regression`). | no        |
-| `gup-egui`                     | egui integration (`GupWidget`).                                       | yes       |
-| `gup-bevy`                     | Bevy integration (`GupPlugin`), built by the `integrations` CI job.   | yes       |
+| Crate                          | Status                                                                 | Published |
+| ------------------------------ | ---------------------------------------------------------------------- | --------- |
+| `gup` (this directory)         | The facade: `gup::prelude`, the builders and the docs you are reading. | yes       |
+| `crates/gup-core`              | The core: context, column store, scales, marks, plot, scene, targets.  | yes       |
+| `crates/gup-core-macros`       | `#[wgsl_function]` and `#[derive(Mark)]`.                              | yes       |
+| `crates/gup-wgsl`              | WGSL library, build-time composition and the run-time linker.          | yes       |
+| `crates/gup-text`              | Font loading, shaping and the glyph atlas.                             | yes       |
+| `crates/gup-visual-regression` | Golden-image and structural check harness (`mask visual-regression`).  | no        |
+| `gup-egui`                     | egui integration (`GupWidget`).                                        | yes       |
+| `gup-bevy`                     | Bevy integration (`GupPlugin`), built by the `integrations` CI job.    | yes       |
 
 `crates/gup-culling-lod` holds GPU culling and LOD code from before the core was
 rewritten. It is parked: out of the workspace and CI, until the LOD work in
-strategic review T7 ports what it needs. See its
+track N5 (scale) ports what it needs. See its
 [README](crates/gup-culling-lod/README.md).
 
 `cargo test -p gup-egui` tests the egui integration. `gup-bevy` is built by the
