@@ -3,6 +3,11 @@
 > A few lines of Rust for a publication-quality chart, drawn on the GPU: in a
 > window, a PNG, an SVG, egui, Bevy or the browser.
 
+![A Gup scatter chart: GDP per person against life expectancy, sized by population and coloured by region](https://raw.githubusercontent.com/au-phiware/gup/main/tests/golden/gallery/hero.png)
+
+See [the gallery](examples/INDEX.md) for ten charts and the code that draws
+each.
+
 Gup (GPU Update Pattern) is a data visualization library for Rust. Data
 encodings (scales, palettes, transfer functions) are shader functions that run
 on the GPU, each with an exact CPU twin for axes, legends, picking and SVG, so
@@ -33,6 +38,8 @@ The timings apply to that machine; measure on yours before comparing.
   does not compile.
 - **Builders that do not trap you.** Start from `gup::scatter`, then drop to the
   typed `Selection` API.
+- **A text alternative for every chart.** `Plot::describe()` gives a title and
+  description; SVG files and canvases carry them for screen readers.
 
 ## Not yet
 
@@ -42,10 +49,11 @@ Each item names its track in
 - No CSV, serde or Arrow input: rows enter through closures (N5).
 - Nothing above 10M rows is measured, and there is no level of detail (N5).
 - No PDF export (N6).
-- No accessibility support yet: a minimum comes in N3, keyboard navigation in
-  N4.
-- CI renders on Linux only; Windows comes in N3.
-- Chart types are those the builders list today; more come in N2.
+- Accessibility beyond a text alternative (keyboard navigation, a data table, a
+  high-contrast theme) (N4).
+- CI draws on Linux (Vulkan) and Windows (DX12); macOS (Metal) is a fix in
+  progress and not yet verified.
+- No pie, violin, density or choropleth charts, and no facets.
 
 ## Quick Start
 
@@ -81,6 +89,9 @@ fn main() -> gup::Result<()> {
     Ok(())
 }
 ```
+
+In the browser, use `default-features = false, features = ["web", "svg"]` and
+`gup::web::CanvasApp`.
 
 To keep the image in memory instead, for a test say:
 
@@ -125,22 +136,24 @@ See [`TECHNICAL_APPROACH.md`](./docs/TECHNICAL_APPROACH.md).
 - **`Plot` and `Scene`**: layout, guides and legends resolve to a plain scene.
 - **Render targets**: image, window, texture, canvas and SVG, one render pass.
 - **Interaction**: CPU and GPU picking, tooltips, zoom, pan, brush and culling.
-- **Builders**: `scatter`, `line` and `bar`, over the same `Plot`.
+- **Builders**: `scatter`, `line`, `bar`, `barh`, `area`, `histogram`, `heatmap`
+  and `boxplot`, over the same `Plot`.
 - **Hosts**: `show`, a WebGPU canvas, `gup-egui` and `gup-bevy`.
 - **Gates**: performance and WASM budgets, visual regression, a browser smoke
   test and a dogfood suite.
 
 ## Development Status
 
-RFC-001 (the core architecture) is implemented: `gup` is a facade over
-`gup-core`. Next, from the
-[strategic review](./docs/planning/STRATEGIC_REVIEW_2026-11.md): N0, hygiene;
-N1, tested tutorials; N2, more chart types; then N3, release 0.1. See
-[`IMPLEMENTATION_STRATEGY.md`](./docs/IMPLEMENTATION_STRATEGY.md).
+Release 0.1 is the first published version; see [CHANGELOG.md](CHANGELOG.md) for
+what it contains and for the versioning policy. What comes next is in the
+[strategic review](./docs/planning/STRATEGIC_REVIEW_2026-11.md) (tracks N4 to
+N6).
 
 ## Documentation
 
-- [`docs/tutorials/README.md`](./docs/tutorials/README.md) - Six tested
+- [`CHANGELOG.md`](CHANGELOG.md) - What each release contains, and the
+  versioning policy
+- [`docs/tutorials/README.md`](./docs/tutorials/README.md) - Seven tested
   tutorials, from a first chart to custom marks
 - [`MISSION_AND_GOALS.md`](./docs/MISSION_AND_GOALS.md) - Project vision and
   objectives
@@ -180,15 +193,15 @@ A plain `cargo build` or `cargo test` at the repository root builds only the
 `gup` crate (`default-members = ["."]`), a facade over `gup-core`. The other
 workspace members are built with `-p`:
 
-| Crate                          | Status                                                                |
-| ------------------------------ | --------------------------------------------------------------------- |
-| `crates/gup-core`              | The core: context, column store, scales, marks, plot, scene, targets. |
-| `crates/gup-core-macros`       | `#[wgsl_function]` and `#[derive(Mark)]`.                             |
-| `crates/gup-wgsl`              | WGSL library, build-time composition and the run-time linker.         |
-| `crates/gup-text`              | Font loading, shaping and the glyph atlas.                            |
-| `crates/gup-visual-regression` | Golden-image and structural check harness (`mask visual-regression`). |
-| `gup-egui`                     | egui integration (`GupWidget`).                                       |
-| `gup-bevy`                     | Bevy integration (`GupPlugin`), built by the `integrations` CI job.   |
+| Crate                          | Status                                                                | Published |
+| ------------------------------ | --------------------------------------------------------------------- | --------- |
+| `crates/gup-core`              | The core: context, column store, scales, marks, plot, scene, targets. | yes       |
+| `crates/gup-core-macros`       | `#[wgsl_function]` and `#[derive(Mark)]`.                             | yes       |
+| `crates/gup-wgsl`              | WGSL library, build-time composition and the run-time linker.         | yes       |
+| `crates/gup-text`              | Font loading, shaping and the glyph atlas.                            | yes       |
+| `crates/gup-visual-regression` | Golden-image and structural check harness (`mask visual-regression`). | no        |
+| `gup-egui`                     | egui integration (`GupWidget`).                                       | yes       |
+| `gup-bevy`                     | Bevy integration (`GupPlugin`), built by the `integrations` CI job.   | yes       |
 
 `crates/gup-culling-lod` holds GPU culling and LOD code from before the core was
 rewritten. It is parked: out of the workspace and CI, until the LOD work in

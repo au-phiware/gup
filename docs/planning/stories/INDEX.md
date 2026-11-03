@@ -355,7 +355,7 @@ and WASM harness after it.
   Changelog) with 0.1.0's contents and limitations, and the 0.x policy: lockstep
   versions, breaking means minor, wgpu and MSRV bumps are breaking. Deps:
   GUP-592 📋 (soft), GUP-593 📋 (soft).
-- [GUP-597](GUP-597_Readme_For_Release_0_1.md) 📋 — The README at release
+- [GUP-597](GUP-597_Readme_For_Release_0_1.md) ✅ — The README at release
   candidate: hero image, eight builders, browser features, a current "Not yet"
   and platform line, CHANGELOG link, published-crates column. Deps: GUP-589 📋,
   GUP-590 📋, GUP-591 📋, GUP-593 📋, GUP-596 📋.

@@ -10,8 +10,8 @@ touches: [README.md, docs/tutorials/README.md]
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N3 Release 0.1) **Status**: 📋 Planned
-**Created**: 2026-11-02
+**Initiative**: Strategic Review 2026-11 (N3 Release 0.1) **Status**: 🚧 In
+Progress **Created**: 2026-11-02
 
 ## Context
 
@@ -178,3 +178,33 @@ keeps its git dependency until the crates exist on crates.io; switching it is
 - [ ] WASM size: unchanged, no library code change
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
+
+## Implementation Summary
+
+README sections changed as in Decisions: hero and gallery line (Pages URL not
+live, so `examples/INDEX.md`), accessibility Key Features bullet, "Not yet"
+(platform line: "CI draws on Linux (Vulkan) and Windows (DX12); macOS (Metal) is
+a fix in progress and not yet verified"), the browser-features paragraph, eight
+builders, Development Status, Seven tutorials plus a CHANGELOG line, and a
+"Published" column. Tutorial 7 was already listed. Relative links checked: 20 of
+20 resolve. `cargo test --doc -p gup` passes; the hero was read and shows the
+scatter with title and legend. Note: the crates table lists six workspace crates
+besides the `gup` facade (published, not in the table), so the column reads yes
+for five and the facade's seven total is not visible in the table.
+
+## Retrospective
+
+**Completed**: 2026-11-03
+
+### Key Technical Learnings
+
+- A docs-only story still trips prettier on the story file itself; run prettier
+  on it before the first commit.
+
+### Architectural Decisions
+
+- macOS stated as "not yet verified" pending GUP-591's CI outcome.
+
+### Follow-up Stories
+
+None.
