@@ -163,6 +163,162 @@ git -C "$tmp/behind" update-ref refs/remotes/origin/main HEAD
 git -C "$tmp/behind" reset -q --hard HEAD~1
 expect_fail behind clean-tree 'not on or above origin/main'
 
+# --- the ci check (GUP-604), against a fake `gh` that serves canned JSON ---
+
+mkdir -p "$tmp/bin"
+cat >"$tmp/bin/gh" <<'EOF'
+#!/usr/bin/env bash
+# A fake gh: canned JSON from $FAKE_GH_DIR, and a log of what was asked.
+echo "$*" >>"$FAKE_GH_DIR/calls"
+case "$1 $2" in
+"auth status") [[ -z ${FAKE_GH_NOAUTH:-} ]] || exit 1 ;;
+"run list") cat "$FAKE_GH_DIR/runs.json" ;;
+"run view") cat "$FAKE_GH_DIR/jobs-$3.json" ;;
+*)
+  echo "fake gh: unexpected: $*" >&2
+  exit 99
+  ;;
+esac
+EOF
+chmod +x "$tmp/bin/gh"
+
+# A PATH without gh: the tools the script uses, linked into one directory.
+mkdir -p "$tmp/nogh"
+for t in bash git jq awk cut dirname mkdir cat grep sed sort head tail diff; do
+  ln -sf "$(command -v "$t")" "$tmp/nogh/$t"
+done
+
+# new_ci NAME: canned runs and jobs for a green main, one run per workflow
+# (ids 1..8) with the jobs the script requires and a skipped deploy job.
+new_ci() {
+  new_case "$1"
+  local d=$tmp/$1 id=0 wf job line
+  mkdir -p "$d/gh"
+  echo '[]' >"$d/gh/runs.json"
+  for wf in 'Tests' 'Lint' 'Visual regression' 'Dogfood' 'Gallery' 'WASM Compilation Check' 'Release check' 'Platforms'; do
+    id=$((id + 1))
+    jq --arg w "$wf" --argjson id "$id" \
+      '. += [{databaseId: $id, workflowName: $w, status: "completed", conclusion: "success", createdAt: "2026-11-04T00:00:00Z"}]' \
+      "$d/gh/runs.json" >"$d/gh/runs.tmp" && mv "$d/gh/runs.tmp" "$d/gh/runs.json"
+    echo '{"jobs": [{"name": "deploy", "conclusion": "skipped"}]}' >"$d/gh/jobs-$id.json"
+    # Job names as the workflows name them; the script matches substrings.
+    while IFS= read -r line; do
+      [[ ${line%%|*} == "$wf" ]] || continue
+      job=${line#*|}
+      jq --arg j "$job (lavapipe)" '.jobs += [{name: $j, conclusion: "success"}]' \
+        "$d/gh/jobs-$id.json" >"$d/gh/jobs.tmp" && mv "$d/gh/jobs.tmp" "$d/gh/jobs-$id.json"
+    done <<<"$ci_required"
+  done
+}
+
+# The script's own list of required jobs, so the fixture follows it.
+ci_required=$(sed -n "/^required_jobs=(/,/^)/p" "$script" | sed -n "s/^  '\(.*\)'$/\1/p")
+if [[ $(wc -l <<<"$ci_required") -lt 10 ]]; then
+  fail "could not read required_jobs from release_check.sh"
+fi
+
+# run_ci NAME [ENV...]: the ci check with the fake gh first on PATH.
+run_ci() {
+  local d=$tmp/$1
+  shift
+  : >"$d/gh/calls"
+  out=$(env "$@" PATH="$tmp/bin:$PATH" FAKE_GH_DIR="$d/gh" RELEASE_CHECK_ROOT="$d" CARGO_TARGET_DIR="$tmp/logs" \
+    "$script" --only ci 2>&1)
+  rc=$?
+}
+
+new_ci ci_ok
+run_ci ci_ok
+((rc == 0)) || fail "ci_ok: ci should pass: $out"
+grep -q 'PASS' <<<"$out" || fail "ci_ok: no PASS row: $out"
+# Read-only: only these three gh commands.
+if grep -vE '^(auth status|run list --commit [0-9a-f]+ |run view [0-9]+ --json jobs$)' "$tmp/ci_ok/gh/calls"; then
+  fail "ci_ok: gh was asked for something other than auth status, run list or run view"
+fi
+
+# A green workflow with a red job (the Platforms macOS job).
+new_ci ci_red_job
+jq '(.jobs[] | select(.name | contains("macOS")) | .conclusion) = "failure"' \
+  "$tmp/ci_red_job/gh/jobs-8.json" >"$tmp/ci_red_job/gh/j.tmp" && mv "$tmp/ci_red_job/gh/j.tmp" "$tmp/ci_red_job/gh/jobs-8.json"
+run_ci ci_red_job
+((rc != 0)) || fail "ci_red_job: ci should fail: $out"
+grep -q "macOS render smoke' is failure" "$tmp/logs/release-check/ci.log" || fail "ci_red_job: the log does not name the macOS job: $(cat "$tmp/logs/release-check/ci.log")"
+
+# A required job that does not exist.
+new_ci ci_missing_job
+jq '.jobs |= map(select(.name | contains("feature-matrix") | not))' \
+  "$tmp/ci_missing_job/gh/jobs-1.json" >"$tmp/ci_missing_job/gh/j.tmp" && mv "$tmp/ci_missing_job/gh/j.tmp" "$tmp/ci_missing_job/gh/jobs-1.json"
+run_ci ci_missing_job
+((rc != 0)) || fail "ci_missing_job: ci should fail: $out"
+grep -q "feature-matrix' is missing" "$tmp/logs/release-check/ci.log" || fail "ci_missing_job: the log does not name the job: $(cat "$tmp/logs/release-check/ci.log")"
+
+# A workflow whose run failed, and one with no run at all.
+new_ci ci_failed_run
+jq '(.[] | select(.workflowName == "Lint") | .conclusion) = "failure"' \
+  "$tmp/ci_failed_run/gh/runs.json" >"$tmp/ci_failed_run/gh/r.tmp" && mv "$tmp/ci_failed_run/gh/r.tmp" "$tmp/ci_failed_run/gh/runs.json"
+run_ci ci_failed_run
+((rc != 0)) || fail "ci_failed_run: ci should fail: $out"
+grep -q 'Lint: run 2 is completed/failure' "$tmp/logs/release-check/ci.log" || fail "ci_failed_run: wrong reason: $(cat "$tmp/logs/release-check/ci.log")"
+
+new_ci ci_no_run
+jq 'map(select(.workflowName != "Dogfood"))' \
+  "$tmp/ci_no_run/gh/runs.json" >"$tmp/ci_no_run/gh/r.tmp" && mv "$tmp/ci_no_run/gh/r.tmp" "$tmp/ci_no_run/gh/runs.json"
+run_ci ci_no_run
+((rc != 0)) || fail "ci_no_run: ci should fail: $out"
+grep -q 'Dogfood: no run on' "$tmp/logs/release-check/ci.log" || fail "ci_no_run: wrong reason: $(cat "$tmp/logs/release-check/ci.log")"
+
+# An older failed run of a workflow does not count when a later run passed.
+new_ci ci_rerun
+jq '. += [{databaseId: 9, workflowName: "Lint", status: "completed", conclusion: "failure", createdAt: "2026-11-03T00:00:00Z"}]' \
+  "$tmp/ci_rerun/gh/runs.json" >"$tmp/ci_rerun/gh/r.tmp" && mv "$tmp/ci_rerun/gh/r.tmp" "$tmp/ci_rerun/gh/runs.json"
+run_ci ci_rerun
+((rc == 0)) || fail "ci_rerun: the latest Lint run passed, ci should pass: $out"
+
+# gh absent, and gh not logged in: SKIP, never FAIL.
+new_ci ci_nogh
+out=$(env PATH="$tmp/nogh" RELEASE_CHECK_ROOT="$tmp/ci_nogh" CARGO_TARGET_DIR="$tmp/logs" "$tmp/nogh/bash" "$script" --only ci 2>&1)
+rc=$?
+if ! { ((rc == 0)) && grep -q 'SKIP' <<<"$out"; }; then fail "ci_nogh: ci should SKIP without gh: rc=$rc $out"; fi
+grep -q 'gh is not installed' "$tmp/logs/release-check/ci.log" || fail "ci_nogh: no reason in the log"
+
+new_ci ci_noauth
+run_ci ci_noauth FAKE_GH_NOAUTH=1
+if ! { ((rc == 0)) && grep -q 'SKIP' <<<"$out"; }; then fail "ci_noauth: ci should SKIP when gh is not authenticated: rc=$rc $out"; fi
+
+# The script never changes a workflow run.
+if grep -nE 'gh (run (rerun|cancel|watch|delete)|workflow|api)' "$script" | grep -v '^[0-9]*:#'; then
+  fail "release_check.sh must only read workflow runs"
+fi
+
+# --- publish_check.sh (GUP-603): a build directory of its own ---
+
+# A fake cargo records the build directory it is given and the arguments.
+mkdir -p "$tmp/pbin" "$tmp/pt"
+cat >"$tmp/pbin/cargo" <<'EOF'
+#!/usr/bin/env bash
+echo "build_dir=$CARGO_BUILD_BUILD_DIR" >"$FAKE_CARGO_OUT"
+echo "args=$*" >>"$FAKE_CARGO_OUT"
+# What a stale overlay would still be, if the script did not clear it.
+ls "$CARGO_BUILD_BUILD_DIR/package" >>"$FAKE_CARGO_OUT" 2>&1
+EOF
+chmod +x "$tmp/pbin/cargo"
+shared=$tmp/shared-build
+mkdir -p "$shared/package/tmp-registry/index" "$tmp/pt/publish-check/package/tmp-registry" "$tmp/pt/publish-check/package/tmp-crate"
+touch "$shared/package/tmp-registry/stale" "$tmp/pt/publish-check/package/tmp-registry/stale"
+PATH="$tmp/pbin:$PATH" CARGO_BUILD_BUILD_DIR=$shared CARGO_TARGET_DIR=$tmp/pt FAKE_CARGO_OUT=$tmp/pcargo.out \
+  "$root/scripts/publish_check.sh" || fail "publish_check.sh failed"
+grep -qx "build_dir=$tmp/pt/publish-check" "$tmp/pcargo.out" || fail "publish_check.sh did not use its own build directory: $(cat "$tmp/pcargo.out")"
+grep -qx 'args=publish --workspace --dry-run --locked' "$tmp/pcargo.out" || fail "publish_check.sh arguments: $(cat "$tmp/pcargo.out")"
+[[ -e $shared/package/tmp-registry/stale ]] || fail "publish_check.sh touched the shared package directory"
+if grep -q tmp- "$tmp/pcargo.out"; then
+  fail "publish_check.sh left a stale overlay in its own directory: $(cat "$tmp/pcargo.out")"
+fi
+# The mask task runs the script, and nothing else publishes.
+grep -q '^./scripts/publish_check.sh$' "$root/maskfile.md" || fail "mask publish-check does not run scripts/publish_check.sh"
+if grep -n 'cargo publish' "$root/scripts/publish_check.sh" | grep -v -e '--dry-run' -e '^[0-9]*:#'; then
+  fail "publish_check.sh mentions cargo publish without --dry-run"
+fi
+
 # The script never publishes: its only mention of `cargo publish` must be a
 # dry run, and it must not tag or push.
 if grep -n 'cargo publish' "$script" | grep -v -e '--dry-run' -e '^[0-9]*:#'; then

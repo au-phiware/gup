@@ -16,13 +16,13 @@ All seven crates (`gup`, `gup-core`, `gup-core-macros`, `gup-wgsl`, `gup-text`,
      `mask docs-rs`, and checks that one version is used everywhere, that
      exactly the seven crates are publishable, that their categories are
      crates.io slugs and that the tree is clean and at or above `origin/main`.
-     It takes tens of minutes and never publishes. Also before publishing:
-  - [ ] The latest Tests, Lint, Visual regression, Dogfood, Release check and
-        Platforms runs on `main` are green (`gh run list --branch main`).
-  - [ ] **macOS (Metal) CI is green.** The Platforms workflow's macOS job gates
-        like the Windows one (GUP-591); read its job conclusion with
-        `gh run view <id> --json jobs`. If it is red, neither `CHANGELOG.md` nor
-        `README.md` may claim macOS support.
+     It takes tens of minutes and never publishes. Its `ci` row reads the latest
+     run of every workflow on `origin/main` and every job of it, including the
+     Platforms workflow's Windows and macOS (Metal) jobs (GUP-591), and is
+     `SKIP` without an authenticated `gh`: then read the runs yourself
+     (`gh run list --commit <sha>`, `gh run view <id> --json jobs`). If the
+     macOS job is red, neither `CHANGELOG.md` nor `README.md` may claim macOS
+     support.
 - [ ] 2. **Owner**: `cargo login` with a crates.io API token scoped to
      `publish-new` and `publish-update`.
 - [ ] 3. **Owner**: confirm the seven names are still free
