@@ -493,6 +493,11 @@ GUP-566 edits `encoding.rs` (not beside GUP-562); GUP-567 edits `selection.rs`.
   at 100M rows for GPU time, build time, memory and fidelity, chosen by a stated
   rule, with RFC-001 findings and the follow-up stories. Opus. Deps: GUP-627 📋,
   GUP-628 📋.
+- [GUP-632](GUP-632_Hundred_Million_Row_Demonstration.md) 📋 — A
+  `hundred_million` example from `Columns` with zoom, pan and keys, measured at
+  10M, 30M and 100M rows, proposed budget rows, and README wording by a stated
+  rule ("interactive" only under 16.7 ms; no "billion"). Deps: GUP-628 📋,
+  GUP-629 📋, GUP-631 📋 and its follow-ups (soft).
 
 ## Polish after 0.1
 
