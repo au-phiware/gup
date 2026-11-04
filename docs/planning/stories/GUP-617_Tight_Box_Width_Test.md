@@ -10,7 +10,8 @@ touches: [crates/gup-core/tests/boxplot_png.rs]
 
 ## Story Overview
 
-**Initiative**: Polish after 0.1 **Status**: 📋 Planned **Created**: 2026-11-04
+**Initiative**: Polish after 0.1 **Status**: 🚧 In Progress **Created**:
+2026-11-04
 
 ## Context
 
