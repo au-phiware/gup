@@ -4,7 +4,6 @@
 //! Stacked areas with an outline: a shifting energy mix (illustrative data).
 
 use gup::builder::AreaChart;
-use gup::prelude::*;
 
 pub struct Output {
     year: f64,
@@ -36,7 +35,6 @@ pub fn chart() -> AreaChart<Output> {
         .y(|o| o.twh)
         .stack(|o| o.source)
         .outline(1.0)
-        .x_scale(Linear::new().domain(2005.0, 2024.0))
         .x_tick_format(|v| format!("{v:.0}"))
         .title("Electricity generation by source")
         .subtitle("Stacked areas, 2005–2024 (illustrative data)")

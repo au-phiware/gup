@@ -60,6 +60,7 @@ pub fn line<T: Send + Sync + 'static>(rows: impl IntoIterator<Item = T>) -> Line
     let mut plot = Plot::new();
     plot.set_kind("Line chart");
     plot.x(Linear::new());
+    plot.fit_extent(0);
     plot.y(Linear::new());
     LineChart {
         plot,

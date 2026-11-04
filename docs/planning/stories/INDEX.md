@@ -519,7 +519,7 @@ checked against `main` on 2026-11-04. GUP-584, GUP-585 and GUP-611 (listed under
 track N2) belong to this group too. The run order for this group, track N4 and
 track N5 is at the end of this section.
 
-- [GUP-612](GUP-612_Line_And_Area_X_Axes_End_At_The_Data.md) 📋 — The x axis of
+- [GUP-612](GUP-612_Line_And_Area_X_Axes_End_At_The_Data.md) ✅ — The x axis of
   `gup::line` and `gup::area` ends at the first and last rows (a third per-axis
   fit policy beside GUP-561's ticks), so the gallery's stacked area loses its
   pinned domain. Deps: GUP-561 ✅, GUP-547 ✅.

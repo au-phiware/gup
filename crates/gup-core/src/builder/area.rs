@@ -126,6 +126,7 @@ pub fn area<T: Send + Sync + 'static>(rows: impl IntoIterator<Item = T>) -> Area
     let mut plot = Plot::new();
     plot.set_kind("Area chart");
     plot.x(Linear::new());
+    plot.fit_extent(0);
     plot.y(Linear::new());
     AreaChart {
         plot,
