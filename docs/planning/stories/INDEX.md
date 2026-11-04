@@ -420,6 +420,10 @@ and run one at a time; the run order is at the end of "Polish after 0.1".
   handling can also use the shell. Deps: GUP-318 ✅. Legacy (2025): GUP-622
   forwards the window's keys to the chart itself, which covers the keyboard
   need; proposed for closing as superseded once GUP-622 lands.
+- [GUP-620](GUP-620_Keyboard_Zoom_Pan_And_Reset.md) 📋 — `ZoomIn`/`ZoomOut` (two
+  wheel lines about the plot centre), Shift+arrows (pan a tenth of the plot) and
+  `ResetView`, through the wheel's and drag's paths, keeping focus while its row
+  stays in view. Deps: GUP-619 📋.
 
 ## Track N5: Performance at Scale
 
