@@ -399,6 +399,28 @@ Run order (at most two build-heavy stories at once; hot files: Cargo.toml files,
 6. GUP-597 alone among `README.md` stories; then GUP-598 alone.
 7. The owner publishes; then GUP-599.
 
+## Track N4: Accessibility
+
+Track N4 from the [November 2026 review](../STRATEGIC_REVIEW_2026-11.md): the
+rest of accessibility after release 0.1's text alternative (GUP-592, GUP-593;
+owner decision 4). Keyboard focus over rows (a keyboard-driven hover with a
+focus ring), keyboard zoom, an announced text per row, hosts that forward keys,
+a hidden data table in the browser, a high-contrast theme and a guide. The
+archived docs in `docs/archive/accessibility/` describe the deleted system and
+are background only. GUP-619, GUP-620, GUP-621 and GUP-624 all edit `plot.rs`
+and run one at a time; the run order is at the end of "Polish after 0.1".
+
+- [GUP-619](GUP-619_Keyboard_Focus_Over_Rows.md) 📋 — `Input::KeyDown` with
+  semantic `Key`s and `Modifiers`; arrow keys walk rows in view (x order within
+  a series, Up/Down between series), Enter clicks, Escape clears, a focus ring,
+  and `Selection::focusable(false)` for composite layers. Deps: GUP-563 ✅,
+  GUP-546 ✅.
+- [GUP-376](GUP-376_GupApp_Event_Callbacks.md) 📋 — Add optional `.on_key()` and
+  `.on_mouse()` callbacks to `GupApp` so examples with simple custom event
+  handling can also use the shell. Deps: GUP-318 ✅. Legacy (2025): GUP-622
+  forwards the window's keys to the chart itself, which covers the keyboard
+  need; proposed for closing as superseded once GUP-622 lands.
+
 ## Track N5: Performance at Scale
 
 Track N5 from the [November 2026 review](../STRATEGIC_REVIEW_2026-11.md):
@@ -471,6 +493,3 @@ will pick each up.
   windowed layer sized by a column whose sizes do not follow data order
   (per-chunk sort runs draw about one instance per draw today). Deps: GUP-482
   ✅. Track: N5 (GPU sort or index buffer).
-- [GUP-376](GUP-376_GupApp_Event_Callbacks.md) 📋 — Add optional `.on_key()` and
-  `.on_mouse()` callbacks to `GupApp` so examples with simple custom event
-  handling can also use the shell. Deps: GUP-318 ✅. Track: N4 (keyboard).
