@@ -417,3 +417,51 @@ fn a_format_changed_after_a_resolve_is_picked_up() {
     let (_, l) = render(&mut chart, 640, 400);
     assert_eq!(sorted_labels(&l), ["-1.5 u", "3 u", "5.25 u"]);
 }
+
+/// GUP-618: a value label drawn in the colour of its own bar segment is
+/// invisible, and `text_present` must say so. No public route sets a value
+/// label's colour, so the image is built by hand: render the chart, then
+/// paint every label's region with the colour that dominates it (the
+/// segment fill) and declare that colour as the label's text colour.
+#[test]
+fn a_value_label_drawn_in_its_fill_colour_fails_text_present() {
+    use gup_visual_regression::checks::{Tolerances, check_text_present};
+    use std::collections::HashMap;
+
+    let mut chart = gup_core::bar(stacked_rows())
+        .x(|r| r.cat)
+        .y(|r| r.v)
+        .stack(|r| r.key)
+        .value_labels();
+    let (image, layout) = render(&mut chart, 640, 400);
+    let mut meta = layout_metadata(&layout);
+    let mut img = RgbaImage::new(640, 400, image.into_raw()).unwrap();
+    let tol = Tolerances::default();
+    // The real chart passes.
+    check_text_present(&img, &meta, &tol).unwrap();
+
+    let mut painted = 0;
+    for region in &mut meta.text_regions {
+        if region.role != gup_visual_regression::TextRole::Other {
+            continue;
+        }
+        let (x0, y0, x1, y1) = region.rect.pixel_span(640, 400).unwrap();
+        let mut counts: HashMap<_, usize> = HashMap::new();
+        for y in y0..y1 {
+            for x in x0..x1 {
+                *counts.entry(img.pixel(x, y)).or_default() += 1;
+            }
+        }
+        let fill = counts.into_iter().max_by_key(|&(_, n)| n).unwrap().0;
+        img.fill_rect(region.rect, fill);
+        region.color = fill;
+        painted += 1;
+    }
+    assert_eq!(painted, 5);
+    let err = check_text_present(&img, &meta, &tol).unwrap_err();
+    assert!(
+        err.message.contains("drawn in its background's colour"),
+        "{err}"
+    );
+    assert!(err.message.contains("5 text region(s)"), "{err}");
+}
