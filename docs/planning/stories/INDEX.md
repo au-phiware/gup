@@ -399,13 +399,69 @@ Run order (at most two build-heavy stories at once; hot files: Cargo.toml files,
 6. GUP-597 alone among `README.md` stories; then GUP-598 alone.
 7. The owner publishes; then GUP-599.
 
+## Track N4: Accessibility
+
+Track N4 from the [November 2026 review](../STRATEGIC_REVIEW_2026-11.md): the
+rest of accessibility after release 0.1's text alternative (GUP-592, GUP-593;
+owner decision 4). Keyboard focus over rows (a keyboard-driven hover with a
+focus ring), keyboard zoom, an announced text per row, hosts that forward keys,
+a hidden data table in the browser, a high-contrast theme and a guide. The
+archived docs in `docs/archive/accessibility/` describe the deleted system and
+are background only. GUP-619, GUP-620, GUP-621 and GUP-624 all edit `plot.rs`
+and run one at a time; the run order is at the end of "Polish after 0.1".
+
+- [GUP-619](GUP-619_Keyboard_Focus_Over_Rows.md) 📋 — `Input::KeyDown` with
+  semantic `Key`s and `Modifiers`; arrow keys walk rows in view (x order within
+  a series, Up/Down between series), Enter clicks, Escape clears, a focus ring,
+  and `Selection::focusable(false)` for composite layers. Deps: GUP-563 ✅,
+  GUP-546 ✅.
+- [GUP-376](GUP-376_GupApp_Event_Callbacks.md) 📋 — Add optional `.on_key()` and
+  `.on_mouse()` callbacks to `GupApp` so examples with simple custom event
+  handling can also use the shell. Deps: GUP-318 ✅. Legacy (2025): GUP-622
+  forwards the window's keys to the chart itself, which covers the keyboard
+  need; proposed for closing as superseded once GUP-622 lands.
+- [GUP-620](GUP-620_Keyboard_Zoom_Pan_And_Reset.md) 📋 — `ZoomIn`/`ZoomOut` (two
+  wheel lines about the plot centre), Shift+arrows (pan a tenth of the plot) and
+  `ResetView`, through the wheel's and drag's paths, keeping focus while its row
+  stays in view. Deps: GUP-619 📋.
+- [GUP-621](GUP-621_Row_Announcements.md) 📋 — `Plot::row_fields`, `row_text`
+  and `focus_text` (and `Chart::focus_text`): a row's series, x, y and colour
+  value with axis names, in the axes' formats (ISO dates on `Time`), with hooks
+  for bars, bins and boxes. Deps: GUP-619 📋, GUP-615 📋.
+- [GUP-622](GUP-622_Window_And_Egui_Hosts_Forward_Keys.md) 📋 — The window app
+  and the egui widget map arrows, Home/End, Enter/Space, Escape, `+`/`=`, `-`
+  and `0` to `Input::KeyDown`; the window closes on an Escape the chart did not
+  use, and the egui widget takes and locks focus. Deps: GUP-619 📋, GUP-620 📋
+  (soft).
+- [GUP-623](GUP-623_Browser_Keyboard_And_Live_Region.md) 📋 — `CanvasApp` makes
+  the canvas focusable, forwards mapped keys (preventing only their default) and
+  speaks `focus_text()` through a hidden `aria-live` region, checked by new
+  browser smoke steps. Deps: GUP-619 📋, GUP-621 📋, GUP-622 📋 (soft).
+- [GUP-624](GUP-624_Hidden_Data_Table_In_The_Browser.md) 📋 — `DataTable`,
+  `Plot::data_table` and `Chart::data_table` from GUP-621's row fields, written
+  by `CanvasApp` as a visually hidden `<table>` (at most 1,000 rows) and rebuilt
+  when the description changes. Deps: GUP-621 📋, GUP-623 📋.
+- [GUP-625](GUP-625_High_Contrast_Theme.md) 📋 — `Theme::high_contrast()` (black
+  text and axes, a 3:1 grid, larger text) and a `HIGH_CONTRAST` palette of eight
+  colours, each at least 3:1 on white and at least ΔE00 12 apart under normal,
+  deutan and protan vision, all by test. Deps: GUP-553 ✅.
+- [GUP-626](GUP-626_Accessibility_Guide.md) 📋 — `docs/ACCESSIBILITY.md`: what
+  Gup does per output, keys, screen readers, contrast, what the developer must
+  do and what is not supported, every example a doctest; README, CHANGELOG and
+  the archive README brought in line. Deps: GUP-619–625 📋.
+
 ## Track N5: Performance at Scale
 
-Track N5 from the [November 2026 review](../STRATEGIC_REVIEW_2026-11.md):
-columnar input, LOD, GPU sort and the 100M-row demonstration are not written
-yet. These two are measured regressions found in N2; each commits a release
-benchmark, and the orchestrator, not the worker, re-records `PERF_BUDGETS.md`.
-GUP-566 edits `encoding.rs` (not beside GUP-562); GUP-567 edits `selection.rs`.
+Track N5 from the [November 2026 review](../STRATEGIC_REVIEW_2026-11.md).
+GUP-566, GUP-577 and GUP-567 were measured regressions found in N2. The track
+proper (written 2026-11-04) measures ingest first (GUP-627), then adds columnar
+input (GUP-628, opus; GUP-629; Arrow in GUP-630), chooses a level-of-detail
+design by measurement (GUP-631, opus, which lists the stories that build it) and
+ends in a 100M-row demonstration with README wording by rule (GUP-632). A 1B-row
+run needs out-of-core paging and is not written. Each story commits its
+benchmark; the orchestrator, not the worker, records `PERF_BUDGETS.md`. GUP-492
+(windowed size-ordered draws, a GPU sort or index buffer) is 💡 and needs a
+scribe pass before it starts.
 
 - [GUP-566](GUP-566_Cheaper_Owned_Category_Keys.md) ✅ — A keyed first-resolve
   benchmark, then builder keys encoded from a borrowed label (no second
@@ -420,6 +476,100 @@ GUP-566 edits `encoding.rs` (not beside GUP-562); GUP-567 edits `selection.rs`.
   values cached for the edge-inset solve, so a programmatic zoom answers by
   binary search with identical insets: `zoom_culled.cpu` from 1.24 back under
   0.90 ms. Deps: GUP-528 ✅.
+- [GUP-627](GUP-627_Scale_Benchmark_Ingest_And_Memory.md) 📋 — A headless
+  `scale_bench` example timing each ingest phase (closures, f64 columns, chunk
+  conversion and upload, first resolve, first frame, zoom) with peak RSS, run at
+  1M–100M rows, so N5 is designed from numbers. Deps: GUP-457 ✅, GUP-482 ✅.
+- [GUP-628](GUP-628_Columnar_Layers.md) 📋 — `Columns`/`Column` (`Arc`'d f64 and
+  f32), `Plot::add_columns::<M>` over `()` rows, `x_column`/`y_column` and
+  `encode_column`: identical pictures to the rows path, and an f32 fast path
+  chosen by a measured rule. Opus. Deps: GUP-627 📋.
+- [GUP-629](GUP-629_Key_Columns.md) 📋 — `Column::Keys(KeyColumn)` (codes plus
+  labels) through Band, Point and `Categorical` scales, remapped once per label
+  in the row path's first-seen order, with images identical to key closures.
+  Deps: GUP-628 📋.
+- [GUP-630](GUP-630_Arrow_Record_Batches.md) 📋 — Feature `arrow`
+  (`arrow-array`, `arrow-schema`): `Columns::from_arrow(&RecordBatch)` for
+  floats, integers, dates, timestamps, strings, dictionaries and booleans, nulls
+  kept, in the feature matrix and docs.rs. Deps: GUP-628 📋, GUP-629 📋, GUP-602
+  ✅.
+- [GUP-631](GUP-631_Level_Of_Detail_Spike.md) 📋 — Spike: per-frame density, a
+  decimation pyramid ported from `gup-culling-lod`, and binned tiles, measured
+  at 100M rows for GPU time, build time, memory and fidelity, chosen by a stated
+  rule, with RFC-001 findings and the follow-up stories. Opus. Deps: GUP-627 📋,
+  GUP-628 📋.
+- [GUP-632](GUP-632_Hundred_Million_Row_Demonstration.md) 📋 — A
+  `hundred_million` example from `Columns` with zoom, pan and keys, measured at
+  10M, 30M and 100M rows, proposed budget rows, and README wording by a stated
+  rule ("interactive" only under 16.7 ms; no "billion"). Deps: GUP-628 📋,
+  GUP-629 📋, GUP-631 📋 and its follow-ups (soft).
+- [GUP-492](GUP-492_Windowed_Size_Order_Draws.md) 💡 — bounded draw calls for a
+  windowed layer sized by a column whose sizes do not follow data order
+  (per-chunk sort runs draw about one instance per draw today). Deps: GUP-482
+  ✅.
+
+## Polish after 0.1
+
+Fixes found while building the gallery, the tutorials and release 0.1, each
+checked against `main` on 2026-11-04. GUP-584, GUP-585 and GUP-611 (listed under
+track N2) belong to this group too. The run order for this group, track N4 and
+track N5 is at the end of this section.
+
+- [GUP-612](GUP-612_Line_And_Area_X_Axes_End_At_The_Data.md) 📋 — The x axis of
+  `gup::line` and `gup::area` ends at the first and last rows (a third per-axis
+  fit policy beside GUP-561's ticks), so the gallery's stacked area loses its
+  pinned domain. Deps: GUP-561 ✅, GUP-547 ✅.
+- [GUP-613](GUP-613_Chart_Types_In_The_Prelude.md) 📋 — The seven builder chart
+  types in the prelude and `Horizontal`/`Vertical`/`Orientation` at the root, so
+  no example imports from `gup::builder::`. Deps: GUP-594 ✅, GUP-595 ✅.
+- [GUP-614](GUP-614_Builder_Text_Layers_And_Pick_Row.md) 📋 —
+  `.text(rows, |t| ..)` and an inherent `pick_row(impl Into<Point>)` on all
+  seven builders (one macro arm), and tutorial 7's labels without `plot_mut()`.
+  Deps: GUP-542 ✅, GUP-563 ✅, GUP-536 ✅.
+- [GUP-615](GUP-615_Value_Labels_Read_The_Axis_Format.md) 📋 — Bar value labels
+  follow the value axis's effective tick format, including one set only through
+  `ScaleRef::tick_format`, and a documented one-unit rule that the gallery's
+  grouped bars follow. Deps: GUP-560 ✅, GUP-544 ✅.
+- [GUP-616](GUP-616_Legends_Match_What_Is_Drawn.md) 📋 — Vertical stacks (bars,
+  areas, histograms) list their legend top-down, and swatches of translucent
+  marks are composited at the marks' opacity, so each matches what is drawn; the
+  description follows. Deps: GUP-547 ✅, GUP-592 ✅.
+- [GUP-617](GUP-617_Tight_Box_Width_Test.md) 📋 — Measure why the box plot's
+  width test needed 3 px and tighten it to 1 px by a stated rule (wrong
+  expectation, wrong measurement, or a geometry bug to escalate), with a 3 px
+  negative control. Deps: GUP-554 ✅.
+- [GUP-618](GUP-618_Harness_Catches_Invisible_Labels.md) 📋 — `text_present`
+  fails a label drawn in its background's colour (today it passes, because the
+  sampled background skips text-coloured pixels), with a threshold set from
+  every real region and a seeded failing chart. Deps: GUP-565 ✅, GUP-397 ✅.
+
+Run order for this group, track N4 and track N5 (2026-11-04). At most two
+build-heavy stories at once; two stories in one step share no hot file
+(`plot.rs`, `selection.rs`, `render.rs`, `encoding.rs`, `builder/mod.rs`,
+`crates/gup-core/src/lib.rs`, `src/lib.rs`, `maskfile.md`, the WASM scenes, this
+file). Lane A holds the `plot.rs` and `selection.rs` stories, one at a time;
+lane B runs beside it. Opus stories (GUP-628, GUP-585, GUP-631) are best started
+early in the week.
+
+| Step | Lane A                      | Lane B                        |
+| ---- | --------------------------- | ----------------------------- |
+| 1    | GUP-612                     | GUP-618                       |
+| 2    | GUP-615                     | GUP-617                       |
+| 3    | GUP-616                     | GUP-613                       |
+| 4    | GUP-619                     | GUP-614                       |
+| 5    | GUP-620                     | GUP-584 (`render.rs`)         |
+| 6    | GUP-621                     | GUP-627                       |
+| 7    | GUP-628 (opus)              | GUP-623 (WASM scenes)         |
+| 8    | GUP-624 (WASM scenes)       | GUP-622                       |
+| 9    | GUP-585 (opus, `render.rs`) | GUP-625 (`lib.rs`)            |
+| 10   | GUP-629 (`encoding.rs`)     | GUP-611                       |
+| 11   | GUP-631 (opus spike)        | GUP-630 (`maskfile.md`)       |
+| 12   | GUP-631's follow-ups        | GUP-626 (`src/lib.rs`)        |
+| 13   | GUP-632                     | GUP-492 (after a scribe pass) |
+
+GUP-625 touches `lib.rs` and must not run beside GUP-628 or GUP-619. GUP-611
+(💡) needs its candidate-list setter named before it starts. Close GUP-376 when
+GUP-622 lands if the owner agrees.
 
 ## Open Backlog
 
@@ -432,10 +582,3 @@ will pick each up.
   per-checkout member `codegen-units` is worth its disk, and if so add it to
   `scripts/cargo_env.sh`. Deps: GUP-411 ✅. Related to GUP-427 (disk growth),
   not superseded by it. No track; keep.
-- [GUP-492](GUP-492_Windowed_Size_Order_Draws.md) 💡 — bounded draw calls for a
-  windowed layer sized by a column whose sizes do not follow data order
-  (per-chunk sort runs draw about one instance per draw today). Deps: GUP-482
-  ✅. Track: N5 (GPU sort or index buffer).
-- [GUP-376](GUP-376_GupApp_Event_Callbacks.md) 📋 — Add optional `.on_key()` and
-  `.on_mouse()` callbacks to `GupApp` so examples with simple custom event
-  handling can also use the shell. Deps: GUP-318 ✅. Track: N4 (keyboard).

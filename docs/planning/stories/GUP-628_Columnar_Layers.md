@@ -1,0 +1,241 @@
+---
+implementer: opus
+implementer-reason:
+  a new data path into the core (no per-row closures, no row type), touching
+  Selection, encodings and the column store; the public shape is fixed below,
+  the internals and the f32 fast path are design work with a measured rule
+touches:
+  [
+    crates/gup-core/src/columns.rs,
+    crates/gup-core/src/selection.rs,
+    crates/gup-core/src/encoding.rs,
+    crates/gup-core/src/column.rs,
+    crates/gup-core/src/plot.rs,
+    crates/gup-core/src/lib.rs,
+    crates/gup-core/examples/scale_bench.rs,
+    crates/gup-core/tests/columns.rs,
+  ]
+---
+
+# GUP-628: Columnar Layers
+
+## Story Overview
+
+**Initiative**: Track N5: Performance at Scale **Status**: 📋 Planned
+**Created**: 2026-11-04
+
+## Context
+
+Every row enters Gup as a value of the user's type `T` and every channel is a
+closure over it (`Selection<T, M>`, `crates/gup-core/src/selection.rs` line 169;
+`DynColumnEncoding::evaluate(&mut self, rows: &[T]) -> Result<ColumnData>`,
+`encoding.rs` line 1095). At scale this costs three times over: the user builds
+a `Vec<T>` (16+ bytes a row), each closure runs per row into a
+`ColumnData::Values(Vec<f64>)` (8 bytes a row per channel), and the store then
+converts to f32 chunks. Data that already lives in columns (a simulation's
+arrays, an Arrow batch, a Polars frame) has to be zipped into rows first. The
+review's track N5 starts with "columnar input reachable from `Plot`".
+
+`ColumnStore::from_columns` exists (`column.rs` line 1049) but nothing connects
+a store to a `Plot` layer. GUP-627 measures where the time and memory go at 1M
+to 100M rows; this story uses those numbers.
+
+The public shape below is fixed so that GUP-629 (key columns) and GUP-630
+(Arrow) can be written against it. The internals, and whether an f32 input skips
+the f64 intermediate, are this story's design work.
+
+## Read First
+
+- GUP-627's retrospective (the phase table and the paragraph naming the largest
+  phase).
+- `crates/gup-core/src/selection.rs`: `Selection` (line 169), `new` (line 338),
+  `evaluate` (lines 757–835), `Retain` (lines 40–100).
+- `crates/gup-core/src/encoding.rs`: `IntoEncoding` (line 1027), `Encoding`
+  (line 1069), `DynColumnEncoding` (around line 1090) and its impls (lines
+  1160–1330), including `AxisEncoding`.
+- `crates/gup-core/src/column.rs`: `ColumnData` (line 285), `ColumnStore::new`,
+  `append` (lines 1034–1180).
+- `crates/gup-core/src/plot.rs`: `add` (around line 956), `circles` (line 855).
+- RFC-001 §3 "Data model" (lines 149–258) and "S4a findings" (lines 2049–2200).
+
+## User Story
+
+> "As a developer with data in columns, I want to give Gup the columns directly,
+> so that tens of millions of points load without building a row struct or
+> running a closure per row."
+
+## Acceptance Criteria
+
+### AC1: Public API as decided
+
+- [ ] `Columns`, `Column`, `Plot::add_columns`, `Selection::<(), M>::x_column`,
+      `y_column` and `ScaleRef::encode_column` exist with the signatures of
+      Decisions, re-exported at the crate root (`Columns`, `Column`), with doc
+      comments and a doctest that draws a scatter from two `Vec<f64>` columns
+      and colours it through `Sequential::viridis().encode_column(..)`.
+- [ ] Errors: columns of unequal length (`Columns::with`), a missing name
+      (`Columns::get` returns `None`; `Index` panics with the name), and a
+      column longer or shorter than the layer (an error at resolve naming the
+      channel).
+
+### AC2: Same pictures
+
+- [ ] A test renders the same 10,000-row scatter (x, y, a numeric colour) from
+      rows and closures and from `Columns`, and the two images are identical
+      (byte-equal on the same device in the same run), as are their domains and
+      `pick_row` results at 20 points.
+- [ ] The same for a line layer (`add_columns::<Line>`).
+- [ ] Appending is out of scope for columnar layers in this story; calling
+      `appender()` on one is an error with a message saying so.
+
+### AC3: Faster and smaller, by a measured rule
+
+- [ ] `scale_bench --columns f64|f32` (new option) builds the layer from
+      `Columns` instead of rows. Record, at 10M and 30M rows (and 100M if
+      GUP-627 could run it), first-resolve time and peak RSS for rows, f64
+      columns and f32 columns, beside GUP-627's numbers.
+- [ ] Decision rule for the f32 path: if f32 columns are converted through an
+      f64 intermediate and that conversion is more than 25% of first resolve at
+      10M rows, add a path that writes f32 input straight into chunks (`F32`
+      format directly; `F32Relative` subtracting the chunk origin in f32 only
+      when the chunk's span keeps the error below the store's existing bound,
+      else through f64). Record the rule's outcome.
+- [ ] Targets: f64 columns' first resolve at 10M at most half the rows path's,
+      and peak RSS at most the rows path's minus the user rows' bytes. If a
+      target is missed, record why with the phase numbers; missing it is not a
+      failure of the story if the cause is outside this design (for example the
+      GPU upload).
+
+### AC4: Findings
+
+- [ ] A "GUP-628 findings" section appended to RFC-001: the design, the AC3
+      table, the f32 rule's outcome, and proposed adjustments for GUP-629,
+      GUP-630, GUP-631 and GUP-632.
+
+## Decisions
+
+- **Container** (`crates/gup-core/src/columns.rs`):
+
+  ```rust
+  /// Named columns of equal length.
+  #[derive(Clone, Debug, Default)]
+  pub struct Columns { /* len, Vec<(Arc<str>, Column)> */ }
+
+  /// One column. Numbers: NaN is null. (`Keys` arrives in GUP-629.)
+  #[derive(Clone, Debug)]
+  #[non_exhaustive]
+  pub enum Column { F64(Arc<[f64]>), F32(Arc<[f32]>) }
+
+  impl Columns {
+      pub fn new() -> Self;
+      /// Add a column; `Err` if its length differs from the first column's.
+      pub fn with(self, name: impl Into<Arc<str>>, column: impl Into<Column>) -> Result<Self>;
+      pub fn len(&self) -> usize;
+      pub fn is_empty(&self) -> bool;
+      pub fn get(&self, name: &str) -> Option<&Column>;
+      pub fn names(&self) -> impl Iterator<Item = &str>;
+  }
+  impl std::ops::Index<&str> for Columns { type Output = Column; }
+  impl From<Vec<f64>> for Column {}  impl From<Vec<f32>> for Column {}
+  impl From<Arc<[f64]>> for Column {} impl From<Arc<[f32]>> for Column {}
+  impl Column { pub fn len(&self) -> usize; pub fn is_empty(&self) -> bool; }
+  ```
+
+  `Arc` so a column can feed several layers and channels without a copy.
+
+- **Layer**:
+  `Plot::add_columns<M: Mark>(&mut self, columns: &Columns) -> &mut Selection<(), M>`.
+  The rows are `()` — a `Vec<()>` of `columns.len()` costs no memory — so every
+  existing `Selection` method, `Retain`, culling, picking and SVG work
+  unchanged. `pick_row` gives a `RowId` whose `row` is the column index;
+  `pick::<()>` is useless and documented as such.
+- **Positions**:
+  `Selection::<(), M>::x_column(&mut self, column: &Column) -> &mut Self` and
+  `y_column`, binding the mark's first `X`-role and `Y`-role channels to the
+  plot's x and y axes exactly as the generated `.x(|r| ..)` setters do through
+  `attr_axis`.
+- **Other channels**:
+  `ScaleRef<S>::encode_column(&self, column: &Column) -> ColumnEncoded<S>` (and
+  the same on bare `EncodeFn` scales, as `encode` is), where `ColumnEncoded<S>`
+  implements `IntoEncoding<(), V, ColumnMarker<f64>>`, so
+  `layer.attr(Circle::FILL, viridis.encode_column(&cols["v"]))` works with the
+  existing `attr`.
+- **Evaluation**: a `DynColumnEncoding<()>` impl whose `evaluate` ignores `rows`
+  and returns the column's data. Whether it can hand the store an `Arc<[f64]>`
+  without a copy, or `ColumnData` needs a borrowed or shared variant, is the
+  implementer's call, recorded in the findings.
+- **Not now**: appends to columnar layers; builders taking `Columns`
+  (`gup::scatter(columns)`); key columns (GUP-629); Arrow (GUP-630).
+
+## Escalation Triggers
+
+- Rows of `()` break an invariant somewhere (for example a check that `T` has a
+  size, or code that reads rows for tooltips and panics); report rather than
+  special-case `()` in more than one place.
+- `IntoEncoding<(), ..>` for `ColumnEncoded` conflicts with an existing blanket
+  impl (coherence), forcing a different public shape.
+- The identical-image test (AC2) differs by any pixel.
+- The design needs a change to `ColumnStore`'s public API beyond adding methods.
+
+## Out of Scope
+
+- Key and string columns (GUP-629); Arrow (GUP-630); LOD (GUP-631).
+- Appending to columnar layers; builders over columns.
+
+## Technical Tasks
+
+- [ ] `columns.rs`, exports, docs.
+- [ ] `add_columns`, `x_column`, `y_column`, `encode_column`, the
+      `DynColumnEncoding<()>` impl.
+- [ ] AC2 tests in `crates/gup-core/tests/columns.rs`.
+- [ ] `scale_bench --columns`, AC3 runs and the f32 rule.
+- [ ] RFC-001 findings.
+
+## Dependencies
+
+### Prerequisite Stories
+
+- GUP-627: Scale Benchmark: Ingest and Memory 📋 — the baseline numbers and the
+  bench this story extends.
+
+### Enables Stories
+
+- GUP-629 (key columns), GUP-630 (Arrow), GUP-631 (LOD spike at 100M), GUP-632
+  (100M demonstration).
+
+## Testing Strategy
+
+- **Unit tests**: `Columns` construction and errors.
+- **Integration tests**: AC2's identical images, domains and picks.
+- **Performance**: AC3's runs (manual, release, development machine).
+
+## Success Metrics
+
+- [ ] A 10M-point scatter loads from two `Vec<f64>` without a row type, at most
+      half the first-resolve time of the rows path.
+
+## Risk Assessment
+
+- **Medium**: `Selection` is the largest file and the most shared; a new impl of
+  a core trait for `()` could ripple. _Mitigation_: the escalation triggers, and
+  AC2's byte-identical check.
+- **Medium**: the f64 intermediate may dominate, and removing it touches the
+  chunk writer. _Mitigation_: the f32 rule only adds a path; the existing one
+  stays the reference.
+
+## Definition of Done
+
+- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+      minutes between commits
+- [ ] All Acceptance Criteria are satisfied and checked
+- [ ] All tests pass: `cargo test -- --test-threads=1` and
+      `cargo test -p gup-core -- --test-threads=1`
+- [ ] Lint and format clean: `mask all-fix`
+- [ ] All examples compile: `cargo check --examples`
+- [ ] Rendered output verified by eye: not needed, identity with the rows path
+      is tested
+- [ ] `mask wasm-browser`: not needed, no browser path changes; state so
+- [ ] WASM size: `mask wasm-size` scatter gz bytes (new code is unused by the
+      scatter; expect a small or no change)
+- [ ] Story status updated to ✅ Complete in story file and INDEX.md
+- [ ] Retrospective added to story document
