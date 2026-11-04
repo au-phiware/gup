@@ -14,8 +14,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Polish after 0.1 **Status**: 🚧 In Progress **Created**:
-2026-11-04
+**Initiative**: Polish after 0.1 **Status**: ✅ Complete (2026-11-04)
+**Created**: 2026-11-04
 
 ## Context
 
@@ -54,7 +54,7 @@ So the harness passes a chart whose labels nobody can read.
 
 ### AC1: Measure the margin on real outputs
 
-- [ ] For every text region of every golden test that runs the harness's checks
+- [x] For every text region of every golden test that runs the harness's checks
       (the `gup` crate's `tests/`, `gup-core`'s `tests/`, and dogfood's
       `run_all.sh`), compute `share` = the fraction of the region's non-guide
       pixels whose exact colour equals the region's most frequent exact colour
@@ -66,23 +66,23 @@ So the harness passes a chart whose labels nobody can read.
 
 ### AC2: The check
 
-- [ ] `check_text_present` fails a region when its most frequent exact colour
+- [x] `check_text_present` fails a region when its most frequent exact colour
       (over non-guide pixels, nothing skipped) is within `text_blend_delta_e` of
       the solid text colour and its `share` exceeds the threshold `t` chosen by
       the rule in Decisions. The failure detail names the region and says the
       text is drawn in its background's colour, with both colours in hex.
-- [ ] Seeded unit tests in `checks.rs`: (a) a filled rectangle with a region
+- [x] Seeded unit tests in `checks.rs`: (a) a filled rectangle with a region
       over it whose text colour equals the fill fails with the new message; (b)
       the same with a contrasting text colour drawn as glyph-like strokes
       passes; (c) a region on the plain background with correct text passes.
-- [ ] Every existing suite still passes: `cargo test -p gup-visual-regression`,
+- [x] Every existing suite still passes: `cargo test -p gup-visual-regression`,
       `cargo test -- --test-threads=1`,
       `cargo test -p gup-core -- --test-threads=1`, and `./dogfood/run_all.sh`
       (10 PASS).
 
 ### AC3: Negative control on a real chart
 
-- [ ] A test (in `gup-core`'s `tests/bar_value_labels.rs`) renders a vertical
+- [x] A test (in `gup-core`'s `tests/bar_value_labels.rs`) renders a vertical
       bar chart with `value_labels()` and a stack whose segment labels are
       forced to the segment's fill colour through `plot_mut()` (or any public
       route that draws a label in its fill colour), runs `check_text_present`,
@@ -117,9 +117,9 @@ So the harness passes a chart whose labels nobody can read.
 
 ## Technical Tasks
 
-- [ ] AC1 measurement across the suites.
-- [ ] The condition and its message; unit tests.
-- [ ] The negative control on a real chart.
+- [x] AC1 measurement across the suites.
+- [x] The condition and its message; unit tests.
+- [x] The negative control on a real chart.
 
 ## Dependencies
 
@@ -136,7 +136,7 @@ So the harness passes a chart whose labels nobody can read.
 
 ## Success Metrics
 
-- [ ] An invisible label fails `text_present` with a message that names it.
+- [x] An invisible label fails `text_present` with a message that names it.
 
 ## Risk Assessment
 
@@ -145,14 +145,71 @@ So the harness passes a chart whose labels nobody can read.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: the commands of AC2
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye: not needed, no image changes
-- [ ] `mask wasm-browser`: not needed, the harness does not run in the browser
-- [ ] WASM size: unchanged: no library code change
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: the commands of AC2
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye: not needed, no image changes
+- [x] `mask wasm-browser`: not needed, the harness does not run in the browser
+- [x] WASM size: unchanged: no library code change
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `check_text_present` (`crates/gup-visual-regression/src/checks.rs`) now fails
+  a region whose most frequent exact colour (nothing skipped, guides excluded)
+  is within `text_blend_delta_e` of the solid text colour and covers more than
+  `INVISIBLE_TEXT_SHARE` = 0.5 of its pixels. The message names the region and
+  says the text is drawn in its background's colour, with hex colours.
+- Seeded unit tests: a label in its fill colour fails; contrasting strokes on a
+  fill and correct text on the plain background pass.
+- `crates/gup-core/tests/bar_value_labels.rs`: a stacked bar chart with
+  `value_labels()` passes, then its five labels are painted in their segment
+  fills (by hand: no public route sets a value label's colour) and the check
+  fails.
+- Results: `cargo test -p gup` 101 pass; `cargo test -p gup-core` 807 pass;
+  `cargo test -p gup-visual-regression` 58 pass; dogfood 10 PASS; no golden
+  changed.
+
+## Retrospective
+
+**Completed**: 2026-11-04
+
+### Key Technical Learnings
+
+#### AC1 measurement
+
+- **Challenge**: pick the threshold from real data.
+- **Solution**: a temporary `eprintln!` per region over
+  `cargo test -p gup-core --tests` (1458 regions), `cargo test -p gup --tests`
+  (687) and dogfood. The maximum `share` over passing regions is **0.0**: in no
+  real region is the most frequent exact colour near the text's own colour (dark
+  text on white, white text on dark fills). So
+  `t = min(0.9, (0 + 1) / 2) = 0.5`. The margin is the whole range, well below
+  the 0.8 trigger. The probe was removed.
+- **Pattern**: dogfood's runner has no text-region check (it printed no
+  regions), so it neither feeds nor is affected by this check.
+
+### Architectural Decisions
+
+#### Threshold as a private constant
+
+- **Decision**: `INVISIBLE_TEXT_SHARE` is a private const, not a `Tolerances`
+  field.
+- **Reasoning**: the story adds a condition to one check, not a knob; a public
+  field is API surface.
+- **Trade-off**: not tunable per case, which suits "never loosen tolerances".
+
+### Development Workflow Insights
+
+- The worktree started behind main and lacked the story; fast-forwarded.
+- The pre-commit hook checks `cargo fmt` on the touched crates; run
+  `cargo fmt -p ...` before committing.
+
+### Follow-up Stories
+
+None written (GUP-653 and GUP-654 unused). A contrast-ratio check is the story's
+Out of Scope; dogfood has no text regions to check yet.
