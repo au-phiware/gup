@@ -441,6 +441,10 @@ and run one at a time; the run order is at the end of "Polish after 0.1".
   `Plot::data_table` and `Chart::data_table` from GUP-621's row fields, written
   by `CanvasApp` as a visually hidden `<table>` (at most 1,000 rows) and rebuilt
   when the description changes. Deps: GUP-621 📋, GUP-623 📋.
+- [GUP-625](GUP-625_High_Contrast_Theme.md) 📋 — `Theme::high_contrast()` (black
+  text and axes, a 3:1 grid, larger text) and a `HIGH_CONTRAST` palette of eight
+  colours, each at least 3:1 on white and at least ΔE00 12 apart under normal,
+  deutan and protan vision, all by test. Deps: GUP-553 ✅.
 
 ## Track N5: Performance at Scale
 
