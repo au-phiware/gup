@@ -462,11 +462,12 @@ Release day only: runs `mask all-check`, the root and gup-core tests,
 `mask merge-check --dogfood`, `mask publish-check` and `mask docs-rs`, then
 checks that one version is used everywhere, that exactly the seven crates are
 publishable, that their categories are crates.io slugs (skipped offline) and
-that the tree is clean and at or above `origin/main`. Every check runs even when
-an earlier one failed, and one table says which. It takes tens of minutes, needs
-the network, a GPU or lavapipe, Chromium and `wasm-bindgen`, and never
-publishes, tags or pushes. See `docs/RELEASING.md` and
-`scripts/release_check.sh`.
+that the tree is clean and at or above `origin/main`, and that the latest
+workflow runs and their jobs on `origin/main` succeeded (the `ci` row, skipped
+without an authenticated `gh`). Every check runs even when an earlier one
+failed, and one table says which. It takes tens of minutes, needs the network, a
+GPU or lavapipe, Chromium and `wasm-bindgen`, and never publishes, tags or
+pushes. See `docs/RELEASING.md` and `scripts/release_check.sh`.
 
 ```bash
 ./scripts/release_check.sh
@@ -713,10 +714,13 @@ features and `rustdoc-args` of each `[package.metadata.docs.rs]` table, with
 Package and verify all seven crates as `cargo publish` would, against a local
 overlay of the members not yet on crates.io (GUP-589). Never publishes; needs
 the network and builds Bevy, so it takes minutes and is not part of
-`mask all-check`
+`mask all-check`. It uses a build directory private to the checkout, because
+cargo's `package/tmp-registry` in the shared one can be left by another
+checkout's dry run (GUP-603); the first run in a checkout builds cold. See
+`scripts/publish_check.sh`
 
 ```bash
-cargo publish --workspace --dry-run --locked
+./scripts/publish_check.sh
 ```
 
 ## watch

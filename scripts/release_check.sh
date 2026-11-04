@@ -21,6 +21,9 @@
 #   seven        exactly the seven published crates have publish == null
 #   categories   every category is a crates.io category slug (SKIP offline)
 #   clean-tree   no uncommitted paths, and HEAD is on or above origin/main
+#   ci           the latest run of every workflow on origin/main succeeded, and
+#                so did its jobs, including Windows and macOS (SKIP without an
+#                authenticated gh or the network; read-only, GUP-604)
 #
 # Expected time: about 45 minutes (EXPECTED_MINUTES below; re-record it after
 # a release-day run). It is meant for release day, not for every commit. Needs
@@ -40,7 +43,7 @@ cd "$here" || exit 1
 root=${RELEASE_CHECK_ROOT:-$here}
 
 published=(gup gup-core gup-core-macros gup-wgsl gup-text gup-egui gup-bevy)
-all_checks=(all-check tests merge-check publish docs-rs one-version seven categories clean-tree)
+all_checks=(all-check tests merge-check publish docs-rs one-version seven categories clean-tree ci)
 EXPECTED_MINUTES=45
 
 usage() {
@@ -48,7 +51,7 @@ usage() {
 usage: scripts/release_check.sh [--only CHECK[,CHECK...]] [-h]
 
   --only  run just these checks (all-check, tests, merge-check, publish,
-          docs-rs, one-version, seven, categories, clean-tree)
+          docs-rs, one-version, seven, categories, clean-tree, ci)
   -h      print this usage
 EOF
 }
@@ -202,6 +205,86 @@ check_clean_tree() {
   fi
 }
 
+# The workflows `origin/main` must be green in, and per workflow the jobs (a
+# substring of the job name) that must exist and have succeeded. Update this
+# with .github/workflows. One line per job: WORKFLOW|JOB.
+required_jobs=(
+  'Tests|cargo test --workspace'
+  'Tests|gup-bevy'
+  'Tests|feature-matrix'
+  'Lint|mask all-check'
+  'Visual regression|visual-regression'
+  'Visual regression|Browser smoke'
+  'Dogfood|Dogfood suite'
+  'Gallery|build-gallery'
+  'WASM Compilation Check|WASM Target Compilation'
+  'Release check|cargo publish --workspace --dry-run'
+  'Release check|docs.rs build'
+  'Platforms|Windows render smoke'
+  'Platforms|macOS render smoke'
+)
+
+# The latest run of every workflow on origin/main, and its jobs (GUP-604).
+# Exit 2 (SKIP) when `gh` is missing, not logged in or cannot reach GitHub.
+# Read-only: only `gh auth status`, `gh run list` and `gh run view`.
+check_ci() {
+  local sha runs wf run id status conclusion jobs line job state other bad=0
+  if ! command -v gh >/dev/null 2>&1; then
+    echo "skipped: gh is not installed"
+    return 2
+  fi
+  if ! gh auth status >/dev/null 2>&1; then
+    echo "skipped: gh is not authenticated (gh auth login)"
+    return 2
+  fi
+  sha=$(git -C "$root" rev-parse --verify -q origin/main) || {
+    echo "no origin/main to read the workflow runs of"
+    return 1
+  }
+  runs=$(gh run list --commit "$sha" --limit 200 --json databaseId,workflowName,status,conclusion,createdAt) || {
+    echo "skipped: gh run list failed (no network?)"
+    return 2
+  }
+  echo "origin/main: $sha"
+  while IFS= read -r wf; do
+    run=$(jq -c --arg w "$wf" '[.[] | select(.workflowName == $w)] | sort_by(.createdAt, .databaseId) | last // empty' <<<"$runs")
+    if [[ -z $run ]]; then
+      echo "$wf: no run on $sha"
+      bad=1
+      continue
+    fi
+    id=$(jq -r .databaseId <<<"$run")
+    status=$(jq -r .status <<<"$run")
+    conclusion=$(jq -r '.conclusion // "none"' <<<"$run")
+    if [[ $status != completed || $conclusion != success ]]; then
+      echo "$wf: run $id is $status/$conclusion, not success"
+      bad=1
+    fi
+    jobs=$(gh run view "$id" --json jobs) || {
+      echo "skipped: gh run view $id failed (no network?)"
+      return 2
+    }
+    for line in "${required_jobs[@]}"; do
+      [[ ${line%%|*} == "$wf" ]] || continue
+      job=${line#*|}
+      state=$(jq -r --arg j "$job" '[.jobs[] | select(.name | contains($j)) | .conclusion // "none"] | if length == 0 then "missing" elif all(. == "success") then "success" else map(select(. != "success")) | first end' <<<"$jobs")
+      if [[ $state != success ]]; then
+        echo "$wf: run $id: job '$job' is $state"
+        bad=1
+      fi
+    done
+    # Any other job that is red (a skipped one, such as a deploy, is fine).
+    other=$(jq -r '.jobs[] | select((.conclusion // "none") != "success" and .conclusion != "skipped") | "\(.name) is \(.conclusion // "none")"' <<<"$jobs")
+    if [[ -n $other ]]; then
+      while IFS= read -r line; do
+        echo "$wf: run $id: job $line"
+      done <<<"$other"
+      bad=1
+    fi
+  done < <(printf '%s\n' "${required_jobs[@]}" | cut -d'|' -f1 | awk '!seen[$0]++')
+  return "$bad"
+}
+
 run_tests() {
   cargo test -- --test-threads=1 &&
     cargo test -p gup-core -- --test-threads=1
@@ -260,6 +343,7 @@ run_step one-version check_one_version
 run_step seven check_seven
 run_step categories check_categories
 run_step clean-tree check_clean_tree
+run_step ci check_ci
 
 echo
 printf '%-12s  %-6s  %7s  %s\n' check result seconds log
