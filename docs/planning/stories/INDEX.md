@@ -538,7 +538,7 @@ track N5 is at the end of this section.
   width test needed 3 px and tighten it to 1 px by a stated rule (wrong
   expectation, wrong measurement, or a geometry bug to escalate), with a 3 px
   negative control. Deps: GUP-554 ✅.
-- [GUP-618](GUP-618_Harness_Catches_Invisible_Labels.md) 📋 — `text_present`
+- [GUP-618](GUP-618_Harness_Catches_Invisible_Labels.md) 🚧 — `text_present`
   fails a label drawn in its background's colour (today it passes, because the
   sampled background skips text-coloured pixels), with a threshold set from
   every real region and a seeded failing chart. Deps: GUP-565 ✅, GUP-397 ✅.
