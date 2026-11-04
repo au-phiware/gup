@@ -483,6 +483,11 @@ GUP-566 edits `encoding.rs` (not beside GUP-562); GUP-567 edits `selection.rs`.
   labels) through Band, Point and `Categorical` scales, remapped once per label
   in the row path's first-seen order, with images identical to key closures.
   Deps: GUP-628 📋.
+- [GUP-630](GUP-630_Arrow_Record_Batches.md) 📋 — Feature `arrow`
+  (`arrow-array`, `arrow-schema`): `Columns::from_arrow(&RecordBatch)` for
+  floats, integers, dates, timestamps, strings, dictionaries and booleans, nulls
+  kept, in the feature matrix and docs.rs. Deps: GUP-628 📋, GUP-629 📋, GUP-602
+  ✅.
 
 ## Polish after 0.1
 
