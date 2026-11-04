@@ -479,6 +479,10 @@ GUP-566 edits `encoding.rs` (not beside GUP-562); GUP-567 edits `selection.rs`.
   f32), `Plot::add_columns::<M>` over `()` rows, `x_column`/`y_column` and
   `encode_column`: identical pictures to the rows path, and an f32 fast path
   chosen by a measured rule. Opus. Deps: GUP-627 📋.
+- [GUP-629](GUP-629_Key_Columns.md) 📋 — `Column::Keys(KeyColumn)` (codes plus
+  labels) through Band, Point and `Categorical` scales, remapped once per label
+  in the row path's first-seen order, with images identical to key closures.
+  Deps: GUP-628 📋.
 
 ## Polish after 0.1
 
