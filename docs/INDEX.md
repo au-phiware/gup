@@ -15,6 +15,8 @@ Quick access to all documents in `docs/`. For stories and planning, see
   (doctest-backed)
 - [IMPLEMENTATION_STRATEGY.md](IMPLEMENTATION_STRATEGY.md) — How work is done,
   what is built, what is next
+- [RELEASING.md](RELEASING.md) — The release checklist: `mask release-check` and
+  the owner's steps
 
 ---
 

@@ -52,15 +52,25 @@ what each release contains and what its version number promises.
   `Window` to bound how many rows are kept.
 - `gup-egui`, a widget that shows a chart in an egui panel, and `gup-bevy`, a
   plugin that shows a chart in a Bevy app.
+- A text alternative for every chart: `Plot::describe` returns a title and a
+  description in words, SVG files carry them as `title`, `desc` and
+  `role="img"`, and the browser canvas gets an `aria-label`.
+- The `gup` crate as the one dependency to add, with features `window` and `svg`
+  (both on by default) and `web` (the browser canvas, wasm32 only). Every
+  supported combination of features builds and tests.
+- A gallery of ten charts, each a runnable example with a checked golden image,
+  and a page that shows them.
 - Seven tutorials, from a first chart to custom marks and a tour of the chart
   types, and runnable examples.
+- CI that renders and compares goldens on Linux (Vulkan), Windows (DX12, WARP)
+  and macOS (Metal), a feature-combination matrix, and a publish dry run with a
+  docs.rs build of all seven crates.
 
 ### Known limitations
 
 - No CSV, serde or Arrow input: rows enter through closures.
 - Nothing above 10M rows is measured, and there is no level of detail.
 - No PDF export.
-- No accessibility support yet: charts have no text alternative and no keyboard
-  navigation.
-- CI renders on Linux only; Windows is not yet tested.
-- Chart types are those the builders list today.
+- Accessibility is a text alternative only: no keyboard navigation, no data
+  table and no high-contrast theme.
+- No pie, violin, density or choropleth charts, and no facets.

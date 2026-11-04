@@ -387,7 +387,7 @@ concurrently --group --names '\s,ignore,rs,nix,md,gha,sh,gallery,hook,doc' \
    'actionlint .github/workflows/*.y*ml' \
    'shellcheck scripts/*.sh dogfood/run_all.sh' \
    './scripts/check_gallery_sync.sh && ./scripts/check_gallery_links.sh && ./scripts/check_story_ids.sh && ./scripts/check_headers.sh' \
-   './scripts/test_pre_commit.sh && ./scripts/test_shared_build_dir.sh && ./scripts/test_prune_build_dir.sh && ./scripts/test_checkpoint.sh && ./scripts/test_check_story_ids.sh' \
+   './scripts/test_pre_commit.sh && ./scripts/test_shared_build_dir.sh && ./scripts/test_prune_build_dir.sh && ./scripts/test_checkpoint.sh && ./scripts/test_check_story_ids.sh && ./scripts/test_release_check.sh' \
    'mask doc'
 ```
 
@@ -452,6 +452,24 @@ OPTIONS
 
 ```bash
 ./scripts/merge_check.sh ${dogfood:+--dogfood}
+```
+
+## release-check
+
+> Everything that must be true before the owner runs `cargo publish` (GUP-598)
+
+Release day only: runs `mask all-check`, the root and gup-core tests,
+`mask merge-check --dogfood`, `mask publish-check` and `mask docs-rs`, then
+checks that one version is used everywhere, that exactly the seven crates are
+publishable, that their categories are crates.io slugs (skipped offline) and
+that the tree is clean and at or above `origin/main`. Every check runs even when
+an earlier one failed, and one table says which. It takes tens of minutes, needs
+the network, a GPU or lavapipe, Chromium and `wasm-bindgen`, and never
+publishes, tags or pushes. See `docs/RELEASING.md` and
+`scripts/release_check.sh`.
+
+```bash
+./scripts/release_check.sh
 ```
 
 ## ci

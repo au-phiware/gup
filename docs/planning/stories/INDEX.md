@@ -362,7 +362,7 @@ and WASM harness after it.
 - [GUP-602](GUP-602_Feature_Combinations_Compile.md) ✅ — Every supported
   feature combination builds and tests (`window`-only lib tests fail today at
   `scope.rs:338`); `mask feature-matrix` in CI. Deps: GUP-589 ✅.
-- [GUP-598](GUP-598_Release_Checklist.md) 📋 — `mask release-check` (every gate,
+- [GUP-598](GUP-598_Release_Checklist.md) ✅ — `mask release-check` (every gate,
   publish dry run, docs.rs, one-version and slug checks, seeded) and
   `docs/RELEASING.md`; ends at "ready to publish". Deps: GUP-536 📋, GUP-588–597
   📋.
@@ -373,6 +373,11 @@ and WASM harness after it.
   same-named layers and name a box plot by its boxes. Deps: GUP-592 ✅.
 - [GUP-601](GUP-601_Describe_Vertical_Band_Order.md) ✅ — Chart descriptions
   read vertical band axes top to bottom. Deps: GUP-592 ✅.
+- [GUP-603](GUP-603_Publish_Check_Private_Package_Dir.md) 📋 —
+  `mask publish-check` fails on a stale shared package directory. Deps: GUP-598
+  ✅.
+- [GUP-604](GUP-604_Release_Check_Workflow_Conclusions.md) 📋 — `release-check`
+  reads the latest workflow job conclusions. Deps: GUP-598 ✅.
 
 Owner steps (not worker stories), in GUP-598's `docs/RELEASING.md`: a crates.io
 token (`cargo login`); re-confirm the seven names are free (all were on

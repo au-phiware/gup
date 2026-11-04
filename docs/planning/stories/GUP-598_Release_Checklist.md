@@ -10,8 +10,8 @@ touches: [maskfile.md, scripts/, docs/RELEASING.md, docs/README.md]
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N3 Release 0.1) **Status**: 📋 Planned
-**Created**: 2026-11-02
+**Initiative**: Strategic Review 2026-11 (N3 Release 0.1) **Status**: 🚧 In
+Progress **Created**: 2026-11-02
 
 ## Context
 
@@ -44,12 +44,12 @@ publish". The owner runs `cargo publish`.
 
 ### AC1: `mask release-check`
 
-- [ ] `scripts/release_check.sh` runs every check in Decisions, each regardless
+- [x] `scripts/release_check.sh` runs every check in Decisions, each regardless
       of the others' results. It prints one summary table (check, pass/FAIL,
       seconds), as `merge_check.sh` does, and exits non-zero if any check
       failed. `mask release-check` runs it. It never publishes, tags or pushes;
       `grep -n 'cargo publish' scripts/release_check.sh` shows only `--dry-run`.
-- [ ] Each consistency check (items 6–9 in Decisions) has a seeded failure in
+- [x] Each consistency check (items 6–9 in Decisions) has a seeded failure in
       `scripts/test_release_check.sh`, run on a scratch copy of the files it
       reads: a `0.1.1` in one place but not the others; a missing CHANGELOG
       heading; a `publish = false` on a published crate; a bad category slug.
@@ -58,22 +58,22 @@ publish". The owner runs `cargo publish`.
 
 ### AC2: The run
 
-- [ ] Run `mask release-check` on the story's branch, rebased on `main`. Paste
+- [x] Run `mask release-check` on the story's branch, rebased on `main`. Paste
       the summary table into the Implementation Summary. Every check passes, or
       each failure is reported under Escalation Triggers with its output. Fix
       nothing outside this story's files.
-- [ ] Check the latest Tests, Lint, Visual regression, Dogfood, Release check
+- [x] Check the latest Tests, Lint, Visual regression, Dogfood, Release check
       and Platforms workflow runs on `main` with
       `gh run list --branch main --limit 20`. Paste each workflow's latest
       conclusion.
 
 ### AC3: `docs/RELEASING.md`
 
-- [ ] The checklist of Decisions, as a Markdown task list, with the owner steps
+- [x] The checklist of Decisions, as a Markdown task list, with the owner steps
       marked "Owner". `docs/README.md` links it in one line.
-- [ ] The CHANGELOG's `## [0.1.0] - Unreleased` heading is left as it is;
+- [x] The CHANGELOG's `## [0.1.0] - Unreleased` heading is left as it is;
       RELEASING.md's step 5 says to date it.
-- [ ] Re-read `CHANGELOG.md`'s "Added" and "Known limitations" against what
+- [x] Re-read `CHANGELOG.md`'s "Added" and "Known limitations" against what
       merged (GUP-596 left accessibility, the gallery and the Windows smoke job
       out because they had not landed): every shipped feature is listed, every
       listed feature exists, and no limitation is stale. Commit the fix.
@@ -141,12 +141,12 @@ publish". The owner runs `cargo publish`.
 
 ## Technical Tasks
 
-- [ ] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30
+- [x] Start commit within 30 minutes; `scripts/checkpoint.sh` every 20–30
       minutes.
-- [ ] `scripts/release_check.sh`, `mask release-check` (AC1). Commit.
-- [ ] `scripts/test_release_check.sh` and its all-check entry (AC1). Commit.
-- [ ] `docs/RELEASING.md` (AC3). Commit.
-- [ ] The run and the workflow conclusions (AC2). DoD commands.
+- [x] `scripts/release_check.sh`, `mask release-check` (AC1). Commit.
+- [x] `scripts/test_release_check.sh` and its all-check entry (AC1). Commit.
+- [x] `docs/RELEASING.md` (AC3). Commit.
+- [x] The run and the workflow conclusions (AC2). DoD commands.
 
 ## Dependencies
 
@@ -169,7 +169,7 @@ publish". The owner runs `cargo publish`.
 
 ## Success Metrics
 
-- [ ] On release day the owner runs one check and follows one list.
+- [x] On release day the owner runs one check and follows one list.
 
 ## Risk Assessment
 
@@ -181,14 +181,99 @@ publish". The owner runs `cargo publish`.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `mask release-check`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye: not applicable; the gates' goldens run
-- [ ] `mask wasm-browser`: run inside `merge-check`
-- [ ] WASM size: run inside `merge-check`; unchanged, no library code change
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `mask release-check`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye: not applicable; the gates' goldens run
+- [x] `mask wasm-browser`: run inside `merge-check`
+- [x] WASM size: run inside `merge-check`; unchanged, no library code change
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `scripts/release_check.sh` and `mask release-check`: nine checks (all-check,
+  tests, merge-check --dogfood, publish dry run, docs-rs, one-version, seven,
+  categories, clean-tree), each run regardless of the others, one table, and
+  `--only` to run chosen checks. `scripts/test_release_check.sh` seeds every
+  consistency check (a `0.1.1` in the workspace version, a dependency, the
+  metadata, a requirement and the CHANGELOG; a missing heading;
+  `publish = false` and an extra published crate; a bad slug; offline SKIP; a
+  dirty tree; HEAD behind) and is in `mask all-check`. `docs/RELEASING.md` is
+  linked from `docs/README.md` and `docs/INDEX.md`.
+- CHANGELOG re-read: added accessibility, the `gup` features, the gallery and CI
+  (Linux, Windows, macOS, feature matrix, publish dry run, docs.rs). Limitations
+  updated: accessibility is a text alternative only; macOS is no longer a
+  limitation, as its job is green and required (GUP-591); unsupported chart
+  types listed.
+- Run on a branch rebased on `main` (e5c2650b), 2026-11-04. The publish check
+  passed (67 s) in the first run and failed in later runs from a stale shared
+  package directory (GUP-603); `cargo publish --workspace --dry-run --locked`
+  with a private build directory passes.
+
+| check       | result | seconds |
+| ----------- | ------ | ------- |
+| all-check   | PASS   | 249     |
+| tests       | PASS   | 460     |
+| merge-check | PASS   | 517     |
+| publish     | FAIL\* | 21      |
+| docs-rs     | PASS   | 56      |
+| one-version | PASS   | 0       |
+| seven       | PASS   | 0       |
+| categories  | PASS   | 1       |
+| clean-tree  | PASS   | 0       |
+
+\*Environmental, see above; it passes with a clean package directory.
+
+Workflows on `main` (e5c2650b): Tests, Lint, Visual regression, Dogfood, Release
+check, Platforms (Windows and macOS jobs both success), Gallery and WASM all
+succeeded.
+
+Decisions: the slug list comes from `https://crates.io/api/v1/category_slugs`
+(the story's URL returns 404); only normal dependencies are compared (gup-wgsl
+has a dev-dependency on itself).
+
+## Retrospective
+
+**Completed**: 2026-11-04
+
+### Key Technical Learnings
+
+#### A test that creates git repositories inside a hook
+
+- **Challenge**: the seeded test ran under the pre-commit hook, which exports
+  `GIT_DIR`. `git -C scratch init` then re-initialised the real repository,
+  setting `core.bare = true` in the shared config and moving `origin/main`.
+- **Solution**: the test unsets `GIT_DIR` and friends, ignores user and system
+  git config, routes every git call through a function that refuses paths
+  outside its temp directory, and checks `rev-parse --is-bare-repository` at the
+  end.
+- **Pattern**: scrub the `GIT_*` environment in any test that creates
+  repositories.
+
+#### A green workflow can hide a red job
+
+- **Challenge**: Platforms reported success while the advisory macOS job failed.
+- **Solution**: RELEASING.md says to read the jobs; GUP-604 automates it.
+
+### Architectural Decisions
+
+#### Checks read overridable inputs
+
+- **Decision**: the consistency checks read `RELEASE_CHECK_ROOT`,
+  `RELEASE_CHECK_METADATA` and `RELEASE_CHECK_SLUGS`.
+- **Reasoning**: seeded tests mutate scratch copies without a scratch workspace.
+- **Trade-off**: the test depends on the real `cargo metadata` shape.
+
+### Development Workflow Insights
+
+- A full run took about 20 minutes here, so the 45 minutes in the script header
+  is conservative; re-record it after the release-day run.
+
+### Follow-up Stories
+
+1. **GUP-603: Publish Check Private Package Directory**.
+2. **GUP-604: Release Check Reads the Workflow Conclusions**.

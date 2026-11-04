@@ -29,6 +29,7 @@ N0–N6 that come next.
 ### [📝 Changelog](../CHANGELOG.md)
 
 What each release contains, and what a version number promises before 1.0.
+[Releasing](./RELEASING.md) is the maintainer's release checklist.
 
 ## Research Documents
 
