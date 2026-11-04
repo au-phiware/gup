@@ -445,6 +445,10 @@ and run one at a time; the run order is at the end of "Polish after 0.1".
   text and axes, a 3:1 grid, larger text) and a `HIGH_CONTRAST` palette of eight
   colours, each at least 3:1 on white and at least ΔE00 12 apart under normal,
   deutan and protan vision, all by test. Deps: GUP-553 ✅.
+- [GUP-626](GUP-626_Accessibility_Guide.md) 📋 — `docs/ACCESSIBILITY.md`: what
+  Gup does per output, keys, screen readers, contrast, what the developer must
+  do and what is not supported, every example a doctest; README, CHANGELOG and
+  the archive README brought in line. Deps: GUP-619–625 📋.
 
 ## Track N5: Performance at Scale
 
