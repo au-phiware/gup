@@ -530,7 +530,7 @@ track N5 is at the end of this section.
   `.text(rows, |t| ..)` and an inherent `pick_row(impl Into<Point>)` on all
   seven builders (one macro arm), and tutorial 7's labels without `plot_mut()`.
   Deps: GUP-542 ✅, GUP-563 ✅, GUP-536 ✅.
-- [GUP-615](GUP-615_Value_Labels_Read_The_Axis_Format.md) 📋 — Bar value labels
+- [GUP-615](GUP-615_Value_Labels_Read_The_Axis_Format.md) 🚧 — Bar value labels
   follow the value axis's effective tick format, including one set only through
   `ScaleRef::tick_format`, and a documented one-unit rule that the gallery's
   grouped bars follow. Deps: GUP-560 ✅, GUP-544 ✅.
