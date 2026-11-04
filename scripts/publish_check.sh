@@ -16,8 +16,8 @@
 #
 # Cost: the verification builds (Bevy included) are not shared with other
 # checkouts or with `mask build`, so the first run in a checkout compiles them
-# cold (about 5 minutes); later runs reuse the checkout's own directory and
-# take about a minute. The overlay itself is cleared before every run.
+# cold (5 to 8 minutes, measured); later runs reuse the checkout's own directory and
+# take about a minute (54 s measured). The overlay itself is cleared before every run.
 #
 #   scripts/publish_check.sh
 set -euo pipefail
