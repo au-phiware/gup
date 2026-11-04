@@ -443,6 +443,10 @@ track N5 is at the end of this section.
   follow the value axis's effective tick format, including one set only through
   `ScaleRef::tick_format`, and a documented one-unit rule that the gallery's
   grouped bars follow. Deps: GUP-560 ✅, GUP-544 ✅.
+- [GUP-616](GUP-616_Legends_Match_What_Is_Drawn.md) 📋 — Vertical stacks (bars,
+  areas, histograms) list their legend top-down, and swatches of translucent
+  marks are composited at the marks' opacity, so each matches what is drawn; the
+  description follows. Deps: GUP-547 ✅, GUP-592 ✅.
 
 ## Open Backlog
 
