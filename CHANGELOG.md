@@ -62,9 +62,9 @@ what each release contains and what its version number promises.
   and a page that shows them.
 - Seven tutorials, from a first chart to custom marks and a tour of the chart
   types, and runnable examples.
-- CI that renders and compares goldens on Linux (Vulkan) and on Windows (DX12,
-  WARP), a feature-combination matrix, and a publish dry run with a docs.rs
-  build of all seven crates.
+- CI that renders and compares goldens on Linux (Vulkan), Windows (DX12, WARP)
+  and macOS (Metal), a feature-combination matrix, and a publish dry run with a
+  docs.rs build of all seven crates.
 
 ### Known limitations
 
@@ -73,6 +73,4 @@ what each release contains and what its version number promises.
 - No PDF export.
 - Accessibility is a text alternative only: no keyboard navigation, no data
   table and no high-contrast theme.
-- CI renders on Linux and Windows. macOS (Metal) is not yet tested, so it is not
-  a supported platform for 0.1.
 - No pie, violin, density or choropleth charts, and no facets.

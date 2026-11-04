@@ -19,10 +19,10 @@ All seven crates (`gup`, `gup-core`, `gup-core-macros`, `gup-wgsl`, `gup-text`,
      It takes tens of minutes and never publishes. Also before publishing:
   - [ ] The latest Tests, Lint, Visual regression, Dogfood, Release check and
         Platforms runs on `main` are green (`gh run list --branch main`).
-  - [ ] **macOS (Metal) CI is green.** The Platforms workflow reports success
-        while the macOS job is advisory (`continue-on-error`), so read the job
-        itself: `gh run view <id> --json jobs`. Until it passes, neither
-        `CHANGELOG.md` nor `README.md` may claim macOS support (GUP-591).
+  - [ ] **macOS (Metal) CI is green.** The Platforms workflow's macOS job gates
+        like the Windows one (GUP-591); read its job conclusion with
+        `gh run view <id> --json jobs`. If it is red, neither `CHANGELOG.md` nor
+        `README.md` may claim macOS support.
 - [ ] 2. **Owner**: `cargo login` with a crates.io API token scoped to
      `publish-new` and `publish-update`.
 - [ ] 3. **Owner**: confirm the seven names are still free
