@@ -304,14 +304,21 @@ fn column_has(image: &image::RgbaImage, layout: &Layout, x: f64, c: Color) -> bo
 fn line_is_byte_identical_to_the_reference_plot() {
     let cx = Context::new_blocking().unwrap();
     let rows = quotes(200);
+    // The builder's x axis ends at the data (GUP-612), a policy a `Plot`
+    // does not have: pin the same domain on both sides.
+    let (first, last) = (rows[0].time, rows.last().unwrap().time);
     let mut chart = gup_core::line(rows.clone())
+        .x_scale(Linear::new().domain(first, last))
         .x(|q| q.time)
         .y(|q| q.price)
         .color(|q| q.ticker.clone());
     let (built, built_layout) = chart.render_resolved(&cx, 640, 400).unwrap();
 
     let mut plot = Plot::new();
-    let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
+    let (x, y) = (
+        plot.x(Linear::new().domain(first, last)),
+        plot.y(Linear::new()),
+    );
     let cat = ScaleRef::new(Categorical::okabe_ito());
     for name in ["Alpha", "Bravo", "Charlie"] {
         let series: Vec<Quote> = rows.iter().filter(|q| q.ticker == name).cloned().collect();

@@ -206,10 +206,9 @@ pub struct Plot {
     /// Whether each axis (x, y, right y) was widened by the last resolve: its range
     /// is the whole plot rect, not inset at the far end.
     widened: [bool; 3],
-    /// Whether each automatic axis (x, y, right y) is rounded out to the
-    /// step its own ticks use (see [`Plot::round_to_ticks`]), so both of its
-    /// ends are ticks.
-    tick_ends: [bool; 3],
+    /// How each automatic axis (x, y, right y) is fitted to its extent
+    /// (see [`AxisFit`]).
+    axis_fit: [AxisFit; 3],
     /// The domain a zoom left on each widened axis. While the axis still
     /// has it, the axis keeps the widened range policy, so zooming moves
     /// no pixel. A domain set any other way gets the fixed-domain policy.
@@ -461,6 +460,20 @@ impl Default for Plot {
     }
 }
 
+/// How an automatic position scale's fitted extent becomes its domain.
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
+enum AxisFit {
+    /// Rounded outward to the 10-tick step (`nice`).
+    #[default]
+    Nice,
+    /// Rounded outward to the step its own ticks use, so both ends are ticks
+    /// (a bar's value axis; see [`Plot::round_to_ticks`]).
+    Ticks,
+    /// Kept as fitted: a series axis ends at the data (see
+    /// [`Plot::fit_extent`]).
+    Extent,
+}
+
 impl Plot {
     /// An empty plot with automatic linear x and y scales, fitted to the
     /// data of its layers. [`x`](Self::x) and [`y`](Self::y) replace them.
@@ -489,7 +502,7 @@ impl Plot {
             cache: None,
             generation: 0,
             widened: [false; 3],
-            tick_ends: [false; 3],
+            axis_fit: [AxisFit::Nice; 3],
             zoomed: [None; 3],
             pick: None,
             drawn: Vec::new(),
@@ -533,7 +546,16 @@ impl Plot {
     /// ends are ticks: a bar's value axis ends on a labelled tick.
     pub(crate) fn round_to_ticks(&mut self, axis: usize) -> &mut Self {
         self.revision = self.revision.wrapping_add(1);
-        self.tick_ends[axis] = true;
+        self.axis_fit[axis] = AxisFit::Ticks;
+        self
+    }
+
+    /// Keep the automatic domain of `axis` at the fitted extent: a series
+    /// axis ends at the first and last rows, with no empty strip. A
+    /// zero-width extent still gets the padding of `nice`.
+    pub(crate) fn fit_extent(&mut self, axis: usize) -> &mut Self {
+        self.revision = self.revision.wrapping_add(1);
+        self.axis_fit[axis] = AxisFit::Extent;
         self
     }
 
@@ -2056,10 +2078,14 @@ impl Plot {
         for (i, s) in [Some(x), Some(y), right].into_iter().enumerate() {
             let Some(s) = s else { continue };
             if s.is_auto() {
-                if self.tick_ends[i] {
-                    s.nice_to([counts.0, counts.1, counts.2][i], true);
-                } else {
-                    s.nice();
+                match self.axis_fit[i] {
+                    AxisFit::Ticks => s.nice_to([counts.0, counts.1, counts.2][i], true),
+                    AxisFit::Nice => s.nice(),
+                    AxisFit::Extent => {
+                        if s.current_domain().is_some_and(|(lo, hi)| lo == hi) {
+                            s.nice();
+                        }
+                    }
                 }
             }
         }
@@ -2370,12 +2396,12 @@ impl Plot {
         // Widening can change the step the ticks use; grow a rounded axis
         // back to ticks at both ends. Only grows, so the room (and the
         // step past the data end) is kept.
-        let tick_ends = self.tick_ends;
+        let axis_fit = self.axis_fit;
         let round_out = |counts: (usize, usize, usize), only: [bool; 3]| {
             let counts = [counts.0, counts.1, counts.2];
             for (i, s) in [Some(x), Some(y), right].into_iter().enumerate() {
                 if let Some(s) = s
-                    && tick_ends[i]
+                    && axis_fit[i] == AxisFit::Ticks
                     && only[i]
                     && s.is_auto()
                 {

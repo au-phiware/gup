@@ -38,6 +38,9 @@ what each release contains and what its version number promises.
 - Marks: `Circle`, `Rect`, `Line` and `Area`, with typed channels, so a wrong
   value type or an unknown channel does not compile.
 - Line curves, including steps and monotone curves, and stacked areas and bars.
+- The x axis of a `gup::line` or `gup::area` chart ends at the first and last
+  rows, with no empty strip at either edge; an explicit `.x_scale(..)` domain
+  still wins.
 - Text layers (`Plot::text`) for annotations, and bar value labels.
 - `#[wgsl_function]` to write your own GPU encoding with an exact CPU mirror,
   and `#[derive(Mark)]` to define your own mark.
