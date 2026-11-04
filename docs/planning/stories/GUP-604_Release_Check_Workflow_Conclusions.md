@@ -8,8 +8,8 @@ touches: [scripts/, maskfile.md, docs/RELEASING.md]
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N3 Release 0.1) **Status**: 📋 Planned
-**Created**: 2026-11-04
+**Initiative**: Strategic Review 2026-11 (N3 Release 0.1) **Status**: 🚧 In
+Progress **Created**: 2026-11-04
 
 ## Context
 
@@ -22,6 +22,24 @@ report success while one of its jobs is red (the macOS job was advisory with
 
 > "As the maintainer, I want `release-check` to read the latest workflow job
 > conclusions on `main`, so that release day has no surprises."
+
+## Decisions
+
+- A `ci` row: for `git rev-parse origin/main`,
+  `gh run list --commit <sha> --json ...`, then `gh run view --json jobs` per
+  run. PASS only if every workflow's latest run on that commit concluded success
+  and the required jobs exist (Tests including feature-matrix, Lint, Visual
+  regression, Dogfood, Gallery, WASM, Release check, Platforms windows and
+  macos).
+- Without `gh`, or unauthenticated, the row is SKIP with a one-line reason,
+  never FAIL. Read-only: it never triggers, re-runs or cancels runs.
+- `docs/RELEASING.md` replaces its hand-written "check CI is green" steps with
+  "`mask release-check`'s `ci` row".
+- Seeded cases in `scripts/test_release_check.sh` with a fake `gh` on PATH:
+  success, one failed job, a missing job, `gh` absent.
+- Safety (GUP-598's incident): tests unset `GIT_*`, use the scratch-directory
+  git wrapper and keep the bare-repository guard. Never `cargo publish` without
+  `--dry-run`.
 
 ## Acceptance Criteria
 

@@ -8,8 +8,8 @@ touches: [maskfile.md, scripts/]
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N3 Release 0.1) **Status**: 📋 Planned
-**Created**: 2026-11-04
+**Initiative**: Strategic Review 2026-11 (N3 Release 0.1) **Status**: 🚧 In
+Progress **Created**: 2026-11-04
 
 ## Context
 
@@ -26,6 +26,18 @@ reliable on a machine with several checkouts.
 
 > "As the maintainer, I want the publish dry run to be reliable in a shared
 > build directory, so that release day has no surprises."
+
+## Decisions
+
+- The publish step runs `cargo publish --workspace --dry-run --locked` with
+  `CARGO_TARGET_DIR` set to a directory private to the run (a `mktemp -d` under
+  the checkout's own target directory, removed on exit by a trap), so cargo's
+  `package/` and `tmp-registry` are never shared. `CARGO_BUILD_BUILD_DIR` stays
+  shared if that still works; if cargo puts `tmp-registry` under the build
+  directory, that step uses a private build directory and the story records the
+  cost.
+- Proof: seed a stale `package/tmp-registry` in the shared location; show the
+  old command fails and the new step passes.
 
 ## Acceptance Criteria
 

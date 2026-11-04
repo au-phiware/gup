@@ -373,10 +373,10 @@ and WASM harness after it.
   same-named layers and name a box plot by its boxes. Deps: GUP-592 ✅.
 - [GUP-601](GUP-601_Describe_Vertical_Band_Order.md) ✅ — Chart descriptions
   read vertical band axes top to bottom. Deps: GUP-592 ✅.
-- [GUP-603](GUP-603_Publish_Check_Private_Package_Dir.md) 📋 —
+- [GUP-603](GUP-603_Publish_Check_Private_Package_Dir.md) 🚧 —
   `mask publish-check` fails on a stale shared package directory. Deps: GUP-598
   ✅.
-- [GUP-604](GUP-604_Release_Check_Workflow_Conclusions.md) 📋 — `release-check`
+- [GUP-604](GUP-604_Release_Check_Workflow_Conclusions.md) 🚧 — `release-check`
   reads the latest workflow job conclusions. Deps: GUP-598 ✅.
 
 Owner steps (not worker stories), in GUP-598's `docs/RELEASING.md`: a crates.io
