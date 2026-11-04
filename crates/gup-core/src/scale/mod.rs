@@ -190,6 +190,16 @@ impl TickFormat {
     pub fn apply(&self, value: f64) -> String {
         (self.0)(value)
     }
+
+    /// Whether `self` and `other` are the same format (one `Arc`); `None`
+    /// and `Some` differ.
+    pub(crate) fn same(a: &Option<Self>, b: &Option<Self>) -> bool {
+        match (a, b) {
+            (None, None) => true,
+            (Some(a), Some(b)) => Arc::ptr_eq(&a.0, &b.0),
+            _ => false,
+        }
+    }
 }
 
 impl std::fmt::Debug for TickFormat {
@@ -416,6 +426,8 @@ pub(crate) trait DynPositionScale: Send + Sync {
     /// Label the scale's ticks with `format`: the shared slot of
     /// [`ScaleRef::tick_format`], and a write for the caches.
     fn set_tick_format(&self, format: TickFormat);
+    /// The scale's current tick format, however it was set.
+    fn tick_format(&self) -> Option<TickFormat>;
 
     /// Zoom by `factor` about pixel `anchor`: the domain becomes the values
     /// now drawn at the range ends pulled towards (`factor < 1`) or pushed
@@ -455,6 +467,10 @@ impl<S: PositionScale> DynPositionScale for ScaleRef<S> {
     fn set_tick_format(&self, format: TickFormat) {
         *self.0.format.write().unwrap_or_else(|p| p.into_inner()) = Some(format);
         self.0.revision.fetch_add(1, Ordering::Relaxed);
+    }
+
+    fn tick_format(&self) -> Option<TickFormat> {
+        ShaderFn::tick_format(self)
     }
 
     fn reads_keys(&self) -> bool {

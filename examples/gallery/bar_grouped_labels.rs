@@ -31,7 +31,7 @@ pub fn chart() -> BarChart<Sale> {
         .y(|s| s.revenue)
         .group(|s| s.region)
         .group_padding(0.15)
-        .value_labels_with(|v| format!("${v:.0}k"))
+        .value_labels_with(|v| format!("{v:.0}"))
         .title("Quarterly revenue by region")
         .subtitle("Grouped bars with value labels")
         .y_title("Revenue ($k)")

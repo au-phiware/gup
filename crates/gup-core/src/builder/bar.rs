@@ -497,12 +497,15 @@ impl<T: Send + Sync + 'static, O: Orientation> BarChart<T, O> {
     /// Print each bar's value at its end: above a non-negative vertical bar,
     /// below a negative one, right of (left of) a horizontal one, and
     /// centred in each segment of a [`stack`](Self::stack) (a segment too
-    /// short to hold its label has none). The text is the value axis's tick
-    /// format, however it was set (on the builder or through `plot_mut()`),
-    /// if one is set, else the value to two decimals at most. A format set
-    /// only with `ScaleRef::tick_format` on a scale handle is not seen. An
-    /// automatic
-    /// value axis makes room for the labels. The last of this and
+    /// short to hold its label has none). The text uses the value axis's
+    /// tick format, however it was set (on the builder, with
+    /// `Plot::y_tick_format`, or with `ScaleRef::tick_format` on the scale's
+    /// handle), if one is set, else the value to two decimals at most. A
+    /// unit appears once: in the axis title when the ticks are bare numbers
+    /// ("Revenue ($k)"), or in the tick format when the title names only the
+    /// quantity ("Revenue", ticks "$200k"). Value labels follow the tick
+    /// format, so this obeys the rule either way. An automatic value axis
+    /// makes room for the labels. The last of this and
     /// [`value_labels_with`](Self::value_labels_with) wins.
     ///
     /// ```
@@ -533,7 +536,9 @@ impl<T: Send + Sync + 'static, O: Orientation> BarChart<T, O> {
     }
 
     /// Like [`value_labels`](Self::value_labels), with the text from `format`
-    /// (given the bar's value, or a segment's summed value).
+    /// (given the bar's value, or a segment's summed value). A unit appears
+    /// once, in the axis title or the tick format, so `format` should print
+    /// what the ticks print.
     ///
     /// ```
     /// let chart = gup_core::bar([("Q1", 3.0), ("Q2", 5.25)])
@@ -833,7 +838,7 @@ impl<T: Send + Sync + 'static, O: Orientation> BarChart<T, O> {
             LabelSpec::With(f) => Arc::clone(f),
             LabelSpec::Default => {
                 // Read at evaluation, so a format set later still applies.
-                let slot = self.plot.axis_format(usize::from(!O::HORIZONTAL));
+                let slot = self.plot.label_format(usize::from(!O::HORIZONTAL));
                 Arc::new(move |v| slot.get().map_or_else(|| default_label(v), |f| f.apply(v)))
             }
         };
