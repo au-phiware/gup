@@ -36,6 +36,9 @@ what each release contains and what its version number promises.
 - The chart types (`LineChart`, `ScatterChart`, and so on) are in
   `gup::prelude`, so one `use gup::prelude::*;` names the type a function
   returns; `Horizontal` and `Vertical` are at the crate root.
+- Every builder has `.text(rows, |t| ..)` to add labels at data positions and a
+  `pick_row` that takes a tuple, so `chart.pick_row((x, y))` compiles without
+  `plot_mut()`.
 - `Plot` and `Selection`, the layered API the builders are made of: several
   layers of marks on shared scales, with a second y axis.
 - Marks: `Circle`, `Rect`, `Line` and `Area`, with typed channels, so a wrong

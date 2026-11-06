@@ -1336,3 +1336,136 @@ mod barh {
             .assert_ok();
     }
 }
+
+/// GUP-614: `.text(rows, |t| ..)` and an inherent `pick_row` on every builder.
+mod text_and_pick_row {
+    use gup_core::geom::Point;
+    use gup_core::prelude::*;
+    use gup_core::scene::TextRole;
+    use gup_core::{ChartExt, Context};
+
+    const ROWS: [(&str, f64); 3] = [("a", 1.0), ("b", 2.0), ("c", 3.0)];
+
+    fn annotations(chart: &mut impl Chart, cx: &Context) -> Vec<String> {
+        chart
+            .resolve(cx, 320.0, 240.0)
+            .unwrap()
+            .layout
+            .texts
+            .iter()
+            .filter(|t| t.run.role == TextRole::Annotation)
+            .map(|t| t.run.text.to_string())
+            .collect()
+    }
+
+    /// A one-row layer of the label "mark", at (x, y) given as the chart's keys.
+    macro_rules! label {
+        ($t:ident, $x:expr, $y:expr) => {{
+            $t.x(|_| $x).y(|_| $y).text(|_| "mark");
+        }};
+        ($t:ident, key $x:expr, $y:expr) => {{
+            $t.x_key(|_| $x).y(|_| $y).text(|_| "mark");
+        }};
+        ($t:ident, $x:expr, key $y:expr) => {{
+            $t.x(|_| $x).y_key(|_| $y).text(|_| "mark");
+        }};
+        ($t:ident, key $x:expr, key $y:expr) => {{
+            $t.x_key(|_| $x).y_key(|_| $y).text(|_| "mark");
+        }};
+    }
+
+    #[test]
+    fn every_builder_lays_out_its_annotation() {
+        let cx = Context::new_blocking().unwrap();
+        let one = |chart: &mut dyn Chart| annotations_dyn(chart, &cx);
+        let want = vec!["mark".to_string()];
+
+        let mut c = gup_core::scatter(ROWS)
+            .x(|r| r.1)
+            .y(|r| r.1)
+            .text([0], |t| label!(t, 2.0, 2.0));
+        assert_eq!(one(&mut c), want, "scatter");
+        let mut c = gup_core::line(ROWS)
+            .x(|r| r.1)
+            .y(|r| r.1)
+            .text([0], |t| label!(t, 2.0, 2.0));
+        assert_eq!(one(&mut c), want, "line");
+        let mut c = gup_core::area(ROWS)
+            .x(|r| r.1)
+            .y(|r| r.1)
+            .text([0], |t| label!(t, 2.0, 2.0));
+        assert_eq!(one(&mut c), want, "area");
+        let mut c = gup_core::bar(ROWS)
+            .x(|r| r.0)
+            .y(|r| r.1)
+            .text([0], |t| label!(t, key "b", 2.0));
+        assert_eq!(one(&mut c), want, "bar");
+        let mut c = gup_core::barh(ROWS)
+            .y(|r| r.0)
+            .x(|r| r.1)
+            .text([0], |t| label!(t, 2.0, key "b"));
+        assert_eq!(one(&mut c), want, "barh");
+        let mut c = gup_core::histogram(ROWS)
+            .x(|r| r.1)
+            .text([0], |t| label!(t, 2.0, 1.0));
+        assert_eq!(one(&mut c), want, "histogram");
+        let mut c = gup_core::heatmap([("a", "p", 1.0), ("b", "q", 2.0)])
+            .x(|r| r.0)
+            .y(|r| r.1)
+            .color_value(|r| r.2)
+            .text([0], |t| label!(t, key "a", key "p"));
+        assert_eq!(one(&mut c), want, "heatmap");
+        let mut c = gup_core::boxplot(ROWS)
+            .x(|r| r.0)
+            .y(|r| r.1)
+            .text([0], |t| label!(t, key "b", 2.0));
+        assert_eq!(one(&mut c), want, "boxplot");
+    }
+
+    fn annotations_dyn(chart: &mut dyn Chart, cx: &Context) -> Vec<String> {
+        chart
+            .resolve(cx, 320.0, 240.0)
+            .unwrap()
+            .layout
+            .texts
+            .iter()
+            .filter(|t| t.run.role == TextRole::Annotation)
+            .map(|t| t.run.text.to_string())
+            .collect()
+    }
+
+    #[test]
+    fn text_works_before_and_after_the_layer_setters() {
+        let cx = Context::new_blocking().unwrap();
+        let before = gup_core::scatter(ROWS)
+            .text([0], |t| label!(t, 2.0, 2.0))
+            .x(|r| r.1)
+            .y(|r| r.1);
+        let after = gup_core::scatter(ROWS)
+            .x(|r| r.1)
+            .y(|r| r.1)
+            .text([0], |t| label!(t, 2.0, 2.0));
+        let (mut before, mut after) = (before, after);
+        assert_eq!(annotations(&mut before, &cx), ["mark"]);
+        assert_eq!(annotations(&mut after, &cx), ["mark"]);
+    }
+
+    #[test]
+    fn pick_row_takes_a_tuple_and_agrees_with_plot_and_trait() {
+        let cx = Context::new_blocking().unwrap();
+        let mut chart = gup_core::scatter(ROWS).x(|r| r.1).y(|r| r.1).radius(8.0);
+        let layout = chart.render_resolved(&cx, 320, 240).unwrap().1;
+        // The row with value 2.0, at the middle of both axes' data range.
+        let x = layout.x_ticks.iter().find(|t| t.0 == 2.0).unwrap().1;
+        let y = layout.y_ticks.iter().find(|t| t.0 == 2.0).unwrap().1;
+        let hit = chart.pick_row((x, y));
+        assert!(hit.is_some(), "a drawn row");
+        assert_eq!(hit, chart.plot_mut().pick_row((x, y)));
+        let p = Point::new(x, y);
+        assert_eq!(hit, Chart::pick_row(&mut chart, p));
+        let dynamic: &mut dyn Chart = &mut chart;
+        assert_eq!(hit, dynamic.pick_row(p));
+        let off = (layout.plot.left() + 1.0, layout.plot.top() + 1.0);
+        assert_eq!(chart.pick_row(off), None);
+    }
+}

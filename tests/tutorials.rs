@@ -576,15 +576,14 @@ fn tutorial_7_text() {
         .radius(4.0)
         .title("Five cities")
         .x_title("Longitude")
-        .y_title("Latitude");
-    chart
-        .plot_mut()
-        .text(cities)
-        .x(|c| c.1)
-        .y(|c| c.2)
-        .text(|c| c.0)
-        .anchor(Anchor::BOTTOM)
-        .dy(-6.0);
+        .y_title("Latitude")
+        .text(cities, |t| {
+            t.x(|c| c.1)
+                .y(|c| c.2)
+                .text(|c| c.0)
+                .anchor(Anchor::BOTTOM)
+                .dy(-6.0);
+        });
 
     check("tutorials/07_text", &mut chart);
 }
