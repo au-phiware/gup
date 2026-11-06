@@ -848,7 +848,7 @@ pub trait KeySource: Send + Sync + 'static {
 }
 
 /// Reads a dictionary key from a row and encodes it (see
-/// [`EncodeFn::encode_key`]). Implemented by [`Key`], [`NullableKey`],
+/// [`EncodeFn::encode_key`]). Implemented by `Key`, [`NullableKey`],
 /// [`OwnedKey`] and [`NullableOwnedKey`], which those methods make.
 pub trait KeyAccessor<T>: KeySource {
     /// The code of `row`'s key in `dictionary`, which gives a new key the
