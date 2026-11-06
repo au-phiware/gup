@@ -41,6 +41,8 @@ what each release contains and what its version number promises.
 - The x axis of a `gup::line` or `gup::area` chart ends at the first and last
   rows, with no empty strip at either edge; an explicit `.x_scale(..)` domain
   still wins.
+- Legends match what is drawn: a vertical stack (bars, areas, histograms) lists
+  its keys top-down, and swatches of translucent marks show the blended colour.
 - Text layers (`Plot::text`) for annotations, and bar value labels.
 - `#[wgsl_function]` to write your own GPU encoding with an exact CPU mirror,
   and `#[derive(Mark)]` to define your own mark.
