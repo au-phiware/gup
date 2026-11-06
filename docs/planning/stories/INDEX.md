@@ -519,7 +519,7 @@ checked against `main` on 2026-11-04. GUP-584, GUP-585 and GUP-611 (listed under
 track N2) belong to this group too. The run order for this group, track N4 and
 track N5 is at the end of this section.
 
-- [GUP-612](GUP-612_Line_And_Area_X_Axes_End_At_The_Data.md) 📋 — The x axis of
+- [GUP-612](GUP-612_Line_And_Area_X_Axes_End_At_The_Data.md) ✅ — The x axis of
   `gup::line` and `gup::area` ends at the first and last rows (a third per-axis
   fit policy beside GUP-561's ticks), so the gallery's stacked area loses its
   pinned domain. Deps: GUP-561 ✅, GUP-547 ✅.
@@ -542,7 +542,7 @@ track N5 is at the end of this section.
   width test needed 3 px and tighten it to 1 px by a stated rule (wrong
   expectation, wrong measurement, or a geometry bug to escalate), with a 3 px
   negative control. Deps: GUP-554 ✅.
-- [GUP-618](GUP-618_Harness_Catches_Invisible_Labels.md) 📋 — `text_present`
+- [GUP-618](GUP-618_Harness_Catches_Invisible_Labels.md) ✅ — `text_present`
   fails a label drawn in its background's colour (today it passes, because the
   sampled background skips text-coloured pixels), with a threshold set from
   every real region and a seeded failing chart. Deps: GUP-565 ✅, GUP-397 ✅.

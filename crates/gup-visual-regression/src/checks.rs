@@ -284,6 +284,45 @@ fn local_background(
         .unwrap_or(layout.background)
 }
 
+/// The most frequent exact colour over a region's non-guide pixels (nothing
+/// skipped) and its share of those pixels, when that colour is within
+/// [`Tolerances::text_blend_delta_e`] of the region's solid text colour. A
+/// label drawn in its background's colour is one such colour throughout.
+fn dominant_text_colour(
+    img: &RgbaImage,
+    region: &crate::layout::TextRegion,
+    layout: &LayoutMetadata,
+    tol: &Tolerances,
+) -> Option<(Rgba8, f32)> {
+    let (x0, y0, x1, y1) = region.rect.pixel_span(img.width(), img.height())?;
+    let mut counts: std::collections::HashMap<Rgba8, usize> = std::collections::HashMap::new();
+    let mut total = 0usize;
+    for y in y0..y1 {
+        for x in x0..x1 {
+            if !layout.in_guide(x, y) {
+                *counts.entry(img.pixel(x, y)).or_default() += 1;
+                total += 1;
+            }
+        }
+    }
+    let max = *counts.values().max()?;
+    let dominant = counts
+        .into_iter()
+        .filter(|&(_, n)| n == max)
+        .map(|(c, _)| c)
+        .min_by_key(|c| (c.r, c.g, c.b, c.a))?;
+    let solid_text = region.color.over(layout.background);
+    (dominant.delta_e(solid_text) <= tol.text_blend_delta_e)
+        .then(|| (dominant, max as f32 / total as f32))
+}
+
+/// A text region fails as invisible when one exact colour near the text's own
+/// solid colour covers more than this share of its non-guide pixels. Measured
+/// (GUP-618) over 2145 text regions of every golden suite: no real region has
+/// a dominant colour near its own text colour (largest share 0.0), so by the
+/// story's rule `min(0.9, (0 + 1) / 2)` the threshold is one half.
+const INVISIBLE_TEXT_SHARE: f32 = 0.5;
+
 /// Fail if any expected text region has fewer than
 /// [`Tolerances::min_text_ink_pixels`] glyph pixels (pixels that look like
 /// the region's text colour over the region's local background, see
@@ -294,8 +333,28 @@ pub fn check_text_present(
     tol: &Tolerances,
 ) -> Result<(), CheckFailure> {
     let mut missing = Vec::new();
+    let mut invisible = Vec::new();
     for region in &layout.text_regions {
         let mut ink = 0usize;
+        if let Some((c, share)) = dominant_text_colour(img, region, layout, tol)
+            && share > INVISIBLE_TEXT_SHARE
+        {
+            let t = region.color.over(layout.background);
+            invisible.push(format!(
+                    "{:?} {:?} at {}: the text is drawn in its background's colour (text #{:02x}{:02x}{:02x}, region is {:.0}% #{:02x}{:02x}{:02x})",
+                    region.role,
+                    region.text,
+                    fmt_rect(&region.rect),
+                    t.r,
+                    t.g,
+                    t.b,
+                    share * 100.0,
+                    c.r,
+                    c.g,
+                    c.b
+                ));
+            continue;
+        }
         let bg = local_background(img, region, layout, tol);
         if let Some((x0, y0, x1, y1)) = region.rect.pixel_span(img.width(), img.height()) {
             for y in y0..y1 {
@@ -320,6 +379,16 @@ pub fn check_text_present(
                 region.color
             ));
         }
+    }
+    if !invisible.is_empty() {
+        return Err(CheckFailure::new(
+            Check::TextPresent,
+            format!(
+                "{} text region(s) are invisible: {}",
+                invisible.len(),
+                invisible.join("; ")
+            ),
+        ));
     }
     if missing.is_empty() {
         return Ok(());
@@ -569,6 +638,28 @@ mod tests {
         let (mut img, layout) = title_on(ORANGE, DARK, false);
         img.fill_rect(PxRect::new(85.0, 2.0, 30.0, 4.0), Rgba8::WHITE);
         assert!(check_text_present(&img, &layout, &tol()).is_err());
+    }
+
+    #[test]
+    fn text_drawn_in_its_fill_colour_is_invisible() {
+        // Seeded failure: the label is the colour of what is behind it.
+        let (img, layout) = title_on(ORANGE, ORANGE, false);
+        let err = check_text_present(&img, &layout, &tol()).unwrap_err();
+        assert!(err.message.contains("Title"), "{err}");
+        assert!(
+            err.message.contains("drawn in its background's colour"),
+            "{err}"
+        );
+        assert!(err.message.contains("#e69f00"), "{err}");
+    }
+
+    #[test]
+    fn contrasting_glyph_strokes_on_a_fill_are_not_invisible() {
+        let (img, layout) = title_on(ORANGE, DARK, true);
+        check_text_present(&img, &layout, &tol()).unwrap();
+        // And on the plain background.
+        let (img, layout) = synthetic();
+        check_text_present(&img, &layout, &tol()).unwrap();
     }
 
     #[test]
