@@ -11,6 +11,7 @@ use super::{DRAWN, Key, erase_key, plot_setters};
 use crate::column::DictionaryKey;
 use crate::geom::Point;
 use crate::prelude::*;
+use crate::selection::RowAxes;
 use crate::transform::{BoxStats, box_stats};
 use crate::{ColumnValue, Context, Input, Layout, Resolved, Response, Result, RowId};
 
@@ -332,6 +333,20 @@ impl<T: Send + Sync + 'static> BoxPlotChart<T> {
             if let Some(text) = self.tooltip.clone() {
                 layer.tooltip(move |b: &Boxed| text(&b.summary));
             }
+            layer.row_fields_with(Arc::new(|b: &Boxed, axes: &RowAxes<'_>| {
+                let (s, y) = (&b.summary.stats, &axes.y);
+                vec![
+                    (axes.x.name.clone(), b.summary.key.to_string()),
+                    ("Median".to_owned(), y.say(s.median)),
+                    ("Q1".to_owned(), y.say(s.q1)),
+                    ("Q3".to_owned(), y.say(s.q3)),
+                    (
+                        "Whiskers".to_owned(),
+                        format!("{}\u{2013}{}", y.say(s.whisker_lo), y.say(s.whisker_hi)),
+                    ),
+                    ("Outliers".to_owned(), s.outliers.len().to_string()),
+                ]
+            }));
             match &self.color {
                 ColorSpec::Default => {
                     layer.fill(Rect::DEFAULT_FILL).stroke(Rect::DEFAULT_FILL);
@@ -396,6 +411,12 @@ impl<T: Send + Sync + 'static> BoxPlotChart<T> {
                 )
                 .y(|p: &Part| p.y)
                 .radius(Px(OUTLIER_RADIUS));
+            layer.row_fields_with(Arc::new(|p: &Part, axes: &RowAxes<'_>| {
+                vec![
+                    (axes.x.name.clone(), p.key.to_string()),
+                    (axes.y.name.clone(), axes.y.say(p.y)),
+                ]
+            }));
             match &self.color {
                 ColorSpec::Default => {
                     layer.fill(Circle::DEFAULT_FILL);
@@ -458,6 +479,9 @@ impl<T: Send + Sync + 'static> Chart for BoxPlotChart<T> {
     }
     fn describe(&self) -> Option<&crate::Description> {
         self.plot.describe()
+    }
+    fn focus_text(&self) -> Option<&str> {
+        self.plot.focus_text()
     }
     fn as_any(&self) -> &dyn Any {
         self

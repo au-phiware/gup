@@ -376,6 +376,9 @@ impl<T: Send + Sync + 'static> Chart for ScatterChart<T> {
     fn describe(&self) -> Option<&crate::Description> {
         self.plot.describe()
     }
+    fn focus_text(&self) -> Option<&str> {
+        self.plot.focus_text()
+    }
     fn as_any(&self) -> &dyn Any {
         self
     }

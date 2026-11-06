@@ -12,6 +12,7 @@ use super::{DRAWN, Key, erase_key, plot_setters};
 use crate::column::DictionaryKey;
 use crate::geom::Point;
 use crate::prelude::*;
+use crate::selection::RowAxes;
 use crate::transform::{edges, index_of};
 use crate::{ColumnValue, Context, Input, Layout, Resolved, Response, Result, RowId};
 
@@ -397,8 +398,29 @@ impl<T: Send + Sync + 'static> HistogramChart<T> {
         };
 
         let colours = ScaleRef::new(self.color_scale.clone());
+        let series_title = self
+            .legend_title
+            .clone()
+            .unwrap_or_else(|| "Series".to_owned());
         for bars in tables {
+            let series = bars.first().and_then(|b| b.key.clone());
             let sel = self.plot.rects(bars);
+            if let Some(name) = series {
+                sel.series_name(name);
+            }
+            let series_title = series_title.clone();
+            sel.row_fields_with(Arc::new(move |b: &HistogramBin, axes: &RowAxes<'_>| {
+                let mut out = Vec::new();
+                if let Some(key) = &b.key {
+                    out.push((series_title.clone(), key.to_string()));
+                }
+                out.push((
+                    "Bin".to_owned(),
+                    format!("{}\u{2013}{}", axes.x.say(b.lo), axes.x.say(b.hi)),
+                ));
+                out.push(("Count".to_owned(), b.count.to_string()));
+                out
+            }));
             sel.x_with(
                 x.then(Offset::by(half_gap(1.0)))
                     .encode(|b: &HistogramBin| b.lo),
@@ -485,6 +507,9 @@ impl<T: Send + Sync + 'static> Chart for HistogramChart<T> {
     }
     fn describe(&self) -> Option<&crate::Description> {
         self.plot.describe()
+    }
+    fn focus_text(&self) -> Option<&str> {
+        self.plot.focus_text()
     }
     fn as_any(&self) -> &dyn Any {
         self

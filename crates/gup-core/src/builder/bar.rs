@@ -14,6 +14,7 @@ use crate::encoding::{KeyEncoded, LabelKey};
 use crate::geom::Point;
 use crate::prelude::*;
 use crate::scene::{HAlign, VAlign};
+use crate::selection::RowAxes;
 use crate::{ColumnValue, Context, Input, Layout, Resolved, Response, Result, RowId};
 
 type Value<T> = Arc<dyn Fn(&T) -> f64 + Send + Sync>;
@@ -669,6 +670,9 @@ impl<T: Send + Sync + 'static, O: Orientation> BarChart<T, O> {
         let colours = ScaleRef::new(self.color_scale.clone());
         for (i, part) in parts.into_iter().enumerate() {
             let label_rows = self.label_rows(&part, tables.as_ref().map(|t| &t[i]), &categories);
+            let series: Option<Arc<str>> = part_key
+                .as_ref()
+                .and_then(|k| part.first().map(|r| k.label(r)));
             let sel = self.plot.rects(part);
             if let Some(xk) = &self.cat_key {
                 let xk = xk.clone();
@@ -747,6 +751,41 @@ impl<T: Send + Sync + 'static, O: Orientation> BarChart<T, O> {
             for op in &self.ops {
                 op(sel);
             }
+            if let Some(name) = &series {
+                sel.series_name(Arc::clone(name));
+            }
+            let color_key = match &self.color {
+                ColorSpec::Key(k) => Some(k.clone()),
+                _ => None,
+            };
+            let (cat, val, horizontal) = (self.cat_key.clone(), self.value.clone(), O::HORIZONTAL);
+            let series_title = self
+                .legend_title
+                .clone()
+                .unwrap_or_else(|| "Series".to_owned());
+            sel.row_fields_with(Arc::new(move |r: &T, axes: &RowAxes<'_>| {
+                let (band, value) = if horizontal {
+                    (&axes.y, &axes.x)
+                } else {
+                    (&axes.x, &axes.y)
+                };
+                let mut out = Vec::new();
+                let name = series
+                    .as_ref()
+                    .map(|s| s.to_string())
+                    .or_else(|| color_key.as_ref().map(|k| k.label(r).to_string()));
+                if let Some(name) = name {
+                    out.push((series_title.clone(), name));
+                }
+                if let Some(cat) = &cat {
+                    out.push((band.name.clone(), cat.label(r).to_string()));
+                }
+                // The row's own value: a stacked segment's top is not it.
+                if let Some(v) = val.as_ref().map(|f| f(r)).filter(|v| v.is_finite()) {
+                    out.push((value.name.clone(), value.say(v)));
+                }
+                out
+            }));
             let key = match (&self.color, &part_key) {
                 (ColorSpec::Fill(c), _) => {
                     sel.fill(*c);
@@ -980,6 +1019,9 @@ impl<T: Send + Sync + 'static, O: Orientation> Chart for BarChart<T, O> {
     }
     fn describe(&self) -> Option<&crate::Description> {
         self.plot.describe()
+    }
+    fn focus_text(&self) -> Option<&str> {
+        self.plot.focus_text()
     }
     fn as_any(&self) -> &dyn Any {
         self

@@ -150,6 +150,14 @@ pub trait PositionScale: ShaderFn<Out = Px> + EncodeFn<Output = Px> + CpuMirror 
         let _ = key;
         None
     }
+    /// How a screen reader says the domain value `v` when no tick format
+    /// applies: three significant digits ([`Time`] says an ISO 8601 date in
+    /// UTC). A plot's user format
+    /// ([`Plot::x_tick_format`](crate::Plot::x_tick_format)) takes
+    /// precedence.
+    fn value_label(&self, v: f64) -> String {
+        crate::describe::sig3(v)
+    }
 }
 
 /// A shared handle to a scale. The plot keeps one clone to draw axes and
@@ -428,6 +436,12 @@ pub(crate) trait DynPositionScale: Send + Sync {
     fn set_tick_format(&self, format: TickFormat);
     /// The scale's current tick format, however it was set.
     fn tick_format(&self) -> Option<TickFormat>;
+    /// See [`PositionScale::value_label`].
+    fn value_label(&self, v: f64) -> String;
+    /// The label of the key with code `code` for a scale that
+    /// [`reads_keys`](Self::reads_keys); `None` for a numeric scale or a
+    /// code outside the domain.
+    fn key_label(&self, code: f64) -> Option<String>;
 
     /// Zoom by `factor` about pixel `anchor`: the domain becomes the values
     /// now drawn at the range ends pulled towards (`factor < 1`) or pushed
@@ -482,6 +496,21 @@ impl<S: PositionScale> DynPositionScale for ScaleRef<S> {
     fn key_position(&self, key: &str) -> Option<f64> {
         let scale = self.read();
         scale.key_code(key).map(|code| scale.eval(code))
+    }
+
+    fn value_label(&self, v: f64) -> String {
+        self.read().value_label(v)
+    }
+
+    fn key_label(&self, code: f64) -> Option<String> {
+        if !self.reads_keys() {
+            return None;
+        }
+        // An ordinal scale has one tick per key, in code order, unless
+        // `count` is small enough to thin them.
+        let ticks = self.read().ticks(usize::MAX / 4);
+        let i = ticks.values.iter().position(|&v| v == code)?;
+        ticks.labels.get(i).cloned()
     }
 
     fn is_auto(&self) -> bool {

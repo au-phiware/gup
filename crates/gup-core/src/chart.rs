@@ -89,6 +89,13 @@ pub trait Chart: 'static {
     fn describe(&self) -> Option<&crate::Description> {
         None
     }
+    /// What a screen reader says when keyboard focus is on a row (the row's
+    /// values with their axis names, and its place, `Mass: 0.9; Span: 0.95
+    /// (2 of 3)`; see [`Plot::focus_text`](crate::Plot::focus_text)); `None`
+    /// without keyboard focus, and for a chart that has none.
+    fn focus_text(&self) -> Option<&str> {
+        None
+    }
     /// The chart as [`Any`], to downcast to its concrete type.
     fn as_any(&self) -> &dyn Any;
     /// The chart as mutable [`Any`], to downcast to its concrete type.

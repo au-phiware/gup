@@ -72,6 +72,11 @@ what each release contains and what its version number promises.
   `Up`, `Down`, `Home`, `End`, `Enter`, `Escape`) to a plot, and it moves a
   focus ring and tooltip from row to row; `Plot::focused` says which.
   `Selection::focusable(false)` keeps a helper layer out of the walk.
+- Row announcements for screen readers: `Plot::focus_text` (and
+  `Chart::focus_text`) says the focused row's values with their axis names and
+  its place, such as `Mass: 0.9; Span: 0.95 (2 of 3)`, in the axes' own formats
+  (a time axis says an ISO date). `Plot::row_fields` and `Plot::row_text` give
+  any row's values as `(name, value)` pairs or text.
 - Render targets: a window (`gup::show`), PNG, SVG, a texture, and a WebGPU
   canvas in the browser.
 - Interaction: picking, tooltips, wheel zoom, drag pan and brushing. Zooming and

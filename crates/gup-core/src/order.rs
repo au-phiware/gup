@@ -238,6 +238,23 @@ impl DrawOrder {
         self.batches[batch] + u64::from(self.local[stored as usize])
     }
 
+    /// The stored row that holds data row `data`: the inverse of
+    /// [`row_of`](Self::row_of), by a scan of the one batch it is in.
+    pub(crate) fn stored_of(&self, data: u64) -> Option<u64> {
+        let batch = self
+            .batches
+            .partition_point(|&b| b <= data)
+            .checked_sub(1)?;
+        let start = self.batches[batch];
+        let end = self
+            .batches
+            .get(batch + 1)
+            .copied()
+            .unwrap_or(self.local.len() as u64);
+        let want = u32::try_from(data - start).ok()?;
+        (start..end).find(|&s| self.local[s as usize] == want)
+    }
+
     /// The instanced draws over `chunks`, in draw order: each segment
     /// split at chunk boundaries.
     pub(crate) fn spans(&self, chunks: &[Chunk]) -> Vec<Span> {
@@ -512,6 +529,11 @@ mod tests {
         let mut rows = drawn(&order);
         rows.sort_unstable();
         assert_eq!(rows, (0..all.len() as u64).collect::<Vec<_>>());
+        // `stored_of` inverts `row_of`.
+        for stored in 0..all.len() as u64 {
+            assert_eq!(order.stored_of(order.row_of(stored)), Some(stored));
+        }
+        assert_eq!(order.stored_of(all.len() as u64 + 5), None);
         // Ties draw stored (earlier) rows first.
         let drawn = drawn(&order);
         for w in drawn.windows(2) {
