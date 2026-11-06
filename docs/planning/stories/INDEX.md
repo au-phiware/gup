@@ -523,7 +523,7 @@ track N5 is at the end of this section.
   `gup::line` and `gup::area` ends at the first and last rows (a third per-axis
   fit policy beside GUP-561's ticks), so the gallery's stacked area loses its
   pinned domain. Deps: GUP-561 ✅, GUP-547 ✅.
-- [GUP-613](GUP-613_Chart_Types_In_The_Prelude.md) 🚧 — The seven builder chart
+- [GUP-613](GUP-613_Chart_Types_In_The_Prelude.md) ✅ — The seven builder chart
   types in the prelude and `Horizontal`/`Vertical`/`Orientation` at the root, so
   no example imports from `gup::builder::`. Deps: GUP-594 ✅, GUP-595 ✅.
 - [GUP-614](GUP-614_Builder_Text_Layers_And_Pick_Row.md) 📋 —
