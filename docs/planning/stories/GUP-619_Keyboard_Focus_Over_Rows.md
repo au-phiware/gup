@@ -20,8 +20,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Track N4: Accessibility **Status**: 🚧 In Progress **Created**:
-2026-11-04
+**Initiative**: Track N4: Accessibility **Status**: ✅ Complete (2026-11-06)
+**Created**: 2026-11-04
 
 ## Context
 
@@ -61,58 +61,58 @@ GUP-620; what a screen reader hears is GUP-621.
 
 ### AC1: Key input
 
-- [ ] `Key`, `Modifiers` and `Input::KeyDown` exist as in Decisions, with
+- [x] `Key`, `Modifiers` and `Input::KeyDown` exist as in Decisions, with
       `Input::key(key)` and `Input::key_with(key, modifiers)` constructors, and
       `Key` and `Modifiers` re-exported at the crate root (not in the prelude).
-- [ ] A doctest on `Key` sends `Input::key(Key::Right)` to a resolved two-row
+- [x] A doctest on `Key` sends `Input::key(Key::Right)` to a resolved two-row
       scatter and asserts `plot.focused()` is the first row.
 
 ### AC2: Focus is a keyboard hover
 
-- [ ] `Plot::focused(&self) -> Option<RowId>` returns the row focused by the
+- [x] `Plot::focused(&self) -> Option<RowId>` returns the row focused by the
       keyboard, `None` when there is none or the hover came from the pointer.
-- [ ] Focusing a row calls `set_hover(Some(row), anchor)`: its `Enter` handlers
+- [x] Focusing a row calls `set_hover(Some(row), anchor)`: its `Enter` handlers
       run, the previous row's `Leave` handlers run, and its tooltip (if the
       layer has one) is shown at the row's anchor. `Plot::hovered()` equals
       `focused()` while the keyboard holds focus.
-- [ ] A pointer move that changes the hover ends keyboard focus (`focused()`
+- [x] A pointer move that changes the hover ends keyboard focus (`focused()`
       becomes `None`); a pointer move that does not change the hovered row
       leaves focus alone.
-- [ ] `Response::redraw` is true whenever focus changes.
+- [x] `Response::redraw` is true whenever focus changes.
 
 ### AC3: The walk
 
-- [ ] The keys do what the table in Decisions says, tested in
+- [x] The keys do what the table in Decisions says, tested in
       `crates/gup-core/tests/keyboard.rs` on: a 5-row scatter whose rows are not
       in x order (Right visits them in x order), a 3-series line chart (Up and
       Down change series and land on the nearest x), a grouped bar chart, and a
       box plot (Left/Right walk boxes; whiskers, caps and medians are never
       focused; Up reaches the outliers' layer).
-- [ ] Enter on a focused row runs its `Click` handlers (`Plot::on_row` sees
+- [x] Enter on a focused row runs its `Click` handlers (`Plot::on_row` sees
       `Event::Click` with that row); Escape clears focus (`Leave` runs) and
       returns `redraw: true`; Escape with nothing focused returns
       `redraw: false`.
-- [ ] Rows outside the current view (culled, or outside the zoomed domain) are
+- [x] Rows outside the current view (culled, or outside the zoomed domain) are
       not visited; a zoom that moves the focused row out of the plot clears
       focus as it clears a hover.
-- [ ] Keys before the first resolve, and on a plot with no focusable row, do
+- [x] Keys before the first resolve, and on a plot with no focusable row, do
       nothing and return `redraw: false`.
 
 ### AC4: Focus ring
 
-- [ ] While `focused()` is `Some`, the overlay scene draws the ring of Decisions
+- [x] While `focused()` is `Some`, the overlay scene draws the ring of Decisions
       centred on the row's anchor; it is not drawn for a pointer hover.
-- [ ] A golden `gup_core/keyboard_focus` (a scatter with a tooltip, the third
+- [x] A golden `gup_core/keyboard_focus` (a scatter with a tooltip, the third
       row focused) is read by eye: a dark square ring with a light edge sits
       centred on the third disc, fully visible, under the tooltip.
-- [ ] `Layout` reports the ring in a new field `focus: Option<Rect>` (as it
+- [x] `Layout` reports the ring in a new field `focus: Option<Rect>` (as it
       reports `tooltip`), so hosts and tests can find it.
 
 ### AC5: Composite builders
 
-- [ ] `Selection::focusable(&mut self, on: bool) -> &mut Self` exists (default
+- [x] `Selection::focusable(&mut self, on: bool) -> &mut Self` exists (default
       true), documented: keyboard focus skips a layer with `focusable(false)`.
-- [ ] The box plot sets `focusable(false)` on its whiskers, caps and medians
+- [x] The box plot sets `focusable(false)` on its whiskers, caps and medians
       layers; the area builder on its outline line layers.
 
 ## Decisions
@@ -194,12 +194,12 @@ GUP-620; what a screen reader hears is GUP-621.
 
 ## Technical Tasks
 
-- [ ] `Key`, `Modifiers`, `Input::KeyDown`, constructors, re-exports.
-- [ ] `PickIndex::anchors`, the cached order, `hover_from_keys`, the key
+- [x] `Key`, `Modifiers`, `Input::KeyDown`, constructors, re-exports.
+- [x] `PickIndex::anchors`, the cached order, `hover_from_keys`, the key
       handling in `handle`, `focused()`.
-- [ ] `focus_item`, `Z_FOCUS`, `Layout::focus`.
-- [ ] `Selection::focusable`; box plot and area builder calls.
-- [ ] `tests/keyboard.rs`, the golden.
+- [x] `focus_item`, `Z_FOCUS`, `Layout::focus`.
+- [x] `Selection::focusable`; box plot and area builder calls.
+- [x] `tests/keyboard.rs`, the golden.
 
 ## Dependencies
 
@@ -220,7 +220,7 @@ GUP-620; what a screen reader hears is GUP-621.
 
 ## Success Metrics
 
-- [ ] Every data row in view of every builder can be reached with arrow keys.
+- [x] Every data row in view of every builder can be reached with arrow keys.
 
 ## Risk Assessment
 
@@ -230,15 +230,90 @@ GUP-620; what a screen reader hears is GUP-621.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1` and
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1` and
       `cargo test -p gup-core -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (the focus golden)
-- [ ] `mask wasm-browser`: run it; `Input` and `plot.rs` input handling change
-- [ ] WASM size: `mask wasm-size` scatter gz bytes
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye (the focus golden)
+- [x] `mask wasm-browser`: run it; `Input` and `plot.rs` input handling change
+- [x] WASM size: `mask wasm-size` scatter gz bytes
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `Key`, `Modifiers`, `Input::KeyDown`, `Input::key` and `Input::key_with`
+  (`input.rs`), re-exported at the crate root; a doctest on `Key`.
+- `Plot::focused`, `hover_from_keys`, the key handling (`key_down`,
+  `focus_target`, `focus_order`) in `plot.rs`; `PickIndex::anchors` in
+  `pick.rs`.
+- `focus_item`, `Z_FOCUS` (`scene.rs`) and `Layout::focus`.
+- `Selection::focusable`; the box plot's whiskers, caps and medians and the area
+  outline layers are `focusable(false)`.
+- Tests: `crates/gup-core/tests/keyboard.rs` (13: scatter walk, pointer
+  hand-over, Enter/Escape, guards, zoom, line, grouped bars, box plot, contrast,
+  golden, dark ring), a `PickIndex::anchors` unit test, an `Input` constructor
+  test. Golden `tests/golden/gup_core/keyboard_focus.png`: a dark square ring
+  with a white edge centred on the third disc, under the tooltip. The dark
+  theme's ring is a light ring with a dark edge (read by eye).
+- WASM scatter gz: 364674 bytes (limit 367607, pass).
+
+## Retrospective
+
+**Completed**: 2026-11-06
+
+### Key Technical Learnings
+
+#### The story's name check was wrong
+
+- **Challenge**: Decisions say `Key` is unused in the public API, but
+  `encoding::Key<A>` was re-exported at the crate root.
+- **Solution**: Dropped `Key` from that re-export in `lib.rs` (nothing outside
+  names it; it still appears in builder signatures as an unnameable type). The
+  input `Key` is now the root's `Key`.
+- **Pattern**: Grep `pub use` at the root for a new public name before settling
+  it in a story.
+
+#### Focus is a hover with a flag
+
+- **Challenge**: Keep focus consistent with picking.
+- **Solution**: Rows come from the same pick index (`anchors`), so each is one
+  `pick` can return; `set_hover` always clears `hover_from_keys`, and key focus
+  sets it afterwards, so every pointer-driven change, zoom and re-anchor failure
+  ends focus without extra code.
+- **Pattern**: Derive a mode flag from the existing state transition that
+  already clears it.
+
+### Architectural Decisions
+
+#### A key onto a row the pointer already holds
+
+- **Decision**: No `Enter`/`Leave` events; the flag and ring are added.
+- **Reasoning**: The hover did not change; the row was already entered.
+- **Trade-off**: `redraw` is true though no handler ran.
+
+#### Enter drops the brush
+
+- **Decision**: `Enter` runs `drop_brush` like a pointer click.
+- **Reasoning**: Consistency with picking's click.
+
+#### Modifiers
+
+- **Decision**: Any modifier at all makes arrow, Enter and Escape keys ignored
+  here (not only Shift), so host shortcuts (Ctrl-Home, Alt-Left) pass.
+
+### Development Workflow Insights
+
+- A multi-line heredoc to a file was refused by the worktree sandbox; the Write
+  tool was the way.
+- `mask merge-check` outlasts a 10-minute foreground timeout; run it in the
+  background.
+
+### Follow-up Stories
+
+None. Known limits: `Retain::GpuOnly` layers above one chunk are not focusable
+(by Decision); the line-walk tie rule uses pixel x, so exact ties depend on
+float rounding.

@@ -1536,7 +1536,7 @@ impl Plot {
         self.hover.map(|(row, _, _)| row)
     }
 
-    /// The row the keyboard focuses (see [`Key`](crate::Key)): `None` when
+    /// The row the keyboard focuses (see [`Key`]): `None` when
     /// there is none, or when the hover came from the pointer. While it is
     /// `Some`, [`hovered`](Self::hovered) is the same row, and a ring is
     /// drawn around it ([`Layout::focus`]).
