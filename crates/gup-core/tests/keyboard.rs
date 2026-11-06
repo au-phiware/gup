@@ -202,13 +202,30 @@ fn keys_do_nothing_before_resolve_without_rows_or_with_modifiers_or_mid_drag() {
     assert!(!key(&mut plot, Key::Right));
     assert_eq!(plot.focused(), None);
 
-    // Modifiers: Shift-arrows are not ours.
+    // Modifiers: Shift-arrows pan, and never walk the rows; Ctrl, Alt and
+    // Meta are the host's, with any key.
     let (_cx, mut plot, _) = scatter();
     let shifted = Input::key_with(Key::Right, Modifiers::SHIFT);
-    assert!(!plot.handle(shifted).redraw);
+    assert!(plot.handle(shifted).redraw);
     assert_eq!(plot.focused(), None);
-    // Zoom keys do nothing yet.
-    assert!(!key(&mut plot, Key::ZoomIn));
+    for k in [Key::Home, Key::Enter, Key::ZoomIn] {
+        assert!(!plot.handle(Input::key_with(k, Modifiers::SHIFT)).redraw);
+    }
+    let none = Modifiers::NONE;
+    for m in [
+        Modifiers { ctrl: true, ..none },
+        Modifiers { alt: true, ..none },
+        Modifiers { meta: true, ..none },
+        Modifiers {
+            ctrl: true,
+            shift: true,
+            ..none
+        },
+    ] {
+        for k in [Key::Right, Key::ZoomIn, Key::ZoomOut, Key::ResetView] {
+            assert!(!plot.handle(Input::key_with(k, m)).redraw, "{k:?} {m:?}");
+        }
+    }
 
     // A drag in progress ignores keys.
     let (_cx, mut plot, _) = scatter();
@@ -420,4 +437,249 @@ fn the_ring_is_drawn_in_the_dark_theme() {
     if let Ok(path) = std::env::var("GUP_KEYBOARD_PNG") {
         image.save(path).unwrap();
     }
+}
+
+fn shifted(plot: &mut Plot, k: Key) -> bool {
+    plot.handle(Input::key_with(k, Modifiers::SHIFT)).redraw
+}
+
+/// Explicit scales and three circles, resolved.
+macro_rules! view_plot {
+    ($xs:expr, $ys:expr) => {{
+        let cx = Context::new_blocking().expect("headless GPU context");
+        let mut plot = Plot::new();
+        let x = plot.x($xs);
+        let y = plot.y($ys);
+        plot.add(Selection::<(f64, f64), Circle>::new(vec![
+            (2.0, 2.0),
+            (5.0, 5.0),
+            (8.0, 8.0),
+        ]))
+        .attr(Circle::X, x.encode(|r: &(f64, f64)| r.0))
+        .attr(Circle::Y, y.encode(|r: &(f64, f64)| r.1))
+        .attr(Circle::RADIUS, Px(6.0));
+        plot.resolve(&cx, W, H).unwrap();
+        (cx, plot, x, y)
+    }};
+}
+
+fn centre(plot: &Plot) -> gup_core::geom::Point {
+    let r = plot.layout().unwrap().plot;
+    gup_core::geom::Point::new(r.left() + r.width / 2.0, r.top() + r.height / 2.0)
+}
+
+fn close(a: (f64, f64), b: (f64, f64)) -> bool {
+    let ok = |a: f64, b: f64| (a - b).abs() <= 1e-12 * a.abs().max(b.abs()).max(1.0);
+    ok(a.0, b.0) && ok(a.1, b.1)
+}
+
+#[test]
+fn zoom_keys_match_two_wheel_lines_about_the_centre() {
+    let (_cx, mut keys, kx, ky) = view_plot!(
+        Linear::new().domain(0.0, 10.0),
+        Linear::new().domain(0.0, 20.0)
+    );
+    let (_cx2, mut wheel, wx, wy) = view_plot!(
+        Linear::new().domain(0.0, 10.0),
+        Linear::new().domain(0.0, 20.0)
+    );
+    let at = centre(&wheel);
+    for (k, lines) in [(Key::ZoomIn, 2.0), (Key::ZoomOut, -2.0), (Key::ZoomIn, 2.0)] {
+        assert!(key(&mut keys, k));
+        assert!(wheel.handle(Input::wheel(at, lines)).redraw);
+        let (a, b) = (kx.read().current_domain(), wx.read().current_domain());
+        assert!(close(a.unwrap(), b.unwrap()), "{a:?} {b:?}");
+        let (a, b) = (ky.read().current_domain(), wy.read().current_domain());
+        assert!(close(a.unwrap(), b.unwrap()), "{a:?} {b:?}");
+    }
+    let d = kx.read().current_domain().unwrap();
+    assert!((d.1 - d.0 - 10.0 * 0.85f64.powi(2)).abs() < 1e-9, "{d:?}");
+
+    // view_axes: only X moves.
+    let (_cx, mut plot, x, y) = view_plot!(
+        Linear::new().domain(0.0, 10.0),
+        Linear::new().domain(0.0, 20.0)
+    );
+    plot.view_axes(Axes::X);
+    assert!(key(&mut plot, Key::ZoomIn));
+    assert_ne!(x.read().current_domain(), Some((0.0, 10.0)));
+    assert_eq!(y.read().current_domain(), Some((0.0, 20.0)));
+    plot.view_axes(Axes::Neither);
+    assert!(!key(&mut plot, Key::ZoomOut));
+    assert!(!shifted(&mut plot, Key::Left));
+
+    // A band x axis stays; y moves.
+    let cx = Context::new_blocking().unwrap();
+    let mut plot = Plot::new();
+    let x = plot.x(Band::new());
+    let y = plot.y(Linear::new().domain(0.0, 20.0));
+    plot.add(Selection::<(&'static str, f64), Circle>::new(vec![
+        ("a", 1.0),
+        ("b", 2.0),
+    ]))
+    .attr(
+        Circle::X,
+        x.encode_nullable_owned_key(|r: &(&'static str, f64)| Some(r.0)),
+    )
+    .attr(Circle::Y, y.encode(|r: &(&'static str, f64)| r.1))
+    .attr(Circle::RADIUS, Px(6.0));
+    plot.resolve(&cx, W, H).unwrap();
+    let band = x.read().current_domain();
+    assert!(key(&mut plot, Key::ZoomIn));
+    assert!(shifted(&mut plot, Key::Up));
+    assert_eq!(x.read().current_domain(), band);
+    assert_ne!(y.read().current_domain(), Some((0.0, 20.0)));
+    plot.view_axes(Axes::X);
+    assert!(!shifted(&mut plot, Key::Right), "band axis is refused");
+    assert!(!key(&mut plot, Key::ZoomOut));
+}
+
+#[test]
+fn shift_arrows_pan_a_tenth_of_the_plot() {
+    let (cx, mut plot, x, y) = view_plot!(
+        Linear::new().domain(0.0, 10.0),
+        Linear::new().domain(0.0, 20.0)
+    );
+    let x0 = x.read().current_domain().unwrap();
+    let y0 = y.read().current_domain().unwrap();
+    // Domain units per pixel on each axis (the range is inset from the plot
+    // rect, so a tenth of the plot is not a tenth of the span).
+    let rect = plot.layout().unwrap().plot;
+    let ux = (x0.1 - x0.0) / (x.read().eval(x0.1) - x.read().eval(x0.0)).abs();
+    let uy = (y0.1 - y0.0) / (y.read().eval(y0.1) - y.read().eval(y0.0)).abs();
+    let (sx, sy) = (
+        0.1 * f64::from(rect.width) * ux,
+        0.1 * f64::from(rect.height) * uy,
+    );
+    for (k, back, dx, dy) in [
+        (Key::Right, Key::Left, sx, 0.0),
+        (Key::Left, Key::Right, -sx, 0.0),
+        (Key::Up, Key::Down, 0.0, sy),
+        (Key::Down, Key::Up, 0.0, -sy),
+    ] {
+        assert!(shifted(&mut plot, k), "{k:?}");
+        let xd = x.read().current_domain().unwrap();
+        let yd = y.read().current_domain().unwrap();
+        let tol = |a: f64, b: f64| (a - b).abs() < 1e-6;
+        assert!(tol(xd.0, x0.0 + dx) && tol(xd.1, x0.1 + dx), "{k:?} {xd:?}");
+        assert!(tol(yd.0, y0.0 + dy) && tol(yd.1, y0.1 + dy), "{k:?} {yd:?}");
+        assert!(shifted(&mut plot, back));
+        plot.resolve(&cx, W, H).unwrap();
+    }
+
+    // view_axes(Y): Shift-Right does not move x, and redraws nothing.
+    plot.view_axes(Axes::Y);
+    let before = x.read().current_domain();
+    assert!(!shifted(&mut plot, Key::Right));
+    assert_eq!(x.read().current_domain(), before);
+}
+
+#[test]
+fn shift_arrows_pan_a_log_axis_by_pixels() {
+    let (cx, mut plot, x, _y) = view_plot!(
+        gup_core::Log::new().domain(1.0, 1000.0),
+        Linear::new().domain(0.0, 10.0)
+    );
+    let width = plot.layout().unwrap().plot.width;
+    for (k, sign) in [(Key::Right, -1.0f64), (Key::Left, 1.0)] {
+        let before = x.read().eval(30.0);
+        assert!(shifted(&mut plot, k));
+        plot.resolve(&cx, W, H).unwrap();
+        let moved = x.read().eval(30.0) - before;
+        let want = sign * 0.1 * f64::from(width);
+        assert!(
+            (moved - want).abs() < 0.01,
+            "{k:?} moved {moved}, want {want}"
+        );
+    }
+}
+
+#[test]
+fn reset_view_key_redraws_only_if_the_view_moved() {
+    let (cx, mut plot, x, _y) = view_plot!(
+        Linear::new().domain(0.0, 10.0),
+        Linear::new().domain(0.0, 20.0)
+    );
+    assert!(!key(&mut plot, Key::ResetView));
+    assert!(key(&mut plot, Key::ZoomIn));
+    assert!(shifted(&mut plot, Key::Right));
+    assert!(key(&mut plot, Key::ResetView));
+    plot.resolve(&cx, W, H).unwrap();
+    assert_eq!(x.read().current_domain(), Some((0.0, 10.0)));
+    assert!(!key(&mut plot, Key::ResetView));
+}
+
+#[test]
+fn view_keys_do_nothing_before_the_first_resolve() {
+    let mut plot = Plot::new();
+    plot.circles(vec![0usize, 1])
+        .x(|r| *r as f64)
+        .y(|r| *r as f64);
+    for k in [Key::ZoomIn, Key::ZoomOut, Key::ResetView] {
+        assert!(!key(&mut plot, k), "{k:?}");
+    }
+    for k in [Key::Left, Key::Right, Key::Up, Key::Down] {
+        assert!(!shifted(&mut plot, k), "{k:?}");
+    }
+}
+
+#[test]
+fn focus_follows_its_row_through_a_key_pan_and_clears_when_a_zoom_drops_it() {
+    let (cx, mut plot, log) = scatter();
+    key(&mut plot, Key::Right);
+    let first = plot.focused().unwrap();
+    take(&log);
+    let a0 = plot.pick_anchor(first).unwrap();
+
+    // Pan the content right: the row stays in the plot and the ring moves.
+    assert!(shifted(&mut plot, Key::Left));
+    plot.resolve(&cx, W, H).unwrap();
+    assert_eq!(plot.focused(), Some(first));
+    let a1 = plot.pick_anchor(first).unwrap();
+    assert!(a1.x > a0.x + 1.0, "{a0:?} -> {a1:?}");
+    let ring = plot.layout().unwrap().focus.unwrap();
+    assert!(ring.left() < a1.x && a1.x < ring.right(), "{ring:?} {a1:?}");
+    assert!(take(&log).is_empty());
+
+    // Zoom in on the centre until the row is out.
+    for _ in 0..40 {
+        key(&mut plot, Key::ZoomIn);
+        plot.resolve(&cx, W, H).unwrap();
+        if plot.focused().is_none() {
+            break;
+        }
+    }
+    assert_eq!(plot.focused(), None);
+    assert_eq!(plot.hovered(), None);
+    assert_eq!(take(&log), vec!["Leave(1)".to_string()]);
+    assert!(plot.layout().unwrap().focus.is_none());
+}
+
+#[test]
+fn view_keys_write_no_column_bytes() {
+    let (cx, mut plot, _) = scatter();
+    key(&mut plot, Key::Home);
+    plot.resolve(&cx, W, H).unwrap();
+    let before = cx.upload_stats();
+    for step in 0..12 {
+        match step % 4 {
+            0 => key(&mut plot, Key::ZoomIn),
+            1 => shifted(&mut plot, Key::Right),
+            2 => key(&mut plot, Key::ZoomOut),
+            _ => shifted(&mut plot, Key::Up),
+        };
+        plot.resolve(&cx, W, H).unwrap();
+    }
+    key(&mut plot, Key::ResetView);
+    plot.resolve(&cx, W, H).unwrap();
+    let wrote = cx.upload_stats() - before;
+    assert_eq!(
+        (
+            wrote.columns.bytes,
+            wrote.validity.bytes,
+            wrote.textures.bytes
+        ),
+        (0, 0, 0),
+        "{wrote:?}"
+    );
 }

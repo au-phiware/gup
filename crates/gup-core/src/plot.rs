@@ -433,6 +433,9 @@ struct CacheKey {
 /// Zoom factor per wheel line (scrolling up zooms in).
 const ZOOM_PER_LINE: f64 = 0.85;
 
+/// The fraction of the plot rect a Shift-arrow pans.
+const KEY_PAN: f32 = 0.1;
+
 impl crate::chart::Chart for Plot {
     fn resolve(&mut self, cx: &Context, width: f32, height: f32) -> Result<&Resolved> {
         Plot::resolve(self, cx, width, height)
@@ -1469,7 +1472,17 @@ impl Plot {
             && at_gen != self.generation
         {
             self.overlay = None;
-            match self.pick_anchor(row) {
+            // Keyboard focus ends when its row leaves the plot rect, as
+            // focus_order never visits such a row.
+            let plot = self.cache.as_ref().map(|(_, r)| r.layout.plot);
+            let keys = self.hover_from_keys;
+            let in_view = |a: Point| {
+                !keys
+                    || plot.is_none_or(|p| {
+                        a.x >= p.left() && a.x <= p.right() && a.y >= p.top() && a.y <= p.bottom()
+                    })
+            };
+            match self.pick_anchor(row).filter(|a| in_view(*a)) {
                 Some(a) => self.hover = Some((row, a, self.generation)),
                 // A GPU-picked row has no anchor but the pointer's, while
                 // the layer holds it (a window may have evicted it).
@@ -1479,8 +1492,11 @@ impl Plot {
                     self.hover = Some((row, anchor, self.generation));
                 }
                 None => {
+                    // The row left the plot (or its layer): end the hover
+                    // as a pointer move off it would.
                     self.hover = None;
                     self.hover_from_keys = false;
+                    self.dispatch(Event::Leave, anchor, row);
                 }
             }
         }
@@ -1572,11 +1588,24 @@ impl Plot {
     ///   release is not a click. [`drag`](Self::drag)(`Drag::Off`) turns this
     ///   off.
     ///
-    /// - A key ([`Input::KeyDown`], see [`Key`]) with no modifier moves
-    ///   keyboard focus over the rows ([`focused`](Self::focused)): the
-    ///   focused row is hovered (`Enter`, `Leave`, tooltip) and ringed; `Enter`
-    ///   runs its `Click` handlers and `Escape` clears it. A pointer move
-    ///   onto another row ends it. Keys are ignored during a drag.
+    /// - A key ([`Input::KeyDown`], see [`Key`]); keys are ignored during a
+    ///   drag, and with Ctrl, Alt or Meta held (those are the host's):
+    ///   - the arrows, `Home` and `End` move keyboard focus over the rows
+    ///     ([`focused`](Self::focused)): the focused row is hovered (`Enter`,
+    ///     `Leave`, tooltip) and ringed. A pointer move onto another row ends
+    ///     it;
+    ///   - `Enter` runs the focused row's `Click` handlers, and `Escape`
+    ///     clears focus;
+    ///   - `ZoomIn` and `ZoomOut` zoom about the centre of the plot rect by
+    ///     two wheel lines;
+    ///   - Shift with an arrow pans a tenth of the plot rect's width or
+    ///     height (Shift-Up shows higher values);
+    ///   - `ResetView` is [`reset_view`](Self::reset_view).
+    ///
+    ///   Unlike the wheel, a key zoom or pan keeps keyboard focus while its
+    ///   row stays in the plot (the ring follows it) and clears it, with a
+    ///   `Leave`, once the row is out. All of them do nothing before the
+    ///   first resolve.
     ///
     /// The wheel and a drag move the axes of [`view_axes`](Self::view_axes)
     /// except band and point axes; [`reset_view`](Self::reset_view) undoes
@@ -1689,9 +1718,17 @@ impl Plot {
                 }
             }
             Input::KeyDown { key, modifiers } => {
-                if modifiers == Modifiers::NONE && self.dragging.is_none() && self.marquee.is_none()
-                {
-                    redraw = self.key_down(key);
+                // Shift belongs to the arrows (they pan); any other modifier
+                // is the host's.
+                let ours = modifiers == Modifiers::NONE
+                    || (modifiers == Modifiers::SHIFT
+                        && matches!(key, Key::Left | Key::Right | Key::Up | Key::Down));
+                if ours && self.dragging.is_none() && self.marquee.is_none() {
+                    redraw = if modifiers.shift {
+                        self.key_pan(key)
+                    } else {
+                        self.key_down(key)
+                    };
                 }
             }
             Input::Wheel { at, lines }
@@ -1713,9 +1750,63 @@ impl Plot {
         Response { redraw }
     }
 
-    /// A key with no modifiers: move, click or clear keyboard focus.
-    /// Whether the chart looks different.
+    /// Shift and an arrow: pan a tenth of the plot rect. Whether the chart
+    /// looks different.
+    fn key_pan(&mut self, key: Key) -> bool {
+        let Some(plot) = self.cache.as_ref().map(|(_, r)| r.layout.plot) else {
+            return false;
+        };
+        // A horizontal key moves x alone, a vertical key the y axes.
+        let [x, y, y_right] = self.movable();
+        let which = match key {
+            Key::Left | Key::Right => [x, false, false],
+            _ => [false, y, y_right],
+        };
+        if !which.contains(&true) {
+            return false;
+        }
+        // Content moves against the key; the vertical sign is screen-down.
+        let (dx, dy) = match key {
+            Key::Right => (-KEY_PAN * plot.width, 0.0),
+            Key::Left => (KEY_PAN * plot.width, 0.0),
+            Key::Up => (0.0, KEY_PAN * plot.height),
+            Key::Down => (0.0, -KEY_PAN * plot.height),
+            _ => return false,
+        };
+        self.pan_from(self.domains(), (dx, dy), which).is_ok()
+    }
+
+    /// A key with no modifiers: move, click or clear keyboard focus, or
+    /// move the view. Whether the chart looks different.
     fn key_down(&mut self, key: Key) -> bool {
+        match key {
+            Key::ZoomIn | Key::ZoomOut => {
+                let Some(plot) = self.cache.as_ref().map(|(_, r)| r.layout.plot) else {
+                    return false;
+                };
+                let which = self.movable();
+                if !which.contains(&true) {
+                    return false;
+                }
+                let centre = Point::new(
+                    plot.left() + plot.width / 2.0,
+                    plot.top() + plot.height / 2.0,
+                );
+                let step = ZOOM_PER_LINE.powi(2);
+                let factor = if key == Key::ZoomIn {
+                    step
+                } else {
+                    step.recip()
+                };
+                return self.zoom_axes(centre, factor, which).is_ok();
+            }
+            Key::ResetView => {
+                let moved = self.home.is_some();
+                self.reset_view();
+                return moved;
+            }
+            _ => {}
+        }
         if key == Key::Escape {
             let Some((_, anchor, _)) = self.hover.filter(|_| self.hover_from_keys) else {
                 return false;
