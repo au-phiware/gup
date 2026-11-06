@@ -31,7 +31,8 @@ use web_time::Instant;
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct TargetDesc {
     /// Colour format. Gup renders into non-sRGB views and blends in sRGB
-    /// space.
+    /// space; [`Renderer::prepare`] rejects an `*Srgb` format (see
+    /// [`Prepared::draw`]).
     pub format: wgpu::TextureFormat,
     /// Physical width.
     pub width: u32,
