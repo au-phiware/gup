@@ -419,7 +419,7 @@ and run one at a time; the run order is at the end of "Polish after 0.1".
   a series, Up/Down between series), Enter clicks, Escape clears, a focus ring,
   and `Selection::focusable(false)` for composite layers. Deps: GUP-563 ✅,
   GUP-546 ✅.
-- [GUP-376](GUP-376_GupApp_Event_Callbacks.md) 📋 — Add optional `.on_key()` and
+- [GUP-376](GUP-376_GupApp_Event_Callbacks.md) 🚫 — Add optional `.on_key()` and
   `.on_mouse()` callbacks to `GupApp` so examples with simple custom event
   handling can also use the shell. Deps: GUP-318 ✅. Legacy (2025): GUP-622
   forwards the window's keys to the chart itself, which covers the keyboard
@@ -432,7 +432,7 @@ and run one at a time; the run order is at the end of "Polish after 0.1".
   and `focus_text` (and `Chart::focus_text`): a row's series, x, y and colour
   value with axis names, in the axes' formats (ISO dates on `Time`), with hooks
   for bars, bins and boxes. Deps: GUP-619 📋, GUP-615 📋.
-- [GUP-622](GUP-622_Window_And_Egui_Hosts_Forward_Keys.md) 📋 — The window app
+- [GUP-622](GUP-622_Window_And_Egui_Hosts_Forward_Keys.md) ✅ — The window app
   and the egui widget map arrows, Home/End, Enter/Space, Escape, `+`/`=`, `-`
   and `0` to `Input::KeyDown`; the window closes on an Escape the chart did not
   use, and the egui widget takes and locks focus. Deps: GUP-619 📋, GUP-620 📋

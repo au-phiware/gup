@@ -2,8 +2,9 @@
 
 ## Story Overview
 
-**Initiative**: Ecosystem Integration **Status**: 📋 Planned **Created**:
-2025-07-17
+**Initiative**: Ecosystem Integration **Status**: 🚫 Closed (2026-11-06):
+superseded by GUP-622, which forwards the window's keys to the chart.
+**Created**: 2025-07-17
 
 ## Context
 

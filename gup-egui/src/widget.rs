@@ -7,7 +7,7 @@ use std::task::{Wake, Waker};
 use eframe::egui_wgpu::RenderState;
 use gup_core::{Chart, Context, Input, Renderer, TargetOptions, TextureTarget};
 
-use crate::input::to_input;
+use crate::input::{key_input, to_input};
 use crate::render::render_into;
 
 /// The `Context` kept in an egui renderer's `callback_resources`.
@@ -60,6 +60,19 @@ pub struct GupWidget {
     inside: bool,
 }
 
+/// What the widget keeps from egui's focus movement while it has focus.
+const KEY_FILTER: egui::EventFilter = egui::EventFilter {
+    tab: false,
+    horizontal_arrows: true,
+    vertical_arrows: true,
+    escape: true,
+};
+
+/// The chart inputs for this frame's key presses.
+fn key_inputs(events: &[egui::Event]) -> impl Iterator<Item = Input> + '_ {
+    events.iter().filter_map(key_input)
+}
+
 impl GupWidget {
     /// A widget drawing on `render_state`'s device (from
     /// `eframe::CreationContext::wgpu_render_state`).
@@ -92,6 +105,7 @@ impl GupWidget {
         chart.set_waker(Waker::from(Arc::new(Repaint(ui.ctx().clone()))));
 
         let mut redraw = self.forward_input(ui, rect, &response, chart);
+        redraw |= Self::forward_keys(ui, rect, &response, chart);
 
         let ppp = ui.ctx().pixels_per_point();
         if let Err(err) = self.render(chart, size, ppp) {
@@ -167,6 +181,48 @@ impl GupWidget {
                 other => other,
             };
             redraw |= chart.handle(input).redraw;
+        }
+        redraw
+    }
+
+    /// Take egui focus on a primary press inside the chart; while the
+    /// widget has focus, lock arrows and Escape (Tab stays egui's) and
+    /// forward key presses to `chart`. Without focus no key is forwarded,
+    /// so a text field keeps its keys. An Escape the chart did not use
+    /// (nothing focused in it) gives the focus back to egui.
+    fn forward_keys(
+        ui: &egui::Ui,
+        rect: egui::Rect,
+        response: &egui::Response,
+        chart: &mut dyn Chart,
+    ) -> bool {
+        let events = ui.input(|i| i.events.clone());
+        let pressed_inside = events.iter().any(|e| {
+            matches!(e, egui::Event::PointerButton {
+                pos, button: egui::PointerButton::Primary, pressed: true, ..
+            } if rect.contains(*pos))
+        });
+        if pressed_inside && response.hovered() {
+            response.request_focus();
+        }
+        if !response.has_focus() {
+            return false;
+        }
+        ui.memory_mut(|m| m.set_focus_lock_filter(response.id, KEY_FILTER));
+        let mut redraw = false;
+        for input in key_inputs(&events) {
+            let escape = matches!(
+                input,
+                Input::KeyDown {
+                    key: gup_core::Key::Escape,
+                    ..
+                }
+            );
+            let r = chart.handle(input).redraw;
+            redraw |= r;
+            if escape && !r {
+                ui.memory_mut(|m| m.surrender_focus(response.id));
+            }
         }
         redraw
     }
@@ -248,5 +304,127 @@ impl Drop for GupWidget {
         if let Some(tex) = self.texture.take() {
             self.render_state.renderer.write().free_texture(&tex.id);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn chart() -> impl Chart {
+        gup_core::scatter(vec![(1.0_f64, 2.0_f64), (3.0, 4.0)])
+            .x(|p| p.0)
+            .y(|p| p.1)
+    }
+
+    fn key(k: egui::Key) -> egui::Event {
+        egui::Event::Key {
+            key: k,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::NONE,
+        }
+    }
+
+    fn press(pos: egui::Pos2) -> egui::Event {
+        egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed: true,
+            modifiers: egui::Modifiers::NONE,
+        }
+    }
+
+    /// A text field above a chart widget, run frame by frame.
+    struct Frame {
+        ctx: egui::Context,
+        field: egui::Id,
+        widget: egui::Id,
+        rect: egui::Rect,
+    }
+
+    impl Frame {
+        fn new(chart: &mut dyn Chart) -> Self {
+            let mut f = Self {
+                ctx: egui::Context::default(),
+                field: egui::Id::new("field"),
+                widget: egui::Id::NULL,
+                rect: egui::Rect::NOTHING,
+            };
+            f.run(vec![], chart);
+            f
+        }
+
+        fn run(&mut self, events: Vec<egui::Event>, chart: &mut dyn Chart) {
+            let input = egui::RawInput {
+                events,
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(400.0, 400.0),
+                )),
+                ..Default::default()
+            };
+            let field = self.field;
+            let (mut widget, mut rect) = (self.widget, self.rect);
+            let _ = self.ctx.run(input, |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    ui.add(egui::TextEdit::singleline(&mut String::new()).id(field));
+                    let (r, response) = ui.allocate_exact_size(
+                        egui::vec2(200.0, 100.0),
+                        egui::Sense::click_and_drag(),
+                    );
+                    (widget, rect) = (response.id, r);
+                    GupWidget::forward_keys(ui, r, &response, chart);
+                });
+            });
+            (self.widget, self.rect) = (widget, rect);
+        }
+
+        fn click_widget(&mut self, chart: &mut dyn Chart) {
+            let c = self.rect.center();
+            self.run(vec![egui::Event::PointerMoved(c), press(c)], chart);
+            self.run(vec![], chart);
+        }
+
+        fn has_focus(&self, id: egui::Id) -> bool {
+            self.ctx.memory(|m| m.has_focus(id))
+        }
+    }
+
+    #[test]
+    fn a_press_inside_takes_focus_and_escape_releases_it() {
+        let mut chart = chart();
+        let mut f = Frame::new(&mut chart);
+        f.click_widget(&mut chart);
+        assert!(f.has_focus(f.widget), "the press focuses the widget");
+        // Nothing is focused in the chart, so Escape gives egui focus back.
+        f.run(vec![key(egui::Key::Escape)], &mut chart);
+        f.run(vec![], &mut chart);
+        assert!(!f.has_focus(f.widget), "Escape surrenders focus");
+    }
+
+    #[test]
+    fn arrows_do_not_move_focus_while_the_widget_has_it() {
+        let mut chart = chart();
+        let mut f = Frame::new(&mut chart);
+        f.click_widget(&mut chart);
+        f.run(vec![key(egui::Key::ArrowUp)], &mut chart);
+        f.run(vec![key(egui::Key::ArrowLeft)], &mut chart);
+        f.run(vec![], &mut chart);
+        assert!(f.has_focus(f.widget));
+    }
+
+    #[test]
+    fn a_focused_text_field_keeps_its_keys() {
+        let mut chart = chart();
+        let mut f = Frame::new(&mut chart);
+        f.ctx.memory_mut(|m| m.request_focus(f.field));
+        f.run(vec![], &mut chart);
+        f.run(
+            vec![key(egui::Key::ArrowRight), key(egui::Key::Escape)],
+            &mut chart,
+        );
+        assert!(!f.has_focus(f.widget), "the widget never takes focus");
     }
 }
