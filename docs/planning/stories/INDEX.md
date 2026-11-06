@@ -414,7 +414,7 @@ archived docs in `docs/archive/accessibility/` describe the deleted system and
 are background only. GUP-619, GUP-620, GUP-621 and GUP-624 all edit `plot.rs`
 and run one at a time; the run order is at the end of "Polish after 0.1".
 
-- [GUP-619](GUP-619_Keyboard_Focus_Over_Rows.md) 📋 — `Input::KeyDown` with
+- [GUP-619](GUP-619_Keyboard_Focus_Over_Rows.md) 🚧 — `Input::KeyDown` with
   semantic `Key`s and `Modifiers`; arrow keys walk rows in view (x order within
   a series, Up/Down between series), Enter clicks, Escape clears, a focus ring,
   and `Selection::focusable(false)` for composite layers. Deps: GUP-563 ✅,
