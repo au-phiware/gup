@@ -526,7 +526,7 @@ track N5 is at the end of this section.
 - [GUP-613](GUP-613_Chart_Types_In_The_Prelude.md) ✅ — The seven builder chart
   types in the prelude and `Horizontal`/`Vertical`/`Orientation` at the root, so
   no example imports from `gup::builder::`. Deps: GUP-594 ✅, GUP-595 ✅.
-- [GUP-614](GUP-614_Builder_Text_Layers_And_Pick_Row.md) 📋 —
+- [GUP-614](GUP-614_Builder_Text_Layers_And_Pick_Row.md) 🚧 —
   `.text(rows, |t| ..)` and an inherent `pick_row(impl Into<Point>)` on all
   seven builders (one macro arm), and tutorial 7's labels without `plot_mut()`.
   Deps: GUP-542 ✅, GUP-563 ✅, GUP-536 ✅.
