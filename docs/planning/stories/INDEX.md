@@ -428,7 +428,7 @@ and run one at a time; the run order is at the end of "Polish after 0.1".
   wheel lines about the plot centre), Shift+arrows (pan a tenth of the plot) and
   `ResetView`, through the wheel's and drag's paths, keeping focus while its row
   stays in view. Deps: GUP-619 📋.
-- [GUP-621](GUP-621_Row_Announcements.md) 📋 — `Plot::row_fields`, `row_text`
+- [GUP-621](GUP-621_Row_Announcements.md) 🚧 — `Plot::row_fields`, `row_text`
   and `focus_text` (and `Chart::focus_text`): a row's series, x, y and colour
   value with axis names, in the axes' formats (ISO dates on `Time`), with hooks
   for bars, bins and boxes. Deps: GUP-619 📋, GUP-615 📋.
