@@ -13,6 +13,9 @@
 //!   --size WxH            image size (default 1920x1080)
 //!   --zoom-frames N       zooms measured (default 30)
 //!   --seed N              random-walk seed (default 1)
+//!   --resolve-only        skip the bench's own accessor and store phases, so
+//!                         the peak RSS after `first_resolve` is the library's
+//!                         alone (rows + its own columns)
 //! ```
 //!
 //! Phases: `build` (generate the rows; not a cost of Gup), `accessor` (the
@@ -37,6 +40,7 @@ struct Options {
     size: (u32, u32),
     zoom_frames: usize,
     seed: u64,
+    resolve_only: bool,
 }
 
 fn parse() -> Options {
@@ -48,6 +52,7 @@ fn parse() -> Options {
         size: (1920, 1080),
         zoom_frames: 30,
         seed: 1,
+        resolve_only: false,
     };
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -72,6 +77,7 @@ fn parse() -> Options {
                 o.size = (w.parse().expect("width"), h.parse().expect("height"));
             }
             "--zoom-frames" => o.zoom_frames = value().parse().expect("--zoom-frames N"),
+            "--resolve-only" => o.resolve_only = true,
             "--seed" => o.seed = value().parse().expect("--seed N"),
             other => panic!("unknown option {other}"),
         }
@@ -173,12 +179,27 @@ fn main() -> gup_core::Result<()> {
     metric("build.ms", format!("{:.1}", ms(t)));
     rss("build");
 
-    // 2. accessor: the closures the layer runs inside `evaluate`.
     let (fx, fy) = (|r: &(f64, f64)| r.0, |r: &(f64, f64)| r.1);
+    if !o.resolve_only {
+        bench_accessor_and_store(&cx, &rows, n, fx, fy)?;
+    }
+    first_resolve_and_after(&o, &cx, rows, fx, fy)
+}
+
+/// Phases 2 and 3, apart from the library: the closures over every row,
+/// then the store and its upload.
+fn bench_accessor_and_store(
+    cx: &Context,
+    rows: &[(f64, f64)],
+    n: usize,
+    fx: impl Fn(&(f64, f64)) -> f64,
+    fy: impl Fn(&(f64, f64)) -> f64,
+) -> gup_core::Result<()> {
+    // 2. accessor: the closures the layer runs inside `evaluate`.
     let t = Instant::now();
     let mut xs = Vec::with_capacity(n);
     let mut ys = Vec::with_capacity(n);
-    for r in &rows {
+    for r in rows {
         xs.push(fx(r));
         ys.push(fy(r));
     }
@@ -202,13 +223,23 @@ fn main() -> gup_core::Result<()> {
         ],
         chunk_rows,
     )?;
-    store.upload(&cx)?;
+    store.upload(cx)?;
     metric("store.ms", format!("{:.1}", ms(t)));
     metric("columns.bytes", (cx.upload_stats() - before).columns.bytes);
     metric("chunks", store.chunks().len());
     rss("store");
-    drop(store);
+    Ok(())
+}
 
+/// Phases 4 to 6, through the library.
+fn first_resolve_and_after(
+    o: &Options,
+    cx: &Context,
+    rows: Vec<(f64, f64)>,
+    fx: impl Fn(&(f64, f64)) -> f64 + Send + Sync + 'static,
+    fy: impl Fn(&(f64, f64)) -> f64 + Send + Sync + 'static,
+) -> gup_core::Result<()> {
+    let n = rows.len();
     // 4. first resolve (consumes the rows)
     let (w, h) = o.size;
     let mut plot = Plot::new();
@@ -220,7 +251,7 @@ fn main() -> gup_core::Result<()> {
         .retain(o.retain);
     let before = cx.upload_stats();
     let t = Instant::now();
-    let scene = plot.resolve(&cx, w as f32, h as f32)?.scene.clone();
+    let scene = plot.resolve(cx, w as f32, h as f32)?.scene.clone();
     metric("first_resolve.ms", format!("{:.1}", ms(t)));
     metric(
         "first_resolve.columns.bytes",
@@ -230,7 +261,7 @@ fn main() -> gup_core::Result<()> {
 
     // 5. first frame
     let t = Instant::now();
-    let image = ImageTarget::new(&cx, w, h)?.render_blocking(&cx, &scene)?;
+    let image = ImageTarget::new(cx, w, h)?.render_blocking(cx, &scene)?;
     metric("first_frame.ms", format!("{:.1}", ms(t)));
     println!("image {}x{}", image.width(), image.height());
     rss("first_frame");
@@ -241,7 +272,7 @@ fn main() -> gup_core::Result<()> {
     for _ in 0..o.zoom_frames {
         let t = Instant::now();
         plot.zoom(centre, 0.97)?;
-        plot.resolve(&cx, w as f32, h as f32)?;
+        plot.resolve(cx, w as f32, h as f32)?;
         times.push(ms(t));
     }
     if !times.is_empty() {
