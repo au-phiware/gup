@@ -10,7 +10,7 @@ touches: [crates/gup-core/src/plot.rs, crates/gup-core/tests/keyboard.rs]
 
 ## Story Overview
 
-**Initiative**: Track N4: Accessibility **Status**: 📋 Planned **Created**:
+**Initiative**: Track N4: Accessibility **Status**: 🚧 In Progress **Created**:
 2026-11-04
 
 ## Context
