@@ -404,6 +404,8 @@ impl<T: Send + Sync + 'static> AreaChart<T> {
             return;
         };
         let rows: Arc<[T]> = Arc::from(rows);
+        self.plot
+            .stack_legend(matches!(self.color, ColorSpec::Stack(_)));
         self.data = Some(Arc::clone(&rows));
         let nan: Num<T> = Arc::new(|_| f64::NAN);
         let xf = self.x.clone().unwrap_or_else(|| Arc::clone(&nan));

@@ -1269,6 +1269,9 @@ pub(crate) trait Layer: wgpu::WasmNotSendSync {
     /// (RFC-001 S7): each `Color`-role channel encoded by a column of one
     /// link that has a legend. Chains have none.
     fn legends(&self) -> Vec<(Option<String>, Legend)>;
+    /// The opacity the layer's marks are drawn at, for its legend's
+    /// swatches: the constant `fill_opacity` (or its default), else 1.
+    fn legend_opacity(&self) -> f32;
     /// The mark's name (`Mark::NAME`), for the chart's description.
     fn mark_name(&self) -> &'static str;
     /// The rows the selection was given.
@@ -1894,6 +1897,20 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             }
         }
         out
+    }
+
+    fn legend_opacity(&self) -> f32 {
+        let Some(i) = M::CHANNELS.iter().position(|d| d.name == "fill_opacity") else {
+            return 1.0;
+        };
+        match &self.encodings[i] {
+            Some(Encoding::Const(ConstValue::F32(o))) => *o,
+            None => match M::CHANNELS[i].default {
+                ConstValue::F32(o) => o,
+                _ => 1.0,
+            },
+            _ => 1.0,
+        }
     }
 
     fn apply_theme(&mut self, theme: &Theme) {

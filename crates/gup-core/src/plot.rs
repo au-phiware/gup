@@ -203,6 +203,8 @@ pub struct Plot {
     theme: Theme,
     /// Set by `legends(false)`.
     legends_off: bool,
+    /// Set by `stack_legend`: list swatches last-seen first.
+    legend_top_down: bool,
     /// Bumped by every `&mut self` method that changes the plot, except
     /// `resolve` and `handle`.
     revision: u64,
@@ -505,6 +507,7 @@ impl Plot {
             label_formats: Default::default(),
             theme: Theme::default(),
             legends_off: false,
+            legend_top_down: false,
             revision: 0,
             hold: None,
             cache: None,
@@ -698,6 +701,14 @@ impl Plot {
     pub fn y_right_title(&mut self, title: impl Into<String>) -> &mut Self {
         self.revision = self.revision.wrapping_add(1);
         self.y_right_title = Some(title.into());
+        self
+    }
+
+    /// List every swatch legend last-seen first, for a vertical stack
+    /// whose first key is drawn at the bottom.
+    pub(crate) fn stack_legend(&mut self, on: bool) -> &mut Self {
+        self.revision = self.revision.wrapping_add(1);
+        self.legend_top_down = on;
         self
     }
 
@@ -2130,7 +2141,7 @@ impl Plot {
         let legends = if self.legends_off {
             Vec::new()
         } else {
-            crate::guide::dedup(self.layers.iter().flat_map(|l| l.legends()))
+            collect_legends(&self.layers, th.background, self.legend_top_down)
         };
 
         // 3. Ticks and label measurements give the margins.
@@ -2985,8 +2996,112 @@ impl Plot {
     }
 }
 
+/// The layers' legends without repeats. A repeat keeps the lowest
+/// opacity of the layers sharing it; swatches are then composited at it
+/// over `background` (what the marks look like) and, for a vertical
+/// stack, reversed so the top layer is first.
+fn collect_legends(
+    layers: &[Box<dyn crate::selection::Layer>],
+    background: crate::channel::Color,
+    top_down: bool,
+) -> Vec<crate::guide::Titled> {
+    let out = dedup_min(layers.iter().flat_map(|l| {
+        let o = l.legend_opacity();
+        l.legends().into_iter().map(move |t| (t, o))
+    }));
+    out.into_iter()
+        .map(|((title, mut legend), opacity)| {
+            if let crate::scale::Legend::Swatches(sw) = &mut legend {
+                if opacity < 1.0 {
+                    for s in sw.iter_mut() {
+                        s.color = composite(s.color, opacity, background);
+                    }
+                }
+                if top_down {
+                    sw.reverse();
+                }
+            }
+            (title, legend)
+        })
+        .collect()
+}
+
+/// `legends` in order without any equal to an earlier one; a repeat
+/// lends its title to the first if that has none, and its opacity if
+/// lower.
+fn dedup_min(
+    legends: impl IntoIterator<Item = (crate::guide::Titled, f32)>,
+) -> Vec<(crate::guide::Titled, f32)> {
+    let mut out: Vec<(crate::guide::Titled, f32)> = Vec::new();
+    for ((title, legend), opacity) in legends {
+        match out.iter_mut().find(|((_, l), _)| *l == legend) {
+            Some(((t, _), o)) => {
+                if t.is_none() {
+                    *t = title;
+                }
+                *o = o.min(opacity);
+            }
+            None => out.push(((title, legend), opacity)),
+        }
+    }
+    out
+}
+
+/// `color` at `opacity` over `background`, blended in sRGB space as
+/// the GPU does (on the encoded values, measured); the result is opaque.
+pub(crate) fn composite(
+    color: crate::channel::Color,
+    opacity: f32,
+    background: crate::channel::Color,
+) -> crate::channel::Color {
+    let a = (color.a * opacity).clamp(0.0, 1.0);
+    let mix = |c: f32, b: f32| b * (1.0 - a) + c * a;
+    crate::channel::Color {
+        r: mix(color.r, background.r),
+        g: mix(color.g, background.g),
+        b: mix(color.b, background.b),
+        a: 1.0,
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn dedup_keeps_the_first_its_first_title_and_the_lowest_opacity() {
+        use crate::scale::{Legend, Swatch};
+        let a = Legend::Swatches(vec![]);
+        let b = Legend::Swatches(vec![Swatch {
+            label: "k".into(),
+            color: crate::channel::Color::BLACK,
+        }]);
+        let out = super::dedup_min([
+            ((None, a.clone()), 1.0),
+            ((Some("B".into()), b.clone()), 0.5),
+            ((Some("A".into()), a.clone()), 0.5),
+            ((Some("other".into()), b.clone()), 1.0),
+        ]);
+        assert_eq!(
+            out,
+            [((Some("A".into()), a), 0.5), ((Some("B".into()), b), 0.5)]
+        );
+    }
+
+    #[test]
+    fn composite_blends_in_srgb_space() {
+        use crate::channel::Color;
+        let c = Color {
+            r: 0.835,
+            g: 0.369,
+            b: 0.0,
+            a: 1.0,
+        };
+        let out = super::composite(c, 0.5, Color::WHITE);
+        // Half of 0.835 and white, as the GPU blends the encoded values.
+        assert!((out.r - 0.9175).abs() < 0.002, "{}", out.r);
+        assert_eq!(out.a, 1.0);
+        assert_eq!(super::composite(c, 1.0, Color::WHITE).r, c.r);
+    }
+
     use super::*;
     use crate::chart::ChartExt;
     use crate::encoding::{CpuMirror, EncodeFn};

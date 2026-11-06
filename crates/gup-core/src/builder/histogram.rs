@@ -331,6 +331,8 @@ impl<T: Send + Sync + 'static> HistogramChart<T> {
             ColorSpec::Key(k) => Some(k.clone()),
             _ => None,
         };
+        // A stacked bin draws its first key at the bottom.
+        self.plot.stack_legend(key_of.is_some());
         let tallied = tally(
             &rows,
             self.x_value.as_ref(),

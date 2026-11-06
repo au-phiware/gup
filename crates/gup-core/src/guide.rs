@@ -30,23 +30,6 @@ const TICK_GAP: f32 = 4.0;
 /// A legend and its title, as collected from the layers.
 pub(crate) type Titled = (Option<String>, Legend);
 
-/// `legends` in order without any equal to an earlier one; a repeat
-/// lends its title to the first if that has none.
-pub(crate) fn dedup(legends: impl IntoIterator<Item = Titled>) -> Vec<Titled> {
-    let mut out: Vec<Titled> = Vec::new();
-    for (title, legend) in legends {
-        match out.iter_mut().find(|(_, l)| *l == legend) {
-            Some((t, _)) => {
-                if t.is_none() {
-                    *t = title;
-                }
-            }
-            None => out.push((title, legend)),
-        }
-    }
-    out
-}
-
 /// What was drawn: scene items, text runs, and the regions the harness
 /// treats as guides.
 pub(crate) struct Placed {
@@ -274,21 +257,5 @@ mod tests {
         assert_eq!(swatch_rows(60, 112.0), (5, 55));
         assert_eq!(swatch_rows(60, 11.0), (0, 60));
         assert_eq!(swatch_rows(0, 0.0), (0, 0));
-    }
-
-    #[test]
-    fn dedup_keeps_the_first_and_its_first_title() {
-        let a = Legend::Swatches(vec![]);
-        let b = Legend::Swatches(vec![crate::scale::Swatch {
-            label: "k".into(),
-            color: crate::channel::Color::BLACK,
-        }]);
-        let out = dedup([
-            (None, a.clone()),
-            (Some("B".into()), b.clone()),
-            (Some("A".into()), a.clone()),
-            (Some("other".into()), b.clone()),
-        ]);
-        assert_eq!(out, [(Some("A".into()), a), (Some("B".into()), b)]);
     }
 }
