@@ -202,6 +202,8 @@ pub struct Selection<T, M: Mark> {
     handlers: Vec<(Event, Handler<T>)>,
     /// The tooltip text of a hovered row.
     tooltip: Option<TooltipFn<T>>,
+    /// Whether keyboard focus visits the layer's rows.
+    focusable: bool,
     /// Evaluated columns, one per column-encoded channel in channel order.
     columns: Option<ColumnStore>,
     /// The size-descending draw order of the stored rows, when the mark's
@@ -352,6 +354,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             legend_titles: vec![None; M::CHANNELS.len()],
             handlers: Vec::new(),
             tooltip: None,
+            focusable: true,
             columns: None,
             order: None,
             max_chunk_rows: None,
@@ -609,6 +612,15 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
     /// empty text shows nothing. Not shown for rows dropped by [`Retain`].
     pub fn tooltip(&mut self, text: impl Fn(&T) -> String + Send + Sync + 'static) -> &mut Self {
         self.tooltip = Some(Box::new(text));
+        self
+    }
+
+    /// Whether keyboard focus visits this layer's rows (default true).
+    /// A composite chart sets `false` on its helper layers (a box plot's
+    /// whiskers, caps and medians), so the arrow keys walk the data and not
+    /// its decoration.
+    pub fn focusable(&mut self, on: bool) -> &mut Self {
+        self.focusable = on;
         self
     }
 
@@ -1310,6 +1322,8 @@ pub(crate) trait Layer: wgpu::WasmNotSendSync {
     /// The tooltip text for `row`: `None` without a tooltip, for a row the
     /// layer no longer holds, or for empty text.
     fn tooltip_text(&self, row: usize) -> Option<String>;
+    /// Whether keyboard focus visits the layer's rows.
+    fn is_focusable(&self) -> bool;
     /// The generated glue (for tests and diagnostics).
     fn glue_source(&self) -> Glue;
     fn as_any_mut(&mut self) -> &mut dyn Any;
@@ -2463,6 +2477,10 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
                 handler(info, row);
             }
         }
+    }
+
+    fn is_focusable(&self) -> bool {
+        self.focusable
     }
 
     fn tooltip_text(&self, row: usize) -> Option<String> {

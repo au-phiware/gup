@@ -371,7 +371,8 @@ impl<T: Send + Sync + 'static> BoxPlotChart<T> {
                 )
                 .y(|p: &Part| p.y)
                 .y_end(|p: &Part| p.y_end)
-                .width(Px(width));
+                .width(Px(width))
+                .focusable(false);
             match &self.color {
                 ColorSpec::Default => {
                     layer.color(Segment::DEFAULT_COLOR);

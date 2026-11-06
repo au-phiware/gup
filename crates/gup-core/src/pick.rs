@@ -634,6 +634,40 @@ impl PickIndex {
             .collect()
     }
 
+    /// Every row the index draws once, with its anchor (a line, path or
+    /// area item gives its `a` row, and its `b` row, so a run's last row
+    /// too), in no particular order.
+    pub(crate) fn anchors(&self) -> Vec<(RowId, Point)> {
+        let mut seen = std::collections::HashSet::new();
+        let mut out = Vec::new();
+        for item in &self.items {
+            let mut push = |row: RowId, q: [f32; 2]| {
+                if seen.insert(row) {
+                    out.push((row, Point::new(q[0], q[1])));
+                }
+            };
+            match item.shape {
+                Shape::Capsule { a, b, .. }
+                | Shape::Path { a, b, .. }
+                | Shape::Area { a, b, .. } => {
+                    push(item.row, a);
+                    push(
+                        RowId {
+                            row: item.row.row + 1,
+                            ..item.row
+                        },
+                        b,
+                    );
+                }
+                _ => {
+                    let p = item.shape.anchor([0.0; 2], item.row).1;
+                    push(item.row, [p.x, p.y]);
+                }
+            }
+        }
+        out
+    }
+
     /// Where a tooltip for `row` attaches, if it is drawn.
     pub(crate) fn anchor(&self, row: RowId) -> Option<Point> {
         self.items.iter().find_map(|item| {

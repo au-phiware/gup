@@ -193,13 +193,13 @@ pub use context::{Caps, Context, ContextId, ContextOptions, Upload, UploadStats,
 pub use describe::Description;
 pub use encoding::{
     ColumnMarker, ColumnValue, ConstMarker, CpuMirror, Derived, DerivedMarker, DynColumnEncoding,
-    DynShaderFn, EncodeFn, Encoded, Encoding, Feeds, IntoEncoding, Key, KeyAccessor, KeyEncoded,
+    DynShaderFn, EncodeFn, Encoded, Encoding, Feeds, IntoEncoding, KeyAccessor, KeyEncoded,
     KeyMarker, KeySource, NullableKey, NullableOwnedKey, OwnedKey, Resource, ShaderFn, Then,
 };
 pub use error::{Error, Result};
 pub use gpu_pick::{GpuPick, PickTicket};
 pub use gup_text::Font;
-pub use input::{Axes, Brush, Button, Drag, Event, EventInfo, Input, Response};
+pub use input::{Axes, Brush, Button, Drag, Event, EventInfo, Input, Key, Modifiers, Response};
 pub use marks::{
     Area, AreaAttrs, Circle, CircleAttrs, Curve, Line, LineAttrs, Rect, RectAttrs, Segment,
     SegmentAttrs,

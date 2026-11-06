@@ -18,14 +18,14 @@ use crate::cull;
 use crate::error::{Error, Result};
 use crate::geom::{Point, Rect};
 use crate::gpu_pick::{GpuPicker, PickTicket};
-use crate::input::{Axes, Brush, Button, Drag, Event, EventInfo, Input, Response};
+use crate::input::{Axes, Brush, Button, Drag, Event, EventInfo, Input, Key, Modifiers, Response};
 use crate::marks::{Area, Circle, Line, Rect as MarkRect, Segment};
 use crate::pick::{PickIndex, RowId};
 use crate::render::{LayerGpu, Span};
 use crate::scale::{DynPositionScale, Linear, PositionScale, ScaleRef, TickFormat, Ticks};
 use crate::scene::{
     Anchor, HAlign, Item, ItemKind, RectPrim, Rule, Scene, TextRole, TextRun, TextStyle, VAlign,
-    Weight, Z_AXES, Z_BRUSH, Z_GRID, Z_TITLE,
+    Weight, Z_AXES, Z_BRUSH, Z_FOCUS, Z_GRID, Z_TITLE,
 };
 use crate::selection::{Layer, Selection};
 use crate::text_layer::{AnnotationLayer, TextLayer};
@@ -75,6 +75,9 @@ pub struct Layout {
     /// runs are in the scene (role [`TextRole::Tooltip`]) but not in
     /// [`texts`](Self::texts).
     pub tooltip: Option<Rect>,
+    /// The keyboard focus ring's outer box, `Some` exactly while one is
+    /// drawn (see [`Plot::focused`]).
+    pub focus: Option<Rect>,
 }
 
 /// A layout plus the scene drawn from it.
@@ -238,6 +241,11 @@ pub struct Plot {
     /// The hovered row, where its tooltip attaches, and the generation that
     /// anchor was found at.
     hover: Option<(RowId, Point, u64)>,
+    /// Whether the hover is keyboard focus (see [`Plot::focused`]).
+    hover_from_keys: bool,
+    /// The focusable rows by layer, each in focus order, with the key and
+    /// plot rect of the pick index they came from.
+    focus_order: Option<FocusOrder>,
     /// Where the primary button went down, until it comes up.
     press: Option<Point>,
     /// The last pointer position seen.
@@ -282,6 +290,15 @@ pub struct Plot {
     gpu_hover: GpuHover,
     /// Called for every `Enter`, `Leave` and `Click`, with the row's id.
     row_handlers: Vec<RowHandler>,
+}
+
+/// The rows keyboard focus walks: one list per focusable layer in plot
+/// order, each sorted by anchor x, then y, then row; built per pick-index
+/// key and plot rect.
+struct FocusOrder {
+    key: (u64, u64),
+    plot: Rect,
+    layers: Vec<Vec<(RowId, Point)>>,
 }
 
 type BrushHandler = Box<dyn FnMut(Option<&Brush>) + Send + Sync>;
@@ -342,6 +359,35 @@ fn brush_item(theme: &Theme, rect: Rect) -> Item {
         clip: None,
         kind: ItemKind::Rects(rects),
     }
+}
+
+/// The keyboard focus ring centred on `anchor`, and its outer box: a 16 px
+/// square of 2 px sides in the title colour inside an 18 px square of 1 px
+/// sides in the background colour, so it shows on any mark or background.
+fn focus_item(theme: &Theme, anchor: Point) -> (Item, Rect) {
+    let l = anchor.x.round() - 9.0;
+    let t = anchor.y.round() - 9.0;
+    let prim = |x, y, w, h, color| RectPrim {
+        rect: Rect::new(x, y, w, h),
+        color,
+    };
+    let (edge, ink) = (theme.background, theme.title);
+    let rects = vec![
+        prim(l, t, 18.0, 1.0, edge),
+        prim(l, t + 17.0, 18.0, 1.0, edge),
+        prim(l, t + 1.0, 1.0, 16.0, edge),
+        prim(l + 17.0, t + 1.0, 1.0, 16.0, edge),
+        prim(l + 1.0, t + 1.0, 16.0, 2.0, ink),
+        prim(l + 1.0, t + 15.0, 16.0, 2.0, ink),
+        prim(l + 1.0, t + 3.0, 2.0, 12.0, ink),
+        prim(l + 15.0, t + 3.0, 2.0, 12.0, ink),
+    ];
+    let item = Item {
+        z: Z_FOCUS,
+        clip: None,
+        kind: ItemKind::Rects(rects),
+    };
+    (item, Rect::new(l, t, 18.0, 18.0))
 }
 
 /// An axis as it was before the view moved.
@@ -519,6 +565,8 @@ impl Plot {
             cull: true,
             gpu_pick: None,
             hover: None,
+            hover_from_keys: false,
+            focus_order: None,
             press: None,
             view_axes: Axes::Both,
             grid: Axes::Neither,
@@ -1419,7 +1467,10 @@ impl Plot {
                 {
                     self.hover = Some((row, anchor, self.generation));
                 }
-                None => self.hover = None,
+                None => {
+                    self.hover = None;
+                    self.hover_from_keys = false;
+                }
             }
         }
         if self.hover.is_none() && self.brush.is_none() && self.marquee.is_none() {
@@ -1435,6 +1486,10 @@ impl Plot {
         }
         self.overlay = None;
         let brush_px = self.marquee.or_else(|| self.brush_rect());
+        let ring = self
+            .hover
+            .filter(|_| self.hover_from_keys)
+            .map(|(_, anchor, _)| focus_item(&self.theme, anchor));
         let tooltip = self.hover.and_then(|(row, anchor, _)| {
             let text = self.layers.get(row.layer)?.tooltip_text(row.row)?;
             Some((text, anchor))
@@ -1442,10 +1497,14 @@ impl Plot {
         let Some((_, base)) = &self.cache else {
             return;
         };
-        if brush_px.is_none() && tooltip.is_none() {
+        if brush_px.is_none() && tooltip.is_none() && ring.is_none() {
             return;
         }
         let mut composed = base.clone();
+        if let Some((item, rect)) = ring {
+            composed.scene.push(item);
+            composed.layout.focus = Some(rect);
+        }
         if let Some(rect) = brush_px {
             composed.scene.push(brush_item(&self.theme, rect));
         }
@@ -1477,6 +1536,16 @@ impl Plot {
         self.hover.map(|(row, _, _)| row)
     }
 
+    /// The row the keyboard focuses (see [`Key`](crate::Key)): `None` when
+    /// there is none, or when the hover came from the pointer. While it is
+    /// `Some`, [`hovered`](Self::hovered) is the same row, and a ring is
+    /// drawn around it ([`Layout::focus`]).
+    pub fn focused(&self) -> Option<RowId> {
+        self.hover
+            .filter(|_| self.hover_from_keys)
+            .map(|(row, _, _)| row)
+    }
+
     /// React to `input`.
     ///
     /// - Moving the pointer onto another row (or off the rows) calls the
@@ -1491,6 +1560,12 @@ impl Plot {
     ///   under it. The hovered row is left when the drag starts, and the
     ///   release is not a click. [`drag`](Self::drag)(`Drag::Off`) turns this
     ///   off.
+    ///
+    /// - A key ([`Input::KeyDown`], see [`Key`]) with no modifier moves
+    ///   keyboard focus over the rows ([`focused`](Self::focused)): the
+    ///   focused row is hovered (`Enter`, `Leave`, tooltip) and ringed; `Enter`
+    ///   runs its `Click` handlers and `Escape` clears it. A pointer move
+    ///   onto another row ends it. Keys are ignored during a drag.
     ///
     /// The wheel and a drag move the axes of [`view_axes`](Self::view_axes)
     /// except band and point axes; [`reset_view`](Self::reset_view) undoes
@@ -1602,6 +1677,12 @@ impl Plot {
                     }
                 }
             }
+            Input::KeyDown { key, modifiers } => {
+                if modifiers == Modifiers::NONE && self.dragging.is_none() && self.marquee.is_none()
+                {
+                    redraw = self.key_down(key);
+                }
+            }
             Input::Wheel { at, lines }
                 if lines.is_finite() && lines != 0.0 && self.cache.is_some() =>
             {
@@ -1619,6 +1700,128 @@ impl Plot {
             _ => {}
         }
         Response { redraw }
+    }
+
+    /// A key with no modifiers: move, click or clear keyboard focus.
+    /// Whether the chart looks different.
+    fn key_down(&mut self, key: Key) -> bool {
+        if key == Key::Escape {
+            let Some((_, anchor, _)) = self.hover.filter(|_| self.hover_from_keys) else {
+                return false;
+            };
+            self.set_hover(None, anchor);
+            return true;
+        }
+        if key == Key::Enter {
+            let Some((row, anchor, _)) = self.hover.filter(|_| self.hover_from_keys) else {
+                return false;
+            };
+            let redraw = self.drop_brush();
+            self.dispatch(Event::Click, anchor, row);
+            return redraw;
+        }
+        let Some(target) = self.focus_target(key) else {
+            return false;
+        };
+        let Some(anchor) = self.pick_anchor(target) else {
+            return false;
+        };
+        if self.focused() == Some(target) {
+            return false;
+        }
+        if self.hovered() == Some(target) {
+            // The pointer already holds the row: keep its hover, add the ring.
+            self.overlay = None;
+        } else {
+            self.set_hover(Some(target), anchor);
+        }
+        self.hover_from_keys = self.hover.is_some();
+        true
+    }
+
+    /// The row `key` moves keyboard focus to, if it moves it.
+    fn focus_target(&mut self, key: Key) -> Option<RowId> {
+        if !matches!(
+            key,
+            Key::Left | Key::Right | Key::Up | Key::Down | Key::Home | Key::End
+        ) {
+            return None;
+        }
+        let focused = self.focused();
+        let order = self.focus_order()?;
+        let layers = &order.layers;
+        let first = layers.first()?.first()?.0;
+        let Some(current) = focused else {
+            return Some(match key {
+                Key::End => layers[0][layers[0].len() - 1].0,
+                _ => first,
+            });
+        };
+        let Some((li, ri)) = layers.iter().enumerate().find_map(|(li, rows)| {
+            rows.iter()
+                .position(|(r, _)| *r == current)
+                .map(|ri| (li, ri))
+        }) else {
+            return Some(first);
+        };
+        let rows = &layers[li];
+        match key {
+            Key::Right => Some(rows[(ri + 1).min(rows.len() - 1)].0),
+            Key::Left => Some(rows[ri.saturating_sub(1)].0),
+            Key::Home => Some(rows[0].0),
+            Key::End => Some(rows[rows.len() - 1].0),
+            _ => {
+                let lj = if key == Key::Up {
+                    (li + 1).min(layers.len() - 1)
+                } else {
+                    li.saturating_sub(1)
+                };
+                let x = rows[ri].1.x;
+                let mut best: Option<(f32, RowId)> = None;
+                for (row, at) in &layers[lj] {
+                    let d = (at.x - x).abs();
+                    if best.is_none_or(|(bd, _)| d < bd) {
+                        best = Some((d, *row));
+                    }
+                }
+                best.map(|(_, r)| r)
+            }
+        }
+    }
+
+    /// The focus order for the current pick index, built on first use.
+    fn focus_order(&mut self) -> Option<&FocusOrder> {
+        let plot = self.layout()?.plot;
+        self.pick_index()?;
+        let key = self.pick.as_ref()?.0;
+        if self
+            .focus_order
+            .as_ref()
+            .is_none_or(|o| o.key != key || o.plot != plot)
+        {
+            let anchors = self.pick.as_ref()?.1.anchors();
+            let mut layers: Vec<Vec<(RowId, Point)>> = vec![Vec::new(); self.layers.len()];
+            for (row, at) in anchors {
+                let inside = at.x >= plot.left()
+                    && at.x <= plot.right()
+                    && at.y >= plot.top()
+                    && at.y <= plot.bottom();
+                if inside && self.layers.get(row.layer).is_some_and(|l| l.is_focusable()) {
+                    layers[row.layer].push((row, at));
+                }
+            }
+            for rows in &mut layers {
+                rows.sort_by(|a, b| {
+                    a.1.x
+                        .total_cmp(&b.1.x)
+                        .then(a.1.y.total_cmp(&b.1.y))
+                        .then(a.0.cmp(&b.0))
+                });
+            }
+            layers.retain(|rows| !rows.is_empty());
+            self.focus_order = Some(FocusOrder { key, plot, layers });
+        }
+        self.focus_order.as_ref()
     }
 
     /// The rectangle from `a` to `b` clamped to the plot rect.
@@ -1816,6 +2019,7 @@ impl Plot {
     /// Whether the tooltip shown changes.
     fn set_hover(&mut self, row: Option<RowId>, at: Point) -> bool {
         let old = self.hover.take();
+        self.hover_from_keys = false;
         // A GPU-picked row without an index entry attaches at the pointer.
         let anchor = row.and_then(|r| self.pick_anchor(r).or(self.gpu_mode.then_some(at)));
         self.hover = row.zip(anchor).map(|(r, a)| (r, a, self.generation));
@@ -2968,6 +3172,7 @@ impl Plot {
                 y_right_ticks: y_right_placed,
                 legend: legend_bounds,
                 tooltip: None,
+                focus: None,
             },
             scene,
         })

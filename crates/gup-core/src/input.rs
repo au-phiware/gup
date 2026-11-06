@@ -40,6 +40,13 @@ pub enum Input {
         /// `lines > 0` scrolls up (away from the user), which zooms in.
         lines: f32,
     },
+    /// A key went down.
+    KeyDown {
+        /// Which key, as a [`Key`] (semantic, not physical).
+        key: Key,
+        /// The modifiers held.
+        modifiers: Modifiers,
+    },
 }
 
 impl Input {
@@ -71,6 +78,100 @@ impl Input {
             lines,
         }
     }
+
+    /// `key` went down with no modifiers.
+    pub fn key(key: Key) -> Self {
+        Self::key_with(key, Modifiers::NONE)
+    }
+
+    /// `key` went down with `modifiers` held.
+    pub fn key_with(key: Key, modifiers: Modifiers) -> Self {
+        Self::KeyDown { key, modifiers }
+    }
+}
+
+/// A key a chart understands. Keys are semantic, not physical: a host maps
+/// its keyboard to them (`+` to `ZoomIn`, `-` to `ZoomOut`, `0` to
+/// `ResetView`, Space to `Enter`).
+///
+/// With no modifiers, the arrows, `Home` and `End` move keyboard focus
+/// over the chart's rows (see [`Plot::focused`](crate::Plot::focused)):
+/// `Right` and `Left` walk the focused layer in x order, `Up` and `Down`
+/// move to the next and previous layer, `Home` and `End` jump to its ends,
+/// `Enter` clicks the focused row and `Escape` clears focus. `ZoomIn`,
+/// `ZoomOut` and `ResetView` do nothing yet.
+///
+/// ```
+/// use gup_core::prelude::*;
+/// use gup_core::{Input, Key, RowId};
+///
+/// # fn main() -> gup_core::Result<()> {
+/// let cx = Context::new_blocking()?;
+/// let mut plot = Plot::new();
+/// plot.circles(vec![(1.0, 2.0), (3.0, 1.0)])
+///     .x(|r: &(f64, f64)| r.0)
+///     .y(|r: &(f64, f64)| r.1);
+/// plot.resolve(&cx, 320.0, 200.0)?;
+///
+/// let response = plot.handle(Input::key(Key::Right));
+/// assert!(response.redraw);
+/// assert_eq!(plot.focused(), Some(RowId { layer: 0, row: 0 }));
+/// # Ok(())
+/// # }
+/// ```
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum Key {
+    /// Left arrow.
+    Left,
+    /// Right arrow.
+    Right,
+    /// Up arrow.
+    Up,
+    /// Down arrow.
+    Down,
+    /// Home.
+    Home,
+    /// End.
+    End,
+    /// Enter (hosts also map Space).
+    Enter,
+    /// Escape.
+    Escape,
+    /// Zoom in (`+`).
+    ZoomIn,
+    /// Zoom out (`-`).
+    ZoomOut,
+    /// Reset the view (`0`).
+    ResetView,
+}
+
+/// The modifier keys held with a [`Key`].
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct Modifiers {
+    /// Shift.
+    pub shift: bool,
+    /// Control.
+    pub ctrl: bool,
+    /// Alt (Option).
+    pub alt: bool,
+    /// Meta (Command, Windows).
+    pub meta: bool,
+}
+
+impl Modifiers {
+    /// No modifier.
+    pub const NONE: Self = Self {
+        shift: false,
+        ctrl: false,
+        alt: false,
+        meta: false,
+    };
+    /// Shift alone.
+    pub const SHIFT: Self = Self {
+        shift: true,
+        ..Self::NONE
+    };
 }
 
 /// A pointer button.
@@ -204,6 +305,23 @@ mod tests {
         assert_eq!(
             Input::wheel((3.0, 4.0), 1.5),
             Input::Wheel { at, lines: 1.5 }
+        );
+        assert_eq!(
+            Input::key(Key::Up),
+            Input::KeyDown {
+                key: Key::Up,
+                modifiers: Modifiers::default()
+            }
+        );
+        assert_eq!(
+            Input::key_with(Key::Up, Modifiers::SHIFT),
+            Input::KeyDown {
+                key: Key::Up,
+                modifiers: Modifiers {
+                    shift: true,
+                    ..Modifiers::NONE
+                }
+            }
         );
     }
 }
