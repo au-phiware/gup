@@ -63,6 +63,10 @@ what each release contains and what its version number promises.
 - A scale family: linear, pow, log, symlog, time, band, point and colour scales,
   with ticks, axes and legends computed to match the GPU.
 - Legends, titles and subtitles, tick formats and a built-in `Theme::dark`.
+- Keyboard focus over a chart's rows: send `Input::key(Key::Right)` (and `Left`,
+  `Up`, `Down`, `Home`, `End`, `Enter`, `Escape`) to a plot, and it moves a
+  focus ring and tooltip from row to row; `Plot::focused` says which.
+  `Selection::focusable(false)` keeps a helper layer out of the walk.
 - Render targets: a window (`gup::show`), PNG, SVG, a texture, and a WebGPU
   canvas in the browser.
 - Interaction: picking, tooltips, wheel zoom, drag pan and brushing. Zooming and

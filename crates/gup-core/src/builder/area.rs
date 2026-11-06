@@ -490,7 +490,7 @@ impl<T: Send + Sync + 'static> AreaChart<T> {
                 if has_y {
                     sel.y(|p: &AreaPoint| p.y);
                 }
-                sel.width(Px(px));
+                sel.width(Px(px)).focusable(false);
                 match (&self.color, name) {
                     (ColorSpec::Fill(c), _) => {
                         sel.color(*c);

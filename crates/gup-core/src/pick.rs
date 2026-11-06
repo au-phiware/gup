@@ -634,6 +634,40 @@ impl PickIndex {
             .collect()
     }
 
+    /// Every row the index draws once, with its anchor (a line, path or
+    /// area item gives its `a` row, and its `b` row, so a run's last row
+    /// too), in no particular order.
+    pub(crate) fn anchors(&self) -> Vec<(RowId, Point)> {
+        let mut seen = std::collections::HashSet::new();
+        let mut out = Vec::new();
+        for item in &self.items {
+            let mut push = |row: RowId, q: [f32; 2]| {
+                if seen.insert(row) {
+                    out.push((row, Point::new(q[0], q[1])));
+                }
+            };
+            match item.shape {
+                Shape::Capsule { a, b, .. }
+                | Shape::Path { a, b, .. }
+                | Shape::Area { a, b, .. } => {
+                    push(item.row, a);
+                    push(
+                        RowId {
+                            row: item.row.row + 1,
+                            ..item.row
+                        },
+                        b,
+                    );
+                }
+                _ => {
+                    let p = item.shape.anchor([0.0; 2], item.row).1;
+                    push(item.row, [p.x, p.y]);
+                }
+            }
+        }
+        out
+    }
+
     /// Where a tooltip for `row` attaches, if it is drawn.
     pub(crate) fn anchor(&self, row: RowId) -> Option<Point> {
         self.items.iter().find_map(|item| {
@@ -799,6 +833,27 @@ mod tests {
             rank,
             shape: Shape::Disc { c: [x, 20.0], r },
         }
+    }
+
+    #[test]
+    fn anchors_give_every_row_of_a_line_once() {
+        let cap = |row, a, b| PickItem {
+            row: RowId { layer: 0, row },
+            z: 0,
+            rank: row as u64,
+            shape: Shape::Capsule { a, b, h: 1.0 },
+        };
+        let items = vec![
+            cap(0, [10.0, 10.0], [20.0, 30.0]),
+            cap(1, [20.0, 30.0], [30.0, 15.0]),
+            disc(1, 7, 0, 0, 40.0, 3.0),
+        ];
+        let index = PickIndex::new(Rect::new(0.0, 0.0, 100.0, 60.0), items);
+        let mut got = index.anchors();
+        got.sort_by_key(|(r, _)| *r);
+        let rows: Vec<(usize, usize)> = got.iter().map(|(r, _)| (r.layer, r.row)).collect();
+        assert_eq!(rows, [(0, 0), (0, 1), (0, 2), (1, 7)]);
+        assert_eq!(got[2].1, Point::new(30.0, 15.0));
     }
 
     #[test]

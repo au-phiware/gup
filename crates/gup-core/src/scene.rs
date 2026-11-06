@@ -20,6 +20,8 @@ pub const Z_AXES: i32 = 100;
 pub const Z_TITLE: i32 = 200;
 /// Z-order of the brush rectangle, above titles and legends.
 pub const Z_BRUSH: i32 = 250;
+/// Z-order of the keyboard focus ring, above the brush, below the tooltip.
+pub const Z_FOCUS: i32 = 275;
 /// Z-order of the hover tooltip, above everything else.
 pub const Z_TOOLTIP: i32 = 300;
 
