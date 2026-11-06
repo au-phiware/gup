@@ -480,7 +480,7 @@ scribe pass before it starts.
   values cached for the edge-inset solve, so a programmatic zoom answers by
   binary search with identical insets: `zoom_culled.cpu` from 1.24 back under
   0.90 ms. Deps: GUP-528 ✅.
-- [GUP-627](GUP-627_Scale_Benchmark_Ingest_And_Memory.md) 📋 — A headless
+- [GUP-627](GUP-627_Scale_Benchmark_Ingest_And_Memory.md) ✅ — A headless
   `scale_bench` example timing each ingest phase (closures, f64 columns, chunk
   conversion and upload, first resolve, first frame, zoom) with peak RSS, run at
   1M–100M rows, so N5 is designed from numbers. Deps: GUP-457 ✅, GUP-482 ✅.
