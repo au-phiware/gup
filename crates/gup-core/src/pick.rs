@@ -836,6 +836,27 @@ mod tests {
     }
 
     #[test]
+    fn anchors_give_every_row_of_a_line_once() {
+        let cap = |row, a, b| PickItem {
+            row: RowId { layer: 0, row },
+            z: 0,
+            rank: row as u64,
+            shape: Shape::Capsule { a, b, h: 1.0 },
+        };
+        let items = vec![
+            cap(0, [10.0, 10.0], [20.0, 30.0]),
+            cap(1, [20.0, 30.0], [30.0, 15.0]),
+            disc(1, 7, 0, 0, 40.0, 3.0),
+        ];
+        let index = PickIndex::new(Rect::new(0.0, 0.0, 100.0, 60.0), items);
+        let mut got = index.anchors();
+        got.sort_by_key(|(r, _)| *r);
+        let rows: Vec<(usize, usize)> = got.iter().map(|(r, _)| (r.layer, r.row)).collect();
+        assert_eq!(rows, [(0, 0), (0, 1), (0, 2), (1, 7)]);
+        assert_eq!(got[2].1, Point::new(30.0, 15.0));
+    }
+
+    #[test]
     fn query_prefers_containing_topmost_then_nearest() {
         let plot = Rect::new(10.0, 10.0, 100.0, 60.0);
         let items = vec![
