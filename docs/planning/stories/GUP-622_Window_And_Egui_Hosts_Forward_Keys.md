@@ -11,8 +11,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Track N4: Accessibility **Status**: 🚧 In Progress **Created**:
-2026-11-04
+**Initiative**: Track N4: Accessibility **Status**: ✅ Complete (2026-11-06)
+**Created**: 2026-11-04
 
 ## Context
 
@@ -49,35 +49,35 @@ accessibility need; GUP-376 is proposed for closing when this lands.
 
 ### AC1: Window
 
-- [ ] A pure
+- [x] A pure
       `fn key_input(key: &winit::keyboard::Key, modifiers: Modifiers)     -> Option<Input>`
       in `app.rs` maps keys per the mapping in Decisions; unit tests cover every
       row of it and a key that maps to `None`.
-- [ ] `window_event` tracks `WindowEvent::ModifiersChanged` and sends mapped
+- [x] `window_event` tracks `WindowEvent::ModifiersChanged` and sends mapped
       `KeyboardInput` presses (not releases, and repeats included) to the chart,
       requesting a redraw when the response says so.
-- [ ] Escape is sent to the chart first; the window exits only when the response
+- [x] Escape is sent to the chart first; the window exits only when the response
       has `redraw: false` (nothing was focused). `CloseRequested` still exits at
       once. A unit test covers the rule through a small pure helper.
-- [ ] Manual check, recorded in the retrospective: `cargo run --example` of a
+- [x] Manual check, recorded in the retrospective: `cargo run --example` of a
       windowed builder example; Right, Right, Enter, `+`, Shift+Right, `0`,
       Escape, Escape behave as Decisions say (focus ring moves, view zooms, pans
       and resets, the first Escape clears focus, the second closes).
 
 ### AC2: egui
 
-- [ ] `pub fn key_input(event: &egui::Event) -> Option<Input>` in
+- [x] `pub fn key_input(event: &egui::Event) -> Option<Input>` in
       `gup-egui/src/input.rs` maps `egui::Event::Key { pressed: true, .. }` per
       the same mapping (egui key names); unit tests as for the window.
-- [ ] `GupWidget::show` requests focus for its response on a primary press
+- [x] `GupWidget::show` requests focus for its response on a primary press
       inside the chart, and is reachable with Tab (egui's focus for an
       interactive widget).
-- [ ] While the widget has focus it sets a focus-lock filter with arrows and
+- [x] While the widget has focus it sets a focus-lock filter with arrows and
       Escape locked (Tab not), so arrows do not move egui's focus, and forwards
       `key_input` events to the chart; without focus it forwards none.
-- [ ] Escape with nothing focused in the chart releases the widget's egui focus
+- [x] Escape with nothing focused in the chart releases the widget's egui focus
       (`surrender_focus`).
-- [ ] The egui example (`gup-egui/examples/egui_chart.rs`) is checked by hand
+- [x] The egui example (`gup-egui/examples/egui_chart.rs`) is checked by hand
       with the same key sequence as AC1 (retrospective).
 
 ## Decisions
@@ -112,9 +112,9 @@ accessibility need; GUP-376 is proposed for closing when this lands.
 
 ## Technical Tasks
 
-- [ ] `key_input` for winit, modifiers tracking, the Escape rule, tests.
-- [ ] `key_input` for egui, focus request and lock, forwarding, tests.
-- [ ] Manual checks of both hosts.
+- [x] `key_input` for winit, modifiers tracking, the Escape rule, tests.
+- [x] `key_input` for egui, focus request and lock, forwarding, tests.
+- [x] Manual checks of both hosts.
 
 ## Dependencies
 
@@ -131,7 +131,7 @@ accessibility need; GUP-376 is proposed for closing when this lands.
 
 ## Success Metrics
 
-- [ ] Both desktop hosts drive keyboard focus and view keys.
+- [x] Both desktop hosts drive keyboard focus and view keys.
 
 ## Risk Assessment
 
@@ -140,16 +140,55 @@ accessibility need; GUP-376 is proposed for closing when this lands.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -p gup-core -- --test-threads=1` and
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -p gup-core -- --test-threads=1` and
       `cargo test -p gup-egui -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye: the manual key sequences
-- [ ] `mask wasm-browser`: not needed, desktop hosts only
-- [ ] WASM size: unchanged: `app.rs` is not built for wasm32 and gup-egui is not
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye: the manual key sequences
+- [x] `mask wasm-browser`: not needed, desktop hosts only
+- [x] WASM size: unchanged: `app.rs` is not built for wasm32 and gup-egui is not
       in the scatter
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `crates/gup-core/src/app.rs`: pure `key_input` (winit) and `escape_exits`;
+  `ModifiersChanged` tracking; presses (repeats included) go to `Chart::handle`;
+  Escape exits only when the chart's response has `redraw: false`;
+  `CloseRequested` exits at once. 4 new unit tests.
+- `gup-egui/src/input.rs`: `key_input(&egui::Event)`. `gup-egui/src/widget.rs`:
+  `GupWidget::forward_keys` requests focus on a primary press inside the rect,
+  sets the focus-lock filter (arrows and Escape, not Tab) while focused,
+  forwards keys, and surrenders focus on an unused Escape. 2 + 3 new unit tests
+  (the egui ones run real `egui::Context` frames with a text field beside the
+  widget).
+- CHANGELOG `[0.1.0]` line added; GUP-376 closed as superseded.
+- `mask merge-check`, `mask egui-screenshot`, gup-egui tests: pass.
+
+## Retrospective
+
+**Completed**: 2026-11-06
+
+### Manual checks
+
+- Window (`hello_world` under Xvfb, keys by xdotool): Right, Right, Enter, `+`,
+  Shift+Right, `0`, Escape left the window open; the second Escape closed it.
+  Zoom, pan and reset do nothing yet (GUP-620 unmerged), so only focus and
+  Escape were observable.
+- egui (`egui_chart`, click then the same keys): no panic, app stays open. Focus
+  gating, arrow lock and Escape release are covered by unit tests.
+
+### Decisions
+
+- Named Space and `Character(" ")` both map to `Enter`.
+- egui `meta` is `Modifiers::mac_cmd`.
+- The egui key logic is a `GupWidget` associated function so tests can drive it
+  without a `RenderState`.
+
+### Follow-up Stories
+
+None.
