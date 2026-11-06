@@ -538,7 +538,7 @@ track N5 is at the end of this section.
   areas, histograms) list their legend top-down, and swatches of translucent
   marks are composited at the marks' opacity, so each matches what is drawn; the
   description follows. Deps: GUP-547 ✅, GUP-592 ✅.
-- [GUP-617](GUP-617_Tight_Box_Width_Test.md) 🚧 — Measure why the box plot's
+- [GUP-617](GUP-617_Tight_Box_Width_Test.md) ✅ — Measure why the box plot's
   width test needed 3 px and tighten it to 1 px by a stated rule (wrong
   expectation, wrong measurement, or a geometry bug to escalate), with a 3 px
   negative control. Deps: GUP-554 ✅.
