@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 use gup_core::geom::Point;
-use gup_core::{Button, Input};
+use gup_core::{Button, Input, Key, Modifiers};
 
 /// The `Input` for an egui event, in coordinates relative to `rect`.
 ///
@@ -61,6 +61,63 @@ pub fn to_input(event: &egui::Event, rect: egui::Rect) -> Option<Input> {
         }
         _ => None,
     }
+}
+
+/// The `Input` for an egui key press (`pressed: true`, repeats included);
+/// `None` for a release or a key the chart does not use.
+///
+/// Arrows, Home, End, Enter, Space and Escape carry the modifiers as held;
+/// `+`/`=`, `-` and `0` become `ZoomIn`, `ZoomOut` and `ResetView` with
+/// Shift dropped (`+` needs Shift on some layouts only).
+pub fn key_input(event: &egui::Event) -> Option<Input> {
+    let egui::Event::Key {
+        key,
+        pressed: true,
+        modifiers: m,
+        ..
+    } = event
+    else {
+        return None;
+    };
+    let held = Modifiers {
+        shift: m.shift,
+        ctrl: m.ctrl,
+        alt: m.alt,
+        meta: m.mac_cmd,
+    };
+    let (key, held) = match key {
+        egui::Key::ArrowLeft => (Key::Left, held),
+        egui::Key::ArrowRight => (Key::Right, held),
+        egui::Key::ArrowUp => (Key::Up, held),
+        egui::Key::ArrowDown => (Key::Down, held),
+        egui::Key::Home => (Key::Home, held),
+        egui::Key::End => (Key::End, held),
+        egui::Key::Enter | egui::Key::Space => (Key::Enter, held),
+        egui::Key::Escape => (Key::Escape, held),
+        egui::Key::Plus | egui::Key::Equals => (
+            Key::ZoomIn,
+            Modifiers {
+                shift: false,
+                ..held
+            },
+        ),
+        egui::Key::Minus => (
+            Key::ZoomOut,
+            Modifiers {
+                shift: false,
+                ..held
+            },
+        ),
+        egui::Key::Num0 => (
+            Key::ResetView,
+            Modifiers {
+                shift: false,
+                ..held
+            },
+        ),
+        _ => return None,
+    };
+    Some(Input::key_with(key, held))
 }
 
 #[cfg(test)]
@@ -185,5 +242,66 @@ mod tests {
             Some(Input::PointerLeft)
         );
         assert_eq!(to_input(&Event::Copy, rect()), None);
+    }
+
+    fn key(k: egui::Key, pressed: bool, modifiers: Modifiers) -> Event {
+        Event::Key {
+            key: k,
+            physical_key: None,
+            pressed,
+            repeat: false,
+            modifiers,
+        }
+    }
+
+    #[test]
+    fn key_input_maps_every_row() {
+        use gup_core::{Input, Key as K, Modifiers as M};
+        let cases = [
+            (egui::Key::ArrowLeft, K::Left),
+            (egui::Key::ArrowRight, K::Right),
+            (egui::Key::ArrowUp, K::Up),
+            (egui::Key::ArrowDown, K::Down),
+            (egui::Key::Home, K::Home),
+            (egui::Key::End, K::End),
+            (egui::Key::Enter, K::Enter),
+            (egui::Key::Space, K::Enter),
+            (egui::Key::Escape, K::Escape),
+            (egui::Key::Plus, K::ZoomIn),
+            (egui::Key::Equals, K::ZoomIn),
+            (egui::Key::Minus, K::ZoomOut),
+            (egui::Key::Num0, K::ResetView),
+        ];
+        for (k, want) in cases {
+            assert_eq!(
+                key_input(&key(k, true, Modifiers::NONE)),
+                Some(Input::key_with(want, M::NONE)),
+                "{k:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn key_input_modifiers_and_nones() {
+        use gup_core::{Input, Key as K, Modifiers as M};
+        let shift = Modifiers::SHIFT;
+        assert_eq!(
+            key_input(&key(egui::Key::ArrowRight, true, shift)),
+            Some(Input::key_with(K::Right, M::SHIFT))
+        );
+        assert_eq!(
+            key_input(&key(egui::Key::Plus, true, shift)),
+            Some(Input::key_with(K::ZoomIn, M::NONE))
+        );
+        let ctrl = Modifiers::CTRL;
+        let got = key_input(&key(egui::Key::Num0, true, ctrl)).unwrap();
+        assert!(matches!(got, Input::KeyDown { modifiers, .. } if modifiers.ctrl));
+        // A release, and a key the chart does not use.
+        assert_eq!(
+            key_input(&key(egui::Key::ArrowLeft, false, Modifiers::NONE)),
+            None
+        );
+        assert_eq!(key_input(&key(egui::Key::A, true, Modifiers::NONE)), None);
+        assert_eq!(key_input(&key(egui::Key::Tab, true, Modifiers::NONE)), None);
     }
 }

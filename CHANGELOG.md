@@ -33,6 +33,11 @@ what each release contains and what its version number promises.
 - Eight chart builders over your own structs: `gup::scatter`, `line`, `bar`,
   `barh`, `area`, `histogram`, `heatmap` and `boxplot`, each configured with
   closures.
+- The window app (`gup::show`, `GupApp`) and the egui widget (`GupWidget`)
+  forward keyboard input to the chart: arrows, Home, End, Enter, Space, Escape,
+  `+`/`=`, `-` and `0`. In egui the widget takes keys only while it has focus
+  (click it or Tab into it); Escape in a window closes it only when the chart
+  had no focused row to clear.
 - The chart types (`LineChart`, `ScatterChart`, and so on) are in
   `gup::prelude`, so one `use gup::prelude::*;` names the type a function
   returns; `Horizontal` and `Vertical` are at the crate root.

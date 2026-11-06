@@ -419,7 +419,7 @@ and run one at a time; the run order is at the end of "Polish after 0.1".
   a series, Up/Down between series), Enter clicks, Escape clears, a focus ring,
   and `Selection::focusable(false)` for composite layers. Deps: GUP-563 ✅,
   GUP-546 ✅.
-- [GUP-376](GUP-376_GupApp_Event_Callbacks.md) 📋 — Add optional `.on_key()` and
+- [GUP-376](GUP-376_GupApp_Event_Callbacks.md) 🚫 — Add optional `.on_key()` and
   `.on_mouse()` callbacks to `GupApp` so examples with simple custom event
   handling can also use the shell. Deps: GUP-318 ✅. Legacy (2025): GUP-622
   forwards the window's keys to the chart itself, which covers the keyboard

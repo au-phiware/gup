@@ -7,7 +7,7 @@ use crate::chart::Chart;
 use crate::context::Context;
 use crate::error::{Error, Result};
 use crate::geom::Point;
-use crate::input::{Button, Input};
+use crate::input::{Button, Input, Modifiers};
 use crate::render::Renderer;
 use crate::target::save_png;
 use crate::window::WindowTarget;
@@ -16,9 +16,9 @@ use std::sync::{Arc, Mutex};
 use winit::application::ApplicationHandler;
 use winit::dpi::{LogicalSize, PhysicalSize};
 use winit::error::EventLoopError;
-use winit::event::{ElementState, KeyEvent, MouseButton, MouseScrollDelta, WindowEvent};
+use winit::event::{ElementState, MouseButton, MouseScrollDelta, WindowEvent};
 use winit::event_loop::{ActiveEventLoop, EventLoop, EventLoopProxy};
-use winit::keyboard::{Key, NamedKey};
+use winit::keyboard::{NamedKey, SmolStr};
 use winit::window::{Window, WindowId};
 
 /// The user event a chart's waker sends: rows arrived, redraw.
@@ -157,6 +157,7 @@ impl GupApp {
             state: None,
             renderer: Renderer::new(),
             cursor: None,
+            modifiers: Modifiers::NONE,
             result: Ok(()),
         };
         event_loop
@@ -207,6 +208,46 @@ fn input_from(event: &WindowEvent, cursor: Option<Point>, scale: f64) -> Option<
     }
 }
 
+/// Map a winit key press to a chart input; `None` for a key the chart
+/// does not use. Named keys carry `modifiers` as held; the characters
+/// `+`, `=`, `-` and `0` drop Shift (`+` needs it on some layouts only).
+fn key_input(key: &winit::keyboard::Key<SmolStr>, modifiers: Modifiers) -> Option<Input> {
+    use winit::keyboard::Key as WKey;
+    let named = |k| Some(Input::key_with(k, modifiers));
+    match key {
+        WKey::Named(NamedKey::ArrowLeft) => named(crate::Key::Left),
+        WKey::Named(NamedKey::ArrowRight) => named(crate::Key::Right),
+        WKey::Named(NamedKey::ArrowUp) => named(crate::Key::Up),
+        WKey::Named(NamedKey::ArrowDown) => named(crate::Key::Down),
+        WKey::Named(NamedKey::Home) => named(crate::Key::Home),
+        WKey::Named(NamedKey::End) => named(crate::Key::End),
+        WKey::Named(NamedKey::Enter | NamedKey::Space) => named(crate::Key::Enter),
+        WKey::Named(NamedKey::Escape) => named(crate::Key::Escape),
+        WKey::Character(c) => {
+            let key = match c.as_str() {
+                "+" | "=" => crate::Key::ZoomIn,
+                "-" => crate::Key::ZoomOut,
+                "0" => crate::Key::ResetView,
+                " " => return named(crate::Key::Enter),
+                _ => return None,
+            };
+            Some(Input::key_with(
+                key,
+                Modifiers {
+                    shift: false,
+                    ..modifiers
+                },
+            ))
+        }
+        _ => None,
+    }
+}
+
+/// Escape closes the window only when the chart had nothing to clear.
+fn escape_exits(response_redraw: bool) -> bool {
+    !response_redraw
+}
+
 /// Field order is drop order: the surface goes before the device.
 struct WindowState {
     target: WindowTarget,
@@ -223,6 +264,8 @@ struct App {
     renderer: Renderer,
     /// The cursor in logical pixels.
     cursor: Option<Point>,
+    /// The modifier keys held.
+    modifiers: Modifiers,
     result: Result<()>,
 }
 
@@ -337,16 +380,40 @@ impl ApplicationHandler<Wake> for App {
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         match event {
-            WindowEvent::CloseRequested
-            | WindowEvent::KeyboardInput {
-                event:
-                    KeyEvent {
-                        logical_key: Key::Named(NamedKey::Escape),
-                        state: ElementState::Pressed,
-                        ..
-                    },
-                ..
-            } => event_loop.exit(),
+            WindowEvent::CloseRequested => event_loop.exit(),
+            WindowEvent::ModifiersChanged(m) => {
+                let s = m.state();
+                self.modifiers = Modifiers {
+                    shift: s.shift_key(),
+                    ctrl: s.control_key(),
+                    alt: s.alt_key(),
+                    meta: s.super_key(),
+                };
+            }
+            WindowEvent::KeyboardInput { event, .. } => {
+                if event.state != ElementState::Pressed {
+                    return;
+                }
+                let escape = event.logical_key == winit::keyboard::Key::Named(NamedKey::Escape);
+                let redraw = match (&self.state, self.chart.as_mut()) {
+                    (Some(state), Some(chart)) => {
+                        match key_input(&event.logical_key, self.modifiers) {
+                            Some(input) => {
+                                let redraw = chart.handle(input).redraw;
+                                if redraw {
+                                    state.target.window().request_redraw();
+                                }
+                                redraw
+                            }
+                            None => false,
+                        }
+                    }
+                    _ => false,
+                };
+                if escape && escape_exits(redraw) {
+                    event_loop.exit();
+                }
+            }
             WindowEvent::Resized(size) => {
                 if let Some(WindowState { cx, target }) = &mut self.state {
                     match target.resize(cx, size.width, size.height) {
@@ -559,5 +626,71 @@ mod tests {
             input_from(&wheel(MouseScrollDelta::LineDelta(0.0, 1.0)), None, 1.0),
             None
         );
+    }
+
+    #[test]
+    fn key_input_maps_every_row() {
+        use winit::keyboard::Key as W;
+        let none = Modifiers::NONE;
+        let named = |k| W::Named(k);
+        let ch = |c: &str| W::Character(SmolStr::new(c));
+        let cases = [
+            (named(NamedKey::ArrowLeft), crate::Key::Left),
+            (named(NamedKey::ArrowRight), crate::Key::Right),
+            (named(NamedKey::ArrowUp), crate::Key::Up),
+            (named(NamedKey::ArrowDown), crate::Key::Down),
+            (named(NamedKey::Home), crate::Key::Home),
+            (named(NamedKey::End), crate::Key::End),
+            (named(NamedKey::Enter), crate::Key::Enter),
+            (named(NamedKey::Space), crate::Key::Enter),
+            (ch(" "), crate::Key::Enter),
+            (named(NamedKey::Escape), crate::Key::Escape),
+            (ch("+"), crate::Key::ZoomIn),
+            (ch("="), crate::Key::ZoomIn),
+            (ch("-"), crate::Key::ZoomOut),
+            (ch("0"), crate::Key::ResetView),
+        ];
+        for (key, want) in cases {
+            assert_eq!(key_input(&key, none), Some(Input::key_with(want, none)));
+        }
+    }
+
+    #[test]
+    fn key_input_modifiers() {
+        use winit::keyboard::Key as W;
+        // Shift is kept on named keys and dropped on characters.
+        assert_eq!(
+            key_input(&W::Named(NamedKey::ArrowRight), Modifiers::SHIFT),
+            Some(Input::key_with(crate::Key::Right, Modifiers::SHIFT))
+        );
+        assert_eq!(
+            key_input(&W::Character(SmolStr::new("+")), Modifiers::SHIFT),
+            Some(Input::key_with(crate::Key::ZoomIn, Modifiers::NONE))
+        );
+        // Ctrl is passed as held.
+        let ctrl = Modifiers {
+            ctrl: true,
+            ..Modifiers::NONE
+        };
+        assert_eq!(
+            key_input(&W::Character(SmolStr::new("0")), ctrl),
+            Some(Input::key_with(crate::Key::ResetView, ctrl))
+        );
+    }
+
+    #[test]
+    fn key_input_ignores_other_keys() {
+        use winit::keyboard::Key as W;
+        assert_eq!(
+            key_input(&W::Character(SmolStr::new("a")), Modifiers::NONE),
+            None
+        );
+        assert_eq!(key_input(&W::Named(NamedKey::Tab), Modifiers::NONE), None);
+    }
+
+    #[test]
+    fn escape_exits_only_when_nothing_was_cleared() {
+        assert!(escape_exits(false));
+        assert!(!escape_exits(true));
     }
 }
