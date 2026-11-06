@@ -432,7 +432,7 @@ and run one at a time; the run order is at the end of "Polish after 0.1".
   and `focus_text` (and `Chart::focus_text`): a row's series, x, y and colour
   value with axis names, in the axes' formats (ISO dates on `Time`), with hooks
   for bars, bins and boxes. Deps: GUP-619 📋, GUP-615 📋.
-- [GUP-622](GUP-622_Window_And_Egui_Hosts_Forward_Keys.md) 📋 — The window app
+- [GUP-622](GUP-622_Window_And_Egui_Hosts_Forward_Keys.md) 🚧 — The window app
   and the egui widget map arrows, Home/End, Enter/Space, Escape, `+`/`=`, `-`
   and `0` to `Input::KeyDown`; the window closes on an Escape the chart did not
   use, and the egui widget takes and locks focus. Deps: GUP-619 📋, GUP-620 📋
