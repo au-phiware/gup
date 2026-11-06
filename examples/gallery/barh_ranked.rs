@@ -3,7 +3,6 @@
 
 //! A ranking as horizontal bars, longest first (illustrative data).
 
-use gup::builder::{BarChart, Horizontal};
 use gup::prelude::*;
 
 pub struct Language {
@@ -12,7 +11,7 @@ pub struct Language {
 }
 
 /// Ten languages, sorted so that the largest is at the top.
-pub fn chart() -> BarChart<Language, Horizontal> {
+pub fn chart() -> BarChart<Language, gup::Horizontal> {
     let mut languages = [
         ("English", 1_450.0),
         ("Mandarin", 1_140.0),

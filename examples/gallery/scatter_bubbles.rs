@@ -3,7 +3,6 @@
 
 //! A bubble chart: size, colour and a log axis (illustrative data).
 
-use gup::builder::ScatterChart;
 use gup::prelude::*;
 
 pub struct Country {

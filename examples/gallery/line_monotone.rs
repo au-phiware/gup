@@ -3,7 +3,6 @@
 
 //! Three smooth lines that never overshoot their data (illustrative data).
 
-use gup::builder::LineChart;
 use gup::prelude::*;
 
 pub struct Reading {

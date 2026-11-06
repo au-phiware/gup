@@ -3,7 +3,6 @@
 
 //! A histogram stacked by category: commute times by mode (illustrative data).
 
-use gup::builder::HistogramChart;
 use gup::prelude::*;
 
 pub struct Trip {

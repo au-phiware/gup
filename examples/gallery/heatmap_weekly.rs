@@ -3,7 +3,6 @@
 
 //! A heatmap of weekday by hour, through the viridis scale (illustrative data).
 
-use gup::builder::HeatmapChart;
 use gup::prelude::*;
 
 pub struct Visits {

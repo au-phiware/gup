@@ -3,7 +3,6 @@
 
 //! Box plots of latency per service, with outliers (illustrative data).
 
-use gup::builder::BoxPlotChart;
 use gup::prelude::*;
 
 pub struct Request {

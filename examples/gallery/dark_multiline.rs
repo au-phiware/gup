@@ -3,7 +3,6 @@
 
 //! Five lines in the dark theme: server load over a day (illustrative data).
 
-use gup::builder::LineChart;
 use gup::prelude::*;
 
 pub struct Sample {

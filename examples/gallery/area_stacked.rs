@@ -3,7 +3,7 @@
 
 //! Stacked areas with an outline: a shifting energy mix (illustrative data).
 
-use gup::builder::AreaChart;
+use gup::prelude::*;
 
 pub struct Output {
     year: f64,
