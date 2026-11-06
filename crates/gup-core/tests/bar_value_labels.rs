@@ -418,6 +418,66 @@ fn a_format_changed_after_a_resolve_is_picked_up() {
     assert_eq!(sorted_labels(&l), ["-1.5 u", "3 u", "5.25 u"]);
 }
 
+// GUP-615: bar labels read the axis's effective format.
+
+#[test]
+fn a_format_set_on_the_scale_handle_labels_the_bars() {
+    let mut chart = gup_core::bar(three()).x(|r| r.0).y(|r| r.1).value_labels();
+    let y = chart.plot_mut().y(Linear::new());
+    y.tick_format(|v| format!("${v:.0}"));
+    let (_, l) = render(&mut chart, 640, 400);
+    assert_eq!(sorted_labels(&l), ["$-2", "$3", "$5"]);
+    let ticks = tick_texts(&l, &["Q1", "Q2", "Q3"]);
+    assert!(ticks.iter().all(|t| t.starts_with('$')), "{ticks:?}");
+}
+
+#[test]
+fn a_format_set_on_the_plot_handle_labels_the_bars_before_or_after_a_resolve() {
+    let mut chart = gup_core::bar(three()).x(|r| r.0).y(|r| r.1).value_labels();
+    let y = chart.plot_mut().y(Linear::new());
+    y.tick_format(|v| format!("{v:.0}%"));
+    let (_, l) = render(&mut chart, 640, 400);
+    assert_eq!(sorted_labels(&l), ["-2%", "3%", "5%"]);
+    y.tick_format(|v| format!("{v:.0} u"));
+    let (_, l) = render(&mut chart, 640, 400);
+    assert_eq!(sorted_labels(&l), ["-2 u", "3 u", "5 u"]);
+}
+
+#[test]
+fn a_horizontal_format_set_on_the_scale_handle_labels_the_bars() {
+    let mut chart = gup_core::barh(three()).y(|r| r.0).x(|r| r.1).value_labels();
+    let x = chart.plot_mut().x(Linear::new());
+    x.tick_format(|v| format!("{v:.0}%"));
+    let (_, l) = render(&mut chart, 640, 400);
+    assert_eq!(sorted_labels(&l), ["-2%", "3%", "5%"]);
+    let ticks = tick_texts(&l, &["Q1", "Q2", "Q3"]);
+    assert!(ticks.iter().all(|t| t.ends_with('%')), "{ticks:?}");
+}
+
+#[test]
+fn the_handle_format_set_last_wins() {
+    let mut chart = gup_core::bar(three()).x(|r| r.0).y(|r| r.1).value_labels();
+    chart.plot_mut().y_tick_format(|v| format!("{v:.0}%"));
+    let y = chart.plot_mut().y(Linear::new());
+    y.tick_format(|v| format!("{v:.0} h"));
+    let (_, l) = render(&mut chart, 640, 400);
+    assert_eq!(sorted_labels(&l), ["-2 h", "3 h", "5 h"]);
+    let ticks = tick_texts(&l, &["Q1", "Q2", "Q3"]);
+    assert!(ticks.iter().all(|t| t.ends_with(" h")), "{ticks:?}");
+}
+
+#[test]
+fn the_plot_format_set_last_wins() {
+    let mut chart = gup_core::bar(three()).x(|r| r.0).y(|r| r.1).value_labels();
+    let y = chart.plot_mut().y(Linear::new());
+    y.tick_format(|v| format!("{v:.0} h"));
+    chart.plot_mut().y_tick_format(|v| format!("{v:.0}%"));
+    let (_, l) = render(&mut chart, 640, 400);
+    assert_eq!(sorted_labels(&l), ["-2%", "3%", "5%"]);
+    let ticks = tick_texts(&l, &["Q1", "Q2", "Q3"]);
+    assert!(ticks.iter().all(|t| t.ends_with('%')), "{ticks:?}");
+}
+
 /// GUP-618: a value label drawn in the colour of its own bar segment is
 /// invisible, and `text_present` must say so. No public route sets a value
 /// label's colour, so the image is built by hand: render the chart, then

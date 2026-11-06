@@ -19,7 +19,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Polish after 0.1 **Status**: 📋 Planned **Created**: 2026-11-04
+**Initiative**: Polish after 0.1 **Status**: ✅ Complete (2026-11-04)
+**Created**: 2026-11-04
 
 ## Context
 
@@ -63,30 +64,30 @@ Two problems with bar value labels (GUP-544, GUP-560), both checked on main:
 
 ### AC1: Labels follow the axis's effective format
 
-- [ ] With `value_labels()`, a format set only through the value axis's
+- [x] With `value_labels()`, a format set only through the value axis's
       `ScaleRef::tick_format` (on the handle `plot_mut().y(..)` returned, or on
       a `ScaleRef` passed to `y_scale`) labels the bars, set before or after the
       first resolve. Tested in `crates/gup-core/tests/bar_value_labels.rs` for a
       vertical and a horizontal chart.
-- [ ] Precedence matches the ticks: whichever of `y_tick_format` and
+- [x] Precedence matches the ticks: whichever of `y_tick_format` and
       `ScaleRef::tick_format` was set last labels both the ticks and the bars
       (two tests, one per order).
-- [ ] Changing the handle's format after a resolve relabels the bars on the next
+- [x] Changing the handle's format after a resolve relabels the bars on the next
       resolve (the text layers are invalidated).
-- [ ] The doc comment of `value_labels` drops the "is not seen" sentence and
+- [x] The doc comment of `value_labels` drops the "is not seen" sentence and
       states the rule: labels use the value axis's tick format, however it was
       set.
 
 ### AC2: The unit rule, documented and followed
 
-- [ ] The `value_labels` and `value_labels_with` docs state the rule of
+- [x] The `value_labels` and `value_labels_with` docs state the rule of
       Decisions in two sentences.
-- [ ] `examples/gallery/bar_grouped_labels.rs` follows it: axis title "Revenue
+- [x] `examples/gallery/bar_grouped_labels.rs` follows it: axis title "Revenue
       ($k)", ticks bare, labels `value_labels_with(|v| format!("{v:.0}"))`.
-- [ ] The golden `tests/golden/gallery/bar_grouped_labels.png` is re-blessed and
+- [x] The golden `tests/golden/gallery/bar_grouped_labels.png` is re-blessed and
       read: every label is a bare whole number (no `$`, no `k`), labels sit
       above their bars, and the axis title still reads "Revenue ($k)".
-- [ ] `git grep -n "value_labels" -- examples docs/tutorials tests/tutorials.rs`
+- [x] `git grep -n "value_labels" -- examples docs/tutorials tests/tutorials.rs`
       is checked against the rule; any other chart that repeats a unit is fixed
       and its golden re-blessed (none expected: `barh_ranked` and tutorial 7
       print bare numbers).
@@ -131,10 +132,10 @@ Two problems with bar value labels (GUP-544, GUP-560), both checked on main:
 
 ## Technical Tasks
 
-- [ ] `DynPositionScale::tick_format`, `TickFormat::same`.
-- [ ] `label_formats`, the sync at resolve, the bar label read.
-- [ ] Tests (AC1); docs (AC1, AC2).
-- [ ] The gallery example and its golden.
+- [x] `DynPositionScale::tick_format`, `TickFormat::same`.
+- [x] `label_formats`, the sync at resolve, the bar label read.
+- [x] Tests (AC1); docs (AC1, AC2).
+- [x] The gallery example and its golden.
 
 ## Dependencies
 
@@ -151,8 +152,8 @@ Two problems with bar value labels (GUP-544, GUP-560), both checked on main:
 
 ## Success Metrics
 
-- [ ] The `value_labels` docs carry no known exception.
-- [ ] The gallery states each unit once.
+- [x] The `value_labels` docs carry no known exception.
+- [x] The gallery states each unit once.
 
 ## Risk Assessment
 
@@ -161,15 +162,56 @@ Two problems with bar value labels (GUP-544, GUP-560), both checked on main:
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1` and
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1` and
       `cargo test -p gup-core -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (the gallery golden)
-- [ ] `mask wasm-browser`: not needed, no layout, input or wasm code change
-- [ ] WASM size: `mask wasm-size` scatter gz bytes
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye (the gallery golden)
+- [x] `mask wasm-browser`: not needed, no layout, input or wasm code change
+- [x] WASM size: `mask wasm-size` scatter gz bytes
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `DynPositionScale::tick_format`, `TickFormat::same`, `Plot::label_formats`
+  synced at the start of `resolve` (annotations invalidated on change); bar
+  labels read `Plot::label_format`; `axis_format` removed.
+- Docs state the one-unit rule. Gallery `bar_grouped_labels` prints bare
+  numbers; its golden was re-blessed and read (title "Revenue ($k)", ticks and
+  labels bare, labels above bars). Tutorial 7 needed no change (unit in the
+  title only, bare labels).
+- Five new tests in `crates/gup-core/tests/bar_value_labels.rs` (handle format,
+  horizontal, both precedence orders, change after resolve).
+- Deviation: the builders' `y_scale`/`x_scale` take a `PositionScale`, not a
+  `ScaleRef`, so "a `ScaleRef` passed to `y_scale`" cannot occur; tests use the
+  handle `plot_mut().y(..)` returns.
+
+## Retrospective
+
+**Completed**: 2026-11-04
+
+### Key Technical Learnings
+
+#### Sync before the cache check
+
+- **Challenge**: a handle write must reach the label slot without per-frame
+  invalidation.
+- **Solution**: compare `Arc` pointers each resolve; only a real change
+  invalidates, so zoom frames cost three pointer comparisons.
+- **Pattern**: `ScaleRef::tick_format` bumps the scale revision, so the cache
+  key already misses; the sync is cheap either way.
+
+### Architectural Decisions
+
+#### A second slot, `label_formats`
+
+- **Decision**: as in the story; `formats` unchanged.
+- **Trade-off**: two slots per axis.
+
+### Follow-up Stories
+
+None.

@@ -99,6 +99,10 @@ impl AxisFormat {
     fn set(&self, format: TickFormat) {
         *self.0.write().unwrap_or_else(|p| p.into_inner()) = Some(format);
     }
+
+    fn store(&self, format: Option<TickFormat>) {
+        *self.0.write().unwrap_or_else(|p| p.into_inner()) = format;
+    }
 }
 
 /// A chart with shared x/y position scales, data layers, axes and an
@@ -193,6 +197,9 @@ pub struct Plot {
     /// The tick label format set through `x_tick_format` and friends, per
     /// axis (x, y, right y); written to each scale installed on the axis.
     formats: [AxisFormat; 3],
+    /// The effective tick format of each axis, however it was set (synced
+    /// from the scales at resolve); bar value labels read it.
+    label_formats: [AxisFormat; 3],
     theme: Theme,
     /// Set by `legends(false)`.
     legends_off: bool,
@@ -495,6 +502,7 @@ impl Plot {
             y_title: None,
             y_right_title: None,
             formats: Default::default(),
+            label_formats: Default::default(),
             theme: Theme::default(),
             legends_off: false,
             revision: 0,
@@ -836,9 +844,36 @@ impl Plot {
         self.set_format(2, f)
     }
 
-    /// The stored tick format slot of axis `axis` (0 x, 1 y, 2 right y).
-    pub(crate) fn axis_format(&self, axis: usize) -> AxisFormat {
-        self.formats[axis].clone()
+    /// The effective tick format slot of axis `axis` (0 x, 1 y, 2 right y):
+    /// what the axis ticks print, however the format was set.
+    pub(crate) fn label_format(&self, axis: usize) -> AxisFormat {
+        self.label_formats[axis].clone()
+    }
+
+    /// Read each numeric axis's current format from its scale; when one
+    /// changed, store it and invalidate the annotation layers, as
+    /// `set_format` does. A key scale stores `None`.
+    fn sync_label_formats(&mut self) {
+        let mut changed = false;
+        for axis in 0..3 {
+            let scale = match axis {
+                0 => Some(&self.x),
+                1 => Some(&self.y),
+                _ => self.y_right.as_ref(),
+            };
+            let now = scale
+                .filter(|s| !s.reads_keys())
+                .and_then(|s| s.tick_format());
+            if !TickFormat::same(&now, &self.label_formats[axis].get()) {
+                self.label_formats[axis].store(now);
+                changed = true;
+            }
+        }
+        if changed {
+            for layer in &mut self.annotations {
+                layer.invalidate();
+            }
+        }
     }
 
     /// Store the format of axis `axis` and write it to the current scale.
@@ -1260,6 +1295,7 @@ impl Plot {
         for layer in &mut self.layers {
             layer.drain_feed()?;
         }
+        self.sync_label_formats();
         // A short lock, never held with the pipeline lock.
         let fonts = cx.text().generation();
         let key = |plot: &Self| CacheKey {
