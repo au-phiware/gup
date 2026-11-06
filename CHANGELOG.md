@@ -72,6 +72,10 @@ what each release contains and what its version number promises.
   `Up`, `Down`, `Home`, `End`, `Enter`, `Escape`) to a plot, and it moves a
   focus ring and tooltip from row to row; `Plot::focused` says which.
   `Selection::focusable(false)` keeps a helper layer out of the walk.
+- Keyboard zoom, pan and reset: `Key::ZoomIn` and `Key::ZoomOut` zoom about the
+  centre of the plot, Shift with an arrow pans a tenth of the plot, and
+  `Key::ResetView` restores the view. Keys held with Ctrl, Alt or Meta are left
+  to the host.
 - Render targets: a window (`gup::show`), PNG, SVG, a texture, and a WebGPU
   canvas in the browser.
 - Interaction: picking, tooltips, wheel zoom, drag pan and brushing. Zooming and
@@ -99,6 +103,6 @@ what each release contains and what its version number promises.
 - No CSV, serde or Arrow input: rows enter through closures.
 - Nothing above 10M rows is measured, and there is no level of detail.
 - No PDF export.
-- Accessibility is a text alternative only: no keyboard navigation, no data
-  table and no high-contrast theme.
+- Accessibility is a text alternative and keyboard navigation of rows and the
+  view: no data table and no high-contrast theme.
 - No pie, violin, density or choropleth charts, and no facets.
