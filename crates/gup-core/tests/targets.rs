@@ -77,7 +77,10 @@ fn host_texture(cx: &Context, samples: u32, label: &str) -> wgpu::Texture {
 
 /// A host recording Gup's draws into its own pass, with its own
 /// (optionally multisampled) attachment, and submitting itself.
-fn draw_in_host_pass(cx: &Context, scene: &Scene, samples: u32) -> image::RgbaImage {
+///
+/// `encode` records `Prepared::encode` before the pass, as a host that
+/// wants translucent lines drawn once does (GUP-584).
+fn draw_in_host_pass(cx: &Context, scene: &Scene, samples: u32, encode: bool) -> image::RgbaImage {
     let resolved = host_texture(cx, 1, "host colour");
     let msaa = (samples > 1).then(|| host_texture(cx, samples, "host msaa"));
     let desc = TargetDesc {
@@ -93,6 +96,9 @@ fn draw_in_host_pass(cx: &Context, scene: &Scene, samples: u32) -> image::RgbaIm
     let resolved_view = resolved.create_view(&Default::default());
     let msaa_view = msaa.as_ref().map(|t| t.create_view(&Default::default()));
     let mut encoder = cx.device().create_command_encoder(&Default::default());
+    if encode {
+        prepared.encode(&mut encoder);
+    }
     {
         let (view, resolve_target) = match &msaa_view {
             Some(m) => (m, Some(&resolved_view)),
@@ -158,7 +164,7 @@ fn image_texture_and_draw_in_pass_agree() {
         assert_eq!(cx.submissions(), before + 1, "TextureTarget submits once");
         let texture = read_texture(&cx, texture_target.texture());
 
-        let in_pass = draw_in_host_pass(&cx, &scene, samples);
+        let in_pass = draw_in_host_pass(&cx, &scene, samples, true);
 
         assert_eq!(
             differing(&image, &texture),
@@ -292,5 +298,74 @@ fn dpr_scales_geometry_and_text() {
     assert!(
         (h2 as i32 - 2 * h1 as i32).abs() <= 3,
         "{w1}×{h1} → {w2}×{h2}"
+    );
+}
+
+/// A wide translucent line crossing itself at the middle of a bow tie.
+fn bow_tie(cx: &Context) -> Scene {
+    use gup_core::prelude::*;
+    let rows: Vec<(f64, f64)> = vec![(0.0, 0.0), (1.0, 1.0), (1.0, 0.0), (0.0, 1.0)];
+    let mut plot = Plot::new();
+    let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
+    plot.add(Selection::<(f64, f64), Line>::new(rows))
+        .x_with(x.encode(|r: &(f64, f64)| r.0))
+        .y_with(y.encode(|r: &(f64, f64)| r.1))
+        .width(Px(24.0))
+        .color(Color {
+            a: 0.5,
+            ..Line::DEFAULT_COLOR
+        });
+    plot.resolve(cx, WIDTH as f32, HEIGHT as f32)
+        .unwrap()
+        .scene
+        .clone()
+}
+
+/// GUP-584: a host that records `Prepared::encode` before its own pass
+/// gets `Renderer::render`'s translucent line byte for byte; one that
+/// does not still gets the line, drawn directly (blending twice at the
+/// crossing). Neither submits on the host's behalf.
+#[test]
+fn host_pass_translucent_line_with_and_without_encode() {
+    let cx = Context::new_blocking().unwrap();
+    let scene = bow_tie(&cx);
+    let image = ImageTarget::new(&cx, WIDTH, HEIGHT)
+        .unwrap()
+        .render_blocking(&cx, &scene)
+        .unwrap();
+    let encoded = draw_in_host_pass(&cx, &scene, 1, true);
+    assert_eq!(
+        differing(&image, &encoded),
+        0,
+        "prepare/encode/draw differs from Renderer::render"
+    );
+    let direct = draw_in_host_pass(&cx, &scene, 1, false);
+    let drawn = direct.pixels().filter(|p| p.0 != [255; 4]).count();
+    assert!(drawn > 2_000, "direct draw left {drawn} pixels drawn");
+    let darker = differing(&image, &direct);
+    assert!(
+        darker > 0,
+        "the direct draw should blend twice at the crossing"
+    );
+}
+
+/// GUP-651: an `*Srgb` format blends translucent marks in linear light,
+/// so `prepare` rejects it and names the fix.
+#[test]
+fn prepare_rejects_srgb_formats() {
+    let cx = Context::new_blocking().unwrap();
+    let scene = bow_tie(&cx);
+    let desc = TargetDesc {
+        format: wgpu::TextureFormat::Rgba8UnormSrgb,
+        width: WIDTH,
+        height: HEIGHT,
+        dpr: 1.0,
+        samples: 1,
+    };
+    let err = Renderer::new().prepare(&cx, &scene, &desc).unwrap_err();
+    let message = err.to_string();
+    assert!(
+        message.contains("sRGB") && message.contains("non-sRGB view"),
+        "{message}"
     );
 }

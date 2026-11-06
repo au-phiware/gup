@@ -26,6 +26,15 @@
 //!                                      as one Line (x the row index, y on
 //!                                      the log scale) with that curve,
 //!                                      instead of the scatter (GUP-551)
+//!   --translucent                      with --line: draw the line at alpha
+//!                                      0.5 and record `Prepared::encode`
+//!                                      before the pass, so the GPU time
+//!                                      runs from the start of the offscreen
+//!                                      pass to the end of the scene pass
+//!                                      (GUP-584)
+//!   --no-encode                        with --translucent: skip `encode`,
+//!                                      so the line draws directly (blending
+//!                                      twice at overlaps), to compare
 //!   --sorted                           sort the rows by x before building, so
 //!                                      chunks are spatially coherent and
 //!                                      culling has something to skip
@@ -74,6 +83,8 @@ struct Options {
     uncapped: bool,
     time: bool,
     line: Option<Curve>,
+    translucent: bool,
+    encode: bool,
     sorted: bool,
     cull: bool,
     prefix: String,
@@ -92,6 +103,8 @@ fn options() -> Options {
         uncapped: false,
         time: false,
         line: None,
+        translucent: false,
+        encode: true,
         sorted: false,
         cull: true,
         prefix: "zoom".to_owned(),
@@ -126,6 +139,8 @@ fn options() -> Options {
                     other => panic!("unknown curve {other}"),
                 });
             }
+            "--translucent" => o.translucent = true,
+            "--no-encode" => o.encode = false,
             "--sorted" => o.sorted = true,
             "--no-cull" => o.cull = false,
             "--metric-prefix" => o.prefix = value().clone(),
@@ -297,11 +312,21 @@ impl Bench {
         let frame = gpu.target.acquire(&gpu.cx)?;
         let t_acquire = Instant::now();
         let mut encoder = gpu.cx.device().create_command_encoder(&Default::default());
+        // The offscreen pass of a translucent line, if any, writes the
+        // beginning timestamp and the scene pass only the end.
+        let mut begun = false;
+        if self.o.encode {
+            let timestamp = match (&gpu.timestamps, measured) {
+                (Some((set, _)), Some(i)) => Some((set, 2 * i as u32)),
+                _ => None,
+            };
+            begun = prepared.encode_with_timestamp(&mut encoder, timestamp);
+        }
         {
             let timestamp_writes = match (&gpu.timestamps, measured) {
                 (Some((set, _)), Some(i)) => Some(wgpu::RenderPassTimestampWrites {
                     query_set: set,
-                    beginning_of_pass_write_index: Some(2 * i as u32),
+                    beginning_of_pass_write_index: (!begun).then_some(2 * i as u32),
                     end_of_pass_write_index: Some(2 * i as u32 + 1),
                 }),
                 _ => None,
@@ -633,7 +658,7 @@ fn main() {
         rows.sort_by(|a, b| a.gdp_per_capita.total_cmp(&b.gdp_per_capita));
     }
     let (mut plot, x, y) = if let Some(curve) = o.line {
-        let (plot, x, y) = line_plot(o.points, curve, o.chunk_rows);
+        let (plot, x, y) = line_plot(o.points, curve, o.translucent, o.chunk_rows);
         (plot, XScale::Linear(x), y)
     } else if o.time {
         let (plot, x, y) = time_plot(rows, Px(o.radius), o.chunk_rows);
@@ -744,6 +769,7 @@ fn time_plot(
 fn line_plot(
     n: usize,
     curve: Curve,
+    translucent: bool,
     max_chunk_rows: Option<u32>,
 ) -> (Plot, ScaleRef<Linear>, ScaleRef<Log>) {
     // xorshift64: the same walk every run.
@@ -768,6 +794,12 @@ fn line_plot(
         .y_with(y.encode(|r: &(f64, f64)| r.1))
         .width(Px(1.5))
         .curve(curve);
+    if translucent {
+        layer.color(Color {
+            a: 0.5,
+            ..Line::DEFAULT_COLOR
+        });
+    }
     if let Some(rows) = max_chunk_rows {
         layer.max_chunk_rows(rows);
     }

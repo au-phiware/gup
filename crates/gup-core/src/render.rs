@@ -16,6 +16,7 @@ use crate::target::{RenderTarget, check_samples, msaa_view};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 // `std::time::Instant::now` panics on wasm32-unknown-unknown.
 use web_time::Instant;
@@ -30,7 +31,8 @@ use web_time::Instant;
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct TargetDesc {
     /// Colour format. Gup renders into non-sRGB views and blends in sRGB
-    /// space.
+    /// space; [`Renderer::prepare`] rejects an `*Srgb` format (see
+    /// [`Prepared::draw`]).
     pub format: wgpu::TextureFormat,
     /// Physical width.
     pub width: u32,
@@ -1294,7 +1296,18 @@ enum Draw {
         pipeline: wgpu::RenderPipeline,
         /// Group 0: the offscreen target.
         target: wgpu::BindGroup,
+        /// What [`Prepared::draw`] draws instead when no
+        /// [`Prepared::encode`] was recorded (GUP-584): the layer drawn
+        /// straight into the scene pass.
+        direct: DirectLine,
     },
+}
+
+/// A translucent line layer drawn directly into the scene pass.
+struct DirectLine {
+    pipeline: wgpu::RenderPipeline,
+    layer: Arc<LayerGpu>,
+    spans: Arc<[Span]>,
 }
 
 /// A translucent line layer's draw into its offscreen target (GUP-439),
@@ -1380,9 +1393,12 @@ impl std::fmt::Debug for Renderer {
 pub struct Prepared {
     view_bind_group: wgpu::BindGroup,
     draws: Vec<(Scissor, Draw)>,
-    /// Translucent line layers' offscreen draws, in scene order: empty
-    /// unless prepared by [`Renderer::render`] (GUP-439).
+    /// Translucent line layers' offscreen draws, in scene order
+    /// (GUP-439).
     coverage: Vec<CoverageDraw>,
+    /// Whether [`encode`](Self::encode) recorded the offscreen passes;
+    /// if not, [`draw`](Self::draw) draws those layers directly.
+    encoded: AtomicBool,
     clear: wgpu::Color,
 }
 
@@ -1390,6 +1406,7 @@ impl std::fmt::Debug for Prepared {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Prepared")
             .field("draws", &self.draws.len())
+            .field("encoded", &self.encoded.load(Ordering::Relaxed))
             .finish_non_exhaustive()
     }
 }
@@ -1444,24 +1461,27 @@ impl Renderer {
     /// instances to the queue (flushed by the host's next submit) but
     /// never submits on the host's behalf (RFC-001 §2).
     ///
-    /// A translucent [`Line`](crate::Line) layer is drawn directly here,
-    /// so it blends twice where its segments overlap (joins and
-    /// self-crossings); [`render`](Self::render) draws it once through an
-    /// offscreen target (GUP-439).
+    /// A translucent [`Line`](crate::Line) layer is drawn once through an
+    /// offscreen target, so its joins and self-crossings have the opacity
+    /// of its arms (GUP-439), if the host records [`Prepared::encode`]
+    /// before its pass (as [`render`](Self::render) does). Without that
+    /// call, [`Prepared::draw`] draws the layer directly, and it blends
+    /// twice where its segments overlap (GUP-584).
+    ///
+    /// The colour view of the host's pass must be non-sRGB; see
+    /// [`Prepared::draw`] (GUP-651).
     pub fn prepare(&mut self, cx: &Context, scene: &Scene, desc: &TargetDesc) -> Result<Prepared> {
-        self.prepare_with(cx, scene, desc, false)
-    }
-
-    /// [`prepare`](Self::prepare), drawing translucent line layers through
-    /// offscreen targets when `offscreen` is set: the caller then records
-    /// [`Prepared::encode`] before the scene pass.
-    fn prepare_with(
-        &mut self,
-        cx: &Context,
-        scene: &Scene,
-        desc: &TargetDesc,
-        offscreen: bool,
-    ) -> Result<Prepared> {
+        if desc.format.is_srgb() {
+            return Err(Error::config(
+                "target",
+                format!(
+                    "format {:?} is sRGB, which blends translucent marks in linear light and \
+                     draws them lighter than Gup's own targets; draw through a non-sRGB view \
+                     of the texture (see Prepared::draw)",
+                    desc.format
+                ),
+            ));
+        }
         if !(desc.dpr.is_finite() && desc.dpr > 0.0) || desc.samples == 0 {
             return Err(Error::config(
                 "target",
@@ -1481,7 +1501,7 @@ impl Renderer {
                     desc.width, desc.height, desc.format, desc.samples
                 )
             },
-            || self.prepare_unscoped(cx, scene, desc, offscreen),
+            || self.prepare_unscoped(cx, scene, desc),
         )
     }
 
@@ -1490,7 +1510,6 @@ impl Renderer {
         cx: &Context,
         scene: &Scene,
         desc: &TargetDesc,
-        offscreen: bool,
     ) -> Result<Prepared> {
         let dpr = desc.dpr;
         let gpu = self.gpu(cx);
@@ -1523,7 +1542,7 @@ impl Renderer {
                              chart again with this context",
                         ));
                     }
-                    if offscreen && batch.translucent {
+                    if batch.translucent {
                         let (view, target) = gpu.coverage_target(cx, coverage.len(), desc);
                         coverage.push(CoverageDraw {
                             pipeline: cx.coverage_pipeline(&batch.gpu.program, desc)?,
@@ -1535,6 +1554,11 @@ impl Renderer {
                         Some(Draw::Composite {
                             pipeline: cx.composite_pipeline(desc)?,
                             target,
+                            direct: DirectLine {
+                                pipeline: cx.mark_pipeline(&batch.gpu.program, desc)?,
+                                layer: Arc::clone(&batch.gpu),
+                                spans: Arc::clone(&batch.visible),
+                            },
                         })
                     } else {
                         let pipeline = cx.mark_pipeline(&batch.gpu.program, desc)?;
@@ -1599,6 +1623,7 @@ impl Renderer {
             view_bind_group: gpu.view_bind_group.clone(),
             draws,
             coverage,
+            encoded: AtomicBool::new(false),
             clear: premultiplied_clear(scene.background),
         })
     }
@@ -1645,7 +1670,7 @@ impl Renderer {
             },
             || {
                 let frame = target.acquire(cx)?;
-                let prepared = self.prepare_with(cx, scene, &desc, true)?;
+                let prepared = self.prepare(cx, scene, &desc)?;
                 let msaa = (desc.samples != own.samples).then(|| self.msaa_view(cx, &desc));
                 let mut encoder =
                     cx.device()
@@ -1873,7 +1898,7 @@ impl Prepared {
     /// batch. Tests pin
     /// it as a deterministic proxy for GPU cost (`PERF_BUDGETS.md`).
     ///
-    /// A translucent line layer that [`Renderer::render`] draws through an
+    /// A translucent line layer drawn through an
     /// offscreen target counts its spans there plus one composite draw.
     pub fn draw_calls(&self) -> usize {
         let offscreen: usize = self.coverage.iter().map(|c| c.spans.len()).sum();
@@ -1890,10 +1915,53 @@ impl Prepared {
 
     /// Record each translucent line layer's offscreen pass into `encoder`
     /// (GUP-439): clear its target, then draw the layer with `Max`
-    /// blending inside its clip. Must precede the scene pass, which
-    /// composites the targets. Records nothing for a scene without one.
-    pub(crate) fn encode(&self, encoder: &mut wgpu::CommandEncoder) {
+    /// blending inside its clip. Call it once, before the pass that
+    /// records [`draw`](Self::draw): `draw` composites the targets, so
+    /// they must be drawn first. Records nothing for a scene without a
+    /// translucent line layer, and a host that never calls it still gets
+    /// those layers, drawn directly (they blend twice where their
+    /// segments overlap).
+    ///
+    /// ```ignore
+    /// let prepared = renderer.prepare(&cx, &scene, &desc)?;
+    /// prepared.encode(&mut encoder);
+    /// {
+    ///     let mut pass = encoder.begin_render_pass(&host_pass_descriptor);
+    ///     prepared.draw(&mut pass);
+    /// }
+    /// ```
+    ///
+    /// Like `draw`, it never submits.
+    pub fn encode(&self, encoder: &mut wgpu::CommandEncoder) {
+        self.encode_with_timestamp(encoder, None);
+    }
+
+    /// [`encode`](Self::encode), writing a timestamp at the beginning of
+    /// the first offscreen pass into `timestamp` (a query set and the
+    /// index in it). Returns whether it did, so that a benchmark times
+    /// the offscreen passes and the scene pass as one span: the scene
+    /// pass then writes only the end. A benchmarking aid; `None`, or a
+    /// scene without an offscreen pass, writes nothing and returns
+    /// `false`.
+    pub fn encode_with_timestamp(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        timestamp: Option<(&wgpu::QuerySet, u32)>,
+    ) -> bool {
+        self.encoded.store(true, Ordering::Relaxed);
+        let mut written = false;
         for c in &self.coverage {
+            let timestamp_writes = match (timestamp, written) {
+                (Some((query_set, index)), false) => {
+                    written = true;
+                    Some(wgpu::RenderPassTimestampWrites {
+                        query_set,
+                        beginning_of_pass_write_index: Some(index),
+                        end_of_pass_write_index: None,
+                    })
+                }
+                _ => None,
+            };
             let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("gup line coverage"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -1906,7 +1974,7 @@ impl Prepared {
                     },
                 })],
                 depth_stencil_attachment: None,
-                timestamp_writes: None,
+                timestamp_writes,
                 occlusion_query_set: None,
             });
             let [x, y, w, h] = c.scissor;
@@ -1915,10 +1983,30 @@ impl Prepared {
             pass.set_bind_group(0, &self.view_bind_group, &[]);
             c.layer.record(&mut pass, &c.spans);
         }
+        written
     }
 
     /// Record every draw into `pass`. Allocates nothing, takes no locks
     /// and never submits, so it can run inside a host's pass.
+    ///
+    /// Translucent line layers composite the offscreen targets drawn by
+    /// [`encode`](Self::encode) if it was recorded for this `Prepared`;
+    /// otherwise they are drawn directly.
+    ///
+    /// # The pass's colour format
+    ///
+    /// The pass's colour view must be non-sRGB, as in every Gup-owned
+    /// target, for translucent marks to look as Gup draws them: colours
+    /// and gradients are sRGB-encoded values, blended as such. A view
+    /// whose format is `*Srgb` makes the GPU blend in linear light, which
+    /// draws translucent marks lighter (50% `#E69F00` on white has green
+    /// 214 instead of 207) and no longer matches a legend's swatch;
+    /// opaque marks are identical. [`Renderer::prepare`] rejects an
+    /// `*Srgb` [`TargetDesc::format`]. To draw into an sRGB texture, make
+    /// it with its non-sRGB format in `view_formats` and create the
+    /// pass's view with that format, as
+    /// [`TextureTarget`](crate::TextureTarget) does (`Rgba8UnormSrgb` →
+    /// `Rgba8Unorm`).
     pub fn draw(&self, pass: &mut wgpu::RenderPass<'_>) {
         for ([x, y, w, h], draw) in &self.draws {
             pass.set_scissor_rect(*x, *y, *w, *h);
@@ -1950,10 +2038,20 @@ impl Prepared {
                 // Binds its atlas at group 0, so the others rebind the view.
                 Draw::Text(batch) => batch.draw(pass),
                 // Binds its target at group 0, likewise.
-                Draw::Composite { pipeline, target } => {
-                    pass.set_pipeline(pipeline);
-                    pass.set_bind_group(0, target, &[]);
-                    pass.draw(0..3, 0..1);
+                Draw::Composite {
+                    pipeline,
+                    target,
+                    direct,
+                } => {
+                    if self.encoded.load(Ordering::Relaxed) {
+                        pass.set_pipeline(pipeline);
+                        pass.set_bind_group(0, target, &[]);
+                        pass.draw(0..3, 0..1);
+                    } else {
+                        pass.set_pipeline(&direct.pipeline);
+                        pass.set_bind_group(0, &self.view_bind_group, &[]);
+                        direct.layer.record(pass, &direct.spans);
+                    }
                 }
             }
         }
@@ -2047,8 +2145,7 @@ mod tests {
     }
 
     /// GUP-439: only a translucent `Line` layer draws through an offscreen
-    /// target, and only when drawn by `Renderer::render`; opaque lines,
-    /// translucent areas and host passes keep the direct draw.
+    /// target; opaque lines and translucent areas keep the direct draw.
     #[test]
     fn only_translucent_lines_draw_offscreen() {
         let cx = Context::new_blocking().unwrap();
@@ -2117,15 +2214,8 @@ mod tests {
         ];
         let mut renderer = Renderer::new();
         for (case, scene, offscreen) in cases {
-            let prepared = renderer.prepare_with(&cx, &scene, &desc, true).unwrap();
+            let prepared = renderer.prepare(&cx, &scene, &desc).unwrap();
             assert_eq!(prepared.coverage.len(), offscreen, "{case}");
-            let direct = renderer.prepare(&cx, &scene, &desc).unwrap();
-            assert!(direct.coverage.is_empty(), "{case}");
-            assert_eq!(
-                prepared.draw_calls(),
-                direct.draw_calls() + offscreen,
-                "{case}: the composite is one more draw"
-            );
         }
     }
 }

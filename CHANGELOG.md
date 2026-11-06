@@ -36,6 +36,14 @@ what each release contains and what its version number promises.
 - The chart types (`LineChart`, `ScatterChart`, and so on) are in
   `gup::prelude`, so one `use gup::prelude::*;` names the type a function
   returns; `Horizontal` and `Vertical` are at the crate root.
+- `Prepared::encode` records translucent lines' offscreen pass before a host's
+  own render pass, so a host that draws with `Renderer::prepare` and
+  `Prepared::draw` gets lines whose joins and crossings are as opaque as their
+  arms, as in Gup's own targets. Without the call they still draw, blending
+  twice at overlaps. `zoom_bench --translucent` times it.
+- `Renderer::prepare` returns an error for an `*Srgb` target format, which would
+  blend translucent marks in linear light and draw them lighter than Gup's own
+  targets; `Prepared::draw` documents drawing through a non-sRGB view.
 - Every builder has `.text(rows, |t| ..)` to add labels at data positions and a
   `pick_row` that takes a tuple, so `chart.pick_row((x, y))` compiles without
   `plot_mut()`.

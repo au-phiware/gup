@@ -4107,12 +4107,14 @@ Opaque lines are unchanged.
   layers still blend over each other: overplotted translucent series show
   density.
 - **Draw-in-pass.** `Renderer::prepare` + `Prepared::draw` (a host's own pass)
-  is unchanged: it cannot add a pass before the host's, so it draws translucent
+  cannot add a pass before the host's, so without a call it draws translucent
   lines directly and their overlaps blend twice. `gup-egui` and `gup-bevy`
   render through `TextureTarget` and `Renderer::render`, so they get the pass.
-  The smallest change for a host that draws in its own pass is a public
+  The smallest change for a host that draws in its own pass is the public
   `Prepared::encode(&self, &mut CommandEncoder)` recorded before its pass
-  (GUP-584).
+  (GUP-584): `prepare` always builds the offscreen targets, and `draw`
+  composites them only if `encode` was recorded for that `Prepared`, else draws
+  the layer directly.
 - **SVG.** A translucent line layer whose strokes share one alpha is written as
   `<g opacity="a">` around opaque strokes: the group is composited once, which
   is the SVG form of the offscreen target. A layer with mixed alphas keeps each
@@ -4137,23 +4139,26 @@ Opaque lines are unchanged.
 
 ### Cost (AC3)
 
-`zoom_bench --line linear`, the 100K-row random walk, 1600x1000 Mailbox
-uncapped, release, Intel HD 630, Mesa Vulkan, load average 2-5. GPU time is from
-the start of the first pass to the end of the scene pass (a local prototype
-patch that times the offscreen pass with the scene pass; GUP-584 adds it to
-`zoom_bench`). Medians of alternating runs:
+`zoom_bench --line linear`, the 100K-row random walk, 1920x1080 Mailbox
+uncapped, release, Intel HD 630, Mesa Vulkan. Re-measured in GUP-584 with
+`zoom_bench --translucent` (alpha 0.5, `Prepared::encode` before the pass; GPU
+time is from the start of the offscreen pass to the end of the scene pass, as
+the prototype's patch timed it) and `--translucent --no-encode` (the direct
+draw). Medians of seven runs, alternating opaque, direct and offscreen. The
+prototype's table, measured at 1600x1000, is replaced by this one.
 
-| Line, 100K rows            | 4 samples, 7 runs | 1 sample, 5 runs |
-| -------------------------- | ----------------- | ---------------- |
-| none (2 rows)              | 0.061 ms          | 0.060 ms         |
-| opaque                     | 2.349 ms          | 2.368 ms         |
-| alpha 0.5, direct (before) | 2.333 ms          | 2.503 ms         |
-| alpha 0.5, offscreen (now) | 2.809 ms          | 2.981 ms         |
-| offscreen / direct, layer  | 1.21x             | 1.19x            |
+| Line, 100K rows            | 4 samples | 1 sample |
+| -------------------------- | --------- | -------- |
+| opaque                     | 2.200 ms  | 1.502 ms |
+| alpha 0.5, direct (before) | 2.190 ms  | 1.537 ms |
+| alpha 0.5, offscreen (now) | 3.150 ms  | 2.128 ms |
+| offscreen / direct, layer  | 1.44x     | 1.38x    |
 
-- **GPU time**: +0.5 ms at 1600x1000, about 1.2x the layer's direct draw (the
-  story's ceiling is 2x). Run to run the clock governor moves single runs by up
-  to 1.6x, so only medians of alternating runs are compared.
+- **GPU time**: +0.6 to +1.0 ms at 1920x1080, 1.4x the layer's direct draw (the
+  story's ceiling is 2x; the prototype measured 1.2x at 1600x1000, which the
+  larger target and the governor's clock account for in part). Run to run the
+  clock governor moves single runs by up to 2x (the runs span 2.76 to 3.93 ms at
+  4 samples), so only medians of alternating runs are compared.
 - **Memory**: 4 bytes per target pixel per translucent line layer (6.4 MB at
   1600x1000), pooled in the `Renderer` and reused while the target's size stays.
 - **Draws and passes**: one render pass and one clear per translucent layer, the
