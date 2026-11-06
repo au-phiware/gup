@@ -282,7 +282,7 @@ cell labels, error bars, pie charts and facets.
 - [GUP-439](GUP-439_Line_Translucent_Joins.md) ✅ — Translucent lines with even
   opacity at rows, curve pieces and self-crossings (a per-layer coverage pass),
   opaque lines unchanged. Deps: GUP-432 ✅, GUP-550 📋, GUP-551 📋.
-- [GUP-584](GUP-584_Translucent_Lines_In_Host_Passes.md) 💡 — A public
+- [GUP-584](GUP-584_Translucent_Lines_In_Host_Passes.md) 🚧 — A public
   `Prepared::encode` so hosts drawing in their own pass get GUP-439's offscreen
   pass (`draw` stays correct without it), and `zoom_bench --translucent`. Edits
   `render.rs`. Deps: GUP-439 ✅.
@@ -538,7 +538,7 @@ track N5 is at the end of this section.
   areas, histograms) list their legend top-down, and swatches of translucent
   marks are composited at the marks' opacity, so each matches what is drawn; the
   description follows. Deps: GUP-547 ✅, GUP-592 ✅.
-- [GUP-651](GUP-651_Host_Pass_Srgb_Blending.md) 📋 — A host pass with an sRGB
+- [GUP-651](GUP-651_Host_Pass_Srgb_Blending.md) 🚧 — A host pass with an sRGB
   colour view blends translucent marks in linear light; document and check the
   non-sRGB contract. Deps: GUP-616.
 - [GUP-617](GUP-617_Tight_Box_Width_Test.md) ✅ — Measure why the box plot's

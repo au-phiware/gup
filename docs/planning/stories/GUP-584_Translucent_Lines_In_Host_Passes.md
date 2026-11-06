@@ -15,8 +15,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: 💡
-New **Created**: 2026-11-02
+**Initiative**: Strategic Review 2026-11 (N2 Chart Vocabulary) **Status**: 🚧 In
+Progress New **Created**: 2026-11-02
 
 ## Context
 

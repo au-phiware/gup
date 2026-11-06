@@ -8,7 +8,8 @@ touches: [crates/gup-core/src/render.rs, crates/gup-core/src/window.rs]
 
 ## Story Overview
 
-**Initiative**: Polish after 0.1 **Status**: 📋 Planned **Created**: 2026-11-06
+**Initiative**: Polish after 0.1 **Status**: 🚧 In Progress **Created**:
+2026-11-06
 
 ## Context
 
