@@ -183,6 +183,7 @@ pub use builder::{
     ScatterChart, area, bar, barh, heatmap, histogram, line, scatter,
 };
 pub use builder::{BoxPlotChart, BoxSummary, boxplot};
+pub use builder::{Horizontal, Orientation, Vertical};
 pub use channel::{
     Antialias, Channel, ChannelDesc, Color, ConstValue, Geometry, GpuType, HitShape, Mark, Px,
     Role, Unit, Visual,
@@ -357,6 +358,25 @@ pub use gup_core_macros::wgsl_function;
 pub use gup_core_macros::Mark;
 
 /// The names most programs need.
+///
+/// The seven builder chart types are here, so a function that returns a chart
+/// can name its type with one import:
+///
+/// ```
+/// use gup_core::prelude::*;
+/// # fn main() -> gup_core::Result<()> {
+/// fn chart() -> LineChart<(f64, f64)> {
+///     gup_core::line(vec![(0.0, 1.0), (1.0, 2.0), (2.0, 1.5)])
+///         .x(|p| p.0)
+///         .y(|p| p.1)
+/// }
+///
+/// let cx = Context::new_blocking()?;
+/// let image = chart().render(&cx, 320, 200)?;
+/// assert!(image.pixels().any(|p| p.0 != [255, 255, 255, 255]));
+/// # Ok(())
+/// # }
+/// ```
 pub mod prelude {
     pub use crate::scene::Anchor;
     pub use crate::{
@@ -365,6 +385,9 @@ pub mod prelude {
         EncodeFn, Event, Line, LineAttrs, Linear, Log, Mark, Offset, Plot, Point, PositionScale,
         Pow, Px, Rect, RectAttrs, Retain, ScaleRef, Segment, SegmentAttrs, Selection, Sequential,
         ShaderFn, Symlog, Theme, Time, Unbrushed, Unit, Window, wgsl_function,
+    };
+    pub use crate::{
+        AreaChart, BarChart, BoxPlotChart, HeatmapChart, HistogramChart, LineChart, ScatterChart,
     };
 }
 

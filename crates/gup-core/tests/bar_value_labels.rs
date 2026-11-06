@@ -289,7 +289,7 @@ fn a_chart_without_labels_has_no_annotations() {
     assert!(labels(&l).is_empty());
 }
 
-fn golden<T: Send + Sync + 'static, O: gup_core::builder::Orientation>(
+fn golden<T: Send + Sync + 'static, O: gup_core::Orientation>(
     name: &str,
     chart: &mut BarChart<T, O>,
     colours: &[Color],

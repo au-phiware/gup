@@ -33,6 +33,9 @@ what each release contains and what its version number promises.
 - Eight chart builders over your own structs: `gup::scatter`, `line`, `bar`,
   `barh`, `area`, `histogram`, `heatmap` and `boxplot`, each configured with
   closures.
+- The chart types (`LineChart`, `ScatterChart`, and so on) are in
+  `gup::prelude`, so one `use gup::prelude::*;` names the type a function
+  returns; `Horizontal` and `Vertical` are at the crate root.
 - `Plot` and `Selection`, the layered API the builders are made of: several
   layers of marks on shared scales, with a second y axis.
 - Marks: `Circle`, `Rect`, `Line` and `Area`, with typed channels, so a wrong

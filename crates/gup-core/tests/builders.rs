@@ -1086,7 +1086,7 @@ mod barh {
     use gup_core::{ChartExt, Context, Layout, OKABE_ITO};
     use gup_visual_regression::RgbaImage;
 
-    fn horizontal(rows: Vec<Sale>) -> gup_core::BarChart<Sale, gup_core::builder::Horizontal> {
+    fn horizontal(rows: Vec<Sale>) -> gup_core::BarChart<Sale, gup_core::Horizontal> {
         gup_core::barh(rows).y(|r| r.quarter).x(|r| r.total)
     }
 

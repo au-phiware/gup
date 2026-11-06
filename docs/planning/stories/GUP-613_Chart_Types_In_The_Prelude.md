@@ -15,7 +15,7 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Polish after 0.1 **Status**: 📋 Planned **Created**: 2026-11-04
+**Initiative**: Polish after 0.1 **Status**: ✅ Complete **Created**: 2026-11-04
 
 ## Context
 
@@ -44,33 +44,33 @@ copying a gallery example learns a module path the README never mentions.
 
 ### AC1: Re-exports
 
-- [ ] The prelude adds `AreaChart`, `BarChart`, `BoxPlotChart`, `HeatmapChart`,
+- [x] The prelude adds `AreaChart`, `BarChart`, `BoxPlotChart`, `HeatmapChart`,
       `HistogramChart`, `LineChart` and `ScatterChart`.
-- [ ] The crate root adds `Horizontal`, `Vertical` and `Orientation` (from
+- [x] The crate root adds `Horizontal`, `Vertical` and `Orientation` (from
       `builder`), beside the existing chart types. They are not added to the
       prelude.
-- [ ] A doctest on `pub mod prelude` (in `crates/gup-core/src/lib.rs`) defines
+- [x] A doctest on `pub mod prelude` (in `crates/gup-core/src/lib.rs`) defines
       `fn chart() -> LineChart<(f64, f64)>` with only
       `use gup_core::prelude::*;` and renders it.
 
 ### AC2: Users of the long paths
 
-- [ ] Each of the nine files in `examples/gallery/` drops its
+- [x] Each of the nine files in `examples/gallery/` drops its
       `use gup::builder::..` line; types come from the prelude, and
       `barh_ranked.rs` names `gup::Horizontal`.
-- [ ] `crates/gup-core/tests/builders.rs` line 1082 uses `gup_core::Horizontal`;
+- [x] `crates/gup-core/tests/builders.rs` line 1082 uses `gup_core::Horizontal`;
       `crates/gup-core/tests/bar_value_labels.rs` line 292 uses
       `gup_core::Orientation`.
-- [ ] `git grep -n "gup::builder::\|gup_core::builder::" -- ':!docs/planning' ':!crates/gup-culling-lod' ':!crates/gup-core/src'`
+- [x] `git grep -n "gup::builder::\|gup_core::builder::" -- ':!docs/planning' ':!crates/gup-culling-lod' ':!crates/gup-core/src'`
       prints nothing.
 
 ### AC3: Nothing else moves
 
-- [ ] `cargo test -p gup-core --test compile_fail` (the trybuild suite) passes
+- [x] `cargo test -p gup-core --test compile_fail` (the trybuild suite) passes
       with no `.stderr` change; see Escalation Triggers.
-- [ ] `cargo test --test gallery -- --test-threads=1` passes with no golden
+- [x] `cargo test --test gallery -- --test-threads=1` passes with no golden
       change (the examples draw exactly what they drew).
-- [ ] `scripts/check_gallery_sync.sh` passes.
+- [x] `scripts/check_gallery_sync.sh` passes.
 
 ## Decisions
 
@@ -98,9 +98,9 @@ copying a gallery example learns a module path the README never mentions.
 
 ## Technical Tasks
 
-- [ ] Edit the two `pub use` lists and the prelude; add the doctest.
-- [ ] Edit the nine gallery files and the two tests.
-- [ ] Run the AC commands.
+- [x] Edit the two `pub use` lists and the prelude; add the doctest.
+- [x] Edit the nine gallery files and the two tests.
+- [x] Run the AC commands.
 
 ## Dependencies
 
@@ -115,7 +115,7 @@ copying a gallery example learns a module path the README never mentions.
 
 ## Success Metrics
 
-- [ ] Zero `gup::builder::` imports outside `gup-core`'s own source.
+- [x] Zero `gup::builder::` imports outside `gup-core`'s own source.
 
 ## Risk Assessment
 
@@ -124,15 +124,77 @@ copying a gallery example learns a module path the README never mentions.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1` and
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1` and
       `cargo test -p gup-core -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye: not needed, no golden changes (AC3)
-- [ ] `mask wasm-browser`: not needed, no layout, input or wasm code change
-- [ ] WASM size: unchanged: re-exports add no code
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye: not needed, no golden changes (AC3)
+- [x] `mask wasm-browser`: not needed, no layout, input or wasm code change
+- [x] WASM size: unchanged: re-exports add no code
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `crates/gup-core/src/lib.rs`: the prelude gains a line naming the seven chart
+  types (`AreaChart`, `BarChart`, `BoxPlotChart`, `HeatmapChart`,
+  `HistogramChart`, `LineChart`, `ScatterChart`); the crate root gains
+  `pub use builder::{Horizontal, Orientation, Vertical}`; the prelude doc has a
+  doctest that defines `fn chart() -> LineChart<(f64, f64)>` with only
+  `use gup_core::prelude::*;` and renders it.
+- `examples/gallery/` (nine files): the `use gup::builder::..` lines are gone.
+  `area_stacked.rs` had no prelude import and now has `use gup::prelude::*;`;
+  `barh_ranked.rs` names `gup::Horizontal`.
+- `crates/gup-core/tests/builders.rs` and `bar_value_labels.rs` use
+  `gup_core::Horizontal` and `gup_core::Orientation`.
+- `CHANGELOG.md`: a `[0.1.0]` Added line for the prelude.
+- Verification: the AC2 `git grep` prints nothing; `cargo check --examples`;
+  `cargo test --doc -p gup -p gup-core` (66 + 4 + 88 + 2 passed);
+  `cargo test -p gup -- --test-threads=1` (all pass);
+  `cargo test -p gup-core -- --test-threads=1` (all pass, including
+  `compile_fail` with no `.stderr` change); `cargo test --test gallery` (11
+  passed, no golden change); `scripts/check_gallery_sync.sh` (in sync);
+  `mask merge-check` (PASS, dogfood skipped).
+- No golden, `.stderr` or `builder` module changed.
+
+## Retrospective
+
+**Completed**: 2026-11-06
+
+### Key Technical Learnings
+
+#### Glob import of chart types
+
+- **Challenge**: Adding names to `gup::prelude` risks a glob ambiguity for users
+  who also glob-import a module that exports the same names.
+- **Solution**: No glob conflicts in the workspace: `cargo check --examples`,
+  all doctests, and the gallery and tutorial suites compile and pass. The
+  orientation words stay at the root, as the Decisions say.
+- **Pattern**: New `pub use` lines are added beside the existing ones rather
+  than edited into existing lists, so the change merges cleanly beside parallel
+  stories in the same file.
+
+### Architectural Decisions
+
+#### Prelude for chart types, root for orientations
+
+- **Decision**: As the story's Decisions section.
+- **Reasoning**: `Horizontal`, `Vertical` and `Orientation` are generic words
+  that a glob import would collide with user types.
+- **Trade-off**: The bar orientation still needs a root path
+  (`gup::Horizontal`).
+- **Future**: Users who want `Horizontal` in scope import it by name.
+
+### Development Workflow Insights
+
+- `area_stacked.rs` had no prelude import, so "drop the builder line" became
+  "replace it with the prelude glob" for that one file.
+- The full `gup-core` suite takes longer than the Bash timeout; running it in
+  the background is the workable approach.
+
+### Follow-up Stories
+
+None. The out-of-scope items are already covered by GUP-614.

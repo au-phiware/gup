@@ -3,7 +3,6 @@
 
 //! Grouped bars with a value label on every bar (illustrative data).
 
-use gup::builder::BarChart;
 use gup::prelude::*;
 
 pub struct Sale {
