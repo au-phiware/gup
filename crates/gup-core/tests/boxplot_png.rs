@@ -99,13 +99,16 @@ fn marks_are_where_the_statistics_put_them() {
     // The box: across the row at the box's middle, from edge to edge.
     let mid = py((s.q1 + s.q3) / 2.0).round() as u32 + 2;
     let (pl, pr) = (plot.left() as u32 + 2, plot.right() as u32 - 2);
-    let ink: Vec<u32> = (pl..pr).filter(|&x| dark(&image, x, mid) > 0.05).collect();
+    // Half coverage: the columns at least half dark. The 1 px stroke's
+    // antialiased edge columns are below half, so they are not counted.
+    let ink: Vec<u32> = (pl..pr).filter(|&x| dark(&image, x, mid) >= 0.5).collect();
     let (left, right) = (f64::from(ink[0]), f64::from(ink[ink.len() - 1] + 1));
-    // One band is 0.8 of the plot width (padding 0.2 between, 0.1 outside,
-    // of one band); the box is 0.6 of it.
-    let want = 0.6 * 0.8 * f64::from(plot.width);
+    // The band's range is the plot rect inset by the mark overhang (plot.rs),
+    // so one band is 0.8 of that, and the box is 0.6 of the band.
+    let band = 0.8 * (f64::from(plot.width) - 2.0 * f64::from(layout.mark_overhang));
+    let want = 0.6 * band;
     assert!(
-        ((right - left) - want).abs() <= 3.0,
+        ((right - left) - want).abs() <= 1.0,
         "{} vs {want} {plot:?} {left} {right}",
         right - left
     );
