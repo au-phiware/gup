@@ -316,7 +316,7 @@ fn months() -> Vec<(f64, &'static str, f64)> {
 }
 
 #[test]
-fn stacked_golden_lists_the_bottom_layer_first() {
+fn stacked_golden_lists_the_top_layer_first() {
     let cx = Context::new_blocking().unwrap();
     let mut chart = gup_core::area(months())
         .x(|r| r.0)
@@ -328,7 +328,7 @@ fn stacked_golden_lists_the_bottom_layer_first() {
         .y_title("Visits (thousands)")
         .grid(Axes::Y);
     let (image, layout) = chart.render_resolved(&cx, 640, 400).unwrap();
-    assert_legend_order(&layout, &["Web", "Mobile", "Partner"]);
+    assert_legend_order(&layout, &["Partner", "Mobile", "Web"]);
     let vr = RgbaImage::new(640, 400, image.into_raw()).unwrap();
     harness()
         .run(

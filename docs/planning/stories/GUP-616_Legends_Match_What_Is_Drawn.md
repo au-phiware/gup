@@ -199,3 +199,39 @@ there reaches all three.
 - [ ] WASM size: `mask wasm-size` scatter gz bytes
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
+
+## Blocked (2026-11-06)
+
+**Question**: the Decisions section says to composite swatches in linear light,
+and the escalation trigger says to stop if the pixel test fails with the linear
+composite but passes with an sRGB composite. That is what happens: may the
+composite be done in sRGB space (`out = bg * (1 - a) + c * a` on the encoded
+values)?
+
+**Evidence** (`crates/gup-core/tests/legend_swatches.rs`, rendered through
+`render_resolved`, i.e. `ImageTarget`, 640 x 400, light theme):
+
+- Area with `color` (fill 0.5), web `#E69F00`: drawn fill pixel
+  `[243, 207, 128]`. Linear composite swatch: `[243, 214, 188]`. sRGB composite
+  swatch: matches.
+- Scatter, `.opacity(0.6)`, key a: disc centre `[240, 197, 102]` (blue = 255 x
+  0.4). Linear swatch `[240, 205, 170]`. sRGB swatch matches.
+- With the sRGB composite all three tests pass (area, outlined area, scatter).
+
+So the image target blends on the encoded values (its colour target is not an
+sRGB-format view). I did not check the window surface target.
+
+**Options**:
+
+1. Composite in sRGB space (recommended: the pixel test is the arbiter, per the
+   story). The unit test and the Decision text change from "linear" to "sRGB".
+2. Keep linear and change how the GPU blends (out of scope, touches every
+   translucent golden).
+
+**State**: WIP commit holds the sRGB composite, `Layer::legend_opacity`,
+`collect_legends`/`dedup_min` in `plot.rs` (`guide::dedup` and its test removed
+as dead code, replaced by a `plot.rs` test), `Plot::stack_legend` and its three
+builder calls, a describe test, `tests/legend_swatches.rs` (new, not in
+`touches:`), and the renamed `builder_area` stacked test. Not done: golden
+re-bless and reading, CHANGELOG line, full test runs, `mask merge-check`,
+retrospective.

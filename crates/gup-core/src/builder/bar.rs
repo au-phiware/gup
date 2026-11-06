@@ -640,6 +640,8 @@ impl<T: Send + Sync + 'static, O: Orientation> BarChart<T, O> {
             Arrange::Group(k) => (Some(k.clone()), false),
             Arrange::Stack(k) => (Some(k.clone()), true),
         };
+        // A vertical stack draws its first key at the bottom.
+        self.plot.stack_legend(stacked && !O::HORIZONTAL);
         let parts = Self::split(rows, part_key.as_ref());
         let count = parts.len().max(1) as u32;
 

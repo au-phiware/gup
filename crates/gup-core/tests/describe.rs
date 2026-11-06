@@ -302,3 +302,33 @@ fn stacked_histogram() {
     );
     println!("{}", d.alt_text());
 }
+
+#[test]
+fn stacked_bar_legend_lists_the_top_segment_first() {
+    let rows: Vec<(&str, &str, f64)> = vec![
+        ("Q1", "north", 3.0),
+        ("Q1", "south", 2.0),
+        ("Q1", "west", 1.0),
+        ("Q2", "north", 2.0),
+        ("Q2", "south", 4.0),
+        ("Q2", "west", 1.0),
+    ];
+    let mut chart = gup_core::bar(rows)
+        .x(|r| r.0)
+        .y(|r| r.2)
+        .stack(|r| r.1)
+        .legend_title("Region");
+    let d = described(&mut chart);
+    assert!(d.text.ends_with("west, south and north."), "{}", d.text);
+    let layout = chart.layout().expect("resolved");
+    let y = |name: &str| {
+        layout
+            .texts
+            .iter()
+            .find(|t| &*t.run.text == name)
+            .unwrap_or_else(|| panic!("no legend entry {name}"))
+            .bounds
+            .y
+    };
+    assert!(y("west") < y("south") && y("south") < y("north"));
+}
