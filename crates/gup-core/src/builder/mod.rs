@@ -311,6 +311,53 @@ macro_rules! plot_setters {
             self.plot.legends(on);
             self
         }
+
+        /// Add a text layer of annotations (see [`Plot::text`](crate::Plot::text))
+        /// and configure it in `layer`. It is a plot-level setter, not a
+        /// recorded layer op, so it works before or after the layer setters
+        /// and does not materialise the chart.
+        ///
+        /// ```
+        /// use gup_core::scene::TextRole;
+        /// use gup_core::prelude::Anchor;
+        /// use gup_core::{ChartExt, Context};
+        /// # fn main() -> gup_core::Result<()> {
+        /// let cities = [("Perth", 115.9, -31.9), ("Darwin", 130.8, -12.5)];
+        /// let mut chart = gup_core::scatter(cities)
+        ///     .x(|c| c.1)
+        ///     .y(|c| c.2)
+        ///     .text(cities, |t| {
+        ///         t.x(|c| c.1).y(|c| c.2).text(|c| c.0).anchor(Anchor::BOTTOM).dy(-6.0);
+        ///     });
+        /// # let cx = Context::new_blocking()?;
+        /// let (_, layout) = chart.render_resolved(&cx, 320, 200)?;
+        /// let mut labels: Vec<&str> = layout
+        ///     .texts
+        ///     .iter()
+        ///     .filter(|t| t.run.role == TextRole::Annotation)
+        ///     .map(|t| &*t.run.text)
+        ///     .collect();
+        /// labels.sort();
+        /// assert_eq!(labels, ["Darwin", "Perth"]);
+        /// # Ok(())
+        /// # }
+        /// ```
+        pub fn text<R: Send + Sync + 'static>(
+            mut self,
+            rows: impl IntoIterator<Item = R>,
+            layer: impl FnOnce(&mut crate::TextLayer<R>),
+        ) -> Self {
+            layer(self.plot.text(rows));
+            self
+        }
+
+        /// The row drawn at `at` (pixels from the top left), or `None`. Same
+        /// as [`Plot::pick_row`](crate::Plot::pick_row), but accepts a tuple;
+        /// `Chart::pick_row` on a `dyn Chart` keeps its `Point` argument.
+        pub fn pick_row(&mut self, at: impl Into<crate::geom::Point>) -> Option<crate::RowId> {
+            self.materialise();
+            self.plot.pick_row(at)
+        }
     };
 }
 pub(crate) use plot_setters;

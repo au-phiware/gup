@@ -293,11 +293,10 @@ fn main() -> gup::Result<()> {
 ## Annotations
 
 Use a text layer to name the marks that matter: a handful of labels, placed at
-data positions, read faster than a legend. A builder is a chart, and
-`.plot_mut()` hands you its `Plot`, to which `.text(rows)` adds a layer of
-labels. They go through the plot's scales like any mark. `Anchor::BOTTOM` puts
-the bottom-centre of each label on its point, and `.dy(-6.0)` lifts it 6 pixels
-clear of the disc.
+data positions, read faster than a legend. `.text(rows, |t| ..)` adds a layer of
+labels, and the closure configures it. They go through the plot's scales like
+any mark. `Anchor::BOTTOM` puts the bottom-centre of each label on its point,
+and `.dy(-6.0)` lifts it 6 pixels clear of the disc.
 
 ```rust
 use gup::prelude::*;
@@ -315,8 +314,10 @@ fn main() -> gup::Result<()> {
         .y(|c| c.2)
         .radius(4.0)
         .title("Five cities")
-        .x_title("Longitude").y_title("Latitude");
-    chart.plot_mut().text(cities).x(|c| c.1).y(|c| c.2).text(|c| c.0).anchor(Anchor::BOTTOM).dy(-6.0);
+        .x_title("Longitude").y_title("Latitude")
+        .text(cities, |t| {
+            t.x(|c| c.1).y(|c| c.2).text(|c| c.0).anchor(Anchor::BOTTOM).dy(-6.0);
+        });
     chart.render(&Context::shared()?, 640, 400)?;
     Ok(())
 }
