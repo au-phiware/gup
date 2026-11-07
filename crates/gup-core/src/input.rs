@@ -84,6 +84,43 @@ impl Input {
         Self::key_with(key, Modifiers::NONE)
     }
 
+    /// Map a key as the W3C UI Events spec names it (`KeyboardEvent.key`:
+    /// `"ArrowLeft"`, `"Home"`, `"Enter"`, `" "`, `"Escape"`, `"+"`, ...)
+    /// to an input; `None` for a key the chart does not use. Named keys
+    /// carry `modifiers` as held; the characters `+`, `=`, `-` and `0` drop
+    /// Shift (`+` needs it on some layouts only). The window and browser
+    /// hosts share this mapping.
+    #[cfg(any(
+        all(feature = "window", not(target_arch = "wasm32")),
+        all(feature = "web", target_arch = "wasm32")
+    ))]
+    pub(crate) fn from_key_name(name: &str, modifiers: Modifiers) -> Option<Self> {
+        let named = |k| Some(Self::key_with(k, modifiers));
+        let unshifted = |k| {
+            Some(Self::key_with(
+                k,
+                Modifiers {
+                    shift: false,
+                    ..modifiers
+                },
+            ))
+        };
+        match name {
+            "ArrowLeft" => named(Key::Left),
+            "ArrowRight" => named(Key::Right),
+            "ArrowUp" => named(Key::Up),
+            "ArrowDown" => named(Key::Down),
+            "Home" => named(Key::Home),
+            "End" => named(Key::End),
+            "Enter" | " " => named(Key::Enter),
+            "Escape" => named(Key::Escape),
+            "+" | "=" => unshifted(Key::ZoomIn),
+            "-" => unshifted(Key::ZoomOut),
+            "0" => unshifted(Key::ResetView),
+            _ => None,
+        }
+    }
+
     /// `key` went down with `modifiers` held.
     pub fn key_with(key: Key, modifiers: Modifiers) -> Self {
         Self::KeyDown { key, modifiers }

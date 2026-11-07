@@ -23,7 +23,7 @@ use crate::chart::Chart;
 use crate::context::Context;
 use crate::error::{Error, Result};
 use crate::geom::Point;
-use crate::input::{Button, Input};
+use crate::input::{Button, Input, Modifiers};
 use crate::render::{Renderer, TargetDesc};
 use crate::surface::surface_config;
 use crate::target::{DEFAULT_SAMPLES, Frame, RenderTarget, check_samples, msaa_view};
@@ -34,7 +34,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use wasm_bindgen::JsCast;
 use wasm_bindgen::JsValue;
 use wasm_bindgen::closure::Closure;
-use web_sys::{Event, EventTarget, HtmlCanvasElement, MouseEvent, PointerEvent, WheelEvent};
+use web_sys::{
+    Event, EventTarget, HtmlCanvasElement, KeyboardEvent, MouseEvent, PointerEvent, WheelEvent,
+};
 
 /// A `<canvas>`'s WebGPU surface as a [`RenderTarget`].
 ///
@@ -255,6 +257,10 @@ struct State {
     label_canvas: bool,
     /// The `aria-label` last written (empty before the first).
     label: String,
+    /// The `aria-live` element after the canvas.
+    live: web_sys::Element,
+    /// The text last written to it (empty before the first).
+    live_text: String,
 }
 
 impl State {
@@ -271,6 +277,7 @@ impl State {
         let resolved = chart.resolve(cx, w as f32 / dpr, h as f32 / dpr)?;
         renderer.render(cx, &resolved.scene, target)?;
         self.update_label();
+        self.update_live();
         Ok(())
     }
 
@@ -295,6 +302,22 @@ impl State {
         self.label = alt;
     }
 }
+
+impl State {
+    /// Speak the chart's keyboard focus: write it to the live region when
+    /// it changes (empty when focus clears). The DOM is written only on
+    /// change.
+    fn update_live(&mut self) {
+        let text = self.chart.focus_text().unwrap_or_default();
+        if text != self.live_text {
+            self.live.set_text_content(Some(text));
+            self.live_text = text.to_owned();
+        }
+    }
+}
+
+/// Visually hidden, still read by screen readers, and out of layout.
+const LIVE_REGION_STYLE: &str = "position:absolute;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap";
 
 thread_local! {
     /// Canvases by wake id. `Wake` needs `Send + Sync`; an id is both, and
@@ -398,6 +421,37 @@ fn dispatch(state: &Rc<RefCell<State>>, input: Input) {
     }
 }
 
+/// Make `canvas` focusable (unless the page set a `tabindex`) and insert
+/// the live region after it.
+fn live_region(canvas: &HtmlCanvasElement) -> Result<web_sys::Element> {
+    let config = |what: &str, e: JsValue| Error::config("canvas", format!("{what}: {e:?}"));
+    if !canvas.has_attribute("tabindex") {
+        canvas
+            .set_attribute("tabindex", "0")
+            .map_err(|e| config("cannot set tabindex", e))?;
+    }
+    let document = web_sys::window()
+        .and_then(|w| w.document())
+        .ok_or_else(|| Error::config("canvas", "there is no document"))?;
+    let live = document
+        .create_element("div")
+        .map_err(|e| config("cannot create the live region", e))?;
+    for (name, value) in [
+        ("aria-live", "polite"),
+        ("aria-atomic", "true"),
+        ("data-gup-live", ""),
+        ("style", LIVE_REGION_STYLE),
+    ] {
+        live.set_attribute(name, value)
+            .map_err(|e| config("cannot set a live region attribute", e))?;
+    }
+    let canvas: &web_sys::Element = canvas.as_ref();
+    canvas
+        .after_with_node_1(&live)
+        .map_err(|e| config("cannot insert the live region", e))?;
+    Ok(live)
+}
+
 fn pointer_at(canvas: &HtmlCanvasElement, e: &MouseEvent) -> Point {
     let rect = canvas.get_bounding_client_rect();
     Point::new(
@@ -424,6 +478,7 @@ impl CanvasApp {
     pub async fn new(canvas: HtmlCanvasElement, chart: impl Chart) -> Result<Self> {
         let cx = Context::new().await?;
         let target = CanvasTarget::new(&cx, canvas.clone())?;
+        let live = live_region(&canvas)?;
         let mut st = State {
             cx: cx.clone(),
             target,
@@ -434,6 +489,8 @@ impl CanvasApp {
             last_error: None,
             label_canvas: !canvas.has_attribute("aria-label"),
             label: String::new(),
+            live,
+            live_text: String::new(),
         };
         st.draw()?;
         cx.settle_gpu_errors().await?;
@@ -550,6 +607,23 @@ impl CanvasApp {
                 );
             }
         })?;
+        // Not passive: a mapped key must not also scroll the page. Tab and
+        // every key the chart does not use keep their default.
+        let state = Rc::clone(&self.state);
+        self.listen(target, "keydown", false, move |e| {
+            if let Some(e) = e.dyn_ref::<KeyboardEvent>() {
+                let modifiers = Modifiers {
+                    shift: e.shift_key(),
+                    ctrl: e.ctrl_key(),
+                    alt: e.alt_key(),
+                    meta: e.meta_key(),
+                };
+                if let Some(input) = Input::from_key_name(&e.key(), modifiers) {
+                    e.prevent_default();
+                    dispatch(&state, input);
+                }
+            }
+        })?;
         let window = web_sys::window()
             .ok_or_else(|| Error::config("canvas listener", "there is no window"))?;
         let state = Rc::clone(&self.state);
@@ -586,7 +660,11 @@ impl CanvasApp {
 
 impl Drop for CanvasApp {
     fn drop(&mut self) {
-        self.state.borrow_mut().closed = true;
+        {
+            let mut st = self.state.borrow_mut();
+            st.closed = true;
+            st.live.remove();
+        }
         CANVASES.with(|c| c.borrow_mut().retain(|e| e.0 != self.wake_id));
         for l in self.listeners.drain(..) {
             // Removing a listener that is already gone is harmless.

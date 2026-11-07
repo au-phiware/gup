@@ -87,6 +87,11 @@ what each release contains and what its version number promises.
   its place, such as `Mass: 0.9; Span: 0.95 (2 of 3)`, in the axes' own formats
   (a time axis says an ISO date). `Plot::row_fields` and `Plot::row_text` give
   any row's values as `(name, value)` pairs or text.
+- Keyboard and screen readers in the browser: `web::CanvasApp` makes the canvas
+  focusable (`tabindex="0"` unless the page set one), forwards the chart keys
+  (arrows, Home, End, Enter, Space, Escape, `+`, `-`, `0`) and speaks
+  `Chart::focus_text` through a visually hidden `aria-live` element after the
+  canvas.
 - Render targets: a window (`gup::show`), PNG, SVG, a texture, and a WebGPU
   canvas in the browser.
 - Interaction: picking, tooltips, wheel zoom, drag pan and brushing. Zooming and

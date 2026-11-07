@@ -225,6 +225,85 @@
             );
             other.free();
           }
+          // GUP-623: a page's tabindex is kept, and Gup's live region goes
+          // when the app does.
+          {
+            const mine = document.createElement("canvas");
+            mine.style.cssText = `width:${w}px;height:${h}px;display:block`;
+            mine.setAttribute("tabindex", "-1");
+            document.body.appendChild(mine);
+            const other = await show_scatter(mine);
+            await frames();
+            await step("tabindex-kept", async () => mine.tabIndex === -1);
+            await step("live-region-added", async () =>
+              mine.nextElementSibling?.hasAttribute("data-gup-live")
+            );
+            other.free();
+            await step(
+              "live-region-removed",
+              async () =>
+                !mine.nextElementSibling?.hasAttribute("data-gup-live")
+            );
+            mine.remove();
+          }
+          // The canvas takes Tab focus, and a mapped key reaches the chart ...
+          await step("tabindex", async () => canvas.tabIndex === 0);
+          const live = canvas.nextElementSibling;
+          await step(
+            "live-region",
+            async () =>
+              live?.getAttribute("aria-live") === "polite" &&
+              live.getAttribute("aria-atomic") === "true" &&
+              live.hasAttribute("data-gup-live") &&
+              live.textContent === ""
+          );
+          let rightKey = null;
+          await step("key-focus", async () => {
+            let first = 0;
+            let least = Infinity;
+            for (let i = 0; i < 6; i++) {
+              const [px] = app.row_px(i);
+              if (px < least) [least, first] = [px, i];
+            }
+            rightKey = new KeyboardEvent("keydown", {
+              key: "ArrowRight",
+              bubbles: true,
+              cancelable: true,
+            });
+            canvas.dispatchEvent(rightKey);
+            await frames();
+            return app.hovered_row() === first;
+          });
+          // ... is announced as `focus_text` says, and does not scroll.
+          await step("key-announced", async () => {
+            const text = app.focus_text();
+            return (
+              live.textContent === text &&
+              text === app.tooltip_text().replaceAll("\n", "; ") + " (1 of 6)"
+            );
+          });
+          console.log("GUP live region: " + JSON.stringify(live.textContent));
+          await step("key-default-prevented", async () => {
+            const tab = new KeyboardEvent("keydown", {
+              key: "Tab",
+              bubbles: true,
+              cancelable: true,
+            });
+            canvas.dispatchEvent(tab);
+            return rightKey.defaultPrevented && !tab.defaultPrevented;
+          });
+          canvas.dispatchEvent(
+            new KeyboardEvent("keydown", {
+              key: "Escape",
+              bubbles: true,
+              cancelable: true,
+            })
+          );
+          await frames();
+          await step(
+            "key-escape",
+            async () => app.hovered_row() === -1 && live.textContent === ""
+          );
           const [rx, ry] = app.row_px(3);
           fire("pointermove", rx, ry);
           await frames();

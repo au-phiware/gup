@@ -51,7 +51,8 @@ js-sys = { version = "0.3", optional = true }
 web-sys = { version = "0.3", optional = true, features = [
   "HtmlCanvasElement", "Element", "DomRect", "EventTarget", "Event",
   "MouseEvent", "PointerEvent", "WheelEvent", "AddEventListenerOptions",
-  "Window", "console", "HtmlElement", "CssStyleDeclaration",
+  "Window", "console", "HtmlElement", "CssStyleDeclaration", "Document",
+  "KeyboardEvent",
 ] }
 
 [[example]]
