@@ -1116,13 +1116,13 @@ impl Plot {
     /// let n = 1_000;
     /// let x: Vec<f64> = (0..n).map(f64::from).collect();
     /// let y: Vec<f64> = x.iter().map(|x| (x / 50.0).sin()).collect();
-    /// let cols = Columns::new().with("x", x)?.with("y", y.clone())?.with("v", y)?;
+    /// let cols = Columns::new().with("x", x)?.with("y", y)?;
     ///
     /// let mut plot = Plot::new();
     /// plot.add_columns::<Circle>(&cols)
     ///     .x_column(&cols["x"])
     ///     .y_column(&cols["y"])
-    ///     .attr(Circle::FILL, Sequential::viridis().encode_column(&cols["v"]))
+    ///     .attr(Circle::FILL, Sequential::viridis().encode_column(&cols["y"]))
     ///     .attr(Circle::RADIUS, Px(2.0));
     /// let cx = Context::new_blocking()?;
     /// let image = plot.render(&cx, 320, 200)?;

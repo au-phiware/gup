@@ -33,6 +33,7 @@ use gup_core::column::{ColumnData, ColumnFormat, ColumnStore};
 use gup_core::geom::Point;
 use gup_core::prelude::*;
 use gup_core::{Column, ImageTarget, Retain};
+use std::sync::Arc;
 use std::time::Instant;
 
 struct Options {
@@ -215,22 +216,27 @@ fn main() -> gup_core::Result<()> {
 /// built directly so no row vector raises the peak RSS, then phases 4 to
 /// 6 on a columnar layer (GUP-628).
 fn columns_run(o: &Options, cx: &Context, wide: bool) -> gup_core::Result<()> {
-    fn walk<F>(o: &Options, narrow: impl Fn(f64) -> F) -> (Vec<F>, Vec<F>) {
+    /// Collected straight into `Arc<[F]>` (one allocation each, from a
+    /// `TrustedLen` iterator): a `Vec` would be copied into its `Arc`.
+    fn walk<F>(o: &Options, narrow: impl Fn(f64) -> F) -> (Arc<[F]>, Arc<[F]>) {
         let n = o.rows;
         let mut rng = Lcg(o.seed);
         let step = 1000.0 / n.max(1) as f64;
         let mut y = 0.0f64;
-        let (mut xs, mut ys) = (Vec::with_capacity(n), Vec::with_capacity(n));
-        for i in 0..n {
-            y += rng.unit() - 0.5;
-            xs.push(narrow(i as f64 * step));
-            ys.push(narrow(y));
-        }
+        let mut xs: Arc<[F]> = (0..n).map(|i| narrow(i as f64 * step)).collect();
+        let mut ys: Arc<[F]> = (0..n)
+            .map(|_| {
+                y += rng.unit() - 0.5;
+                narrow(y)
+            })
+            .collect();
         if o.shuffle {
+            let xm = Arc::get_mut(&mut xs).expect("unique");
+            let ym = Arc::get_mut(&mut ys).expect("unique");
             for i in (1..n).rev() {
                 let j = (rng.next() % (i as u64 + 1)) as usize;
-                xs.swap(i, j);
-                ys.swap(i, j);
+                xm.swap(i, j);
+                ym.swap(i, j);
             }
         }
         (xs, ys)

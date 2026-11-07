@@ -98,6 +98,10 @@ what each release contains and what its version number promises.
   panning write no column data to the GPU.
 - Streaming: `append` and `Appender` to add rows while a chart is showing, and
   `Window` to bound how many rows are kept.
+- Columnar layers: `Plot::add_columns` draws `Columns` of `f64` or `f32`
+  directly, with `x_column`, `y_column` and `encode_column`, without a row type
+  or a closure per row; a 10M-point scatter loads in about half the time and two
+  thirds of the memory of the same rows.
 - `gup-egui`, a widget that shows a chart in an egui panel, and `gup-bevy`, a
   plugin that shows a chart in a Bevy app.
 - A text alternative for every chart: `Plot::describe` returns a title and a
