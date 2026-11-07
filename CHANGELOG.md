@@ -38,6 +38,10 @@ what each release contains and what its version number promises.
   `+`/`=`, `-` and `0`. In egui the widget takes keys only while it has focus
   (click it or Tab into it); Escape in a window closes it only when the chart
   had no focused row to clear.
+- `Theme::high_contrast()`, for low-vision readers: black text and axes, a grid
+  at 3:1, larger text, and the `HIGH_CONTRAST` palette whose eight colours are
+  each at least 3:1 on white and clearly distinct under normal, deutan and
+  protan vision.
 - The chart types (`LineChart`, `ScatterChart`, and so on) are in
   `gup::prelude`, so one `use gup::prelude::*;` names the type a function
   returns; `Horizontal` and `Vertical` are at the crate root.
