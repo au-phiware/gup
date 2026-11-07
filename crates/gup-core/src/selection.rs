@@ -331,8 +331,7 @@ impl Input {
     fn slice(&self) -> ColumnSlice<'_> {
         match self {
             Self::Owned(d) => d.as_slice(),
-            Self::Shared(Column::F64(v)) => ColumnSlice::F64(v),
-            Self::Shared(Column::F32(v)) => ColumnSlice::F32(v),
+            Self::Shared(c) => c.slice(),
         }
     }
 
@@ -683,6 +682,12 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         self.bits_stale = true;
     }
 
+    /// Whether every column-encoded channel reads a shared column, so the
+    /// columns can be evaluated again without the rows (GUP-664).
+    fn needs_no_rows(&self) -> bool {
+        self.column_encodings().all(|(_, c)| c.shared().is_some())
+    }
+
     /// Whether a channel reads a columnar layer's shared column (GUP-628).
     fn reads_shared_columns(&self) -> bool {
         self.axes
@@ -964,7 +969,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             Some(_) => None,
         };
         if let Some(reason) = stale {
-            if !self.all_rows_held() {
+            if !self.all_rows_held() && !self.needs_no_rows() {
                 return Err(Error::config(
                     "layer",
                     format!(
@@ -977,10 +982,26 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
                     ),
                 ));
             }
+            let len = self.len();
             let mut inputs = self.column_inputs()?;
             self.order = self.size_order(&inputs);
             let mut store = ColumnStore::new(formats, chunk_rows)?;
-            if self.order.is_some() || controls.is_some() {
+            let shared = self.order.is_none()
+                && controls.is_none()
+                && inputs.iter().all(|i| matches!(i, Input::Shared(_)));
+            if shared {
+                // A columnar layer: the store reads the columns and keeps
+                // no copy of them (GUP-664).
+                let columns: Vec<Column> = inputs
+                    .into_iter()
+                    .map(|i| match i {
+                        Input::Shared(c) => c,
+                        Input::Owned(_) => unreachable!("every input is shared"),
+                    })
+                    .collect();
+                store.append_shared(&columns)?;
+                inputs = Vec::new();
+            } else if self.order.is_some() || controls.is_some() {
                 // Sorting by size permutes the columns, and control values
                 // read x and y as f64: both work on owned columns.
                 let mut values: Vec<ColumnData> =
@@ -995,13 +1016,15 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
                     values.push(ColumnData::Values(c2));
                 }
                 if let Some(order) = &mut self.order {
-                    order.push_runs(&mut values, &runs(self.window, &store, self.rows.len()));
+                    order.push_runs(&mut values, &runs(self.window, &store, len));
                     order.mark_evaluated();
                 }
                 inputs = values.into_iter().map(Input::Owned).collect();
             }
-            let slices: Vec<ColumnSlice<'_>> = inputs.iter().map(Input::slice).collect();
-            store.append_slices(self.rows.len(), &slices)?;
+            if !shared {
+                let slices: Vec<ColumnSlice<'_>> = inputs.iter().map(Input::slice).collect();
+                store.append_slices(len, &slices)?;
+            }
             self.columns = Some(store);
             // Stored rows (and so GPU pick ids) are new.
             self.epoch = self.epoch.wrapping_add(1);
@@ -1013,9 +1036,11 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
 
     /// Every column-encoded channel's data for the rows held, in channel
     /// order: a shared column as it is, else the accessor run over the
-    /// rows. Each must have one value per row; a column of another length
-    /// is an error naming its channel.
+    /// rows. Each must have one value per row (the rows of a layer that
+    /// needs none may have been dropped); a column of another length is an
+    /// error naming its channel.
     fn column_inputs(&mut self) -> Result<Vec<Input>> {
+        let len = self.len();
         let rows = &self.rows;
         let mut inputs = Vec::new();
         for (slot, e) in self.encodings.iter_mut().enumerate() {
@@ -1026,7 +1051,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
                 Some(column) => Input::Shared(column.clone()),
                 None => Input::Owned(c.evaluate(rows)?),
             };
-            if input.len() != rows.len() {
+            if input.len() != len {
                 return Err(Error::config(
                     "column",
                     format!(
@@ -1035,7 +1060,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
                         M::NAME,
                         M::CHANNELS[slot].name.to_ascii_uppercase(),
                         input.len(),
-                        rows.len()
+                        len
                     ),
                 ));
             }
@@ -1590,17 +1615,14 @@ fn first_slots(channels: &[ChannelDesc], is_column: &[bool]) -> [Option<usize>; 
 }
 
 /// Column `k`'s raw value at data row `data`, from the CPU columns (the
-/// chunk's origin added back); `None` when its chunk was released.
+/// chunk's origin added back) or the shared column; `None` when its chunk
+/// was released.
 fn read_stored(store: &ColumnStore, order: Option<&DrawOrder>, k: usize, data: u64) -> Option<f64> {
     let stored = match order {
         Some(order) => order.stored_of(data)?,
         None => data,
     };
-    let chunks = store.chunks();
-    let c = chunks.partition_point(|c| c.row_base() + u64::from(c.rows()) <= stored);
-    let chunk = chunks.get(c)?;
-    let values = store.chunk_values(c, k)?;
-    values.get((stored - chunk.row_base()) as usize).copied()
+    store.value(stored, k)
 }
 
 /// A row's colour channel, as read.
@@ -1747,7 +1769,9 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             ));
         };
         let rows = self.len() as u64;
-        if !self.retain.keeps_columns(rows) {
+        // Shared columns are the layer's whatever its policy (GUP-664).
+        let shared = self.columns.as_ref().is_some_and(ColumnStore::is_shared);
+        if !shared && !self.retain.keeps_columns(rows) {
             return LayerVector::Skipped(format!(
                 "its CPU columns are not retained (Retain::{:?}, {rows} rows)",
                 self.retain
@@ -2607,6 +2631,17 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         } else {
             cull::pick_ranges(polyline, &chunk_rows, visible)
         };
+        // Shared columns can always be read, but an index over more rows
+        // than a layer keeps CPU columns for costs more than the GPU pick
+        // the plot uses for such a layer (GUP-664): culled to fewer, its
+        // visible rows are indexed.
+        if store.is_shared()
+            && !self.cpu_readable()
+            && ranges.iter().map(ExactSizeIterator::len).sum::<usize>()
+                > Retain::AUTO_MAX_ROWS as usize
+        {
+            return Ok(());
+        }
         let mut chunk_needed = vec![visible.is_empty(); chunk_rows.len()];
         for r in &ranges {
             let first = chunk_rows.partition_point(|&(b, rows)| b + rows <= r.start);
@@ -2816,10 +2851,20 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         M::GPU_PICK
     }
 
+    /// Whether the plot picks the layer's rows on the CPU. A store of
+    /// shared columns can always be read, but is read for picking only as
+    /// far as the policy would keep CPU columns (GUP-664): above
+    /// [`Retain::AUTO_MAX_ROWS`] rows under `Auto`, the plot picks it on
+    /// the GPU, as it does a layer of rows.
     fn cpu_readable(&self) -> bool {
-        self.columns
-            .as_ref()
-            .is_none_or(|store| store.cpu_kept() || !self.rows.is_empty())
+        self.columns.as_ref().is_none_or(|store| {
+            !self.rows.is_empty()
+                || if store.is_shared() {
+                    self.retain.keeps_columns(self.len() as u64)
+                } else {
+                    store.cpu_kept()
+                }
+        })
     }
 
     fn row_any(&self, row: usize) -> Option<&dyn Any> {

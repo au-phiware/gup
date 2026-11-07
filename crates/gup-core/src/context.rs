@@ -463,6 +463,29 @@ impl Context {
         self.inner.queue.write_buffer(buffer, offset, data);
     }
 
+    /// Write `size` bytes into `buffer` at `offset`, counted as `kind`:
+    /// `fill` writes them straight into the upload's staging memory, so
+    /// data produced for the GPU needs no CPU buffer of its own (GUP-664).
+    /// `size` is a multiple of 4. If the write is invalid, wgpu reports
+    /// the error as it does for [`write_buffer`](Self::write_buffer) and
+    /// `fill` is not called.
+    pub(crate) fn write_buffer_with(
+        &self,
+        kind: Upload,
+        buffer: &wgpu::Buffer,
+        offset: u64,
+        size: u64,
+        fill: impl FnOnce(&mut [u8]),
+    ) {
+        let Some(nonzero) = wgpu::BufferSize::new(size) else {
+            return;
+        };
+        self.inner.uploads.add(kind, size as usize);
+        if let Some(mut view) = self.inner.queue.write_buffer_with(buffer, offset, nonzero) {
+            fill(&mut view);
+        }
+    }
+
     /// A new buffer holding `data` (`usage` gains `COPY_DST`), counted as
     /// `kind`.
     pub(crate) fn buffer_with_data(
