@@ -495,33 +495,37 @@ GUP-628 and GUP-631 (shared `selection.rs`).
   `scale_bench` example timing each ingest phase (closures, f64 columns, chunk
   conversion and upload, first resolve, first frame, zoom) with peak RSS, run at
   1M–100M rows, so N5 is designed from numbers. Deps: GUP-457 ✅, GUP-482 ✅.
-- [GUP-628](GUP-628_Columnar_Layers.md) 🚧 — `Columns`/`Column` (`Arc`'d f64 and
+- [GUP-628](GUP-628_Columnar_Layers.md) ✅ — `Columns`/`Column` (`Arc`'d f64 and
   f32), `Plot::add_columns::<M>` over `()` rows, `x_column`/`y_column` and
   `encode_column`: identical pictures to the rows path, and an f32 fast path
-  chosen by a measured rule. Opus. Deps: GUP-627 📋.
+  chosen by a measured rule. Opus. Deps: GUP-627 ✅.
+- [GUP-664](GUP-664_Shared_Columns_As_The_CPU_Copy.md) 📋 — a columnar layer
+  keeps no chunk CPU copy (its shared columns are the copy): about 76 MiB and 60
+  ms less at 10M rows, and picking, re-encoding and other contexts work above
+  `Retain::AUTO_MAX_ROWS`. Opus. Deps: GUP-628 ✅; before GUP-632.
 - [GUP-629](GUP-629_Key_Columns.md) 📋 — `Column::Keys(KeyColumn)` (codes plus
   labels) through Band, Point and `Categorical` scales, remapped once per label
   in the row path's first-seen order, with images identical to key closures.
-  Deps: GUP-628 📋.
+  Deps: GUP-628 ✅.
 - [GUP-630](GUP-630_Arrow_Record_Batches.md) 📋 — Feature `arrow`
   (`arrow-array`, `arrow-schema`): `Columns::from_arrow(&RecordBatch)` for
   floats, integers, dates, timestamps, strings, dictionaries and booleans, nulls
-  kept, in the feature matrix and docs.rs. Deps: GUP-628 📋, GUP-629 📋, GUP-602
+  kept, in the feature matrix and docs.rs. Deps: GUP-628 ✅, GUP-629 📋, GUP-602
   ✅.
 - [GUP-631](GUP-631_Level_Of_Detail_Spike.md) 📋 — Spike: per-frame density, a
   decimation pyramid ported from `gup-culling-lod`, and binned tiles, measured
   at 100M rows for GPU time, build time, memory and fidelity, chosen by a stated
   rule, with RFC-001 findings and the follow-up stories. Opus. Deps: GUP-627 📋,
-  GUP-628 📋.
+  GUP-628 ✅.
 - [GUP-632](GUP-632_Hundred_Million_Row_Demonstration.md) 📋 — A
   `hundred_million` example from `Columns` with zoom, pan and keys, measured at
   10M, 30M and 100M rows, proposed budget rows, and README wording by a stated
-  rule ("interactive" only under 16.7 ms; no "billion"). Deps: GUP-628 📋,
+  rule ("interactive" only under 16.7 ms; no "billion"). Deps: GUP-628 ✅,
   GUP-629 📋, GUP-631 📋 and its follow-ups (soft).
 - [GUP-492](GUP-492_Windowed_Size_Order_Draws.md) 📋 — bounded draw calls for a
   windowed layer sized by a column, through 12.5% size buckets in the sort key
   (about one draw per row today), with a `zoom_bench` row. Deps: GUP-482 ✅,
-  GUP-628 📋 and GUP-631 📋 (sequencing only: shared `selection.rs`).
+  GUP-628 ✅ and GUP-631 📋 (sequencing only: shared `selection.rs`).
 
 ## Polish after 0.1
 

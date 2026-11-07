@@ -1105,7 +1105,7 @@ impl Plot {
     ///
     /// The layer's rows are `()`, so every [`Selection`] method works on it:
     /// [`Retain`](crate::Retain), culling, picking and vector output. A
-    /// picked [`RowId`](crate::RowId)'s `row` is the column index, and
+    /// picked [`RowId`]'s `row` is the column index, and
     /// [`row_fields`](Self::row_fields) reads the columns;
     /// [`pick::<()>`](Self::pick) only says that some row was hit. A
     /// columnar layer cannot be appended to.
