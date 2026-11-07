@@ -165,6 +165,9 @@ pub struct TextLayer<T> {
     hide_overlaps: bool,
     /// Candidates tried, in order, after the layer's own anchor and offsets.
     fallbacks: Vec<(Anchor, f32, f32)>,
+    /// Radius in px of the disc each row's point takes in the overlap grid;
+    /// 0 for none.
+    avoid: f32,
     /// Bumped by every setter; part of the plot's revision sum.
     revision: u64,
     /// The closures' results, until a setter clears them.
@@ -191,6 +194,7 @@ impl<T: Send + Sync + 'static> TextLayer<T> {
             halo: 0.0,
             hide_overlaps: false,
             fallbacks: Vec::new(),
+            avoid: 0.0,
             revision: 0,
             evaluated: None,
         }
@@ -531,6 +535,76 @@ impl<T: Send + Sync + 'static> TextLayer<T> {
         self.changed()
     }
 
+    /// Keep labels off the points: with [`hide_overlaps`](Self::hide_overlaps)
+    /// on, every row's pixel position takes a square box of side
+    /// `2 * radius` (default 0: none) before any label is placed, and a
+    /// label whose box (grown by the halo) overlaps one is rejected like one
+    /// overlapping a kept label, so its next [`fallbacks`](Self::fallbacks)
+    /// candidate is tried and it is hidden if none fits. The boxes are the
+    /// layer's own rows, at the layer's `x` and `y`, whether or not the row
+    /// has a label to draw; rows without a finite position take none. The
+    /// layer cannot see the marks it annotates, so pass the marks' radius;
+    /// it is constant for all rows. A row's own point is an obstacle too:
+    /// offset the label (`dx`, `dy`) by more than the radius. A `radius` of
+    /// 0 or less, or NaN, is off. Ignored without `hide_overlaps(true)`.
+    ///
+    /// Two guarantees, both exact: no kept label's box overlaps a point's
+    /// box, and no kept label's box is nearer another row's point than its
+    /// own row's point (box-to-point distance; ties go to its own; rows
+    /// without a label count as points). A candidate that breaks either is
+    /// rejected and the next one tried. The trade is fewer labels on dense
+    /// plots: a label is better missing than naming the wrong point.
+    ///
+    /// ```
+    /// use gup_core::prelude::*;
+    /// use gup_core::scene::TextRole;
+    ///
+    /// let rows = vec![(5.0, 5.0), (5.4, 5.0)];
+    /// let cx = Context::new_blocking()?;
+    /// let mut plot = Plot::new();
+    /// plot.x(Linear::new().domain(0.0, 10.0));
+    /// plot.y(Linear::new().domain(0.0, 10.0));
+    /// plot.circles(rows.clone())
+    ///     .x(|r: &(f64, f64)| r.0)
+    ///     .y(|r: &(f64, f64)| r.1)
+    ///     .radius(Px(4.0));
+    /// plot.text(rows)
+    ///     .x(|r: &(f64, f64)| r.0)
+    ///     .y(|r: &(f64, f64)| r.1)
+    ///     .text(|r: &(f64, f64)| format!("{:.1}", r.0))
+    ///     .anchor(Anchor::BOTTOM)
+    ///     .dy(-6.0)
+    ///     .fallbacks([(Anchor::TOP, 0.0, 6.0)])
+    ///     .hide_overlaps(true)
+    ///     .avoid_points(Px(4.0));
+    /// let layout = plot.resolve(&cx, 480.0, 300.0)?.layout.clone();
+    /// use gup_core::geom::Rect as Box2;
+    /// let discs: Vec<Box2> = [(5.0, 5.0), (5.4, 5.0)]
+    ///     .iter()
+    ///     .map(|&(x, y)| {
+    ///         let p = layout.plot;
+    ///         let (px, py) = (p.left() + p.width * x as f32 / 10.0, p.bottom() - p.height * y as f32 / 10.0);
+    ///         Box2::from_edges(px - 4.0, py - 4.0, px + 4.0, py + 4.0)
+    ///     })
+    ///     .collect();
+    /// let mut n = 0;
+    /// for t in layout.texts.iter().filter(|t| t.run.role == TextRole::Annotation) {
+    ///     n += 1;
+    ///     let b = t.bounds;
+    ///     for d in &discs {
+    ///         let apart = b.right() <= d.left() || d.right() <= b.left()
+    ///             || b.bottom() <= d.top() || d.bottom() <= b.top();
+    ///         assert!(apart, "{b:?} overlaps {d:?}");
+    ///     }
+    /// }
+    /// assert!(n > 0);
+    /// # Ok::<(), gup_core::Error>(())
+    /// ```
+    pub fn avoid_points(&mut self, radius: Px) -> &mut Self {
+        self.avoid = if radius.0 > 0.0 { radius.0 } else { 0.0 };
+        self.changed()
+    }
+
     /// How many rows (labels) the layer has.
     pub fn len(&self) -> usize {
         self.rows.len()
@@ -686,6 +760,8 @@ struct Kept {
     rows: usize,
     /// Per cell, the kept boxes that touch it.
     cells: Vec<Vec<Rect>>,
+    /// Per cell, the row points (`avoid_points`) that fall in it.
+    points: Vec<Vec<(usize, f32, f32)>>,
 }
 
 impl Kept {
@@ -701,7 +777,36 @@ impl Kept {
             cols,
             rows,
             cells: vec![Vec::new(); cols * rows],
+            points: vec![Vec::new(); cols * rows],
         }
+    }
+
+    /// Record row `i`'s point.
+    fn add_point(&mut self, i: usize, x: f32, y: f32) {
+        let (c, _, r, _) = self.span(Rect::new(x, y, 0.0, 0.0));
+        self.points[r * self.cols + c].push((i, x, y));
+    }
+
+    /// Whether a point of a row other than `i` is nearer `b` than `own`
+    /// is (ties go to `own`).
+    fn point_nearer_than(&self, i: usize, own: (f32, f32), b: Rect) -> bool {
+        let dist = |p: (f32, f32)| {
+            let dx = (b.left() - p.0).max(p.0 - b.right()).max(0.0);
+            let dy = (b.top() - p.1).max(p.1 - b.bottom()).max(0.0);
+            dx.hypot(dy)
+        };
+        let d = dist(own);
+        if d == 0.0 {
+            return false;
+        }
+        let (x0, x1, y0, y1) = self.span(b.inflate(d));
+        (y0..=y1).any(|y| {
+            (x0..=x1).any(|x| {
+                self.points[y * self.cols + x]
+                    .iter()
+                    .any(|&(j, px, py)| j != i && dist((px, py)) < d)
+            })
+        })
     }
 
     /// The cells `b` covers, clamped to the grid: `(x0..=x1, y0..=y1)`.
@@ -828,6 +933,16 @@ impl<T: Send + Sync + 'static> AnnotationLayer for TextLayer<T> {
         let mut kept = self
             .hide_overlaps
             .then(|| Kept::new(plot.inflate(self.halo), 4.0 * size));
+        if let (Some(kept), true) = (&mut kept, self.avoid > 0.0) {
+            let r = self.avoid;
+            for i in 0..ev.text.len() {
+                let (px, py) = (pixel(&ev.x, i, x) as f32, pixel(&ev.y, i, y) as f32);
+                if px.is_finite() && py.is_finite() {
+                    kept.add_point(i, px, py);
+                    kept.push(Rect::from_edges(px - r, py - r, px + r, py + r));
+                }
+            }
+        }
         let cands = self.candidates();
         let mut out = Vec::new();
         for (i, s) in ev.text.iter().enumerate() {
@@ -864,7 +979,9 @@ impl<T: Send + Sync + 'static> AnnotationLayer for TextLayer<T> {
                 };
                 if let Some(kept) = &mut kept {
                     let b = bounds.inflate(self.halo);
-                    if kept.overlaps(b) {
+                    if kept.overlaps(b)
+                        || (self.avoid > 0.0 && kept.point_nearer_than(i, (px, py), bounds))
+                    {
                         continue;
                     }
                     kept.push(b);

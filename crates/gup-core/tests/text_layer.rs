@@ -541,7 +541,7 @@ fn resolve_cost_of_a_thousand_labels() {
             )
         })
         .collect();
-    let make = |labelled: bool, cull: bool, fallbacks: bool| {
+    let make = |labelled: bool, cull: bool, fallbacks: bool, avoid: bool| {
         let mut plot = Plot::new();
         plot.circles(rows.clone())
             .x(|r: &(f64, f64)| r.0)
@@ -562,7 +562,8 @@ fn resolve_cost_of_a_thousand_labels() {
                 } else {
                     Vec::new()
                 })
-                .hide_overlaps(cull);
+                .hide_overlaps(cull)
+                .avoid_points(Px(if avoid { 4.0 } else { 0.0 }));
         }
         plot
     };
@@ -579,26 +580,33 @@ fn resolve_cost_of_a_thousand_labels() {
         times[times.len() / 2]
     };
     let (without, with) = (
-        median(&mut make(false, false, false)),
-        median(&mut make(true, false, false)),
+        median(&mut make(false, false, false, false)),
+        median(&mut make(true, false, false, false)),
     );
     println!(
         "metric text_layer.resolve_ms without={without:.3} with={with:.3} delta={:.3}",
         with - without
     );
     // GUP-527: what `hide_overlaps` adds to the same resolve.
-    let culled = median(&mut make(true, true, false));
+    let culled = median(&mut make(true, true, false, false));
     println!(
         "metric text_layer.cull_ms with={with:.3} culled={culled:.3} delta={:.3}",
         culled - with
     );
     // GUP-611: what four candidates add to the culling.
-    let placed = median(&mut make(true, true, true));
+    let placed = median(&mut make(true, true, true, false));
     println!(
         "metric text_layer.fallbacks_ms culled={culled:.3} placed={placed:.3} delta={:.3}",
         placed - culled
     );
-    let mut plot = make(true, false, false);
+    // GUP-656: what seeding the points and the nearest-point test add to
+    // the same four candidates.
+    let avoided = median(&mut make(true, true, true, true));
+    println!(
+        "metric text_layer.avoid_points_ms placed={placed:.3} avoided={avoided:.3} delta={:.3}",
+        avoided - placed
+    );
+    let mut plot = make(true, false, false, false);
     let resolved = plot.resolve(&cx, 800.0, 600.0).unwrap().clone();
     let drawn = labels(&resolved.layout).len();
     assert!(drawn > 900, "{drawn} of 1000 labels drawn");

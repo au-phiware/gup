@@ -15,8 +15,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (polish before 0.1) **Status**: 📋
-Ready **Created**: 2026-11-07
+**Initiative**: Strategic Review 2026-11 (polish before 0.1) **Status**: 🚧 In
+Progress **Created**: 2026-11-07
 
 ## Context
 
@@ -225,3 +225,40 @@ scatter whose labels and discs share rows) and needs no cross-layer plumbing.
       code change"
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
+
+## Decisions (revised 2026-11-08, after the escalation)
+
+- `avoid_points` also enforces the nearest-point rule: a candidate is viable
+  only if no other row's point is nearer its box than its own point (ties to the
+  own point; rows with empty text count). `Kept` holds the points in a parallel
+  grid of the same cell size; only cells within the own distance of the box are
+  tested. Both guarantees are exact by construction.
+- The kept-count floor is replaced by: at least 25% of rows kept on the
+  1,000-point scatter (measured 275).
+- Golden: `gup_core/text_fallbacks` re-recorded with `avoid_points(Px(4.0))`.
+
+## Implementation Summary
+
+- `TextLayer::avoid_points`, `Kept::add_point` / `point_nearer_than`
+  (`text_layer.rs`); tests in `text_halo.rs`; cost metric in `text_layer.rs`.
+- 1,000-point scatter (800x600, radius 4, offsets 5/6 px): labels touching a
+  disc 563 without, 0 with; nearer another point 597 of 647 without (92%), 0 of
+  275 with; kept 647 without, 275 with (GUP-611 on its offsets: 599).
+- Cost (release, 6 runs, `text_layer.avoid_points_ms` delta over fallbacks):
+  0.418, 0.018, 0.209, 0.272, 0.271, 0.093 ms; median about 0.24 ms, under the
+  0.3 ms budget (noisy).
+- Golden read: 88 of 300 labels kept, none on a disc, each beside its own point.
+- Sweep: `hide_overlaps` appears only in `text_layer.rs`, `plot.rs` docs and the
+  text tests; none changed (opt-in). Gallery or tutorial charts: none use text
+  layers over circles with `hide_overlaps`.
+
+## Retrospective
+
+**Completed**: 2026-11-08
+
+- The 5% nearest-point AC was unreachable by luck in a dense scatter (92% of
+  labels failed without the rule); making it a placement rule was cheap: a local
+  grid query bounded by the own distance.
+- Trade: fewer labels (275 vs 647) on dense plots; documented on the setter.
+- Follow-up: per-row radii from the mark layer remain out of scope (no new
+  story).
