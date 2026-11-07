@@ -3814,7 +3814,7 @@ mod tests {
     #[test]
     fn categorical_params_match_the_wgsl_layout() {
         use crate::encoding::{DynShaderFn, ShaderFn};
-        use crate::scale::{NULL_COLOR, OKABE_ITO};
+        use crate::scale::{NULL_COLOR, OKABE_ITO_DISTINCT};
         use crate::shader::COLOR_CATEGORICAL;
         let module = parse(COLOR_CATEGORICAL.import_path, COLOR_CATEGORICAL.wgsl);
         let layout = struct_layout(
@@ -3834,7 +3834,7 @@ mod tests {
         let [Resource::Lut(lut)] = &ShaderFn::resources(&c)[..] else {
             panic!("one LUT")
         };
-        let rgba: Vec<[u8; 4]> = OKABE_ITO.iter().map(|c| c.to_rgba8()).collect();
+        let rgba: Vec<[u8; 4]> = OKABE_ITO_DISTINCT.iter().map(|c| c.to_rgba8()).collect();
         assert_eq!(lut[..8], rgba[..]);
     }
 }

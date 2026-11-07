@@ -4,7 +4,7 @@
 //! Marks: [`Circle`], [`Rect`], [`Segment`] and [`Line`] (RFC-001 S6).
 
 use crate::channel::{Color, Px, Unit};
-use crate::scale::OKABE_ITO;
+use crate::scale::OKABE_ITO_DISTINCT;
 
 /// A filled disc centred on `(X, Y)`, sized in logical pixels so it stays
 /// round on any aspect ratio.
@@ -64,7 +64,7 @@ pub struct Circle {
 
 impl Circle {
     /// The default fill (`#0072B2`).
-    pub const DEFAULT_FILL: Color = OKABE_ITO[3];
+    pub const DEFAULT_FILL: Color = OKABE_ITO_DISTINCT[0];
 }
 
 /// A filled axis-aligned box in logical pixels, with analytically
@@ -136,7 +136,7 @@ pub struct Rect {
 
 impl Rect {
     /// The default fill (`#0072B2`).
-    pub const DEFAULT_FILL: Color = OKABE_ITO[3];
+    pub const DEFAULT_FILL: Color = OKABE_ITO_DISTINCT[0];
 }
 
 /// A straight line from `(x, y)` to `(x_end, y_end)` in logical pixels, with a
@@ -194,7 +194,7 @@ pub struct Segment {
 
 impl Segment {
     /// The default colour (`#0072B2`).
-    pub const DEFAULT_COLOR: Color = OKABE_ITO[3];
+    pub const DEFAULT_COLOR: Color = OKABE_ITO_DISTINCT[0];
 }
 
 /// A polyline through the rows in data order: one segment from each row to
@@ -251,7 +251,7 @@ pub struct Line {
 
 impl Line {
     /// The default colour (`#0072B2`).
-    pub const DEFAULT_COLOR: Color = OKABE_ITO[3];
+    pub const DEFAULT_COLOR: Color = OKABE_ITO_DISTINCT[0];
 }
 
 /// How a [`Line`] runs from one row to the next: straight, in steps that

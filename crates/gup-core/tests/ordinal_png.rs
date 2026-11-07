@@ -16,7 +16,7 @@ use common::vr::{harness, layout_metadata, rgba8};
 use gup_core::geom::Rect;
 use gup_core::prelude::*;
 use gup_core::scene::{Item, ItemKind, RectPrim, Z_GRID};
-use gup_core::{ImageTarget, Layout, OKABE_ITO, Scene};
+use gup_core::{ImageTarget, Layout, OKABE_ITO_DISTINCT, Scene};
 use gup_visual_regression::{LayoutMetadata, RgbaImage};
 use std::fmt;
 
@@ -128,7 +128,7 @@ fn categorical_scatter_with_eleven_keys_and_a_legend() {
     let swatches = colour.read().legend().unwrap().swatches().to_vec();
     assert_eq!(swatches.len(), 11);
     assert_eq!(&*swatches[10].label, "Swan");
-    for (s, c) in swatches.iter().zip(OKABE_ITO) {
+    for (s, c) in swatches.iter().zip(OKABE_ITO_DISTINCT) {
         assert_eq!(s.color, c, "{}: the first 8 are Okabe-Ito", s.label);
     }
     let guides = legend_guides(&layout, 12.0);

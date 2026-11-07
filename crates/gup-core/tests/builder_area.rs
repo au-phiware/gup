@@ -12,7 +12,7 @@ use common::vr::{harness, layout_metadata};
 use gup_core::geom::Point;
 use gup_core::prelude::*;
 use gup_core::scene::{ItemKind, Z_TOOLTIP};
-use gup_core::{Input, Layout, OKABE_ITO};
+use gup_core::{Input, Layout, OKABE_ITO_DISTINCT};
 use gup_visual_regression::RgbaImage;
 
 /// x, series, value.
@@ -114,11 +114,11 @@ fn color_gives_translucent_overlapping_areas_and_a_legend() {
     let (x, y) = (&layout.x_ticks, &layout.y_ticks);
     // Only "web" above 4; both below.
     let only_web = px(&image, at(x, 5.0), at(y, 6.0));
-    assert_near(only_web, over_white(OKABE_ITO[0], 0.5));
+    assert_near(only_web, over_white(OKABE_ITO_DISTINCT[0], 0.5));
     let both = px(&image, at(x, 5.0), at(y, 2.0));
-    let over_web = over_white(OKABE_ITO[0], 0.5).map(f32::from);
+    let over_web = over_white(OKABE_ITO_DISTINCT[0], 0.5).map(f32::from);
     let want = [0, 1, 2].map(|c| {
-        let [r, g, b, _] = OKABE_ITO[1].to_rgba8();
+        let [r, g, b, _] = OKABE_ITO_DISTINCT[1].to_rgba8();
         let src = [r, g, b][c] as f32;
         (src * 0.5 + over_web[c] * 0.5).round() as u8
     });
@@ -149,7 +149,7 @@ fn stacked_layers_meet_with_no_gap_or_overlap() {
     let mut chart = stack_chart(stacked_rows());
     let (image, layout) = chart.render_resolved(&cx, 640, 400).unwrap();
     let (xt, yt) = (&layout.x_ticks, &layout.y_ticks);
-    let colour = |i: usize| over_white(OKABE_ITO[i], 1.0);
+    let colour = |i: usize| over_white(OKABE_ITO_DISTINCT[i], 1.0);
     // Mid-way along segments, where the aligned edges are slanted.
     for x in [1.0, 3.0, 5.0, 7.0, 9.0] {
         let [a_top, b_top, c_top] = tops(x);
@@ -231,13 +231,13 @@ fn outline_is_the_opaque_series_colour_along_the_top() {
     for (i, top) in tops(3.0).into_iter().enumerate() {
         assert_near(
             px(&image, at(xt, 3.0), at(yt, top) + 0.5),
-            over_white(OKABE_ITO[i], 1.0),
+            over_white(OKABE_ITO_DISTINCT[i], 1.0),
         );
     }
     // Inside a layer, away from edges, the fill is translucent.
     assert_near(
         px(&image, at(xt, 3.0), at(yt, 2.5)),
-        over_white(OKABE_ITO[0], 0.3),
+        over_white(OKABE_ITO_DISTINCT[0], 0.3),
     );
     // Only the areas are layers of the area type.
     assert_eq!(chart.layers_mut().len(), 3);

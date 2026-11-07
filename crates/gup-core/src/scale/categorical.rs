@@ -19,12 +19,13 @@ use std::sync::{Arc, OnceLock};
 /// `theme.null_color`.
 pub const NULL_COLOR: Color = Color::hex(0x999999);
 
-/// The Okabe-Ito colour-blind-safe palette in default-series order: orange,
+/// The Okabe-Ito colour-blind-safe palette in the published order: orange,
 /// sky blue, bluish green, blue, vermillion, reddish purple, yellow, black.
+/// Charts default to [`OKABE_ITO_DISTINCT`], which orders the same eight
+/// colours so the first few differ most.
 ///
 /// Yellow has 1.32:1 contrast on white, so it comes after every colour with
-/// at least 2.25:1 (orange); black is last. Blue is fourth, so a four-series
-/// chart ends on the marks' default colour.
+/// at least 2.25:1 (orange); black is last.
 ///
 /// ```
 /// use gup_core::scale::OKABE_ITO;
@@ -43,9 +44,9 @@ pub const OKABE_ITO: [Color; 8] = [
     Color::hex(0x000000),
 ];
 
-/// [`OKABE_ITO`] for a dark background (`Theme::dark`): black, which
-/// vanishes on dark, is replaced by `#E8E8E8`. The other seven colours keep
-/// their colour-blind safety, and all reach 3:1 contrast on `#1E1E22`.
+/// [`OKABE_ITO`] (the published order) for a dark background: black, which
+/// vanishes on dark, is replaced by `#E8E8E8`. The default dark palette is
+/// [`OKABE_ITO_DISTINCT_DARK`].
 pub const OKABE_ITO_DARK: [Color; 8] = [
     OKABE_ITO[0],
     OKABE_ITO[1],
@@ -54,6 +55,46 @@ pub const OKABE_ITO_DARK: [Color; 8] = [
     OKABE_ITO[4],
     OKABE_ITO[5],
     OKABE_ITO[6],
+    Color::hex(0xe8e8e8),
+];
+
+/// The Okabe-Ito colours in the default-series order: blue, vermillion,
+/// reddish purple, bluish green, sky blue, orange, yellow, black. The first
+/// four are four different hues (blue, red-orange, purple, green), where the
+/// published order puts two blues among its first four. Among the orders
+/// with that property and blue first, this one maximises the worst
+/// colour-vision view's minimum CIEDE2000 (asserted by test).
+/// Blue is first, so a one-series chart and series 1 of a many-series chart
+/// agree on the marks' default fill.
+///
+/// ```
+/// use gup_core::{Circle, Color, OKABE_ITO_DISTINCT};
+/// assert_eq!(OKABE_ITO_DISTINCT[0], Circle::DEFAULT_FILL);
+/// assert_eq!(OKABE_ITO_DISTINCT[0], Color::hex(0x0072b2));
+/// ```
+pub const OKABE_ITO_DISTINCT: [Color; 8] = [
+    Color::hex(0x0072b2),
+    Color::hex(0xd55e00),
+    Color::hex(0xcc79a7),
+    Color::hex(0x009e73),
+    Color::hex(0x56b4e9),
+    Color::hex(0xe69f00),
+    Color::hex(0xf0e442),
+    Color::hex(0x000000),
+];
+
+/// [`OKABE_ITO_DISTINCT`] for a dark background (`Theme::dark`): black is
+/// replaced by `#E8E8E8`, as in [`OKABE_ITO_DARK`], and the two blues swap
+/// places (sky blue first, blue fifth) because `#0072B2` is the dimmest
+/// colour on dark (about 3.3:1 on `#1E1E22`) while sky blue reaches about 7:1.
+pub const OKABE_ITO_DISTINCT_DARK: [Color; 8] = [
+    OKABE_ITO_DISTINCT[4],
+    OKABE_ITO_DISTINCT[1],
+    OKABE_ITO_DISTINCT[2],
+    OKABE_ITO_DISTINCT[3],
+    OKABE_ITO_DISTINCT[0],
+    OKABE_ITO_DISTINCT[5],
+    OKABE_ITO_DISTINCT[6],
     Color::hex(0xe8e8e8),
 ];
 
@@ -105,7 +146,7 @@ pub const MAX_PALETTE: usize = 2048;
 ///
 /// **Palette.** The colours live in a one-row LUT texture read by texel,
 /// so a palette may have any length up to [`MAX_PALETTE`]. The default is
-/// the theme's palette, [`OKABE_ITO`] (8 colours, colour-blind safe)
+/// the theme's palette, [`OKABE_ITO_DISTINCT`] (8 colours, colour-blind safe)
 /// unless the theme says otherwise; [`from_palette`](Self::from_palette)
 /// ignores the theme. A domain with more keys
 /// than the palette has colours does not cycle: the scale extends the
@@ -117,7 +158,7 @@ pub const MAX_PALETTE: usize = 2048;
 ///
 /// ```
 /// use gup_core::prelude::*;
-/// use gup_core::{NULL_COLOR, OKABE_ITO};
+/// use gup_core::{NULL_COLOR, OKABE_ITO_DISTINCT};
 ///
 /// struct Row { x: f64, y: f64, continent: Option<String> }
 /// let rows = vec![
@@ -142,13 +183,13 @@ pub const MAX_PALETTE: usize = 2048;
 ///
 /// // Codes in first-seen order: Asia 0, Europe 1; the missing key is null.
 /// let centre = |v: f64| image.get_pixel(x.read().eval(v) as u32, y.read().eval(v) as u32).0;
-/// assert_eq!(centre(1.0), OKABE_ITO[0].to_rgba8());
-/// assert_eq!(centre(2.0), OKABE_ITO[1].to_rgba8());
+/// assert_eq!(centre(1.0), OKABE_ITO_DISTINCT[0].to_rgba8());
+/// assert_eq!(centre(2.0), OKABE_ITO_DISTINCT[1].to_rgba8());
 /// assert_eq!(centre(3.0), NULL_COLOR.to_rgba8());
 /// // The legend lists the keys, with the colours drawn.
 /// let legend = colour.read().legend().unwrap();
 /// let swatches = legend.swatches();
-/// assert_eq!((&*swatches[1].label, swatches[1].color), ("Europe", OKABE_ITO[1]));
+/// assert_eq!((&*swatches[1].label, swatches[1].color), ("Europe", OKABE_ITO_DISTINCT[1]));
 /// # Ok::<(), gup_core::Error>(())
 /// ```
 #[derive(Clone, Debug, PartialEq)]
@@ -169,17 +210,17 @@ pub struct Categorical {
 }
 
 impl Categorical {
-    /// The theme's palette ([`OKABE_ITO`] for the default theme,
-    /// [`OKABE_ITO_DARK`] for `Theme::dark`), extended past 8 keys with
+    /// The theme's palette ([`OKABE_ITO_DISTINCT`] for the default theme,
+    /// [`OKABE_ITO_DISTINCT_DARK`] for `Theme::dark`), extended past 8 keys with
     /// colours generated against the theme's background.
     pub fn okabe_ito() -> Self {
         static LUT: OnceLock<Arc<[[u8; 4]]>> = OnceLock::new();
         Self {
-            lut: Arc::clone(LUT.get_or_init(|| extend(&OKABE_ITO, Color::WHITE).into())),
+            lut: Arc::clone(LUT.get_or_init(|| extend(&OKABE_ITO_DISTINCT, Color::WHITE).into())),
             keys: Vec::new(),
             null_color: NULL_COLOR,
             null_color_set: false,
-            themed: Some((OKABE_ITO, Color::WHITE)),
+            themed: Some((OKABE_ITO_DISTINCT, Color::WHITE)),
         }
     }
 
@@ -446,16 +487,16 @@ mod tests {
     #[test]
     fn codes_follow_the_palette_and_null_is_grey() {
         let c = fitted(8);
-        assert_eq!(c.eval(0.0).to_rgba8(), [0xe6, 0x9f, 0x00, 255]);
-        assert_eq!(c.eval(3.0), Circle::DEFAULT_FILL);
-        for (i, color) in OKABE_ITO.iter().enumerate() {
+        assert_eq!(c.eval(0.0).to_rgba8(), [0x00, 0x72, 0xb2, 255]);
+        assert_eq!(c.eval(0.0), Circle::DEFAULT_FILL);
+        for (i, color) in OKABE_ITO_DISTINCT.iter().enumerate() {
             assert_eq!(c.eval(i as f64), *color);
         }
         assert_eq!(c.eval(f64::from(NULL_CODE)), NULL_COLOR);
         assert_eq!(c.eval(f64::NAN), NULL_COLOR);
         // Outside the domain (no such key yet) is null, as on the GPU.
         assert_eq!(c.eval(8.0), NULL_COLOR);
-        assert!(!OKABE_ITO.contains(&NULL_COLOR));
+        assert!(!OKABE_ITO_DISTINCT.contains(&NULL_COLOR));
     }
 
     /// AC2: past the palette's 8 colours, keys get generated colours
@@ -503,7 +544,7 @@ mod tests {
             "light keeps the static LUT"
         );
         c.apply_theme(&dark);
-        for (i, want) in OKABE_ITO_DARK.iter().enumerate() {
+        for (i, want) in OKABE_ITO_DISTINCT_DARK.iter().enumerate() {
             assert_eq!(c.eval(i as f64), *want);
         }
         // The 9th colour is generated against the dark background: it is
@@ -565,7 +606,10 @@ mod tests {
         let legend = c.legend().unwrap();
         let s = legend.swatches();
         assert_eq!(s.len(), 3);
-        assert_eq!((&*s[2].label, s[2].color), ("Africa", OKABE_ITO[2]));
+        assert_eq!(
+            (&*s[2].label, s[2].color),
+            ("Africa", OKABE_ITO_DISTINCT[2])
+        );
         assert!(legend.ramp().is_none());
     }
 }

@@ -4104,7 +4104,7 @@ mod tests {
     #[test]
     fn a_new_key_grows_the_domain_with_a_uniform_write_only() {
         use crate::ShaderFn;
-        use crate::scale::{Categorical, OKABE_ITO};
+        use crate::scale::{Categorical, OKABE_ITO_DISTINCT};
         type Row = (f64, f64, &'static str);
         let cx = Context::new_blocking().unwrap();
         let rows: Vec<Row> = (0..30)
@@ -4154,7 +4154,7 @@ mod tests {
         assert_eq!(labels(&colour), ["a", "b", "c", "d"]);
         assert_eq!(
             colour.read().legend().unwrap().swatches()[3].color,
-            OKABE_ITO[3]
+            OKABE_ITO_DISTINCT[3]
         );
         // x, y (4 bytes each) and the code (4 bytes) of 2 rows.
         assert_eq!(written.columns.bytes, 2 * 12, "{written:?}");
@@ -4170,8 +4170,16 @@ mod tests {
                 .get_pixel(x.read().eval(v.0) as u32, y.read().eval(v.1) as u32)
                 .0
         };
-        assert_eq!(at((35.0, 2.0)), OKABE_ITO[3].to_rgba8(), "the new key");
-        assert_eq!(at((36.0, 3.0)), OKABE_ITO[0].to_rgba8(), "an old key");
+        assert_eq!(
+            at((35.0, 2.0)),
+            OKABE_ITO_DISTINCT[3].to_rgba8(),
+            "the new key"
+        );
+        assert_eq!(
+            at((36.0, 3.0)),
+            OKABE_ITO_DISTINCT[0].to_rgba8(),
+            "an old key"
+        );
     }
 
     /// GUP-429 AC3: a bar's width comes from the band scale each resolve.

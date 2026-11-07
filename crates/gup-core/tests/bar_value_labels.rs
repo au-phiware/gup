@@ -10,7 +10,7 @@ use common::vr::{harness, layout_metadata, rgba8};
 use gup_core::geom::Rect;
 use gup_core::prelude::*;
 use gup_core::scene::TextRole;
-use gup_core::{BarChart, Layout, OKABE_ITO};
+use gup_core::{BarChart, Layout, OKABE_ITO_DISTINCT};
 use gup_visual_regression::RgbaImage;
 
 /// The annotation (label) texts with their text, in no particular order.
@@ -323,7 +323,11 @@ fn golden_grouped_bars_with_a_negative_value() {
         .legend_title("Region")
         .y_title("Sales")
         .value_labels();
-    golden("gup_core/bar_value_labels", &mut chart, &OKABE_ITO[..3]);
+    golden(
+        "gup_core/bar_value_labels",
+        &mut chart,
+        &OKABE_ITO_DISTINCT[..3],
+    );
 }
 
 #[test]
@@ -348,7 +352,7 @@ fn golden_stacked_horizontal_bars_with_a_hidden_thin_segment() {
     golden(
         "gup_core/bar_value_labels_stacked",
         &mut chart,
-        &OKABE_ITO[..3],
+        &OKABE_ITO_DISTINCT[..3],
     );
 }
 

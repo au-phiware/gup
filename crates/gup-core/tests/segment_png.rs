@@ -10,7 +10,7 @@ mod common;
 use common::svg_marks;
 use common::vr::{harness, layout_metadata, rgba8};
 use gup_core::prelude::*;
-use gup_core::{ImageTarget, OKABE_ITO};
+use gup_core::{ImageTarget, OKABE_ITO_DISTINCT};
 use gup_visual_regression::RgbaImage;
 
 const RED: Color = Color::hex(0xff0000);
@@ -178,13 +178,13 @@ fn width_and_colour_are_encoded_per_row() {
         let want = 1.0 + 5.0 * v / 10.0;
         let lo = (yc - 10.0) as u32;
         let sum: f64 = (lo..lo + 20)
-            .map(|py| ink_of(&image, xm, py, OKABE_ITO[i]))
+            .map(|py| ink_of(&image, xm, py, OKABE_ITO_DISTINCT[i]))
             .sum();
         assert!((sum - want).abs() <= 0.5, "row {i}: {sum} vs {want}");
         // The centre pixel is the category's colour at its own coverage.
         let px = image.get_pixel(xm, yc as u32).0;
-        let col = OKABE_ITO[i].to_rgba8();
-        let c = ink_of(&image, xm, yc as u32, OKABE_ITO[i]);
+        let col = OKABE_ITO_DISTINCT[i].to_rgba8();
+        let c = ink_of(&image, xm, yc as u32, OKABE_ITO_DISTINCT[i]);
         for k in 0..3 {
             let expect = 255.0 * (1.0 - c) + f64::from(col[k]) * c;
             assert!(

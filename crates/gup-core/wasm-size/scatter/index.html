@@ -68,8 +68,8 @@
           else coloured++;
         }
         // A dictionary-encoded colour (RFC-001 S4b): four keys through
-        // `encode_nullable_key` must draw in the first four Okabe-Ito
-        // colours and missing keys in the null grey; a row with a NaN x is
+        // `encode_nullable_key` must draw in the first four default
+        // palette colours and missing keys in the null grey; a row with a NaN x is
         // not drawn (validity bits read in the vertex stage), so leaving the
         // row out gives the same pixels.
         const dict = await render_categorical(w, h, false);
@@ -84,10 +84,10 @@
           }
         }
         const expected = [
-          [0xe6, 0x9f, 0x00],
-          [0x56, 0xb4, 0xe9],
-          [0x00, 0x9e, 0x73],
           [0x00, 0x72, 0xb2],
+          [0xd5, 0x5e, 0x00],
+          [0xcc, 0x79, 0xa7],
+          [0x00, 0x9e, 0x73],
           [0x99, 0x99, 0x99],
         ];
         const dictCounts = expected.map(([r, g, b]) => {

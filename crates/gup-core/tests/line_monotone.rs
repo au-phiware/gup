@@ -13,7 +13,7 @@ use common::svg_marks;
 use common::vr::{harness, layout_metadata, rgba8};
 use gup_core::geom::Point as Pt;
 use gup_core::prelude::*;
-use gup_core::{ImageTarget, OKABE_ITO, RowId, SvgTarget, VectorTarget};
+use gup_core::{ImageTarget, OKABE_ITO_DISTINCT, RowId, SvgTarget, VectorTarget};
 use gup_visual_regression::RgbaImage;
 
 type Row = (f64, f64);
@@ -914,7 +914,7 @@ fn line_monotone_golden() {
     let cx = Context::new_blocking().unwrap();
     let (w, h) = (640u32, 400u32);
     let rows = monthly();
-    let blue = OKABE_ITO[3];
+    let blue = OKABE_ITO_DISTINCT[0];
     let light = Color { a: 0.35, ..blue };
     let mut plot = Plot::new();
     plot.title("Monotone curve").legends(false);

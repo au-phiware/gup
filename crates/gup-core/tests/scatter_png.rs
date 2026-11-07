@@ -158,7 +158,7 @@ fn marks(resolved: &gup_core::Resolved) -> &gup_core::scene::MarkBatch {
 #[test]
 fn categorical_scatter_with_nulls() {
     use common::continents::{self, HEIGHT, Place, RADIUS, WIDTH};
-    use gup_core::{NULL_COLOR, OKABE_ITO};
+    use gup_core::{NULL_COLOR, OKABE_ITO_DISTINCT};
 
     let cx = Context::new_blocking().expect("headless GPU context");
     let rows = continents::places();
@@ -234,7 +234,7 @@ fn categorical_scatter_with_nulls() {
 
     // AC2, AC4: each point's centre in its category's colour.
     let palette = |code: Option<u32>| match code {
-        Some(c) => OKABE_ITO[c as usize % OKABE_ITO.len()],
+        Some(c) => OKABE_ITO_DISTINCT[c as usize % OKABE_ITO_DISTINCT.len()],
         None => NULL_COLOR,
     };
     let codes = continents::codes(&nulls);
@@ -267,7 +267,7 @@ fn categorical_scatter_with_nulls() {
     assert!(checked.iter().all(|&n| n >= 2), "{checked:?}");
 
     let mut meta = layout_metadata(&layout);
-    for (k, c) in OKABE_ITO.iter().take(5).enumerate() {
+    for (k, c) in OKABE_ITO_DISTINCT.iter().take(5).enumerate() {
         meta = meta.with_expected_color(format!("code {k}"), rgba8(*c));
     }
     meta = meta.with_expected_color("null", rgba8(NULL_COLOR));

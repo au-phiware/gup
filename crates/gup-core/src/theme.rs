@@ -5,7 +5,7 @@
 //! styles itself with (RFC-001 S7).
 
 use crate::channel::{Color, Px};
-use crate::scale::{HIGH_CONTRAST, NULL_COLOR, OKABE_ITO, OKABE_ITO_DARK};
+use crate::scale::{HIGH_CONTRAST, NULL_COLOR, OKABE_ITO_DISTINCT, OKABE_ITO_DISTINCT_DARK};
 
 /// How rows outside a brush are drawn while one exists.
 ///
@@ -148,7 +148,7 @@ impl Default for Theme {
             },
             brush_stroke: Color::hex(0x4477aa),
             unbrushed: Unbrushed::default(),
-            palette: OKABE_ITO,
+            palette: OKABE_ITO_DISTINCT,
         }
     }
 }
@@ -166,7 +166,7 @@ impl Theme {
     /// palette colour 3:1.
     ///
     /// The default categorical palette follows the theme
-    /// ([`OKABE_ITO_DARK`]: Okabe-Ito with black replaced by a light
+    /// ([`OKABE_ITO_DISTINCT_DARK`]: Okabe-Ito with black replaced by a light
     /// grey), and colours generated past eight keys are chosen against the
     /// dark background.
     ///
@@ -204,7 +204,7 @@ impl Theme {
             brush_fill: Color { a: 0.2, ..blue },
             brush_stroke: blue,
             unbrushed: Unbrushed::Fade(0.3),
-            palette: OKABE_ITO_DARK,
+            palette: OKABE_ITO_DISTINCT_DARK,
             ..Self::default()
         }
     }
@@ -267,6 +267,7 @@ impl Theme {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::scale::OKABE_ITO;
 
     /// WCAG 2 relative luminance of an sRGB colour.
     fn luminance(c: Color) -> f64 {
@@ -290,7 +291,7 @@ mod tests {
     #[test]
     fn light_is_the_default() {
         assert_eq!(Theme::light(), Theme::default());
-        assert_eq!(Theme::default().palette, OKABE_ITO);
+        assert_eq!(Theme::default().palette, OKABE_ITO_DISTINCT);
     }
 
     /// AC1: the dark theme's contrast ratios (GUP-553).
@@ -390,6 +391,11 @@ mod tests {
         [0.114503, 0.786281, 0.099216],
         [-0.003882, -0.048116, 1.051998],
     ];
+    const TRITANOPIA: [[f64; 3]; 3] = [
+        [1.255528, -0.076749, -0.178779],
+        [-0.078411, 0.930809, 0.147602],
+        [0.004733, 0.691367, 0.303900],
+    ];
     const IDENTITY: [[f64; 3]; 3] = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
 
     /// AC1: `HIGH_CONTRAST`, each colour 3:1 on white and every pair at
@@ -425,12 +431,134 @@ mod tests {
         assert!(weakest.0 >= 12.0, "weakest pair {weakest:?}");
     }
 
-    /// The light palette is the old one; only the last colour differs.
+    const VIEWS: [(&str, &[[f64; 3]; 3]); 4] = [
+        ("normal", &IDENTITY),
+        ("deuteranopia", &DEUTERANOPIA),
+        ("protanopia", &PROTANOPIA),
+        ("tritanopia", &TRITANOPIA),
+    ];
+
+    /// The smallest CIEDE2000 between any two of `colors` in `view`.
+    fn min_delta_e(colors: &[Color], view: &[[f64; 3]; 3]) -> f64 {
+        use gup_visual_regression::color::{delta_e_2000, srgb_to_lab};
+        let labs: Vec<_> = colors
+            .iter()
+            .map(|c| srgb_to_lab(simulate(*c, view)))
+            .collect();
+        let mut min = f64::MAX;
+        for (i, a) in labs.iter().enumerate() {
+            for b in &labs[i + 1..] {
+                min = min.min(delta_e_2000(*a, *b));
+            }
+        }
+        min
+    }
+
+    /// The worst view's minimum ΔE00 over the first `n` colours.
+    fn floor(colors: &[Color], n: usize) -> f64 {
+        VIEWS
+            .iter()
+            .map(|(_, m)| min_delta_e(&colors[..n], m))
+            .fold(f64::MAX, f64::min)
+    }
+
+    /// Every ordering the hue-family rule allows: `#0072B2` first, then one
+    /// of orange or vermillion, bluish green and reddish purple in any order
+    /// (positions 2-4), then the remaining two (sky blue and the other
+    /// orange) in either order, then yellow and black.
+    fn family_orders() -> Vec<[Color; 8]> {
+        let [orange, sky, green, blue, vermillion, purple, yellow, black] = OKABE_ITO;
+        let mut out = Vec::new();
+        for (warm, other) in [(orange, vermillion), (vermillion, orange)] {
+            for mid in [
+                [warm, green, purple],
+                [warm, purple, green],
+                [green, warm, purple],
+                [green, purple, warm],
+                [purple, warm, green],
+                [purple, green, warm],
+            ] {
+                for tail in [[sky, other], [other, sky]] {
+                    out.push([
+                        blue, mid[0], mid[1], mid[2], tail[0], tail[1], yellow, black,
+                    ]);
+                }
+            }
+        }
+        out
+    }
+
+    /// GUP-658: the first four of `OKABE_ITO_DISTINCT` are four hue families
+    /// (blue, orange, green, purple), blue first; the order is the argmax of
+    /// the worst-view floor of `[..4]`, then `[..5]`, then `[..3]`, among the
+    /// orders the family rule allows; and every floor is at least 10. The
+    /// measured comparison (min pairwise ΔE00 per view, Machado 2009
+    /// severity 1) is printed by this test and recorded in the story.
+    #[test]
+    fn distinct_order_is_the_family_argmax() {
+        let key = |p: &[Color]| (floor(p, 4), floor(p, 5), floor(p, 3));
+        let better = |a: (f64, f64, f64), b: (f64, f64, f64)| {
+            a.0 > b.0 + 1e-9
+                || (a.0 - b.0).abs() <= 1e-9
+                    && (a.1 > b.1 + 1e-9 || (a.1 - b.1).abs() <= 1e-9 && a.2 > b.2 + 1e-9)
+        };
+        let mut best = family_orders()[0];
+        for o in family_orders() {
+            if better(key(&o), key(&best)) {
+                best = o;
+            }
+        }
+        assert_eq!(best, OKABE_ITO_DISTINCT, "the const is not the argmax");
+
+        // (a) four families, blue first.
+        let family = |c: Color| match c {
+            c if c == OKABE_ITO[3] || c == OKABE_ITO[1] => 0,
+            c if c == OKABE_ITO[0] || c == OKABE_ITO[4] => 1,
+            c if c == OKABE_ITO[2] => 2,
+            _ => 3,
+        };
+        let mut seen: Vec<_> = OKABE_ITO_DISTINCT[..4].iter().map(|c| family(*c)).collect();
+        seen.sort_unstable();
+        assert_eq!(seen, [0, 1, 2, 3]);
+        assert_eq!(OKABE_ITO_DISTINCT[0], OKABE_ITO[3]);
+
+        // (b) floors.
+        for (name, p) in [
+            ("distinct", &OKABE_ITO_DISTINCT),
+            ("published", &OKABE_ITO),
+            ("high contrast", &HIGH_CONTRAST),
+        ] {
+            for n in [3, 4, 5] {
+                let row: Vec<String> = VIEWS
+                    .iter()
+                    .map(|(v, m)| format!("{v} {:.2}", min_delta_e(&p[..n], m)))
+                    .collect();
+                eprintln!("TABLE {name}[..{n}]: {}", row.join(", "));
+            }
+        }
+        assert!(floor(&OKABE_ITO_DISTINCT, 4) >= 10.0);
+        assert!(floor(&OKABE_ITO_DISTINCT, 5) >= 10.0);
+    }
+
+    /// The dark palette is the light one with the two blues swapped and black lightened.
     #[test]
     fn dark_palette_replaces_only_black() {
-        assert_eq!(OKABE_ITO_DARK[..7], OKABE_ITO[..7]);
-        assert_eq!(OKABE_ITO_DARK[7], Color::hex(0xe8e8e8));
-        assert_eq!(Theme::dark().palette, OKABE_ITO_DARK);
+        // The light order with the two blues swapped and black lightened.
+        let mut want = OKABE_ITO_DISTINCT;
+        want.swap(0, 4);
+        want[7] = Color::hex(0xe8e8e8);
+        assert_eq!(OKABE_ITO_DISTINCT_DARK, want);
+        assert!(contrast(OKABE_ITO_DISTINCT_DARK[0], Theme::dark().background) >= 4.5);
+        for n in [3, 4, 5] {
+            let row: Vec<String> = VIEWS
+                .iter()
+                .map(|(v, m)| format!("{v} {:.2}", min_delta_e(&OKABE_ITO_DISTINCT_DARK[..n], m)))
+                .collect();
+            eprintln!("TABLE dark[..{n}]: {}", row.join(", "));
+        }
+        assert!(floor(&OKABE_ITO_DISTINCT_DARK, 4) >= 10.0);
+        assert!(floor(&OKABE_ITO_DISTINCT_DARK, 5) >= 10.0);
+        assert_eq!(Theme::dark().palette, OKABE_ITO_DISTINCT_DARK);
     }
 
     /// The defaults are the values `plot.rs` hard-coded before themes.
