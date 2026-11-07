@@ -93,6 +93,9 @@ struct Evaluated {
     measured: Option<Measured>,
 }
 
+/// A label's ink box and baseline origin at `(0, 0)`; `None` with no ink.
+type Ink = Option<(Bounds, [f32; 2])>;
+
 /// Each label's ink box with its anchor at `(0, 0)`, at one font size: the
 /// box, and the baseline origin before rounding. `None` for a label with no
 /// ink. Where the label really is, the box is this one shifted by whole
@@ -103,7 +106,21 @@ struct Measured {
     /// `TextSystem::generation` when measured: a new fallback font changes
     /// the boxes.
     fonts: u64,
-    boxes: Vec<Option<(Bounds, [f32; 2])>>,
+    boxes: Vec<Ink>,
+    /// The same, per fallback candidate, in order; empty unless the layer
+    /// hides overlaps.
+    alt: Vec<Vec<Ink>>,
+}
+
+impl Measured {
+    /// The boxes of candidate `c` (0 the layer's own).
+    fn candidate(&self, c: usize) -> &[Ink] {
+        if c == 0 {
+            &self.boxes
+        } else {
+            &self.alt[c - 1]
+        }
+    }
 }
 
 /// The ink box of a label at `at`, from its box and origin at `(0, 0)`.
@@ -146,6 +163,8 @@ pub struct TextLayer<T> {
     halo: f32,
     /// Whether a label overlapping one kept before it is dropped.
     hide_overlaps: bool,
+    /// Candidates tried, in order, after the layer's own anchor and offsets.
+    fallbacks: Vec<(Anchor, f32, f32)>,
     /// Bumped by every setter; part of the plot's revision sum.
     revision: u64,
     /// The closures' results, until a setter clears them.
@@ -171,9 +190,20 @@ impl<T: Send + Sync + 'static> TextLayer<T> {
             z: Z_AXES - 1,
             halo: 0.0,
             hide_overlaps: false,
+            fallbacks: Vec::new(),
             revision: 0,
             evaluated: None,
         }
+    }
+
+    /// The positions a label may take, the first being the layer's own:
+    /// `(anchor, dx, dy)`. The fallbacks count only when overlaps are hidden.
+    fn candidates(&self) -> Vec<(Anchor, f32, f32)> {
+        let mut c = vec![(self.anchor, self.dx.get(), self.dy.get())];
+        if self.hide_overlaps {
+            c.extend(self.fallbacks.iter().copied());
+        }
+        c
     }
 
     /// Count a change: the next resolve evaluates the rows again.
@@ -448,6 +478,59 @@ impl<T: Send + Sync + 'static> TextLayer<T> {
         self.changed()
     }
 
+    /// Where a label goes when [`hide_overlaps`](Self::hide_overlaps) finds
+    /// its box taken: a ranked list of `(anchor, dx, dy)` candidates, tried
+    /// in order after the layer's own [`anchor`](Self::anchor) with its
+    /// offsets, which stays the first choice. Each fallback has its own
+    /// anchor and its own constant offsets in logical pixels (they replace
+    /// the layer's [`dx`](Self::dx) and [`dy`](Self::dy), including their
+    /// `_with` forms). A label takes the first candidate that is drawn and
+    /// overlaps no kept box, and is hidden only if none fits; the choice
+    /// depends on row order, then candidate order, so it is deterministic.
+    /// Without `hide_overlaps(true)` the fallbacks are ignored. Edge room
+    /// for the axes covers every candidate's reach. Replaces any earlier
+    /// list; an empty list (the default) tries the one position.
+    ///
+    /// ```
+    /// use gup_core::prelude::*;
+    /// use gup_core::scene::TextRole;
+    ///
+    /// // Two points on top of each other: the second label goes below.
+    /// let rows = vec![(5.0, 5.0), (5.0, 5.0)];
+    /// let cx = Context::new_blocking()?;
+    /// let mut plot = Plot::new();
+    /// plot.x(Linear::new().domain(0.0, 10.0));
+    /// plot.y(Linear::new().domain(0.0, 10.0));
+    /// plot.circles(rows.clone())
+    ///     .x(|r: &(f64, f64)| r.0)
+    ///     .y(|r: &(f64, f64)| r.1);
+    /// plot.text(rows)
+    ///     .x(|r: &(f64, f64)| r.0)
+    ///     .y(|r: &(f64, f64)| r.1)
+    ///     .text(|r: &(f64, f64)| format!("{:.1}", r.0))
+    ///     .anchor(Anchor::BOTTOM)
+    ///     .dy(-4.0)
+    ///     .fallbacks([(Anchor::TOP, 0.0, 4.0)])
+    ///     .hide_overlaps(true);
+    /// let layout = plot.resolve(&cx, 480.0, 300.0)?.layout.clone();
+    /// let ys: Vec<f32> = layout
+    ///     .texts
+    ///     .iter()
+    ///     .filter(|t| t.run.role == TextRole::Annotation)
+    ///     .map(|t| t.run.at.y)
+    ///     .collect();
+    /// assert_eq!(ys.len(), 2);
+    /// assert!(ys[0] < ys[1]);
+    /// # Ok::<(), gup_core::Error>(())
+    /// ```
+    pub fn fallbacks(
+        &mut self,
+        candidates: impl IntoIterator<Item = (Anchor, f32, f32)>,
+    ) -> &mut Self {
+        self.fallbacks = candidates.into_iter().collect();
+        self.changed()
+    }
+
     /// How many rows (labels) the layer has.
     pub fn len(&self) -> usize {
         self.rows.len()
@@ -493,6 +576,11 @@ impl<T: Send + Sync + 'static> TextLayer<T> {
         }
         let size = self.size.unwrap_or(theme.tick_size.0);
         let (anchor, weight) = (self.anchor, self.weight);
+        let alts: Vec<Anchor> = if self.hide_overlaps {
+            self.fallbacks.iter().map(|f| f.0).collect()
+        } else {
+            Vec::new()
+        };
         let ev = self.evaluated.as_mut().expect("evaluated above");
         if ev
             .measured
@@ -500,29 +588,33 @@ impl<T: Send + Sync + 'static> TextLayer<T> {
             .is_none_or(|m| m.size != size || m.fonts != text.generation())
         {
             let font = text.font_weight(weight);
-            let boxes = ev
-                .text
-                .iter()
-                .map(|s| {
-                    if s.is_empty() {
-                        return None;
-                    }
-                    let run = gup_text::Run {
-                        text: s,
-                        size,
-                        at: [0.0, 0.0],
-                        anchor,
-                        weight,
-                        features: gup_text::Features::default(),
-                    };
-                    let b = font.ink_bounds(&run);
-                    (b.width > 0.0 && b.height > 0.0).then(|| (b, font.baseline_origin(&run)))
-                })
-                .collect();
+            let measure = |anchor: Anchor| -> Vec<Ink> {
+                ev.text
+                    .iter()
+                    .map(|s| {
+                        if s.is_empty() {
+                            return None;
+                        }
+                        let run = gup_text::Run {
+                            text: s,
+                            size,
+                            at: [0.0, 0.0],
+                            anchor,
+                            weight,
+                            features: gup_text::Features::default(),
+                        };
+                        let b = font.ink_bounds(&run);
+                        (b.width > 0.0 && b.height > 0.0).then(|| (b, font.baseline_origin(&run)))
+                    })
+                    .collect()
+            };
+            let boxes = measure(anchor);
+            let alt = alts.into_iter().map(measure).collect();
             ev.measured = Some(Measured {
                 size,
                 fonts: text.generation(),
                 boxes,
+                alt,
             });
         }
         true
@@ -592,9 +684,8 @@ struct Kept {
     cell: f32,
     cols: usize,
     rows: usize,
-    /// Per cell, indices into `boxes`.
-    cells: Vec<Vec<u32>>,
-    boxes: Vec<Rect>,
+    /// Per cell, the kept boxes that touch it.
+    cells: Vec<Vec<Rect>>,
 }
 
 impl Kept {
@@ -610,7 +701,6 @@ impl Kept {
             cols,
             rows,
             cells: vec![Vec::new(); cols * rows],
-            boxes: Vec::new(),
         }
     }
 
@@ -623,28 +713,26 @@ impl Kept {
         (col(b.left()), col(b.right()), row(b.top()), row(b.bottom()))
     }
 
-    /// Keep `b` and return `true` if it overlaps no kept box (shares no
-    /// area with one); otherwise `false`.
-    fn insert(&mut self, b: Rect) -> bool {
+    /// Whether `b` shares area with a kept box.
+    fn overlaps(&self, b: Rect) -> bool {
+        let (x0, x1, y0, y1) = self.span(b);
+        (y0..=y1).any(|y| {
+            (x0..=x1).any(|x| {
+                self.cells[y * self.cols + x]
+                    .iter()
+                    .any(|&k| intersect(k, b).is_some())
+            })
+        })
+    }
+
+    /// Keep `b`, which overlaps no kept box.
+    fn push(&mut self, b: Rect) {
         let (x0, x1, y0, y1) = self.span(b);
         for y in y0..=y1 {
             for x in x0..=x1 {
-                if self.cells[y * self.cols + x]
-                    .iter()
-                    .any(|&k| intersect(self.boxes[k as usize], b).is_some())
-                {
-                    return false;
-                }
+                self.cells[y * self.cols + x].push(b);
             }
         }
-        let k = self.boxes.len() as u32;
-        self.boxes.push(b);
-        for y in y0..=y1 {
-            for x in x0..=x1 {
-                self.cells[y * self.cols + x].push(k);
-            }
-        }
-        true
     }
 }
 
@@ -730,7 +818,6 @@ impl<T: Send + Sync + 'static> AnnotationLayer for TextLayer<T> {
         }
         let ev = self.evaluated.as_ref().expect("prepared above");
         let measured = ev.measured.as_ref().expect("prepared above");
-        let (dx, dy) = (self.dx.get(), self.dy.get());
         let size = self.size.unwrap_or(theme.tick_size.0);
         let reach = plot.inflate(4.0 * size);
         let color = match &self.color {
@@ -741,63 +828,67 @@ impl<T: Send + Sync + 'static> AnnotationLayer for TextLayer<T> {
         let mut kept = self
             .hide_overlaps
             .then(|| Kept::new(plot.inflate(self.halo), 4.0 * size));
+        let cands = self.candidates();
         let mut out = Vec::new();
         for (i, s) in ev.text.iter().enumerate() {
             if s.is_empty() {
                 continue;
             }
-            let at = Point::new(
-                (pixel(&ev.x, i, x) as f32) + dx,
-                (pixel(&ev.y, i, y) as f32) + dy,
-            );
-            if !(at.x.is_finite() && at.y.is_finite())
-                || at.x < reach.left()
-                || at.x > reach.right()
-                || at.y < reach.top()
-                || at.y > reach.bottom()
-            {
-                continue;
+            let (px, py) = (pixel(&ev.x, i, x) as f32, pixel(&ev.y, i, y) as f32);
+            for (c, &(anchor, dx, dy)) in cands.iter().enumerate() {
+                let at = Point::new(px + dx, py + dy);
+                if !(at.x.is_finite() && at.y.is_finite())
+                    || at.x < reach.left()
+                    || at.x > reach.right()
+                    || at.y < reach.top()
+                    || at.y > reach.bottom()
+                {
+                    continue;
+                }
+                let Some((box0, off)) = measured.candidate(c)[i] else {
+                    continue;
+                };
+                let ink = shift(box0, off, at);
+                if let (Some(spans), Coords::Values(_)) = (&ev.within_x, &ev.x)
+                    && !fits(ink.width, spans[i], x)
+                {
+                    continue;
+                }
+                if let (Some(spans), Coords::Values(_)) = (&ev.within_y, &ev.y)
+                    && !fits(ink.height, spans[i], y)
+                {
+                    continue;
+                }
+                let Some(bounds) = intersect(ink.into(), plot) else {
+                    continue;
+                };
+                if let Some(kept) = &mut kept {
+                    let b = bounds.inflate(self.halo);
+                    if kept.overlaps(b) {
+                        continue;
+                    }
+                    kept.push(b);
+                }
+                let run = TextRun {
+                    text: Arc::clone(s),
+                    at,
+                    anchor,
+                    style: TextStyle {
+                        size: Px(size),
+                        color: color
+                            .or_else(|| ev.color.as_ref().map(|c| c[i]))
+                            .unwrap_or(theme.label),
+                        weight: self.weight,
+                        halo: halo.map(|width| Halo {
+                            width,
+                            color: theme.background,
+                        }),
+                    },
+                    role: TextRole::Annotation,
+                };
+                out.push(PlacedText { run, bounds });
+                break;
             }
-            let run = TextRun {
-                text: Arc::clone(s),
-                at,
-                anchor: self.anchor,
-                style: TextStyle {
-                    size: Px(size),
-                    color: color
-                        .or_else(|| ev.color.as_ref().map(|c| c[i]))
-                        .unwrap_or(theme.label),
-                    weight: self.weight,
-                    halo: halo.map(|width| Halo {
-                        width,
-                        color: theme.background,
-                    }),
-                },
-                role: TextRole::Annotation,
-            };
-            let Some((box0, off)) = measured.boxes[i] else {
-                continue;
-            };
-            let ink = shift(box0, off, at);
-            if let (Some(spans), Coords::Values(_)) = (&ev.within_x, &ev.x)
-                && !fits(ink.width, spans[i], x)
-            {
-                continue;
-            }
-            if let (Some(spans), Coords::Values(_)) = (&ev.within_y, &ev.y)
-                && !fits(ink.height, spans[i], y)
-            {
-                continue;
-            }
-            let Some(bounds) = intersect(ink.into(), plot) else {
-                continue;
-            };
-            if let Some(kept) = &mut kept
-                && !kept.insert(bounds.inflate(self.halo))
-            {
-                continue;
-            }
-            out.push(PlacedText { run, bounds });
         }
         Ok(out)
     }
@@ -808,17 +899,19 @@ impl<T: Send + Sync + 'static> AnnotationLayer for TextLayer<T> {
         }
         let ev = self.evaluated.as_ref().expect("prepared above");
         let measured = ev.measured.as_ref().expect("prepared above");
-        let (dx, dy) = (self.dx.get(), self.dy.get());
+        let cands = self.candidates();
         let keyed = [
             self.x.as_ref().is_none_or(Position::is_key),
             self.y.as_ref().is_none_or(Position::is_key),
         ];
         let mut reach = [0.0f32; 2];
-        for (b, off) in measured.boxes.iter().flatten() {
-            let [(xn, xf), (yn, yf)] = extents(b, off, dx, dy);
-            for (i, e) in [xn.max(xf), yn.max(yf)].into_iter().enumerate() {
-                if !keyed[i] && e > reach[i] {
-                    reach[i] = e;
+        for (c, &(_, dx, dy)) in cands.iter().enumerate() {
+            for (b, off) in measured.candidate(c).iter().flatten() {
+                let [(xn, xf), (yn, yf)] = extents(b, off, dx, dy);
+                for (i, e) in [xn.max(xf), yn.max(yf)].into_iter().enumerate() {
+                    if !keyed[i] && e > reach[i] {
+                        reach[i] = e;
+                    }
                 }
             }
         }
@@ -836,16 +929,23 @@ impl<T: Send + Sync + 'static> AnnotationLayer for TextLayer<T> {
             return;
         };
         let ev = self.evaluated.as_ref().expect("measured implies evaluated");
-        let (dx, dy) = (self.dx.get(), self.dy.get());
+        let cands = self.candidates();
         let scales = [x, y];
         let coords = [&ev.x, &ev.y];
-        for (i, (b, off)) in measured
-            .boxes
-            .iter()
-            .enumerate()
-            .filter_map(|(i, b)| b.as_ref().map(|b| (i, b)))
-        {
-            let ext = extents(b, off, dx, dy);
+        for i in 0..ev.text.len() {
+            // One edge per label: the most it reaches at any candidate.
+            let mut ext: Option<[(f32, f32); 2]> = None;
+            for (c, &(_, dx, dy)) in cands.iter().enumerate() {
+                let Some((b, off)) = &measured.candidate(c)[i] else {
+                    continue;
+                };
+                let e = extents(b, off, dx, dy);
+                ext = Some(match ext {
+                    None => e,
+                    Some(m) => [0, 1].map(|a| (m[a].0.max(e[a].0), m[a].1.max(e[a].1))),
+                });
+            }
+            let Some(ext) = ext else { continue };
             for a in 0..2 {
                 let (Some(axis), Coords::Values(v)) = (axes[a], coords[a]) else {
                     continue;

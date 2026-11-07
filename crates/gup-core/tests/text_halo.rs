@@ -336,3 +336,197 @@ fn text_halo_golden() {
         .assert_ok();
     svg_marks::assert_matches("gup_core/text_halo", &resolved.scene, &vr, &meta);
 }
+
+// GUP-611: a label that collides tries other anchors before it is hidden.
+
+/// The fallbacks the tests use: right of the point, left of it, below it.
+const FALLBACKS: [(Anchor, f32, f32); 3] = [
+    (Anchor::LEFT, 5.0, 0.0),
+    (Anchor::RIGHT, -5.0, 0.0),
+    (Anchor::TOP, 0.0, 5.0),
+];
+
+/// The scatter test's halo (the cost test's scatter has none).
+const HALO: f32 = 0.0;
+
+fn overlap(a: &PlacedText, b: &PlacedText, halo: f32) -> bool {
+    let (a, b) = (a.bounds.inflate(halo), b.bounds.inflate(halo));
+    a.left() < b.right() && b.left() < a.right() && a.top() < b.bottom() && b.top() < a.bottom()
+}
+
+/// The 1,000-point scatter of `labelled_scatter` with 2 px halos, culled,
+/// with `fallbacks` (and culling off if `hide` is false).
+fn placed_scatter(rows: &[(f64, f64)], fallbacks: &[(Anchor, f32, f32)], hide: bool) -> Plot {
+    let mut plot = Plot::new();
+    plot.legends(false);
+    plot.circles(rows.to_vec())
+        .x(|r: &(f64, f64)| r.0)
+        .y(|r: &(f64, f64)| r.1);
+    plot.text(rows.to_vec())
+        .x(|r: &(f64, f64)| r.0)
+        .y(|r: &(f64, f64)| r.1)
+        .text(|r: &(f64, f64)| format!("{:.1}", r.0))
+        .anchor(Anchor::BOTTOM)
+        .dy(-4.0)
+        .halo(Px(HALO))
+        .fallbacks(fallbacks.iter().copied())
+        .hide_overlaps(hide);
+    plot
+}
+
+/// With no fallbacks (or with culling off) the output is today's, byte for
+/// byte; with fallbacks no two kept boxes overlap, more labels are kept,
+/// and the result is the same on every resolve.
+#[test]
+fn fallbacks_keep_more_labels_and_none_overlap() {
+    let cx = Context::new_blocking().unwrap();
+    let rows = scatter(1000);
+    let halo = HALO;
+    let resolve = |plot: &mut Plot| plot.resolve(&cx, 800.0, 600.0).unwrap().layout.clone();
+    // No fallbacks: the layer `labelled_scatter` builds, as before.
+    let base = resolve(&mut placed_scatter(&rows, &[], true));
+    let single = resolve(&mut labelled_scatter(&rows, halo, true));
+    assert_eq!(labels(&base), labels(&single));
+    // Culling off: the fallbacks are ignored.
+    let all = resolve(&mut placed_scatter(&rows, &[], false));
+    let ignored = resolve(&mut placed_scatter(&rows, &FALLBACKS, false));
+    assert_eq!(labels(&all), labels(&ignored));
+
+    let placed = resolve(&mut placed_scatter(&rows, &FALLBACKS, true));
+    let (base, placed) = (labels(&base), labels(&placed));
+    println!("kept {} then {} with fallbacks", base.len(), placed.len());
+    assert!(placed.len() > base.len() * 11 / 10);
+    for (i, a) in placed.iter().enumerate() {
+        for b in &placed[..i] {
+            assert!(!overlap(a, b, halo), "{a:?} overlaps {b:?}");
+        }
+    }
+    // Some labels sit at a fallback, and only at the listed anchors.
+    assert!(placed.iter().any(|t| t.run.anchor != Anchor::BOTTOM));
+    for t in &placed {
+        let a = t.run.anchor;
+        assert!(a == Anchor::BOTTOM || FALLBACKS.iter().any(|f| f.0 == a));
+    }
+    // Deterministic.
+    let again = resolve(&mut placed_scatter(&rows, &FALLBACKS, true));
+    assert_eq!(placed, labels(&again));
+}
+
+/// Two labels on one point: the second, hidden at the layer's anchor, is
+/// kept at the first fallback that fits (right of the point before below
+/// it).
+#[test]
+fn a_hidden_label_is_kept_at_its_second_candidate() {
+    let cx = Context::new_blocking().unwrap();
+    let rows = vec![(5.0, 5.0), (5.0, 5.0)];
+    let make = |fallbacks: &[(Anchor, f32, f32)]| {
+        let mut plot = Plot::new();
+        plot.x(Linear::new().domain(0.0, 10.0));
+        plot.y(Linear::new().domain(0.0, 10.0));
+        plot.circles(vec![(5.0, 5.0)])
+            .x(|r: &(f64, f64)| r.0)
+            .y(|r: &(f64, f64)| r.1);
+        plot.text(rows.clone())
+            .x(|r: &(f64, f64)| r.0)
+            .y(|r: &(f64, f64)| r.1)
+            .text(|r: &(f64, f64)| format!("{:.1}", r.0))
+            .anchor(Anchor::BOTTOM)
+            .dy(-4.0)
+            .fallbacks(fallbacks.iter().copied())
+            .hide_overlaps(true);
+        plot
+    };
+    let hidden = make(&[]).resolve(&cx, 480.0, 320.0).unwrap().layout.clone();
+    assert_eq!(labels(&hidden).len(), 1);
+    let placed = make(&FALLBACKS)
+        .resolve(&cx, 480.0, 320.0)
+        .unwrap()
+        .layout
+        .clone();
+    let l = labels(&placed);
+    assert_eq!(l.len(), 2);
+    assert_eq!(
+        (l[0].run.anchor, l[1].run.anchor),
+        (Anchor::BOTTOM, Anchor::LEFT)
+    );
+    assert_eq!(l[0].run.at.x + 5.0, l[1].run.at.x);
+    assert!(!overlap(l[0], l[1], 0.0));
+}
+
+/// Edge room covers every candidate's reach: a fallback that reaches past
+/// the plot edge insets the axis, and only when culling uses it.
+#[test]
+fn edge_room_covers_every_candidate() {
+    let cx = Context::new_blocking().unwrap();
+    let make = |fallbacks: &[(Anchor, f32, f32)], hide: bool| {
+        let mut plot = Plot::new();
+        let x = plot.x(Linear::new().domain(0.0, 10.0));
+        plot.y(Linear::new().domain(0.0, 10.0));
+        plot.circles(vec![(5.0, 5.0)])
+            .x(|r: &(f64, f64)| r.0)
+            .y(|r: &(f64, f64)| r.1);
+        plot.text(vec![(10.0, 5.0)])
+            .x(|r: &(f64, f64)| r.0)
+            .y(|r: &(f64, f64)| r.1)
+            .text(|_: &(f64, f64)| "label")
+            .anchor(Anchor::BOTTOM)
+            .dy(-4.0)
+            .fallbacks(fallbacks.iter().copied())
+            .hide_overlaps(hide);
+        (plot, x)
+    };
+    let edge = |(mut plot, x): (Plot, ScaleRef<Linear>)| {
+        plot.resolve(&cx, 480.0, 320.0).unwrap();
+
+        x.read().eval(10.0)
+    };
+    let far = [(Anchor::LEFT, 40.0, 0.0)];
+    let base = edge(make(&[], true));
+    let with = edge(make(&far, true));
+    assert!(with < base - 20.0, "{base} then {with}");
+    assert_eq!(base, edge(make(&far, false)));
+}
+
+/// The `gup_core/text_fallbacks` golden: the `text_halo` scatter with
+/// fallbacks, so labels the single anchor hid sit beside or below their
+/// points.
+#[test]
+fn text_fallbacks_golden() {
+    let cx = Context::new_blocking().unwrap();
+    let (w, h) = (640u32, 400u32);
+    let rows = scatter(300);
+    let mut plot = Plot::new();
+    plot.legends(false);
+    plot.title("Labels try other anchors before they hide");
+    plot.x(Linear::new().domain(0.0, 100.0));
+    plot.y(Linear::new().domain(0.0, 100.0));
+    plot.circles(rows.clone())
+        .x(|r: &(f64, f64)| r.0)
+        .y(|r: &(f64, f64)| r.1)
+        .radius(Px(4.0));
+    plot.text(rows)
+        .x(|r: &(f64, f64)| r.0)
+        .y(|r: &(f64, f64)| r.1)
+        .text(|r: &(f64, f64)| format!("{:.1}", r.1))
+        .anchor(Anchor::BOTTOM)
+        .dy(-6.0)
+        .fallbacks([
+            (Anchor::LEFT, 7.0, 0.0),
+            (Anchor::RIGHT, -7.0, 0.0),
+            (Anchor::TOP, 0.0, 7.0),
+        ])
+        .halo(Px(2.0))
+        .hide_overlaps(true);
+    let resolved = plot.resolve(&cx, w as f32, h as f32).unwrap().clone();
+    println!("golden kept {}", labels(&resolved.layout).len());
+    let image = ImageTarget::new(&cx, w, h)
+        .unwrap()
+        .render_blocking(&cx, &resolved.scene)
+        .unwrap();
+    let vr = RgbaImage::new(image.width(), image.height(), image.as_raw().clone()).unwrap();
+    let meta = layout_metadata(&resolved.layout);
+    harness()
+        .run("gup_core/text_fallbacks", Ok((vr.clone(), meta.clone())))
+        .assert_ok();
+    svg_marks::assert_matches("gup_core/text_fallbacks", &resolved.scene, &vr, &meta);
+}

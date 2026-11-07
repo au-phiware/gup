@@ -29,9 +29,23 @@ it reuses GUP-527's grid of kept boxes (`Kept` in `text_layer.rs`).
 > collides above its point to try beside or below it before it is hidden, so
 > that more points keep their labels."
 
+## Decisions
+
+- The setter is
+  `TextLayer::fallbacks(impl IntoIterator<Item = (Anchor, f32, f32)>)`. The
+  layer's own `anchor` with `dx`/`dy` (including `dx_with`, `dy_with`) stays the
+  first candidate; each fallback is tried in order with its own anchor and
+  constant px offsets replacing the layer's. With no fallbacks the output equals
+  today's byte for byte. With `hide_overlaps(false)` the fallbacks are ignored
+  (not measured, not counted in edge room).
+- A candidate is viable if it is drawn at all (finite, in reach, has ink, fits
+  its `within` span, meets the plot rect) and overlaps no kept box.
+- Edge room takes, per label, the largest reach over all candidates (one edge
+  per label, not one per candidate).
+
 ## Acceptance Criteria
 
-- [ ] A setter on `TextLayer` (name decided and recorded in the story's
+- [x] A setter on `TextLayer` (name decided and recorded in the story's
       Decisions, e.g. `.placements([..])`) takes a ranked list of
       `(Anchor, dx, dy)` candidates. With `hide_overlaps(true)`, each label
       takes the first candidate whose box overlaps no kept box, and is hidden
