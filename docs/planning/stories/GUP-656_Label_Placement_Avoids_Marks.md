@@ -15,8 +15,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (polish before 0.1) **Status**: 📋
-Ready **Created**: 2026-11-07
+**Initiative**: Strategic Review 2026-11 (polish before 0.1) **Status**: 🚧 In
+Progress **Created**: 2026-11-07
 
 ## Context
 
