@@ -25,7 +25,8 @@ pub fn chart() -> BarChart<Language, gup::Horizontal> {
         ("Urdu", 230.0),
     ]
     .map(|(name, speakers)| Language { name, speakers });
-    languages.sort_by(|a, b| a.speakers.total_cmp(&b.speakers));
+    // The first category takes the top band, so sort largest first.
+    languages.sort_by(|a, b| b.speakers.total_cmp(&a.speakers));
 
     gup::barh(languages)
         .y(|l| l.name)
