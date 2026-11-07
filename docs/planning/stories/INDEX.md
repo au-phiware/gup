@@ -452,7 +452,7 @@ and run one at a time; the run order is at the end of "Polish after 0.1".
   the canvas focusable, forwards mapped keys (preventing only their default) and
   speaks `focus_text()` through a hidden `aria-live` region, checked by new
   browser smoke steps. Deps: GUP-619 📋, GUP-621 📋, GUP-622 📋 (soft).
-- [GUP-624](GUP-624_Hidden_Data_Table_In_The_Browser.md) 📋 — `DataTable`,
+- [GUP-624](GUP-624_Hidden_Data_Table_In_The_Browser.md) 🚧 — `DataTable`,
   `Plot::data_table` and `Chart::data_table` from GUP-621's row fields, written
   by `CanvasApp` as a visually hidden `<table>` (at most 1,000 rows) and rebuilt
   when the description changes. Deps: GUP-621 📋, GUP-623 📋.
