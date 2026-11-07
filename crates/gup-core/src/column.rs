@@ -440,16 +440,11 @@ impl Acc {
 /// one by one, then a word (32 rows) at a time with four independent min
 /// and max lanes: about twice as fast as [`Acc::push`] and a bit per row
 /// (GUP-628).
-fn scan<V: Copy + Into<f64>>(
-    stats: Acc,
-    values: &[V],
-    rows: (usize, &mut [u32], usize, usize),
-) -> Acc {
+fn scan(stats: Acc, values: &[f64], rows: (usize, &mut [u32], usize, usize)) -> Acc {
     let (at, validity, planes, plane) = rows;
     let mut stats = stats;
     let head = ((32 - at % 32) % 32).min(values.len());
     for (i, &v) in values[..head].iter().enumerate() {
-        let v: f64 = v.into();
         stats.push(v);
         if v.is_finite() {
             let row = at + i;
@@ -461,7 +456,6 @@ fn scan<V: Copy + Into<f64>>(
     for (word, block) in ((at + head) / 32..).zip(values[head..].chunks(32)) {
         let mut mask = 0u32;
         for (j, &v) in block.iter().enumerate() {
-            let v: f64 = v.into();
             let finite = v.is_finite();
             mask |= u32::from(finite) << j;
             let (a, b) = if finite {
@@ -526,25 +520,14 @@ impl ChunkColumn {
 
     /// Store `values` as rows `at..` of this numeric column (validity
     /// plane `plane` of `planes`) in the chunk's CPU copy, updating the
-    /// origin and stats. Each value is widened to `f64` before the origin
-    /// is subtracted, so `f32` input stores exactly the bytes its widened
-    /// values would.
-    fn write<V: Copy + Into<f64>>(
-        &mut self,
-        cpu: &mut ChunkCpu,
-        at: u32,
-        values: &[V],
-        planes: usize,
-        plane: usize,
-    ) {
+    /// origin and stats. (`f32` input arrives widened, a block at a time:
+    /// see [`Chunk::write`].)
+    fn write(&mut self, cpu: &mut ChunkCpu, at: u32, values: &[f64], planes: usize, plane: usize) {
         if self.origin.is_none() {
             // Rows already stored are non-finite, so the origin they were
             // written against does not matter.
             self.origin = if self.format.is_relative() {
-                values
-                    .iter()
-                    .map(|&v| v.into())
-                    .find(|v: &f64| v.is_finite())
+                values.iter().copied().find(|v| v.is_finite())
             } else {
                 Some(0.0)
             };
@@ -558,12 +541,11 @@ impl ChunkColumn {
         if stride == 4 {
             // `split`'s high half: the low half is not stored.
             for (cell, &v) in dst.chunks_exact_mut(4).zip(values) {
-                let v: f64 = v.into();
                 cell.copy_from_slice(&((v - origin) as f32).to_le_bytes());
             }
         } else {
             for (cell, &v) in dst.chunks_exact_mut(stride).zip(values) {
-                let [hi, lo] = self.format.split(v.into() - origin);
+                let [hi, lo] = self.format.split(v - origin);
                 cell[..4].copy_from_slice(&hi.to_le_bytes());
                 cell[4..].copy_from_slice(&lo.to_le_bytes());
             }
@@ -787,7 +769,17 @@ impl Chunk {
                     plane += 1;
                 }
                 ColumnSlice::F32(values) => {
-                    col.write(cpu, at, &values[range.clone()], planes, plane);
+                    // Widened a block at a time on the stack (exactly), so
+                    // the binary holds one writer and no f64 copy of the
+                    // column is made. Blocks are whole validity words.
+                    let mut wide = [0.0f64; 256];
+                    for (k, block) in values[range.clone()].chunks(wide.len()).enumerate() {
+                        for (w, &v) in wide.iter_mut().zip(block) {
+                            *w = f64::from(v);
+                        }
+                        let row = at + (k * wide.len()) as u32;
+                        col.write(cpu, row, &wide[..block.len()], planes, plane);
+                    }
                     plane += 1;
                 }
                 ColumnSlice::Codes(codes) => {
@@ -1982,7 +1974,6 @@ mod tests {
                 _ => f64::from(i) * 0.25 - 3.0,
             })
             .collect();
-        let narrow: Vec<f32> = values.iter().map(|&v| v as f32).collect();
         let planes = 2;
         for at in [0, 1, 31, 32, 45] {
             for len in [0, 3, 40, 155] {
@@ -1999,11 +1990,38 @@ mod tests {
                 let mut bits = vec![0u32; validity_words(256, planes)];
                 let got = scan(Acc::EMPTY, slice, (at, &mut bits, planes, 1));
                 assert_eq!((got, &bits), (want, &want_bits), "at {at}, {len} rows");
-                let mut bits32 = vec![0u32; validity_words(256, planes)];
-                let got32 = scan(Acc::EMPTY, &narrow[..len], (at, &mut bits32, planes, 1));
-                assert_eq!((got32, &bits32), (want, &want_bits), "f32 at {at}");
             }
         }
+        // f32 input, widened in blocks, stores what its f64 twin stores,
+        // across blocks, chunks and an append that starts mid-word.
+        let wide: Vec<f64> = (0..1500)
+            .map(|i| {
+                if i % 97 == 3 {
+                    f64::NAN
+                } else {
+                    f64::from(i) * 0.5
+                }
+            })
+            .collect();
+        let narrow: Vec<f32> = wide.iter().map(|&v| v as f32).collect();
+        let fill = |first: ColumnSlice<'_>, rest: ColumnSlice<'_>| {
+            let mut s = ColumnStore::new(vec![ColumnFormat::F32Relative], 1024).unwrap();
+            s.append_slices(45, &[first]).unwrap();
+            s.append_slices(1455, &[rest]).unwrap();
+            s
+        };
+        let a = fill(ColumnSlice::F64(&wide[..45]), ColumnSlice::F64(&wide[45..]));
+        let b = fill(
+            ColumnSlice::F32(&narrow[..45]),
+            ColumnSlice::F32(&narrow[45..]),
+        );
+        assert_eq!(a.chunks().len(), 2);
+        for (ca, cb) in a.chunks().iter().zip(b.chunks()) {
+            assert_eq!(ca.bytes(), cb.bytes());
+            assert_eq!(ca.validity(), cb.validity());
+            assert_eq!(ca.columns()[0].stats(), cb.columns()[0].stats());
+        }
+        assert_eq!(a.stats(0), b.stats(0));
     }
 
     /// S4b: keys get codes in first-seen order, across appends and chunks;
