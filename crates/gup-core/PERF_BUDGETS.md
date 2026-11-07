@@ -80,8 +80,8 @@ X) or `info` (printed, never fails).
 | `pipeline.link_create.cold_ms`     | 1.04      | <= 10     | `pipeline_timings`, its first run                                             |
 | `pipeline.link_create.max_ms`      | 1.06      | info      | `pipeline_timings`                                                            |
 | `wasm.wgpu.gz_bytes`               | 32,360    | info      | `scripts/wasm_size.sh`, bare wgpu                                             |
-| `wasm.scatter.gz_bytes`            | 360,399   | +2%       | `scripts/wasm_size.sh`, the reference scatter                                 |
-| `wasm.over_wgpu.gz_bytes`          | 328,039   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10                                   |
+| `wasm.scatter.gz_bytes`            | 370,070   | +2%       | `scripts/wasm_size.sh`, the reference scatter                                 |
+| `wasm.over_wgpu.gz_bytes`          | 337,710   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10                                   |
 | `wasm.per_row_type.gz_bytes`       | 1,730     | <= 2600   | `scripts/wasm_size.sh`, one more Selection row type                           |
 | `wasm.svg_export.gz_bytes`         | 4,057     | info      | `scripts/wasm_size.sh`, the scatter with `svg-export` minus without (GUP-557) |
 
@@ -548,3 +548,12 @@ seeded violation (GUP-417 retrospective).
   `info` row, `wasm.svg_export.gz_bytes` (4,057). GUP-592's `Plot::describe`
   adds about 2,500. The scatter reads 360,399 B gz, over bare wgpu 328,039 (72
   KB of headroom under the 400,000 cap).
+- **GUP-621 merged (2026-11-07, orchestrator)**: since the GUP-592 recording,
+  the keyboard stories (619 focus, 620 zoom and pan), 616 legends, 625 the
+  high-contrast palette and 611 label fallbacks took the scatter to 366,463;
+  GUP-621's row announcements (the axis number formatter reused for text, the
+  row composer and its strings) add 3,607 more, after its worker moved the
+  generic part out of `Layer::row_fields`. Accepted: screen-reader text is the
+  point of track N4, and GUP-623's live region needs it in the browser. The
+  scatter reads 370,070 B gz, over bare wgpu 337,710 (62 KB of headroom under
+  the 400,000 cap).
