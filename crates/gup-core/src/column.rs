@@ -2509,4 +2509,104 @@ mod tests {
         store.release();
         assert!(store.cpu_values(0).is_none(), "full chunks released");
     }
+
+    /// GUP-664: a store of shared columns keeps no CPU copy, yet uploads
+    /// the bytes and validity bits an owned store does, reads the values
+    /// it reads, and uploads to a second context after release.
+    #[test]
+    fn shared_columns_upload_and_read_as_owned_ones() {
+        let formats = vec![
+            ColumnFormat::F32Relative,
+            ColumnFormat::F32x2Relative,
+            ColumnFormat::F32,
+        ];
+        let n = 300;
+        let times: Vec<f64> = (0..n)
+            .map(|i| match i {
+                7 | 150 => f64::NAN,
+                _ => 1.7e9 + f64::from(i) * 0.37,
+            })
+            .collect();
+        let narrow: Vec<f32> = (0..n)
+            .map(|i| {
+                if i == 64 {
+                    f32::INFINITY
+                } else {
+                    i as f32 * 0.5 - 3.0
+                }
+            })
+            .collect();
+        let shared = [
+            crate::Column::from(times.clone()),
+            crate::Column::from(times.clone()),
+            crate::Column::from(narrow.clone()),
+        ];
+        let widened: Vec<f64> = narrow.iter().map(|&v| f64::from(v)).collect();
+        let owned = [
+            ColumnData::Values(times.clone()),
+            ColumnData::Values(times),
+            ColumnData::Values(widened),
+        ];
+        let mut a = ColumnStore::new(formats.clone(), 128).unwrap();
+        a.append(n as usize, &owned).unwrap();
+        let mut b = ColumnStore::new(formats, 128).unwrap();
+        b.append_shared(&shared).unwrap();
+        assert!(b.is_shared());
+        assert_eq!(b.chunks().len(), 3);
+        assert!(b.chunks().iter().all(|c| c.bytes().is_none()));
+        assert!(b.chunks().iter().all(|c| c.validity().is_none()));
+        let err = b.append(1, &owned).unwrap_err().to_string();
+        assert!(err.contains("cannot be appended"), "{err}");
+
+        let bits = |v: Vec<f64>| v.into_iter().map(f64::to_bits).collect::<Vec<_>>();
+        for col in 0..3 {
+            assert_eq!(a.stats(col), b.stats(col), "column {col} stats");
+            for (ca, cb) in a.chunks().iter().zip(b.chunks()) {
+                assert_eq!(ca.columns()[col].origin(), cb.columns()[col].origin());
+                assert_eq!(ca.columns()[col].stats(), cb.columns()[col].stats());
+            }
+            let values = a.cpu_values(col).unwrap();
+            assert_eq!(bits(values.clone()), bits(b.cpu_values(col).unwrap()));
+            assert_eq!(
+                bits(a.chunk_values(1, col).unwrap()),
+                bits(b.chunk_values(1, col).unwrap())
+            );
+            for row in [0, 7, 64, 127, 128, 150, 299] {
+                let one = |s: &ColumnStore| s.value(row, col).unwrap().to_bits();
+                assert_eq!(one(&a), one(&b), "row {row} of column {col}");
+                assert_eq!(one(&b), values[row as usize].to_bits());
+            }
+        }
+        assert!(b.value(300, 0).is_none());
+
+        let cx = Context::new_blocking().unwrap();
+        a.upload(&cx).unwrap();
+        let before = cx.upload_stats();
+        b.upload(&cx).unwrap();
+        let written = cx.upload_stats() - before;
+        let same_gpu = |cx: &Context, a: &ColumnStore, b: &ColumnStore| {
+            for (k, (ca, cb)) in a.chunks().iter().zip(b.chunks()).enumerate() {
+                let (ga, gb) = (ca.buffer(cx).unwrap(), cb.buffer(cx).unwrap());
+                let (ba, bb) = (read_buffer(cx, ga), read_buffer(cx, gb));
+                for col in 0..3 {
+                    let r = ca.column_range(col);
+                    let r = r.start as usize..r.end as usize;
+                    assert_eq!(ba[r.clone()], bb[r], "chunk {k} column {col}");
+                }
+                let (va, vb) = (ca.validity_buffer(cx), cb.validity_buffer(cx));
+                assert_eq!(read_buffer(cx, va.unwrap()), read_buffer(cx, vb.unwrap()));
+            }
+        };
+        same_gpu(&cx, &a, &b);
+        assert_eq!(written.columns.bytes, n as u64 * (4 + 8 + 4));
+
+        // Releasing keeps nothing less, and another context still takes
+        // the columns.
+        assert_eq!(b.release(), 0);
+        let other = Context::new_blocking().unwrap();
+        assert!(b.uploadable_to(&other));
+        b.upload(&other).unwrap();
+        a.upload(&other).unwrap();
+        same_gpu(&other, &a, &b);
+    }
 }
