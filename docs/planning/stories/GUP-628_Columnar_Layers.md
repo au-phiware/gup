@@ -228,18 +228,18 @@ the f64 intermediate, are this story's design work.
 
 - [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1` and
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1` and
       `cargo test -p gup-core -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye: not needed, identity with the rows path
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye: not needed, identity with the rows path
       is tested
-- [ ] `mask wasm-browser`: not needed, no browser path changes; state so
-- [ ] WASM size: `mask wasm-size` scatter gz bytes (new code is unused by the
+- [x] `mask wasm-browser`: not needed, no browser path changes; state so
+- [x] WASM size: `mask wasm-size` scatter gz bytes (new code is unused by the
       scatter; expect a small or no change)
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
 
 ## Implementation Summary
 
@@ -305,9 +305,9 @@ the full table and phase numbers are in RFC-001 "GUP-628 findings"):
 gz (+1,778 B; per-row-type 1,525 to 1,821 B, under its 2,600 limit). The first
 version was +2,090 B; one writer instead of an f64 and an f32 copy trimmed it.
 
-**Not run**: `mask wasm-browser` (no browser path changes, as the DoD says),
-100M rows (memory), rendered output by eye (identity with the rows path is
-tested byte for byte).
+**Not run**: `mask wasm-browser` on its own (it passed inside
+`mask merge-check`), 100M rows (memory), rendered output by eye (identity with
+the rows path is tested byte for byte).
 
 ## Retrospective
 
