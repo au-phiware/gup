@@ -219,6 +219,10 @@ cell labels, error bars, pie charts and facets.
 - [GUP-611](GUP-611_Label_Placement_Tries_Other_Anchors.md) 💡 — A ranked list
   of anchors per label, tried against GUP-527's grid before a label is hidden.
   Deps: GUP-527 ✅.
+- [GUP-656](GUP-656_Label_Placement_Avoids_Marks.md) 📋 Ready — Opt-in
+  `TextLayer::avoid_points(Px)` seeds the kept-box grid with a disc per row so
+  labels stay off the points and name their own. Edits `text_layer.rs`. Deps:
+  GUP-611 ✅.
 - [GUP-543](GUP-543_Horizontal_Bars_And_Group_Padding.md) ✅ — `gup::barh`
   (`BarChart<T, Horizontal>`, categories top to bottom) and
   `BarChart::group_padding`. Deps: GUP-537 📋.
