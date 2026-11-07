@@ -111,6 +111,13 @@ Backlog triage for later tracks (notes only; their stories are not written):
 - **N3 after N0**: release 0.1's minimal accessibility (`Plot::describe()`, an
   SVG title and description, a canvas `aria-label`) starts from the docs GUP-499
   archives; full N4 follows the release.
+- [GUP-658](GUP-658_Default_Categorical_Order_Distinct_First.md) 📋 — New
+  `OKABE_ITO_DISTINCT` order (blue, orange, green, purple first) as the default
+  palette, with measured ΔE00 under four colour-vision views and re-blessed
+  goldens; the canonical `OKABE_ITO` stays. Deps: GUP-625 ✅.
+- [GUP-659](GUP-659_Tick_Format_Below_One_Thousand.md) ✅ — The scatter_bubbles
+  gallery axis writes "$500" instead of "$0.5k" (a named `dollars` function in
+  the example), two goldens re-blessed. Deps: GUP-594 ✅.
 
 ## Track N1: Docs and Tutorials
 

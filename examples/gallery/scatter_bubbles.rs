@@ -44,7 +44,7 @@ pub fn chart() -> ScatterChart<Country> {
         .color(|c| c.region)
         .size(|c| c.people)
         .x_scale(Log::new())
-        .x_tick_format(|v| format!("${}k", v / 1000.0))
+        .x_tick_format(dollars)
         .title("Wealth and health of nations")
         .subtitle("GDP per person against life expectancy, 2020 (illustrative data)")
         .x_title("GDP per person")
@@ -52,6 +52,30 @@ pub fn chart() -> ScatterChart<Country> {
         .grid(Axes::Both)
 }
 
+/// A dollar tick label: thousands take a `k`, smaller values are written out.
+fn dollars(v: f64) -> String {
+    if v.abs() < 1000.0 {
+        format!("${v}")
+    } else {
+        format!("${}k", v / 1000.0)
+    }
+}
+
 fn main() -> gup::Result<()> {
     gup::show(chart())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::dollars;
+
+    #[test]
+    fn dollars_below_a_thousand_have_no_k() {
+        assert_eq!(dollars(0.5), "$0.5");
+        assert_eq!(dollars(500.0), "$500");
+        assert_eq!(dollars(999.0), "$999");
+        assert_eq!(dollars(1000.0), "$1k");
+        assert_eq!(dollars(2500.0), "$2.5k");
+        assert_eq!(dollars(1e6), "$1000k");
+    }
 }
