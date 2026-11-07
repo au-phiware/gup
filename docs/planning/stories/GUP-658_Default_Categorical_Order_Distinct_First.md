@@ -189,3 +189,49 @@ examples).
 - [ ] WASM size: `mask wasm-size` scatter gz bytes (two consts added)
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
+
+## Blocked (2026-11-07)
+
+**Question**: AC2's "the old order is worse" assertion cannot hold: measured
+CIEDE2000 shows `OKABE_ITO_DISTINCT` is not more distinct than the published
+order by minimum pair distance. How should the story proceed?
+
+Measured (Machado 2009 severity 1; minimum pairwise ΔE00; test
+`measure_palettes` in `theme.rs`, WIP):
+
+| Palette slice      | normal | deuteranopia | protanopia | tritanopia |
+| ------------------ | -----: | -----------: | ---------: | ---------: |
+| DISTINCT[..4]      |  38.40 |        16.11 |      12.26 |      11.13 |
+| OKABE_ITO[..4]     |  22.31 |        22.27 |      17.91 |      12.07 |
+| DISTINCT[..5]      |  22.31 |        15.54 |      12.26 |      11.13 |
+| OKABE_ITO[..5]     |  22.24 |        12.52 |      17.91 |      12.07 |
+| HIGH_CONTRAST[..4] |  38.40 |        20.53 |      18.20 |      12.07 |
+| HIGH_CONTRAST[..5] |  37.02 |        16.11 |      12.26 |      12.07 |
+
+- First four of DISTINCT are above the ΔE 10 trigger in every view (floor
+  11.13), so that trigger does not fire.
+- Over all views, min of DISTINCT[..5] is 11.13 and of OKABE_ITO[..5] is 12.07.
+  AC2 requires the published order's check (threshold min(15, 11.13)) to fail;
+  it passes (12.07 >= 11.13). DISTINCT is worse than published under protanopia
+  and tritanopia, better under deuteranopia (15.5 vs 12.5) and about equal under
+  normal vision (22.3 vs 22.2).
+- The premise (orange/vermillion and sky blue/blue near pairs) is only true as a
+  visual impression: under normal vision the published first five are already at
+  ΔE 22.
+- AC3: HIGH_CONTRAST first five are all at or above 12.07 (>= 12), so by the
+  story's rule it stays unchanged.
+
+Options:
+
+1. Keep the Decisions order, drop the "old order fails" assertion (replace with
+   a recorded comparison), and soften the story's claim. The gallery change is
+   cosmetic (blue first, orange second).
+2. Search for an order that beats the published one in every view (a quick brute
+   force over orderings of the first five, blue first, excluding yellow and
+   black early, is cheap) and make that the Decisions order.
+3. Abandon the story (the published order is already ΔE >= 12 everywhere).
+
+Recommendation: option 2 if the goal is genuine distinctness (the story's
+measure is then meaningful); otherwise option 1 for the blue-first consistency
+alone. The code (consts, default switch, exports, marks, theme) is in the WIP
+commit; goldens are not yet re-blessed and the sweep is not started.

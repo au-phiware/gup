@@ -32,10 +32,10 @@ pub(crate) mod conformance;
 
 pub use band::{Band, BandParams, Point};
 pub use categorical::HIGH_CONTRAST;
-pub use categorical::OKABE_ITO_DARK;
 pub use categorical::{
     CATEGORICAL_COLORS, Categorical, CategoricalParams, MAX_PALETTE, NULL_COLOR, OKABE_ITO,
 };
+pub use categorical::{OKABE_ITO_DARK, OKABE_ITO_DISTINCT, OKABE_ITO_DISTINCT_DARK};
 pub use diverging::{Diverging, DivergingParams};
 pub use legend::{ColorScale, Legend, Ramp, RampTick, Swatch};
 pub use linear::{Linear, LinearParams};

@@ -19,12 +19,13 @@ use std::sync::{Arc, OnceLock};
 /// `theme.null_color`.
 pub const NULL_COLOR: Color = Color::hex(0x999999);
 
-/// The Okabe-Ito colour-blind-safe palette in default-series order: orange,
+/// The Okabe-Ito colour-blind-safe palette in the published order: orange,
 /// sky blue, bluish green, blue, vermillion, reddish purple, yellow, black.
+/// Charts default to [`OKABE_ITO_DISTINCT`], which orders the same eight
+/// colours so the first few differ most.
 ///
 /// Yellow has 1.32:1 contrast on white, so it comes after every colour with
-/// at least 2.25:1 (orange); black is last. Blue is fourth, so a four-series
-/// chart ends on the marks' default colour.
+/// at least 2.25:1 (orange); black is last.
 ///
 /// ```
 /// use gup_core::scale::OKABE_ITO;
@@ -43,9 +44,9 @@ pub const OKABE_ITO: [Color; 8] = [
     Color::hex(0x000000),
 ];
 
-/// [`OKABE_ITO`] for a dark background (`Theme::dark`): black, which
-/// vanishes on dark, is replaced by `#E8E8E8`. The other seven colours keep
-/// their colour-blind safety, and all reach 3:1 contrast on `#1E1E22`.
+/// [`OKABE_ITO`] (the published order) for a dark background: black, which
+/// vanishes on dark, is replaced by `#E8E8E8`. The default dark palette is
+/// [`OKABE_ITO_DISTINCT_DARK`].
 pub const OKABE_ITO_DARK: [Color; 8] = [
     OKABE_ITO[0],
     OKABE_ITO[1],
@@ -54,6 +55,43 @@ pub const OKABE_ITO_DARK: [Color; 8] = [
     OKABE_ITO[4],
     OKABE_ITO[5],
     OKABE_ITO[6],
+    Color::hex(0xe8e8e8),
+];
+
+/// The Okabe-Ito colours in the default-series order: blue, orange, bluish
+/// green, reddish purple, sky blue, vermillion, yellow, black. The first four
+/// differ in hue and lightness (CIEDE2000 at least 20 apart under normal
+/// vision and three colour-vision views, asserted by test), where the
+/// published order puts near neighbours at series 1 and 5 and at 2 and 4.
+/// Blue is first, so a one-series chart and series 1 of a many-series chart
+/// agree on the marks' default fill.
+///
+/// ```
+/// use gup_core::{Circle, Color, OKABE_ITO_DISTINCT};
+/// assert_eq!(OKABE_ITO_DISTINCT[0], Circle::DEFAULT_FILL);
+/// assert_eq!(OKABE_ITO_DISTINCT[0], Color::hex(0x0072b2));
+/// ```
+pub const OKABE_ITO_DISTINCT: [Color; 8] = [
+    Color::hex(0x0072b2),
+    Color::hex(0xe69f00),
+    Color::hex(0x009e73),
+    Color::hex(0xcc79a7),
+    Color::hex(0x56b4e9),
+    Color::hex(0xd55e00),
+    Color::hex(0xf0e442),
+    Color::hex(0x000000),
+];
+
+/// [`OKABE_ITO_DISTINCT`] for a dark background (`Theme::dark`): black is
+/// replaced by `#E8E8E8`, as in [`OKABE_ITO_DARK`].
+pub const OKABE_ITO_DISTINCT_DARK: [Color; 8] = [
+    OKABE_ITO_DISTINCT[0],
+    OKABE_ITO_DISTINCT[1],
+    OKABE_ITO_DISTINCT[2],
+    OKABE_ITO_DISTINCT[3],
+    OKABE_ITO_DISTINCT[4],
+    OKABE_ITO_DISTINCT[5],
+    OKABE_ITO_DISTINCT[6],
     Color::hex(0xe8e8e8),
 ];
 
@@ -169,17 +207,17 @@ pub struct Categorical {
 }
 
 impl Categorical {
-    /// The theme's palette ([`OKABE_ITO`] for the default theme,
-    /// [`OKABE_ITO_DARK`] for `Theme::dark`), extended past 8 keys with
+    /// The theme's palette ([`OKABE_ITO_DISTINCT`] for the default theme,
+    /// [`OKABE_ITO_DISTINCT_DARK`] for `Theme::dark`), extended past 8 keys with
     /// colours generated against the theme's background.
     pub fn okabe_ito() -> Self {
         static LUT: OnceLock<Arc<[[u8; 4]]>> = OnceLock::new();
         Self {
-            lut: Arc::clone(LUT.get_or_init(|| extend(&OKABE_ITO, Color::WHITE).into())),
+            lut: Arc::clone(LUT.get_or_init(|| extend(&OKABE_ITO_DISTINCT, Color::WHITE).into())),
             keys: Vec::new(),
             null_color: NULL_COLOR,
             null_color_set: false,
-            themed: Some((OKABE_ITO, Color::WHITE)),
+            themed: Some((OKABE_ITO_DISTINCT, Color::WHITE)),
         }
     }
 
