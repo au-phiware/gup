@@ -13,7 +13,7 @@ use common::svg_marks;
 use common::vr::{harness, layout_metadata, rgba8};
 use gup_core::geom::Point as Pt;
 use gup_core::prelude::*;
-use gup_core::{ImageTarget, OKABE_ITO, RowId, SvgTarget, VectorTarget};
+use gup_core::{ImageTarget, OKABE_ITO_DISTINCT, RowId, SvgTarget, VectorTarget};
 use gup_visual_regression::RgbaImage;
 use std::path::Path;
 
@@ -583,7 +583,7 @@ fn line_steps_golden() {
     let vr = RgbaImage::new(image.width(), image.height(), image.as_raw().clone()).unwrap();
     let mut meta = layout_metadata(&resolved.layout);
     for (i, (name, ..)) in series.iter().enumerate() {
-        meta = meta.with_expected_color(*name, rgba8(OKABE_ITO[i]));
+        meta = meta.with_expected_color(*name, rgba8(OKABE_ITO_DISTINCT[i]));
     }
     harness()
         .run("gup_core/line_steps", Ok((vr.clone(), meta.clone())))

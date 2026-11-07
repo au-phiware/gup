@@ -71,18 +71,23 @@ examples).
 
 ### AC2: Measured distinctness
 
-- [ ] A test computes CIEDE2000 between every pair of the first four colours of
-      `OKABE_ITO_DISTINCT` under normal vision, deuteranopia, protanopia and
-      tritanopia (tritanopia matrix from Machado 2009, severity 1, added next to
-      the other two), and asserts the minimum is at least the measured floor
-      minus 0.5, rounded down (record the measured minimum for each view in the
-      test's comment and the story retrospective).
-- [ ] A second assertion: among the first five colours, no pair has ΔE00 below
-      the smaller of 15 and the measured minimum; the same test asserts that the
-      same check on `OKABE_ITO[..5]` fails (shows the old order was worse), with
-      its measured minimum recorded.
-- [ ] If the measured minimum of the first four under any view is below 10,
-      escalate (see triggers).
+(Revised by the orchestrator 2026-11-07 after the first measurement: minimum
+ΔE00 does not capture "four different hue families", and the published order
+already scores well on it.)
+
+- [x] A test (`distinct_order_is_the_family_argmax` in `theme.rs`, tritanopia
+      matrix from Machado 2009 severity 1 added next to the other two) asserts
+      (a) the first four of `OKABE_ITO_DISTINCT` are one colour from each hue
+      family (blue, orange or vermillion, green, purple) with `#0072B2` first,
+      (b) the minimum pairwise ΔE00 of `[..4]` and of `[..5]` is at least 10 in
+      normal vision, deuteranopia, protanopia and tritanopia, and (c) the const
+      is the argmax, over the 24 orders the family rule allows, of the
+      worst-view floor of `[..4]`, then `[..5]`, then `[..3]`.
+- [x] The comparison table (old and new, all four views, `[..3]`, `[..4]`,
+      `[..5]`) is recorded under Implementation Summary, with the CVD losses
+      stated plainly.
+- [x] If the measured minimum of the first four under any view is below 10,
+      escalate (it is 12.07).
 
 ### AC3: High-contrast palette checked
 
@@ -112,11 +117,14 @@ examples).
 
 ## Decisions
 
-- **Order** (`OKABE_ITO_DISTINCT`): blue `#0072B2`, orange `#E69F00`, bluish
-  green `#009E73`, reddish purple `#CC79A7`, sky blue `#56B4E9`, vermillion
-  `#D55E00`, yellow `#F0E442`, black `#000000`. The dark twin replaces the black
-  with `#E8E8E8`, as `OKABE_ITO_DARK` does. The first four differ in hue and
-  lightness; blue first matches the single-series default.
+- **Order** (`OKABE_ITO_DISTINCT`, revised 2026-11-07 by the orchestrator): blue
+  `#0072B2`, vermillion `#D55E00`, reddish purple `#CC79A7`, bluish green
+  `#009E73`, sky blue `#56B4E9`, orange `#E69F00`, yellow `#F0E442`, black
+  `#000000`. It is the argmax (worst-view min ΔE00 of `[..4]`, then `[..5]`,
+  then `[..3]`) among orders with blue `#0072B2` first, one colour from each of
+  the four hue families (blue, orange or vermillion, green, purple) in positions
+  1-4, the two remaining colours in 5-6, yellow and black last. The dark twin
+  replaces the black with `#E8E8E8`, as `OKABE_ITO_DARK` does.
 - **Name**: `OKABE_ITO_DISTINCT`. The worker may propose a better name in the
   retrospective but keeps this one unless the orchestrator renames it.
 - **Canonical consts stay**: they are public and documented as the published
@@ -189,49 +197,3 @@ examples).
 - [ ] WASM size: `mask wasm-size` scatter gz bytes (two consts added)
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
-
-## Blocked (2026-11-07)
-
-**Question**: AC2's "the old order is worse" assertion cannot hold: measured
-CIEDE2000 shows `OKABE_ITO_DISTINCT` is not more distinct than the published
-order by minimum pair distance. How should the story proceed?
-
-Measured (Machado 2009 severity 1; minimum pairwise ΔE00; test
-`measure_palettes` in `theme.rs`, WIP):
-
-| Palette slice      | normal | deuteranopia | protanopia | tritanopia |
-| ------------------ | -----: | -----------: | ---------: | ---------: |
-| DISTINCT[..4]      |  38.40 |        16.11 |      12.26 |      11.13 |
-| OKABE_ITO[..4]     |  22.31 |        22.27 |      17.91 |      12.07 |
-| DISTINCT[..5]      |  22.31 |        15.54 |      12.26 |      11.13 |
-| OKABE_ITO[..5]     |  22.24 |        12.52 |      17.91 |      12.07 |
-| HIGH_CONTRAST[..4] |  38.40 |        20.53 |      18.20 |      12.07 |
-| HIGH_CONTRAST[..5] |  37.02 |        16.11 |      12.26 |      12.07 |
-
-- First four of DISTINCT are above the ΔE 10 trigger in every view (floor
-  11.13), so that trigger does not fire.
-- Over all views, min of DISTINCT[..5] is 11.13 and of OKABE_ITO[..5] is 12.07.
-  AC2 requires the published order's check (threshold min(15, 11.13)) to fail;
-  it passes (12.07 >= 11.13). DISTINCT is worse than published under protanopia
-  and tritanopia, better under deuteranopia (15.5 vs 12.5) and about equal under
-  normal vision (22.3 vs 22.2).
-- The premise (orange/vermillion and sky blue/blue near pairs) is only true as a
-  visual impression: under normal vision the published first five are already at
-  ΔE 22.
-- AC3: HIGH_CONTRAST first five are all at or above 12.07 (>= 12), so by the
-  story's rule it stays unchanged.
-
-Options:
-
-1. Keep the Decisions order, drop the "old order fails" assertion (replace with
-   a recorded comparison), and soften the story's claim. The gallery change is
-   cosmetic (blue first, orange second).
-2. Search for an order that beats the published one in every view (a quick brute
-   force over orderings of the first five, blue first, excluding yellow and
-   black early, is cheap) and make that the Decisions order.
-3. Abandon the story (the published order is already ΔE >= 12 everywhere).
-
-Recommendation: option 2 if the goal is genuine distinctness (the story's
-measure is then meaningful); otherwise option 1 for the blue-first consistency
-alone. The code (consts, default switch, exports, marks, theme) is in the WIP
-commit; goldens are not yet re-blessed and the sweep is not started.

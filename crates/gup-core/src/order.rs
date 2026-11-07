@@ -616,7 +616,7 @@ mod tests {
 
     fn colour(key: &str) -> crate::Color {
         let code = KEYS.iter().position(|k| *k == key).unwrap();
-        crate::OKABE_ITO[code]
+        crate::OKABE_ITO_DISTINCT[code]
     }
 
     /// AC2 at `opacity`, with `filler` (at least one) tiny discs first (out of

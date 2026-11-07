@@ -11,7 +11,7 @@ use common::scatter::{HEIGHT, TITLE, WIDTH, countries, plot};
 use common::vr::{harness, layout_metadata};
 use gup_core::geom::Point;
 use gup_core::prelude::*;
-use gup_core::{Layout, OKABE_ITO};
+use gup_core::{Layout, OKABE_ITO_DISTINCT};
 use gup_visual_regression::RgbaImage;
 
 #[derive(Clone, Debug)]
@@ -151,7 +151,10 @@ fn defaults_render_a_titled_legend_and_scaled_discs() {
     // Segment colours: first-seen order takes the palette in order.
     for (r, seg) in [(small, 1), (large, 2)] {
         let (cx_, cy) = centre(&layout, r);
-        assert_near(px(&image, cx_, cy), over_white(OKABE_ITO[seg], 0.7));
+        assert_near(
+            px(&image, cx_, cy),
+            over_white(OKABE_ITO_DISTINCT[seg], 0.7),
+        );
     }
     assert!(layout.texts.iter().any(|t| &*t.run.text == "Segment"));
 
@@ -354,13 +357,13 @@ fn series_follow_first_seen_order_and_keep_data_order() {
     let to = |x: f64, y: f64| (at(&layout.x_ticks, x), at(&layout.y_ticks, y));
     // Zulu: (0,1) -> (4,9) -> (2,2); the first segment passes (1, 3).
     let (x, y) = to(1.0, 3.0);
-    assert_near(px(&image, x, y), over_white(OKABE_ITO[0], 1.0));
+    assert_near(px(&image, x, y), over_white(OKABE_ITO_DISTINCT[0], 1.0));
     // Alpha: (0,5) -> (4,6); the second layer takes the second colour.
     let (x, y) = to(2.0, 5.5);
-    assert_near(px(&image, x, y), over_white(OKABE_ITO[1], 1.0));
+    assert_near(px(&image, x, y), over_white(OKABE_ITO_DISTINCT[1], 1.0));
     // The line goes back from (4,9) to (2,2): (3, 5.5) is on it.
     let (x, y) = to(3.0, 5.5);
-    assert_near(px(&image, x, y), over_white(OKABE_ITO[0], 1.0));
+    assert_near(px(&image, x, y), over_white(OKABE_ITO_DISTINCT[0], 1.0));
     assert_eq!(
         chart
             .pick(Point::new(to(3.9, 8.7).0 as f32, to(3.9, 8.7).1 as f32))
@@ -375,7 +378,7 @@ fn line_golden_has_clean_breaks_and_a_legend() {
     let mut chart = line_builder(quotes(DAYS));
     let (image, layout) = chart.render_resolved(&cx, 800, 450).unwrap();
 
-    let gap_colour = OKABE_ITO[1];
+    let gap_colour = OKABE_ITO_DISTINCT[1];
     let x_of = |d: usize| at(&layout.x_ticks, START + d as f64 * DAY);
     let middle = x_of((GAP.start + GAP.end) / 2 - 1) + 0.5 * (x_of(1) - x_of(0));
     assert!(
@@ -412,7 +415,7 @@ fn layers_mut_reaches_each_series() {
                 })
                 .count() as u32
         };
-        ink(OKABE_ITO[2]) * 1000 + ink(OKABE_ITO[0])
+        ink(OKABE_ITO_DISTINCT[2]) * 1000 + ink(OKABE_ITO_DISTINCT[0])
     };
     let mut thin = gup_core::line(rows.clone())
         .x(|q| q.time)
@@ -426,7 +429,7 @@ fn layers_mut_reaches_each_series() {
     assert_eq!(layers.len(), 3);
     layers.into_iter().nth(2).unwrap().width(Px(8.0));
     let (a, b) = (thickness(&mut thin, 300.0), thickness(&mut wide, 300.0));
-    // Only the third series (OKABE_ITO[2]) changed; the first did not.
+    // Only the third series (OKABE_ITO_DISTINCT[2]) changed; the first did not.
     assert!(b / 1000 > a / 1000 + 3, "third series: {a} -> {b}");
     assert_eq!(a % 1000, b % 1000, "first series changed");
 }
@@ -528,7 +531,7 @@ mod bars {
     use super::{at, harness};
     use gup_core::geom::Point;
     use gup_core::prelude::*;
-    use gup_core::{ChartExt, Context, Layout, OKABE_ITO, ScaleRef};
+    use gup_core::{ChartExt, Context, Layout, OKABE_ITO_DISTINCT, ScaleRef};
     use gup_visual_regression::RgbaImage;
 
     #[derive(Clone, Debug)]
@@ -720,7 +723,7 @@ mod bars {
         // Slot r of Q2 is region r's bar, in its own colour.
         let band = f64::from(layout.x_ticks[1].1 - layout.x_ticks[0].1);
         let centre = f64::from(layout.x_ticks[1].1);
-        for (r, region_colour) in OKABE_ITO.iter().take(4).enumerate() {
+        for (r, region_colour) in OKABE_ITO_DISTINCT.iter().take(4).enumerate() {
             let x = centre + ((r as f64 + 0.5) / 4.0 - 0.5) * band * 0.8;
             let y = at(&layout.y_ticks, 0.0) - 6.0;
             // Allow for the padding in the band width: look for the colour
@@ -776,12 +779,12 @@ mod bars {
                 let top = base + total;
                 let mid = y((base + top) / 2.0);
                 assert!(
-                    near(pixel(&image, x, mid), OKABE_ITO[r], 3),
+                    near(pixel(&image, x, mid), OKABE_ITO_DISTINCT[r], 3),
                     "{} {}: middle is {:?}, wanted {:?}",
                     QUARTERS[q],
                     REGIONS[r],
                     pixel(&image, x, mid),
-                    OKABE_ITO[r]
+                    OKABE_ITO_DISTINCT[r]
                 );
                 if r > 0 {
                     // The join: the segment below ends exactly where this
@@ -796,8 +799,12 @@ mod bars {
                             REGIONS[r]
                         );
                     }
-                    assert!(near(pixel(&image, x, join + 2.0), OKABE_ITO[r - 1], 3));
-                    assert!(near(pixel(&image, x, join - 2.0), OKABE_ITO[r], 3));
+                    assert!(near(
+                        pixel(&image, x, join + 2.0),
+                        OKABE_ITO_DISTINCT[r - 1],
+                        3
+                    ));
+                    assert!(near(pixel(&image, x, join - 2.0), OKABE_ITO_DISTINCT[r], 3));
                 }
                 base = top;
             }
@@ -805,7 +812,7 @@ mod bars {
             let ink_top = (0..image.height())
                 .find(|&py| {
                     let p = image.get_pixel(x as u32, py).0;
-                    py as f32 > layout.plot.top() && near(p, OKABE_ITO[3], 3)
+                    py as f32 > layout.plot.top() && near(p, OKABE_ITO_DISTINCT[3], 3)
                 })
                 .unwrap();
             assert!(
@@ -831,10 +838,10 @@ mod bars {
         let x = f64::from(layout.x_ticks[0].1);
         let y = |v: f64| at(&layout.y_ticks, v);
         for (v, colour, what) in [
-            (15.0, OKABE_ITO[0], "North above"),
-            (40.0, OKABE_ITO[2], "East above North"),
-            (-10.0, OKABE_ITO[1], "South below"),
-            (-25.0, OKABE_ITO[3], "West below South"),
+            (15.0, OKABE_ITO_DISTINCT[0], "North above"),
+            (40.0, OKABE_ITO_DISTINCT[2], "East above North"),
+            (-10.0, OKABE_ITO_DISTINCT[1], "South below"),
+            (-25.0, OKABE_ITO_DISTINCT[3], "West below South"),
         ] {
             assert!(
                 near(pixel(&image, x, y(v)), colour, 3),
@@ -856,8 +863,8 @@ mod bars {
         let (image, layout) = chart.render_resolved(&cx, 400, 300).unwrap();
         let x = f64::from(layout.x_ticks[0].1);
         let y = |v: f64| at(&layout.y_ticks, v);
-        assert!(near(pixel(&image, x, y(25.0)), OKABE_ITO[0], 3));
-        assert!(near(pixel(&image, x, y(55.0)), OKABE_ITO[1], 3));
+        assert!(near(pixel(&image, x, y(25.0)), OKABE_ITO_DISTINCT[0], 3));
+        assert!(near(pixel(&image, x, y(55.0)), OKABE_ITO_DISTINCT[1], 3));
         assert!(pixel(&image, x, y(65.0))[0] > 240, "taller than the sum");
     }
 
@@ -957,7 +964,7 @@ mod bars {
             }
         }
         for (i, region) in REGIONS.iter().enumerate() {
-            meta = meta.with_expected_color(format!("{region} fill"), rgba8(OKABE_ITO[i]));
+            meta = meta.with_expected_color(format!("{region} fill"), rgba8(OKABE_ITO_DISTINCT[i]));
         }
         let vr = RgbaImage::new(800, 500, image.into_raw()).unwrap();
         harness()
@@ -1068,7 +1075,7 @@ mod bars {
         let (image, layout) = chart.render_resolved(&cx, 480, 320).unwrap();
         let mut meta = layout_metadata(&layout);
         for (i, region) in ["North", "South"].iter().enumerate() {
-            meta = meta.with_expected_color(format!("{region} fill"), rgba8(OKABE_ITO[i]));
+            meta = meta.with_expected_color(format!("{region} fill"), rgba8(OKABE_ITO_DISTINCT[i]));
         }
         let vr = RgbaImage::new(480, 320, image.into_raw()).unwrap();
         harness()
@@ -1083,7 +1090,7 @@ mod barh {
     use super::{at, harness};
     use crate::bars::{QUARTERS, Sale, near, sales};
     use gup_core::prelude::*;
-    use gup_core::{ChartExt, Context, Layout, OKABE_ITO};
+    use gup_core::{ChartExt, Context, Layout, OKABE_ITO_DISTINCT};
     use gup_visual_regression::RgbaImage;
 
     fn horizontal(rows: Vec<Sale>) -> gup_core::BarChart<Sale, gup_core::Horizontal> {
@@ -1146,13 +1153,16 @@ mod barh {
         let x = |v: f64| at(&layout.x_ticks, v);
         for (q, v) in [("Q1", 20.0), ("Q2", 40.0)] {
             let y = f64::from(text_y(&layout, q));
-            assert!(near(px(&image, x(v) - 2.0, y), OKABE_ITO[3], 3), "{q} end");
             assert!(
-                !near(px(&image, x(v) + 2.0, y), OKABE_ITO[3], 3),
+                near(px(&image, x(v) - 2.0, y), OKABE_ITO_DISTINCT[0], 3),
+                "{q} end"
+            );
+            assert!(
+                !near(px(&image, x(v) + 2.0, y), OKABE_ITO_DISTINCT[0], 3),
                 "{q} past"
             );
             assert!(
-                near(px(&image, x(0.0) + 2.0, y), OKABE_ITO[3], 3),
+                near(px(&image, x(0.0) + 2.0, y), OKABE_ITO_DISTINCT[0], 3),
                 "{q} start"
             );
         }
@@ -1168,7 +1178,7 @@ mod barh {
         let mut order: Vec<usize> = Vec::new();
         for y in layout.plot.top() as u32..layout.plot.bottom() as u32 {
             let p = px(&image, x, f64::from(y));
-            if let Some(i) = OKABE_ITO[..4].iter().position(|&c| near(p, c, 3))
+            if let Some(i) = OKABE_ITO_DISTINCT[..4].iter().position(|&c| near(p, c, 3))
                 && order.last() != Some(&i)
             {
                 order.push(i);
@@ -1211,10 +1221,10 @@ mod barh {
         let (image, layout) = chart.render_resolved(&cx, 400, 300).unwrap();
         let y = f64::from(text_y(&layout, "Q1"));
         for (v, colour, what) in [
-            (15.0, OKABE_ITO[0], "North from 0"),
-            (40.0, OKABE_ITO[2], "East after North"),
-            (-10.0, OKABE_ITO[1], "South left of 0"),
-            (-25.0, OKABE_ITO[3], "West left of South"),
+            (15.0, OKABE_ITO_DISTINCT[0], "North from 0"),
+            (40.0, OKABE_ITO_DISTINCT[2], "East after North"),
+            (-10.0, OKABE_ITO_DISTINCT[1], "South left of 0"),
+            (-25.0, OKABE_ITO_DISTINCT[3], "West left of South"),
         ] {
             let p = px(&image, at(&layout.x_ticks, v), y);
             assert!(near(p, colour, 3), "{what}: {p:?}");
@@ -1249,11 +1259,11 @@ mod barh {
         let (touching, layout) = two_quarters(0.0);
         let y = row(&layout);
         let first = (0..touching.width())
-            .find(|&x| near(touching.get_pixel(x, y).0, OKABE_ITO[0], 3))
+            .find(|&x| near(touching.get_pixel(x, y).0, OKABE_ITO_DISTINCT[0], 3))
             .unwrap();
         // Q1's four bars, with no background between the first and last.
         let q1_last = (first..touching.width())
-            .find(|&x| near(touching.get_pixel(x, y).0, OKABE_ITO[3], 3))
+            .find(|&x| near(touching.get_pixel(x, y).0, OKABE_ITO_DISTINCT[3], 3))
             .unwrap();
         for x in first + 1..q1_last {
             let p = touching.get_pixel(x, y).0;
@@ -1262,9 +1272,9 @@ mod barh {
                 "background at x={x}: {p:?}"
             );
         }
-        let full = run_of(&touching, y, OKABE_ITO[0]);
+        let full = run_of(&touching, y, OKABE_ITO_DISTINCT[0]);
         let (halved, layout) = two_quarters(0.5);
-        let half = run_of(&halved, row(&layout), OKABE_ITO[0]);
+        let half = run_of(&halved, row(&layout), OKABE_ITO_DISTINCT[0]);
         // Two bands, so each count covers two bars.
         assert!(
             (half as f64 - full as f64 / 2.0).abs() <= 2.0,
@@ -1328,7 +1338,7 @@ mod barh {
         assert!(text_y(&layout, names[0]) < text_y(&layout, names[4]));
         let mut meta = layout_metadata(&layout);
         for (i, year) in ["2019", "2023"].iter().enumerate() {
-            meta = meta.with_expected_color(format!("{year} fill"), rgba8(OKABE_ITO[i]));
+            meta = meta.with_expected_color(format!("{year} fill"), rgba8(OKABE_ITO_DISTINCT[i]));
         }
         let vr = RgbaImage::new(480, 320, image.into_raw()).unwrap();
         harness()

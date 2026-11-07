@@ -267,9 +267,9 @@ fn colours_come_from_the_key_the_fill_or_the_default() {
     for (i, (median, key)) in medians.iter().zip([0.0, 1.0, 0.0]).enumerate() {
         let col = (f64::from(layout.plot.x) + band * (i as f64 + 0.5) - 8.0) as u32;
         let want = rgb(if key == 0.0 {
-            Color::hex(0xE6_9F_00)
+            Color::hex(0x00_72_B2)
         } else {
-            Color::hex(0x56_B4_E9)
+            Color::hex(0xD5_5E_00)
         });
         assert!(
             find(&image, &layout, *median, col).contains(&want),

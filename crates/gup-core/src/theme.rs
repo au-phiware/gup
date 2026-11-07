@@ -454,22 +454,90 @@ mod tests {
         min
     }
 
-    #[test]
-    fn measure_palettes() {
-        for (name, p) in [
-            ("distinct", &OKABE_ITO_DISTINCT[..]),
-            ("published", &OKABE_ITO[..]),
-            ("hc", &HIGH_CONTRAST[..]),
-        ] {
-            for n in [4, 5] {
-                for (view, m) in VIEWS {
-                    eprintln!(
-                        "MEASURE {name}[..{n}] {view}: {:.2}",
-                        min_delta_e(&p[..n], m)
-                    );
+    /// The worst view's minimum ΔE00 over the first `n` colours.
+    fn floor(colors: &[Color], n: usize) -> f64 {
+        VIEWS
+            .iter()
+            .map(|(_, m)| min_delta_e(&colors[..n], m))
+            .fold(f64::MAX, f64::min)
+    }
+
+    /// Every ordering the hue-family rule allows: `#0072B2` first, then one
+    /// of orange or vermillion, bluish green and reddish purple in any order
+    /// (positions 2-4), then the remaining two (sky blue and the other
+    /// orange) in either order, then yellow and black.
+    fn family_orders() -> Vec<[Color; 8]> {
+        let [orange, sky, green, blue, vermillion, purple, yellow, black] = OKABE_ITO;
+        let mut out = Vec::new();
+        for (warm, other) in [(orange, vermillion), (vermillion, orange)] {
+            for mid in [
+                [warm, green, purple],
+                [warm, purple, green],
+                [green, warm, purple],
+                [green, purple, warm],
+                [purple, warm, green],
+                [purple, green, warm],
+            ] {
+                for tail in [[sky, other], [other, sky]] {
+                    out.push([
+                        blue, mid[0], mid[1], mid[2], tail[0], tail[1], yellow, black,
+                    ]);
                 }
             }
         }
+        out
+    }
+
+    /// GUP-658: the first four of `OKABE_ITO_DISTINCT` are four hue families
+    /// (blue, orange, green, purple), blue first; the order is the argmax of
+    /// the worst-view floor of `[..4]`, then `[..5]`, then `[..3]`, among the
+    /// orders the family rule allows; and every floor is at least 10. The
+    /// measured comparison (min pairwise ΔE00 per view, Machado 2009
+    /// severity 1) is printed by this test and recorded in the story.
+    #[test]
+    fn distinct_order_is_the_family_argmax() {
+        let key = |p: &[Color]| (floor(p, 4), floor(p, 5), floor(p, 3));
+        let better = |a: (f64, f64, f64), b: (f64, f64, f64)| {
+            a.0 > b.0 + 1e-9
+                || (a.0 - b.0).abs() <= 1e-9
+                    && (a.1 > b.1 + 1e-9 || (a.1 - b.1).abs() <= 1e-9 && a.2 > b.2 + 1e-9)
+        };
+        let mut best = family_orders()[0];
+        for o in family_orders() {
+            if better(key(&o), key(&best)) {
+                best = o;
+            }
+        }
+        assert_eq!(best, OKABE_ITO_DISTINCT, "the const is not the argmax");
+
+        // (a) four families, blue first.
+        let family = |c: Color| match c {
+            c if c == OKABE_ITO[3] || c == OKABE_ITO[1] => 0,
+            c if c == OKABE_ITO[0] || c == OKABE_ITO[4] => 1,
+            c if c == OKABE_ITO[2] => 2,
+            _ => 3,
+        };
+        let mut seen: Vec<_> = OKABE_ITO_DISTINCT[..4].iter().map(|c| family(*c)).collect();
+        seen.sort_unstable();
+        assert_eq!(seen, [0, 1, 2, 3]);
+        assert_eq!(OKABE_ITO_DISTINCT[0], OKABE_ITO[3]);
+
+        // (b) floors.
+        for (name, p) in [
+            ("distinct", &OKABE_ITO_DISTINCT),
+            ("published", &OKABE_ITO),
+            ("high contrast", &HIGH_CONTRAST),
+        ] {
+            for n in [3, 4, 5] {
+                let row: Vec<String> = VIEWS
+                    .iter()
+                    .map(|(v, m)| format!("{v} {:.2}", min_delta_e(&p[..n], m)))
+                    .collect();
+                eprintln!("TABLE {name}[..{n}]: {}", row.join(", "));
+            }
+        }
+        assert!(floor(&OKABE_ITO_DISTINCT, 4) >= 10.0);
+        assert!(floor(&OKABE_ITO_DISTINCT, 5) >= 10.0);
     }
 
     /// The dark palette differs from the light one only in the last colour.
