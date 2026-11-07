@@ -192,7 +192,7 @@ pub use channel::{
 pub use chart::{Chart, ChartExt};
 pub use columns::{Column, Columns};
 pub use context::{Caps, Context, ContextId, ContextOptions, Upload, UploadStats, WriteCount};
-pub use describe::Description;
+pub use describe::{DataTable, Description};
 pub use encoding::{
     ColumnEncoded, ColumnMarker, ColumnValue, ConstMarker, CpuMirror, Derived, DerivedMarker,
     DynColumnEncoding, DynShaderFn, EncodeFn, Encoded, Encoding, Feeds, IntoEncoding, KeyAccessor,
@@ -385,8 +385,8 @@ pub mod prelude {
     pub use crate::scene::Anchor;
     pub use crate::{
         Area, AreaAttrs, Axes, Band, Bins, Categorical, Chart, ChartExt, Circle, CircleAttrs,
-        Color, ColorScale, Columns, Context, CpuMirror, Curve, Derived, Description, Diverging,
-        Drag, EncodeFn, Event, Line, LineAttrs, Linear, Log, Mark, Offset, Plot, Point,
+        Color, ColorScale, Columns, Context, CpuMirror, Curve, DataTable, Derived, Description,
+        Diverging, Drag, EncodeFn, Event, Line, LineAttrs, Linear, Log, Mark, Offset, Plot, Point,
         PositionScale, Pow, Px, Rect, RectAttrs, Retain, ScaleRef, Segment, SegmentAttrs,
         Selection, Sequential, ShaderFn, Symlog, Theme, Time, Unbrushed, Unit, Window,
         wgsl_function,

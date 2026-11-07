@@ -257,6 +257,31 @@
               live.hasAttribute("data-gup-live") &&
               live.textContent === ""
           );
+          // GUP-624: the data as a hidden table after the live region:
+          // captioned by the description's title, one body row per row.
+          const table = live.nextElementSibling;
+          const bodyRows = () => table.querySelectorAll("tbody tr").length;
+          await step(
+            "table",
+            async () =>
+              table?.tagName === "TABLE" && table.hasAttribute("data-gup-table")
+          );
+          await step("table-caption", async () =>
+            table.querySelector("caption")?.textContent.startsWith(
+              "Interactive scatter"
+            )
+          );
+          await step("table-rows", async () => bodyRows() === 6);
+          await step(
+            "table-headers",
+            async () =>
+              table.querySelector("thead th")?.textContent === "x" &&
+              table.querySelector("thead th").getAttribute("scope") === "col" &&
+              table.querySelectorAll("thead th").length === 2 &&
+              table.querySelector("tbody tr").children.length === 2
+          );
+          console.log("GUP table: " + table.querySelector("caption")?.textContent);
+          console.log("GUP table html: " + table.outerHTML.slice(0, 600));
           let rightKey = null;
           await step("key-focus", async () => {
             let first = 0;
@@ -494,6 +519,9 @@
             app.append_row(50, 9);
             await step("append-wake", () =>
               within("append-wake", () => app.appended_seen() > 0)
+            );
+            await step("table-appended", () =>
+              within("table-appended", () => bodyRows() === 7)
             );
             await step("append-pixel", async () => {
               const img = await app.render_rgba();
