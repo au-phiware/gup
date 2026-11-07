@@ -23,6 +23,12 @@ help: the following other types implement trait `IntoEncoding<T, V, K>`
    | |     S: EncodeFn<Input = D::Gpu, Output = V>,
    | |____________________________________________^ `Encoded<A, S>` implements `IntoEncoding<T, V, ColumnMarker<D>>`
 ...
+   | / impl<V, S> IntoEncoding<(), V, ColumnMarker<f64>> for ColumnEncoded<S>
+   | | where
+   | |     V: Visual,
+   | |     S: EncodeFn<Input = f32, Output = V>,
+   | |_________________________________________^ `ColumnEncoded<S>` implements `IntoEncoding<(), V, ColumnMarker<f64>>`
+...
    | / impl<T, V, K, S> IntoEncoding<T, V, KeyMarker> for KeyEncoded<K, S>
    | | where
    | |     T: 'static,

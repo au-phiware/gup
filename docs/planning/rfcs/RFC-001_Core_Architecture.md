@@ -4199,3 +4199,119 @@ prototype's table, measured at 1600x1000, is replaced by this one.
   layers whose clipped bounding boxes do not overlap can share one texture.
   Measure before building it.
 - **Draw-in-pass hosts**: GUP-584 (`Prepared::encode`).
+
+## GUP-628 findings (2026-11-08)
+
+[GUP-628](../stories/GUP-628_Columnar_Layers.md) adds columnar layers: data that
+already lives in columns reaches a `Plot` without a row type or a closure per
+row.
+
+### Design
+
+- **API** (as decided): `Columns` (named `Column`s of equal length),
+  `Column::{F64, F32}` over `Arc<[_]>`, `Plot::add_columns::<M>(&cols)` (a
+  `Selection<(), M>` over `vec![(); n]`, which costs no memory),
+  `x_column`/`y_column` (the mark's first `X`/`Y`-role channel, found by a
+  `const fn` so a mark without one does not compile), and
+  `EncodeFn::encode_column(&Column) -> ColumnEncoded<Self>`, a provided method
+  like `encode`, so `ScaleRef<S>` and bare scales both have it.
+  `ColumnEncoded<S>: IntoEncoding<(), V, ColumnMarker<f64>>` has no coherence
+  conflict. `Columns` is in the prelude; `Column` and `ColumnEncoded` are at the
+  crate root.
+- **No copy into the store.** `ColumnData` (public) is unchanged. A defaulted,
+  hidden `DynColumnEncoding::shared() -> Option<&Column>` lets the layer see a
+  shared column; `Selection::evaluate` gathers each channel as
+  `Input::Owned(ColumnData)` or `Input::Shared(Column)` and hands the store
+  borrowed `ColumnSlice`s (`F64`, `F32`, `Codes`; crate-private) through a new
+  `ColumnStore::append_slices`. The public `append(&[ColumnData])` is a wrapper.
+  Only a size-sorted layer (the sort permutes columns) or a monotone line
+  (control values read x and y) takes owned copies. `evaluate` on a
+  `ColumnEncoded` still returns the column's values (a copy), for the paths that
+  call it (picking with released CPU columns).
+- **Axes.** A plot-axis binding is an `AxisSource<T>`: `Rows(closure)` (the
+  generated setters) or `Column(Column)`; `AxisEncoding` evaluates either.
+- **One check for lengths.** Every column-encoded channel's input must have the
+  layer's row count, or resolve fails naming the channel ("Circle layer: the
+  column of `Circle::FILL` has 2 rows, but the layer has 3"). It never fires for
+  closures.
+- **Rows of `()`** broke nothing: `Retain`, culling, picking, SVG, `row_fields`
+  and the GUP-621 announcements work unchanged. `read_value` reads a shared
+  column by data row when the CPU chunk columns were released, so a columnar row
+  is still announced under `GpuOnly` (one place; a `()` row has no index).
+  `append` on a columnar layer is an error, and so is the resolve that drains an
+  `appender()`'s rows (`appender()` itself returns `Appender<T>` for every
+  layer).
+- **Chunk writer.** One f64 writer (`ChunkColumn::write`), now in two passes:
+  the cells, then `scan`, which computes stats and validity bits a word (32
+  rows) at a time with four min/max lanes. That took the write of two 10M-row
+  columns from 125 to 90 ms, for rows and columns alike. f32 input is widened
+  (exactly) into a 256-value stack buffer and written by the same writer, so the
+  binary has one writer and no f64 copy of the column is made.
+
+### AC3 table
+
+`scale_bench` (release, seed 1, sorted, 1920 x 1080, `Retain::Auto`; Intel HD
+630, Vulkan). Rows run `--resolve-only` (the library alone); columns run
+`--columns f64|f32`, built straight into `Arc<[_]>`. Medians of 3, load average
+4-5 from other agents; MiB. GUP-627's rows numbers (2026-11-06, same machine,
+quieter) beside them.
+
+| rows | path           | first_resolve ms | peak RSS MiB | RSS above the data | first_frame ms |
+| ---- | -------------- | ---------------- | ------------ | ------------------ | -------------- |
+| 10M  | rows (GUP-627) | 272.7            | 415          | -                  | 1065           |
+| 10M  | rows           | 177.5            | 412          | 231 (24.2 B/row)   | 987            |
+| 10M  | f64 columns    | 93.0 (52%)       | 261          | 80 (8.4 B/row)     | 983            |
+| 10M  | f32 columns    | 94.7 (53%)       | 185          | 81 (8.5 B/row)     | 977            |
+| 30M  | rows (GUP-627) | 810.5            | 1183         | -                  | 3099           |
+| 30M  | rows           | 634.7            | 1180         | 694 (24.3 B/row)   | 2943           |
+| 30M  | f64 columns    | 347.0 (55%)      | 724          | 238 (8.3 B/row)    | 2949           |
+| 30M  | f32 columns    | 336.8 (53%)      | 495          | 238 (8.3 B/row)    | 2936           |
+| 100M | not run        | -                | -            | -                  | -              |
+
+100M was not run: `MemAvailable` was 6-18 GB during the session, under the 20 GB
+the run needs. A rerun on the final commit (load 5-12) gave the same RSS to the
+MiB and a 51% time ratio at 10M. Zoom resolves are unchanged (0.1-0.4 ms).
+
+**Targets.** Peak RSS: at most the rows path's minus the user rows (412 - 152.6
+= 259.4 MiB at 10M, 722.2 at 30M); measured 261 and 724, 1.6 and 1.8 MiB over,
+which is wgpu's upload staging (the rows path's f64 vectors are freed before its
+upload, the columns are not). Time: at most half; measured 50-52% at 10M across
+two batches, 55% at 30M. Of the f64 first resolve at 10M (instrumented once, not
+committed): chunk write 90 ms (page faults on the fresh chunk buffers 23 ms,
+f64-to-f32 conversion about 28 ms, stats and validity the rest), upload 10 ms,
+fit and layout about 5 ms. The rows path adds 77-100 ms of closures. What is
+left is the chunk CPU copy, which both paths make; GUP-664 removes it for
+columnar layers.
+
+### The f32 rule
+
+Through an f64 intermediate (measured with that variant in the library before
+the writer change), the conversion was 51-55 ms of a 191 ms first resolve at
+10M: 28%, above the 25% rule. The direct path was kept: f32 columns are written
+into chunks without an f64 copy (first resolve 94.7 ms, 185 MiB against 191 ms,
+337 MiB). `scale_bench` prints `f32.widen.ms` (what the intermediate would add:
+50 ms at 10M, 161 ms at 30M) so the rule can be rechecked. The direct path
+widens each value exactly and subtracts the chunk origin in f64, so it stores
+the same bytes as the f64 path, and the f32-arithmetic variant (subtracting in
+f32 when the chunk span allows) was not needed.
+
+### Proposed adjustments
+
+- **GUP-629 (key columns).** `Column::Keys` must be remapped into the scale's
+  dictionary, so it reaches the store as `Input::Owned(Codes)`, not shared;
+  `shared()` must then not return the source column for value reads
+  (`read_value` would read source codes), or `Column::value` must map through
+  the remap. `ColumnEncoded`'s `ColumnMarker<f64>` impl needs a sibling for
+  `KeyMarker`.
+- **GUP-630 (Arrow).** `Arc<[f64]>` cannot wrap an Arrow buffer without a copy
+  (`From<Vec<_>>` copies too: the allocation must hold the `Arc` header). Either
+  accept one copy per column on import or add a `Column` variant over a shared
+  foreign buffer (`#[non_exhaustive]` allows it). Arrow nulls must become NaN
+  for floats; integers convert to f64 (or f32) once.
+- **GUP-631 (LOD).** Unchanged by this story: `first_frame` (about 1 s at 10M,
+  the unculled full-extent pass) is still the largest phase by an order of
+  magnitude over the columnar first resolve.
+- **GUP-632 (100M).** Use columns, built straight into `Arc<[f32]>` or
+  `Arc<[f64]>`; at 100M rows a columnar layer above `Retain::AUTO_MAX_ROWS`
+  releases its rows and CPU columns, so picking needs GUP-664. The library's
+  peak above the data is 8.3 B/row today (about 0.8 GiB at 100M).

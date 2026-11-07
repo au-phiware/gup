@@ -16,6 +16,9 @@
 //!   --resolve-only        skip the bench's own accessor and store phases, so
 //!                         the peak RSS after `first_resolve` is the library's
 //!                         alone (rows + its own columns)
+//!   --columns f64|f32     build the layer from `Columns` (GUP-628) instead
+//!                         of rows: no row type and no accessors, so the
+//!                         accessor and store phases are skipped
 //! ```
 //!
 //! Phases: `build` (generate the rows; not a cost of Gup), `accessor` (the
@@ -29,7 +32,8 @@
 use gup_core::column::{ColumnData, ColumnFormat, ColumnStore};
 use gup_core::geom::Point;
 use gup_core::prelude::*;
-use gup_core::{ImageTarget, Retain};
+use gup_core::{Column, ImageTarget, Retain};
+use std::sync::Arc;
 use std::time::Instant;
 
 struct Options {
@@ -41,6 +45,8 @@ struct Options {
     zoom_frames: usize,
     seed: u64,
     resolve_only: bool,
+    /// `Some("f64")` or `Some("f32")`: a columnar layer.
+    columns: Option<String>,
 }
 
 fn parse() -> Options {
@@ -53,6 +59,7 @@ fn parse() -> Options {
         zoom_frames: 30,
         seed: 1,
         resolve_only: false,
+        columns: None,
     };
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -78,6 +85,11 @@ fn parse() -> Options {
             }
             "--zoom-frames" => o.zoom_frames = value().parse().expect("--zoom-frames N"),
             "--resolve-only" => o.resolve_only = true,
+            "--columns" => {
+                let v = value();
+                assert!(v == "f64" || v == "f32", "--columns f64|f32");
+                o.columns = Some(v);
+            }
             "--seed" => o.seed = value().parse().expect("--seed N"),
             other => panic!("unknown option {other}"),
         }
@@ -145,7 +157,12 @@ fn main() -> gup_core::Result<()> {
     let o = parse();
     let n = o.rows;
     println!(
-        "scale_bench: {n} rows, retain {}, {}, {}x{}, seed {}, load average {}, MemAvailable {} GB",
+        "scale_bench: {n} rows ({}), retain {}, {}, {}x{}, seed {}, load average {}, MemAvailable {} GB",
+        o.columns.as_deref().map_or("rows", |c| if c == "f64" {
+            "f64 columns"
+        } else {
+            "f32 columns"
+        }),
         o.retain_name,
         if o.shuffle { "shuffled" } else { "sorted" },
         o.size.0,
@@ -160,6 +177,9 @@ fn main() -> gup_core::Result<()> {
     }
 
     // 1. build
+    if let Some(kind) = &o.columns {
+        return columns_run(&o, &cx, kind == "f64");
+    }
     let t = Instant::now();
     let mut rng = Lcg(o.seed);
     let step = 1000.0 / n.max(1) as f64;
@@ -183,7 +203,76 @@ fn main() -> gup_core::Result<()> {
     if !o.resolve_only {
         bench_accessor_and_store(&cx, &rows, n, fx, fy)?;
     }
-    first_resolve_and_after(&o, &cx, rows, fx, fy)
+    first_resolve_and_after(&o, &cx, n, |plot| {
+        plot.circles(rows)
+            .x(fx)
+            .y(fy)
+            .attr(Circle::RADIUS, Px(1.5))
+            .retain(o.retain);
+    })
+}
+
+/// The rows of phase 1 as two columns (`f64`, or narrowed to `f32`),
+/// built directly so no row vector raises the peak RSS, then phases 4 to
+/// 6 on a columnar layer (GUP-628).
+fn columns_run(o: &Options, cx: &Context, wide: bool) -> gup_core::Result<()> {
+    /// Collected straight into `Arc<[F]>` (one allocation each, from a
+    /// `TrustedLen` iterator): a `Vec` would be copied into its `Arc`.
+    fn walk<F>(o: &Options, narrow: impl Fn(f64) -> F) -> (Arc<[F]>, Arc<[F]>) {
+        let n = o.rows;
+        let mut rng = Lcg(o.seed);
+        let step = 1000.0 / n.max(1) as f64;
+        let mut y = 0.0f64;
+        let mut xs: Arc<[F]> = (0..n).map(|i| narrow(i as f64 * step)).collect();
+        let mut ys: Arc<[F]> = (0..n)
+            .map(|_| {
+                y += rng.unit() - 0.5;
+                narrow(y)
+            })
+            .collect();
+        if o.shuffle {
+            let xm = Arc::get_mut(&mut xs).expect("unique");
+            let ym = Arc::get_mut(&mut ys).expect("unique");
+            for i in (1..n).rev() {
+                let j = (rng.next() % (i as u64 + 1)) as usize;
+                xm.swap(i, j);
+                ym.swap(i, j);
+            }
+        }
+        (xs, ys)
+    }
+    let t = Instant::now();
+    let cols = if wide {
+        let (xs, ys) = walk(o, |v| v);
+        Columns::new().with("x", xs)?.with("y", ys)?
+    } else {
+        let (xs, ys) = walk(o, |v| v as f32);
+        Columns::new().with("x", xs)?.with("y", ys)?
+    };
+    metric("build.ms", format!("{:.1}", ms(t)));
+    rss("build");
+    first_resolve_and_after(o, cx, o.rows, |plot| {
+        plot.add_columns::<Circle>(&cols)
+            .x_column(&cols["x"])
+            .y_column(&cols["y"])
+            .attr(Circle::RADIUS, Px(1.5))
+            .retain(o.retain);
+    })?;
+    if !wide {
+        // What an f64 intermediate costs: widening both columns. Measured
+        // after the run, so it does not raise the peak RSS above.
+        let t = Instant::now();
+        let widened: Vec<Vec<f64>> = ["x", "y"]
+            .iter()
+            .map(|name| match &cols[*name] {
+                Column::F32(v) => v.iter().map(|&v| f64::from(v)).collect(),
+                _ => unreachable!("f32 columns"),
+            })
+            .collect();
+        metric("f32.widen.ms", format!("{:.1}", ms(t)));
+        drop(std::hint::black_box(widened));
+    }
+    Ok(())
 }
 
 /// Phases 2 and 3, apart from the library: the closures over every row,
@@ -231,24 +320,18 @@ fn bench_accessor_and_store(
     Ok(())
 }
 
-/// Phases 4 to 6, through the library.
+/// Phases 4 to 6, through the library, on the layer `add` adds.
 fn first_resolve_and_after(
     o: &Options,
     cx: &Context,
-    rows: Vec<(f64, f64)>,
-    fx: impl Fn(&(f64, f64)) -> f64 + Send + Sync + 'static,
-    fy: impl Fn(&(f64, f64)) -> f64 + Send + Sync + 'static,
+    n: usize,
+    add: impl FnOnce(&mut Plot),
 ) -> gup_core::Result<()> {
-    let n = rows.len();
-    // 4. first resolve (consumes the rows)
+    // 4. first resolve (of rows, it consumes them)
     let (w, h) = o.size;
     let mut plot = Plot::new();
     plot.legends(false);
-    plot.circles(rows)
-        .x(fx)
-        .y(fy)
-        .attr(Circle::RADIUS, Px(1.5))
-        .retain(o.retain);
+    add(&mut plot);
     let before = cx.upload_stats();
     let t = Instant::now();
     let scene = plot.resolve(cx, w as f32, h as f32)?.scene.clone();

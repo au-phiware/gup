@@ -15,6 +15,7 @@
 
 use crate::channel::{ConstValue, GpuType, Px, Visual};
 use crate::column::{ColumnData, ColumnFormat, ColumnStats, Dictionary, DictionaryKey, NULL_CODE};
+use crate::columns::Column;
 use crate::error::{Error, Result};
 use crate::shader::WgslModule;
 use std::any::Any;
@@ -264,6 +265,23 @@ pub trait EncodeFn: Clone + Send + Sync + 'static {
         Encoded {
             accessor,
             func: self.clone(),
+        }
+    }
+
+    /// Encode a [`Column`] of a columnar layer
+    /// ([`Plot::add_columns`](crate::Plot::add_columns)) through (a clone
+    /// of) this function: `viridis.encode_column(&cols["v"])`. The column
+    /// is shared, not copied, and no closure runs per row. Its length must
+    /// be the layer's, or resolving the plot is an error naming the
+    /// channel.
+    fn encode_column(&self, column: &Column) -> ColumnEncoded<Self>
+    where
+        Self: EncodeFn<Input = f32>,
+    {
+        ColumnEncoded {
+            column: column.clone(),
+            func: self.clone(),
+            extent: None,
         }
     }
 
@@ -720,6 +738,17 @@ pub struct Encoded<A, S> {
     func: S,
 }
 
+/// A [`Column`] composed with an encoding function, made by
+/// [`EncodeFn::encode_column`]: drives a channel of a columnar layer
+/// ([`Plot::add_columns`](crate::Plot::add_columns)), whose rows are `()`.
+#[derive(Clone)]
+pub struct ColumnEncoded<S> {
+    column: Column,
+    func: S,
+    /// The extent of the column the function was last fitted to.
+    extent: Option<(f64, f64)>,
+}
+
 /// A key accessor composed with an encoding function over dictionary
 /// codes, made by [`EncodeFn::encode_key`] and its siblings. It owns the
 /// channel's [`Dictionary`]: the column store holds only codes, and the
@@ -1053,6 +1082,16 @@ where
     }
 }
 
+impl<V, S> IntoEncoding<(), V, ColumnMarker<f64>> for ColumnEncoded<S>
+where
+    V: Visual,
+    S: EncodeFn<Input = f32, Output = V>,
+{
+    fn into_encoding(self) -> Encoding<()> {
+        Encoding::Column(Box::new(self))
+    }
+}
+
 impl<T, V, K, S> IntoEncoding<T, V, KeyMarker> for KeyEncoded<K, S>
 where
     T: 'static,
@@ -1097,6 +1136,14 @@ pub trait DynColumnEncoding<T>: Send + Sync {
     /// missing value), without touching the encoding's state: how a row is
     /// read out when its CPU columns were released (GUP-621).
     fn row_value(&self, row: &T) -> f64;
+    /// The column the encoding reads, when it reads one directly rather
+    /// than running an accessor (a columnar layer's, GUP-628): the layer
+    /// stores it without the copy [`evaluate`](Self::evaluate) makes, and
+    /// reads row values from it. `None` (the default) for an accessor.
+    #[doc(hidden)]
+    fn shared(&self) -> Option<&Column> {
+        None
+    }
     /// The encoding function's links, in evaluation order.
     fn links(&self) -> Vec<&dyn DynShaderFn>;
     /// Fit the function's automatic domains to the column: a numeric
@@ -1173,6 +1220,53 @@ where
 
     fn row_value(&self, row: &T) -> f64 {
         (self.accessor)(row).to_f64()
+    }
+
+    fn links(&self) -> Vec<&dyn DynShaderFn> {
+        self.func.links()
+    }
+
+    fn fit(&mut self, stats: Option<ColumnStats>) -> Result<()> {
+        let Some(stats) = stats else { return Ok(()) };
+        self.extent = Some(stats.extent());
+        self.func.fit(stats.extent())?;
+        self.func.fit_integral(stats.integral);
+        Ok(())
+    }
+
+    fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)> {
+        self.func.image(extent)
+    }
+
+    #[cfg(feature = "svg")]
+    fn mirror(&self) -> Arc<dyn ColumnMirror> {
+        Arc::new(FuncMirror(self.func.clone()))
+    }
+
+    fn legend(&self) -> Option<crate::Legend> {
+        self.func
+            .encode_legend()
+            .or_else(|| self.func.encode_legend_over(self.extent?))
+    }
+
+    fn apply_theme(&mut self, theme: &Theme) {
+        self.func.apply_theme(theme);
+    }
+}
+
+impl<S: EncodeFn> DynColumnEncoding<()> for ColumnEncoded<S> {
+    fn evaluate(&mut self, _rows: &[()]) -> Result<ColumnData> {
+        Ok(ColumnData::Values(self.column.to_f64()))
+    }
+
+    /// A `()` row does not say which row it is: NaN. Rows are read
+    /// through [`shared`](Self::shared).
+    fn row_value(&self, _row: &()) -> f64 {
+        f64::NAN
+    }
+
+    fn shared(&self) -> Option<&Column> {
+        Some(&self.column)
     }
 
     fn links(&self) -> Vec<&dyn DynShaderFn> {
@@ -1307,21 +1401,35 @@ impl<E: EncodeFn> DynEncodeFn for E {
     }
 }
 
-/// A closure on a position channel, encoded through a plot scale's shared
+/// What a position channel bound to a plot axis reads: a closure over
+/// each row (the generated `.x(|r| ..)` setters), or a column of a
+/// columnar layer (`x_column`, GUP-628).
+pub(crate) enum AxisSource<T> {
+    Rows(Arc<dyn Fn(&T) -> f64 + Send + Sync>),
+    Column(Column),
+}
+
+impl<T> Clone for AxisSource<T> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Rows(f) => Self::Rows(Arc::clone(f)),
+            Self::Column(c) => Self::Column(c.clone()),
+        }
+    }
+}
+
+/// A position channel's source, encoded through a plot scale's shared
 /// state (see [`DynPositionScale::dyn_encode`](crate::scale)).
 pub(crate) struct AxisEncoding<T> {
-    pub(crate) accessor: Arc<dyn Fn(&T) -> f64 + Send + Sync>,
+    pub(crate) source: AxisSource<T>,
     pub(crate) func: Box<dyn DynEncodeFn>,
     extent: Option<(f64, f64)>,
 }
 
 impl<T> AxisEncoding<T> {
-    pub(crate) fn new(
-        accessor: Arc<dyn Fn(&T) -> f64 + Send + Sync>,
-        func: Box<dyn DynEncodeFn>,
-    ) -> Self {
+    pub(crate) fn new(source: AxisSource<T>, func: Box<dyn DynEncodeFn>) -> Self {
         Self {
-            accessor,
+            source,
             func,
             extent: None,
         }
@@ -1330,13 +1438,24 @@ impl<T> AxisEncoding<T> {
 
 impl<T> DynColumnEncoding<T> for AxisEncoding<T> {
     fn evaluate(&mut self, rows: &[T]) -> Result<ColumnData> {
-        Ok(ColumnData::Values(
-            rows.iter().map(|r| (self.accessor)(r)).collect(),
-        ))
+        Ok(ColumnData::Values(match &self.source {
+            AxisSource::Rows(f) => rows.iter().map(|r| f(r)).collect(),
+            AxisSource::Column(c) => c.to_f64(),
+        }))
     }
 
     fn row_value(&self, row: &T) -> f64 {
-        (self.accessor)(row)
+        match &self.source {
+            AxisSource::Rows(f) => f(row),
+            AxisSource::Column(_) => f64::NAN,
+        }
+    }
+
+    fn shared(&self) -> Option<&Column> {
+        match &self.source {
+            AxisSource::Rows(_) => None,
+            AxisSource::Column(c) => Some(c),
+        }
     }
 
     fn links(&self) -> Vec<&dyn DynShaderFn> {
