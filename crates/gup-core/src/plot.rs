@@ -1583,6 +1583,7 @@ impl Plot {
     ///
     /// ```
     /// use gup_core::prelude::*;
+    /// use gup_core::RowId;
     ///
     /// let cx = Context::new_blocking()?;
     /// let mut plot = Plot::new();

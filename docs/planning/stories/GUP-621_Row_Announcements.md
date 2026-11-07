@@ -19,8 +19,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Track N4: Accessibility **Status**: 🚧 In Progress **Created**:
-2026-11-04
+**Initiative**: Track N4: Accessibility **Status**: ✅ Complete (2026-11-07)
+**Created**: 2026-11-04
 
 ## Context
 
@@ -61,10 +61,10 @@ plus a count, and a box is a five-number summary.
 
 ### AC1: Row fields
 
-- [ ] `Plot::row_fields(&self, row: RowId) -> Option<Vec<(String, String)>>`
+- [x] `Plot::row_fields(&self, row: RowId) -> Option<Vec<(String, String)>>`
       returns `(name, value)` pairs by the rules in Decisions; `None` for a row
       that does not exist or whose layer kept neither rows nor CPU columns.
-- [ ] Tested in `crates/gup-core/tests/keyboard.rs` (or a new
+- [x] Tested in `crates/gup-core/tests/keyboard.rs` (or a new
       `tests/row_text.rs`) for: a scatter with axis titles (names are the
       titles), one without (names `x` and `y`), a `Time` x axis (an ISO date), a
       colour key (a `Series` field), a heatmap (two keys and the value), a
@@ -75,16 +75,16 @@ plus a count, and a box is a five-number summary.
 
 ### AC2: Row text and focus text
 
-- [ ] `Plot::row_text(&self, row) -> Option<String>`: the layer's tooltip with
+- [x] `Plot::row_text(&self, row) -> Option<String>`: the layer's tooltip with
       line breaks replaced by `"; "`, if it has one; else the fields joined as
       in Decisions.
-- [ ] `Plot::focus_text(&self) -> Option<&str>`: `row_text` of the focused row
+- [x] `Plot::focus_text(&self) -> Option<&str>`: `row_text` of the focused row
       plus the position suffix, `None` without keyboard focus. Recomputed when
       focus moves and on each full resolve while focused (an append can change
       `n`).
-- [ ] `Chart::focus_text(&self) -> Option<&str>` exists with a default of
+- [x] `Chart::focus_text(&self) -> Option<&str>` exists with a default of
       `None`; `Plot` and all seven builders implement it by delegation.
-- [ ] A doctest on `Plot::focus_text` focuses the second of three rows with
+- [x] A doctest on `Plot::focus_text` focuses the second of three rows with
       `Input::key(Key::Right)` twice and asserts the exact string, e.g.
       `"Mass: 0.9; Span: 0.95 (2 of 3)"`.
 
@@ -179,15 +179,67 @@ plus a count, and a box is a five-number summary.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1` and
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1` and
       `cargo test -p gup-core -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye: not needed, text only
-- [ ] `mask wasm-browser`: not needed yet (GUP-623 uses it); state so
-- [ ] WASM size: `mask wasm-size` scatter gz bytes
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye: not needed, text only
+- [x] `mask wasm-browser`: not needed yet (GUP-623 uses it); state so
+- [x] WASM size: `mask wasm-size` scatter gz bytes
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `Plot::row_fields`, `row_text`, `focus_text`; `Chart::focus_text` (default
+  `None`; Plot and the seven builders delegate). Focus text is refreshed at the
+  end of `handle` and `resolve` (keyed by row and generation).
+- `PositionScale::value_label` (default `sig3`; `Time` says ISO 8601 UTC);
+  `DynPositionScale::{value_label, key_label}`.
+- `Selection::series_name` and `row_fields_with`; bar, histogram and box plot
+  hooks; line, area, bar and histogram name their series.
+- Support: `DynColumnEncoding::row_value` (encoding.rs) reads one row from the
+  rows when CPU columns are released; `DrawOrder::stored_of` (order.rs).
+- Tests: `tests/row_text.rs` (15), `Time::value_label`, `stored_of`, two
+  doctests. Rendered output unchanged (text only); `mask wasm-browser` not
+  needed (GUP-623).
+- WASM size: `mask wasm-size` scatter gz 369536 vs recorded 360399 (+2.5%, limit
+  +2%: FAIL). Not re-recorded; needs the coordinator's decision.
+
+## Retrospective
+
+**Completed**: 2026-11-07
+
+### Architectural Decisions
+
+#### Hook takes the axes
+
+- **Decision**: `row_fields_with` takes
+  `Fn(&T, &RowAxes) -> Vec<(String, String)>`, not `Fn(&T)`.
+- **Reasoning**: a hook must name fields by the axis titles and format values
+  with the axis format, both of which live in the plot and may change after the
+  layer is built.
+- **Trade-off**: differs from the Decisions text by one parameter
+  (crate-private).
+
+#### Small additions outside `touches`
+
+- `encoding.rs` (`row_value`, needed for the Retain::Rows fallback through
+  `&self`) and `order.rs` (`stored_of`, to read a size-ordered layer's column
+  row) were edited; both additive.
+- Key labels: an ordinal axis via its ticks at unlimited count; a colour key via
+  its legend's swatches (code order), so no band.rs or categorical.rs edit.
+
+### Key Technical Learnings
+
+- `chunk_values` decodes a whole chunk per field read; fine per focus move, but
+  a single-row decode would be cheaper at 10M rows.
+- A stacked area reads its cumulative top edge (generic path); a hook like the
+  bar's would give the own value.
+
+### Follow-up Stories
+
+None written (GUP-652 and GUP-655 unused).
