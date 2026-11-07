@@ -22,7 +22,7 @@ use crate::plot::inset::EdgeAxis;
 use crate::render::{
     ChunkDraw, Draws, LayerGpu, LayerUniforms, chunk_uniform_offset, chunk_uniforms,
 };
-use crate::scale::{DynPositionScale, Legend};
+use crate::scale::{DynPositionScale, Legend, TickFormat};
 use crate::scene::MarkBatch;
 use crate::shader::glue::{self, ChannelSource, ChunkBase, Glue, GlueChannel, GlueSpec};
 use crate::theme::{Theme, Unbrushed};
@@ -35,6 +35,44 @@ use std::task::Waker;
 
 type Handler<T> = Box<dyn FnMut(&EventInfo, &T) + Send + Sync>;
 type TooltipFn<T> = Box<dyn Fn(&T) -> String + Send + Sync>;
+/// A builder's own `(name, value)` fields for a row (see
+/// [`Selection::row_fields_with`]).
+pub(crate) type RowFieldsFn<T> =
+    Arc<dyn for<'a> Fn(&T, &RowAxes<'a>) -> Vec<(String, String)> + Send + Sync>;
+
+/// How a plot axis says a value: its name and how it formats numbers
+/// (GUP-621).
+pub(crate) struct AxisText<'a> {
+    /// The axis title, else `x` or `y`.
+    pub(crate) name: String,
+    pub(crate) scale: &'a dyn DynPositionScale,
+    /// The axis's effective tick format, if one is set.
+    pub(crate) format: Option<TickFormat>,
+}
+
+impl AxisText<'_> {
+    /// The text of domain value `v`: a key's label on an ordinal axis, else
+    /// the tick format's, else the scale's own
+    /// ([`PositionScale::value_label`](crate::PositionScale::value_label)).
+    pub(crate) fn say(&self, v: f64) -> String {
+        if self.scale.reads_keys() {
+            return self
+                .scale
+                .key_label(v)
+                .unwrap_or_else(|| crate::describe::sig3(v));
+        }
+        match &self.format {
+            Some(f) => f.apply(v),
+            None => self.scale.value_label(v),
+        }
+    }
+}
+
+/// The two axes a layer's row is read through.
+pub(crate) struct RowAxes<'a> {
+    pub(crate) x: AxisText<'a>,
+    pub(crate) y: AxisText<'a>,
+}
 
 /// The palette LUTs a layer's GPU state was built with.
 type Luts = Vec<Vec<[u8; 4]>>;
@@ -204,6 +242,11 @@ pub struct Selection<T, M: Mark> {
     tooltip: Option<TooltipFn<T>>,
     /// Whether keyboard focus visits the layer's rows.
     focusable: bool,
+    /// The series the layer's rows belong to, for a builder that splits
+    /// rows into one layer per key (GUP-621).
+    series: Option<Arc<str>>,
+    /// Replaces the generic row fields (GUP-621).
+    row_fields: Option<RowFieldsFn<T>>,
     /// Evaluated columns, one per column-encoded channel in channel order.
     columns: Option<ColumnStore>,
     /// The size-descending draw order of the stored rows, when the mark's
@@ -355,6 +398,8 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             handlers: Vec::new(),
             tooltip: None,
             focusable: true,
+            series: None,
+            row_fields: None,
             columns: None,
             order: None,
             max_chunk_rows: None,
@@ -612,6 +657,21 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
     /// empty text shows nothing. Not shown for rows dropped by [`Retain`].
     pub fn tooltip(&mut self, text: impl Fn(&T) -> String + Send + Sync + 'static) -> &mut Self {
         self.tooltip = Some(Box::new(text));
+        self
+    }
+
+    /// The series the layer's rows belong to: its name leads the row's
+    /// fields (GUP-621).
+    pub(crate) fn series_name(&mut self, name: Arc<str>) -> &mut Self {
+        self.series = Some(name);
+        self
+    }
+
+    /// Replace the generic row fields (the x, y and colour values read
+    /// from the channels) with `f(row)`: for a chart whose value is not
+    /// what a channel holds (a stacked bar, a histogram bin, a box).
+    pub(crate) fn row_fields_with(&mut self, f: RowFieldsFn<T>) -> &mut Self {
+        self.row_fields = Some(f);
         self
     }
 
@@ -1327,6 +1387,11 @@ pub(crate) trait Layer: wgpu::WasmNotSendSync {
     fn tooltip_text(&self, row: usize) -> Option<String>;
     /// Whether keyboard focus visits the layer's rows.
     fn is_focusable(&self) -> bool;
+    /// The row's `(name, value)` fields as a listener hears them
+    /// (GUP-621): a builder's own, else the series, x, y and colour read
+    /// from the channels. `None` for a row the layer does not hold or
+    /// cannot read.
+    fn row_fields(&self, row: usize, axes: &RowAxes<'_>) -> Option<Vec<(String, String)>>;
     /// The generated glue (for tests and diagnostics).
     fn glue_source(&self) -> Glue;
     fn as_any_mut(&mut self) -> &mut dyn Any;
@@ -1366,7 +1431,140 @@ fn axis_scale_for<'s>(
     Ok(scale)
 }
 
+/// The first column-encoded channel of each role X, Y and Color.
+fn first_slots(channels: &[ChannelDesc], is_column: &[bool]) -> [Option<usize>; 3] {
+    let mut out = [None; 3];
+    for (slot, desc) in channels.iter().enumerate() {
+        let target = match desc.role {
+            Some(Role::X) => 0,
+            Some(Role::Y) => 1,
+            Some(Role::Color) => 2,
+            _ => continue,
+        };
+        if out[target].is_none() && is_column[slot] {
+            out[target] = Some(slot);
+        }
+    }
+    out
+}
+
+/// Column `k`'s raw value at data row `data`, from the CPU columns (the
+/// chunk's origin added back); `None` when its chunk was released.
+fn read_stored(store: &ColumnStore, order: Option<&DrawOrder>, k: usize, data: u64) -> Option<f64> {
+    let stored = match order {
+        Some(order) => order.stored_of(data)?,
+        None => data,
+    };
+    let chunks = store.chunks();
+    let c = chunks.partition_point(|c| c.row_base() + u64::from(c.rows()) <= stored);
+    let chunk = chunks.get(c)?;
+    let values = store.chunk_values(c, k)?;
+    values.get((stored - chunk.row_base()) as usize).copied()
+}
+
+/// A row's colour channel, as read.
+struct ColorRead {
+    value: f64,
+    /// A key column: the value is a code into the legend's swatches.
+    is_key: bool,
+    legend: Option<Legend>,
+    title: Option<String>,
+}
+
+/// The fields of a row from its raw values: a key colour (or the layer's
+/// series) names the series, then x, then y, then a numeric colour value.
+/// `None` when nothing was read.
+fn compose_row(
+    axes: &RowAxes<'_>,
+    x: Option<f64>,
+    y: Option<f64>,
+    color: Option<ColorRead>,
+    series: Option<&str>,
+) -> Option<Vec<(String, String)>> {
+    let title = |default: &str| {
+        color
+            .as_ref()
+            .and_then(|c| c.title.clone())
+            .unwrap_or_else(|| default.to_owned())
+    };
+    let key_label = color.as_ref().filter(|c| c.is_key).and_then(|c| {
+        let Some(Legend::Swatches(swatches)) = &c.legend else {
+            return None;
+        };
+        swatches.get(c.value as usize).map(|s| s.label.to_string())
+    });
+    let mut out = Vec::new();
+    if let Some(label) = key_label {
+        out.push((title("Series"), label));
+    } else if let Some(name) = series {
+        out.push((title("Series"), name.to_owned()));
+    }
+    for (axis, v) in [(&axes.x, x), (&axes.y, y)] {
+        if let Some(v) = v {
+            out.push((axis.name.clone(), axis.say(v)));
+        }
+    }
+    if let Some(c) = color.as_ref().filter(|c| !c.is_key) {
+        let grouped = match &c.legend {
+            Some(Legend::Ramp(r)) => {
+                let values: Vec<f64> = r.ticks.iter().map(|t| t.value).collect();
+                crate::scale::groups_thousands(&values)
+            }
+            _ => false,
+        };
+        out.push((title("Value"), crate::scale::number_label(c.value, grouped)));
+    }
+    (!out.is_empty()).then_some(out)
+}
+
 impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
+    /// Whether channel `slot` is a key column (dictionary codes).
+    fn is_key_channel(&self, slot: usize) -> bool {
+        let Some(store) = &self.columns else {
+            return false;
+        };
+        self.column_index(slot)
+            .and_then(|k| store.formats().get(k))
+            .is_some_and(|f| *f == ColumnFormat::U32)
+    }
+
+    /// The index of channel `slot`'s column among the stored columns.
+    fn column_index(&self, slot: usize) -> Option<usize> {
+        if !matches!(self.encodings.get(slot)?, Some(Encoding::Column(_))) {
+            return None;
+        }
+        Some(
+            self.encodings[..slot]
+                .iter()
+                .filter(|e| matches!(e, Some(Encoding::Column(_))))
+                .count(),
+        )
+    }
+
+    /// Channel `slot`'s raw input value for data row `data`: from the CPU
+    /// columns (the chunk's origin added back), else by running the
+    /// accessor on the row `held`. `NaN` for a missing value.
+    fn read_value(&self, slot: usize, data: u64, held: Option<&T>) -> Option<f64> {
+        let k = self.column_index(slot)?;
+        if let Some(store) = &self.columns
+            && let Some(v) = read_stored(store, self.order.as_ref(), k, data)
+        {
+            return Some(v);
+        }
+        match self.encodings.get(slot)? {
+            Some(Encoding::Column(e)) => held.map(|r| e.row_value(r)),
+            _ => None,
+        }
+    }
+
+    /// The legend of colour channel `slot`'s encoding.
+    fn legend_of(&self, slot: usize) -> Option<Legend> {
+        let Some(Encoding::Column(c)) = &self.encodings[slot] else {
+            return None;
+        };
+        c.legend()
+    }
+
     /// The batch's vector slot: the snapshot with the `svg` feature.
     #[cfg(feature = "svg")]
     fn vector_slot(&self, theme: &Theme, entries: &[DrawEntry]) -> Arc<LayerVector> {
@@ -2498,6 +2696,38 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
 
     fn is_focusable(&self) -> bool {
         self.focusable
+    }
+
+    fn row_fields(&self, row: usize, axes: &RowAxes<'_>) -> Option<Vec<(String, String)>> {
+        if !self.holds(row) {
+            return None;
+        }
+        let held = row
+            .checked_sub(self.released)
+            .and_then(|i| self.rows.get(i));
+        if let Some(f) = &self.row_fields {
+            return held.map(|r| f(r, axes));
+        }
+        let data = (row as u64).checked_sub(self.evicted)?;
+        let is_column: Vec<bool> = self
+            .encodings
+            .iter()
+            .map(|e| matches!(e, Some(Encoding::Column(_))))
+            .collect();
+        let [x, y, color] = first_slots(M::CHANNELS, &is_column);
+        let read = |slot: Option<usize>| {
+            slot.and_then(|s| self.read_value(s, data, held))
+                .filter(|v| !v.is_nan())
+        };
+        let color = color.and_then(|slot| {
+            Some(ColorRead {
+                value: read(Some(slot))?,
+                is_key: self.is_key_channel(slot),
+                legend: self.legend_of(slot),
+                title: self.legend_titles[slot].clone(),
+            })
+        });
+        compose_row(axes, read(x), read(y), color, self.series.as_deref())
     }
 
     fn tooltip_text(&self, row: usize) -> Option<String> {

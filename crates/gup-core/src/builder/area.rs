@@ -451,6 +451,9 @@ impl<T: Send + Sync + 'static> AreaChart<T> {
         let layers: Vec<_> = groups.into_iter().map(|g| g.0).zip(points).collect();
         for (name, pts) in &layers {
             let sel = self.plot.area(pts.clone());
+            if let Some(name) = name {
+                sel.series_name(Arc::clone(name));
+            }
             if has_x {
                 sel.x(|p: &AreaPoint| p.x);
             }
@@ -568,6 +571,9 @@ impl<T: Send + Sync + 'static> Chart for AreaChart<T> {
     }
     fn describe(&self) -> Option<&crate::Description> {
         self.plot.describe()
+    }
+    fn focus_text(&self) -> Option<&str> {
+        self.plot.focus_text()
     }
     fn as_any(&self) -> &dyn Any {
         self

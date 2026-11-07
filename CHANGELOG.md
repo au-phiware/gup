@@ -82,6 +82,11 @@ what each release contains and what its version number promises.
   centre of the plot, Shift with an arrow pans a tenth of the plot, and
   `Key::ResetView` restores the view. Keys held with Ctrl, Alt or Meta are left
   to the host.
+- Row announcements for screen readers: `Plot::focus_text` (and
+  `Chart::focus_text`) says the focused row's values with their axis names and
+  its place, such as `Mass: 0.9; Span: 0.95 (2 of 3)`, in the axes' own formats
+  (a time axis says an ISO date). `Plot::row_fields` and `Plot::row_text` give
+  any row's values as `(name, value)` pairs or text.
 - Render targets: a window (`gup::show`), PNG, SVG, a texture, and a WebGPU
   canvas in the browser.
 - Interaction: picking, tooltips, wheel zoom, drag pan and brushing. Zooming and

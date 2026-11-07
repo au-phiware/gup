@@ -291,7 +291,14 @@ impl<T: Send + Sync + 'static> LineChart<T> {
 
     /// Add one line layer over `series`, with the recorded settings.
     fn add_series(&mut self, series: Vec<T>) {
+        let name = match &self.color {
+            ColorSpec::Key(key) => series.first().map(|r| key.label(r)),
+            _ => None,
+        };
         let sel = self.plot.line(series);
+        if let Some(name) = name {
+            sel.series_name(name);
+        }
         for op in &self.ops {
             op(sel);
         }
@@ -467,6 +474,9 @@ impl<T: Send + Sync + 'static> Chart for LineChart<T> {
     }
     fn describe(&self) -> Option<&crate::Description> {
         self.plot.describe()
+    }
+    fn focus_text(&self) -> Option<&str> {
+        self.plot.focus_text()
     }
     fn as_any(&self) -> &dyn Any {
         self

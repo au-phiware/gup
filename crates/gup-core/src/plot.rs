@@ -27,7 +27,7 @@ use crate::scene::{
     Anchor, HAlign, Item, ItemKind, RectPrim, Rule, Scene, TextRole, TextRun, TextStyle, VAlign,
     Weight, Z_AXES, Z_BRUSH, Z_FOCUS, Z_GRID, Z_TITLE,
 };
-use crate::selection::{Layer, Selection};
+use crate::selection::{AxisText, Layer, RowAxes, Selection};
 use crate::text_layer::{AnnotationLayer, TextLayer};
 use crate::theme::Theme;
 use gup_text::TextSystem;
@@ -248,6 +248,9 @@ pub struct Plot {
     /// The focusable rows by layer, each in focus order, with the key and
     /// plot rect of the pick index they came from.
     focus_order: Option<FocusOrder>,
+    /// What a screen reader says of the focused row, and the row and
+    /// resolve generation it was made for.
+    focus_text: Option<((RowId, u64), String)>,
     /// Where the primary button went down, until it comes up.
     press: Option<Point>,
     /// The last pointer position seen.
@@ -464,6 +467,9 @@ impl crate::chart::Chart for Plot {
     fn describe(&self) -> Option<&crate::Description> {
         Plot::describe(self)
     }
+    fn focus_text(&self) -> Option<&str> {
+        Plot::focus_text(self)
+    }
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -573,6 +579,7 @@ impl Plot {
             hover: None,
             hover_from_keys: false,
             focus_order: None,
+            focus_text: None,
             press: None,
             view_axes: Axes::Both,
             grid: Axes::Neither,
@@ -1386,6 +1393,7 @@ impl Plot {
         self.sync_brush(cx)?;
         self.gpu_step(cx)?;
         self.sync_overlay(cx);
+        self.sync_focus_text();
         match (&self.overlay, &self.cache) {
             (Some((g, composed)), _) if *g == self.generation => Ok(composed),
             (_, Some((_, resolved))) => Ok(resolved),
@@ -1573,6 +1581,143 @@ impl Plot {
             .map(|(row, _, _)| row)
     }
 
+    /// The `(name, value)` fields of `row` as a listener hears them, or
+    /// `None` for a row that does not exist or whose layer kept neither its
+    /// rows nor its CPU columns ([`Retain`](crate::Retain)).
+    ///
+    /// The fields are, in order: the series (a colour key, or a series a
+    /// chart builder split the rows by), x, y, then the colour value of a
+    /// numeric colour channel. x and y are named by the axis titles
+    /// ([`x_title`](Self::x_title)), else `x` and `y`; the colour field by
+    /// its legend title, else `Series` or `Value`. Axis values are said as
+    /// the axis prints its ticks ([`x_tick_format`](Self::x_tick_format)),
+    /// else to three significant digits; a time axis says an ISO 8601 date
+    /// (`2024-02-29`, or `2024-02-29T14:05`); a key axis says the key.
+    /// A chart builder says its own fields: a stacked bar its segment's own
+    /// value, a histogram bin its `Bin` range and `Count`, a box its median,
+    /// quartiles, whiskers and outlier count.
+    ///
+    /// ```
+    /// use gup_core::prelude::*;
+    /// use gup_core::RowId;
+    ///
+    /// let cx = Context::new_blocking()?;
+    /// let mut plot = Plot::new();
+    /// plot.circles(vec![(1.0, 0.5)]).x(|r| r.0).y(|r| r.1);
+    /// plot.x_title("Mass");
+    /// plot.resolve(&cx, 320.0, 200.0)?;
+    /// let row = RowId { layer: 0, row: 0 };
+    /// assert_eq!(
+    ///     plot.row_fields(row),
+    ///     Some(vec![
+    ///         ("Mass".to_string(), "1".to_string()),
+    ///         ("y".to_string(), "0.5".to_string()),
+    ///     ])
+    /// );
+    /// assert_eq!(plot.row_fields(RowId { layer: 0, row: 1 }), None);
+    /// # Ok::<(), gup_core::Error>(())
+    /// ```
+    pub fn row_fields(&self, row: RowId) -> Option<Vec<(String, String)>> {
+        let layer = self.layers.get(row.layer)?;
+        let right = self
+            .y_right
+            .as_deref()
+            .filter(|r| layer.y_axis_id() == Some(r.identity()));
+        let (y, y_axis, y_title) = match right {
+            Some(r) => (r, 2, &self.y_right_title),
+            None => (&*self.y, 1, &self.y_title),
+        };
+        let axes = RowAxes {
+            x: AxisText {
+                name: self.x_title.clone().unwrap_or_else(|| "x".to_owned()),
+                scale: &*self.x,
+                format: self.label_formats[0].get(),
+            },
+            y: AxisText {
+                name: y_title.clone().unwrap_or_else(|| "y".to_owned()),
+                scale: y,
+                format: self.label_formats[y_axis].get(),
+            },
+        };
+        layer.row_fields(row.row, &axes)
+    }
+
+    /// What a screen reader says of `row`: its layer's tooltip with the line
+    /// breaks replaced by `"; "`, if the layer has one, else
+    /// [`row_fields`](Self::row_fields) as `name: value` joined by `"; "`.
+    /// `None` when there is nothing to say.
+    pub fn row_text(&self, row: RowId) -> Option<String> {
+        if let Some(tip) = self.layers.get(row.layer)?.tooltip_text(row.row) {
+            return Some(tip.lines().collect::<Vec<_>>().join("; "));
+        }
+        let fields = self.row_fields(row)?;
+        if fields.is_empty() {
+            return None;
+        }
+        Some(
+            fields
+                .iter()
+                .map(|(name, value)| format!("{name}: {value}"))
+                .collect::<Vec<_>>()
+                .join("; "),
+        )
+    }
+
+    /// What a screen reader says when keyboard focus is on a row: its
+    /// [`row_text`](Self::row_text) and its place among the layer's
+    /// focusable rows in view, `" (2 of 3)"`. `None` without keyboard focus
+    /// ([`focused`](Self::focused)). It is made when focus moves and at
+    /// each full resolve while focused (an append can change the count).
+    ///
+    /// ```
+    /// use gup_core::prelude::*;
+    /// use gup_core::{Input, Key};
+    ///
+    /// let cx = Context::new_blocking()?;
+    /// let mut plot = Plot::new();
+    /// plot.circles(vec![(0.8, 0.9), (0.9, 0.95), (1.0, 0.99)])
+    ///     .x(|r| r.0)
+    ///     .y(|r| r.1);
+    /// plot.x_title("Mass").y_title("Span");
+    /// plot.resolve(&cx, 320.0, 200.0)?;
+    /// assert_eq!(plot.focus_text(), None);
+    /// plot.handle(Input::key(Key::Right));
+    /// plot.handle(Input::key(Key::Right));
+    /// assert_eq!(plot.focus_text(), Some("Mass: 0.9; Span: 0.95 (2 of 3)"));
+    /// # Ok::<(), gup_core::Error>(())
+    /// ```
+    pub fn focus_text(&self) -> Option<&str> {
+        self.focus_text.as_ref().map(|(_, text)| text.as_str())
+    }
+
+    /// Bring [`focus_text`](Self::focus_text) up to date with the focus.
+    fn sync_focus_text(&mut self) {
+        let Some(row) = self.focused() else {
+            self.focus_text = None;
+            return;
+        };
+        let key = (row, self.generation);
+        if self.focus_text.as_ref().is_some_and(|(k, _)| *k == key) {
+            return;
+        }
+        self.focus_text = self.focus_text_of(row).map(|t| (key, t));
+    }
+
+    /// The row's text and its place in its layer's focus order.
+    fn focus_text_of(&mut self, row: RowId) -> Option<String> {
+        let text = self.row_text(row)?;
+        let place = self.focus_order().and_then(|order| {
+            order.layers.iter().find_map(|rows| {
+                let k = rows.iter().position(|(r, _)| *r == row)?;
+                Some((k + 1, rows.len()))
+            })
+        });
+        Some(match place {
+            Some((k, n)) => format!("{text} ({k} of {n})"),
+            None => text,
+        })
+    }
+
     /// React to `input`.
     ///
     /// - Moving the pointer onto another row (or off the rows) calls the
@@ -1747,6 +1892,7 @@ impl Plot {
             }
             _ => {}
         }
+        self.sync_focus_text();
         Response { redraw }
     }
 

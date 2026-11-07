@@ -1093,6 +1093,10 @@ pub trait DynColumnEncoding<T>: Send + Sync {
     /// Run the accessor over `rows`: numbers, or keys encoded through the
     /// channel's dictionary (which grows by any new key).
     fn evaluate(&mut self, rows: &[T]) -> Result<ColumnData>;
+    /// The column value of one row (a code, for a key column; `NaN` for a
+    /// missing value), without touching the encoding's state: how a row is
+    /// read out when its CPU columns were released (GUP-621).
+    fn row_value(&self, row: &T) -> f64;
     /// The encoding function's links, in evaluation order.
     fn links(&self) -> Vec<&dyn DynShaderFn>;
     /// Fit the function's automatic domains to the column: a numeric
@@ -1167,6 +1171,10 @@ where
         ))
     }
 
+    fn row_value(&self, row: &T) -> f64 {
+        (self.accessor)(row).to_f64()
+    }
+
     fn links(&self) -> Vec<&dyn DynShaderFn> {
         self.func.links()
     }
@@ -1214,6 +1222,14 @@ where
                 .map(|r| self.key.code(r, &mut dictionary))
                 .collect::<Result<_>>()?,
         ))
+    }
+
+    fn row_value(&self, row: &T) -> f64 {
+        let mut dictionary = self.dictionary.lock().unwrap_or_else(|p| p.into_inner());
+        match self.key.code(row, &mut dictionary) {
+            Ok(code) if code != NULL_CODE => f64::from(code),
+            _ => f64::NAN,
+        }
     }
 
     fn links(&self) -> Vec<&dyn DynShaderFn> {
@@ -1317,6 +1333,10 @@ impl<T> DynColumnEncoding<T> for AxisEncoding<T> {
         Ok(ColumnData::Values(
             rows.iter().map(|r| (self.accessor)(r)).collect(),
         ))
+    }
+
+    fn row_value(&self, row: &T) -> f64 {
+        (self.accessor)(row)
     }
 
     fn links(&self) -> Vec<&dyn DynShaderFn> {

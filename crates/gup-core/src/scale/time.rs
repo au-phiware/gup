@@ -138,6 +138,12 @@ impl PositionScale for Time {
     /// Calendar ticks: about `count` of them, on whole units of the
     /// interval the span calls for, labelled by the coarsest unit each
     /// begins.
+    /// ISO 8601 in UTC: `YYYY-MM-DD` at midnight, else `YYYY-MM-DDTHH:MM`,
+    /// with `:SS` only when the second is not zero.
+    fn value_label(&self, v: f64) -> String {
+        iso(v)
+    }
+
     fn ticks(&self, count: usize) -> Ticks {
         let (d0, d1) = self.resolved_domain();
         let (lo, hi) = (d0.min(d1), d0.max(d1));
@@ -373,6 +379,25 @@ fn begins_year(t: f64) -> bool {
     m == 1 && d == 1 && t.rem_euclid(DAY) == 0.0
 }
 
+/// `t` seconds since the epoch as ISO 8601 in UTC (see
+/// [`Time::value_label`](PositionScale::value_label)).
+fn iso(t: f64) -> String {
+    if !t.is_finite() {
+        return crate::describe::sig3(t);
+    }
+    let t = t.round();
+    let days = (t / DAY).floor();
+    let secs = (t - days * DAY) as i64;
+    let (hh, mm, ss) = (secs / 3600, secs / 60 % 60, secs % 60);
+    let (y, m, d) = civil(t);
+    let date = format!("{y:04}-{m:02}-{d:02}");
+    match (hh, mm, ss) {
+        (0, 0, 0) => date,
+        (_, _, 0) => format!("{date}T{hh:02}:{mm:02}"),
+        _ => format!("{date}T{hh:02}:{mm:02}:{ss:02}"),
+    }
+}
+
 /// `(year, month, day)` of the UTC day holding `t` seconds since the
 /// epoch (proleptic Gregorian).
 fn civil(t: f64) -> (i64, u32, u32) {
@@ -424,6 +449,26 @@ mod tests {
             assert_eq!(civil(date(y, m, d)), (y, m, d));
             assert_eq!(civil(date(y, m, d) + DAY - 1.0), (y, m, d));
         }
+    }
+
+    #[test]
+    fn value_labels_are_iso_8601_in_utc() {
+        let t = Time::new();
+        assert_eq!(t.value_label(date(2024, 2, 29)), "2024-02-29");
+        assert_eq!(
+            t.value_label(date(2024, 2, 29) + 14.0 * HOUR),
+            "2024-02-29T14:00"
+        );
+        assert_eq!(
+            t.value_label(date(2024, 2, 29) + 14.0 * HOUR + 5.0 * MINUTE + 9.0),
+            "2024-02-29T14:05:09"
+        );
+        assert_eq!(
+            t.value_label(date(1969, 12, 31) + 1.0 * HOUR),
+            "1969-12-31T01:00"
+        );
+        assert_eq!(t.value_label(0.0), "1970-01-01");
+        assert_eq!(t.value_label(f64::NAN), "n/a");
     }
 
     fn time(d0: f64, d1: f64) -> Time {
