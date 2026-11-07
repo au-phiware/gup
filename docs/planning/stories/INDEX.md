@@ -499,7 +499,7 @@ GUP-628 and GUP-631 (shared `selection.rs`).
   f32), `Plot::add_columns::<M>` over `()` rows, `x_column`/`y_column` and
   `encode_column`: identical pictures to the rows path, and an f32 fast path
   chosen by a measured rule. Opus. Deps: GUP-627 ✅.
-- [GUP-664](GUP-664_Shared_Columns_As_The_CPU_Copy.md) 📋 — a columnar layer
+- [GUP-664](GUP-664_Shared_Columns_As_The_CPU_Copy.md) 🚧 — a columnar layer
   keeps no chunk CPU copy (its shared columns are the copy): about 76 MiB and 60
   ms less at 10M rows, and picking, re-encoding and other contexts work above
   `Retain::AUTO_MAX_ROWS`. Opus. Deps: GUP-628 ✅; before GUP-632.
