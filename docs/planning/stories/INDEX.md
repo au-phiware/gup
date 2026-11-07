@@ -106,8 +106,8 @@ Backlog triage for later tracks (notes only; their stories are not written):
   `%Y-%m`, t3 `$Nk`) need `x_tick_format`/`y_tick_format` on the builders, whose
   `x_scale` takes a `PositionScale`, not a `ScaleRef` (checked 2026-10-24);
   restore the formats in that story.
-- **N5**: GUP-492 (windowed size-order draws), through a GPU sort or an index
-  buffer.
+- **N5**: GUP-492 (windowed size-order draws), through size buckets in the sort
+  key.
 - **N3 after N0**: release 0.1's minimal accessibility (`Plot::describe()`, an
   SVG title and description, a canvas `aria-label`) starts from the docs GUP-499
   archives; full N4 follows the release.
@@ -464,8 +464,8 @@ design by measurement (GUP-631, opus, which lists the stories that build it) and
 ends in a 100M-row demonstration with README wording by rule (GUP-632). A 1B-row
 run needs out-of-core paging and is not written. Each story commits its
 benchmark; the orchestrator, not the worker, records `PERF_BUDGETS.md`. GUP-492
-(windowed size-ordered draws, a GPU sort or index buffer) is 💡 and needs a
-scribe pass before it starts.
+(windowed size-ordered draws, through size buckets) is 📋 Ready and runs after
+GUP-628 and GUP-631 (shared `selection.rs`).
 
 - [GUP-566](GUP-566_Cheaper_Owned_Category_Keys.md) ✅ — A keyed first-resolve
   benchmark, then builder keys encoded from a borrowed label (no second
@@ -507,10 +507,10 @@ scribe pass before it starts.
   10M, 30M and 100M rows, proposed budget rows, and README wording by a stated
   rule ("interactive" only under 16.7 ms; no "billion"). Deps: GUP-628 📋,
   GUP-629 📋, GUP-631 📋 and its follow-ups (soft).
-- [GUP-492](GUP-492_Windowed_Size_Order_Draws.md) 💡 — bounded draw calls for a
-  windowed layer sized by a column whose sizes do not follow data order
-  (per-chunk sort runs draw about one instance per draw today). Deps: GUP-482
-  ✅.
+- [GUP-492](GUP-492_Windowed_Size_Order_Draws.md) 📋 — bounded draw calls for a
+  windowed layer sized by a column, through 12.5% size buckets in the sort key
+  (about one draw per row today), with a `zoom_bench` row. Deps: GUP-482 ✅,
+  GUP-628 📋 and GUP-631 📋 (sequencing only: shared `selection.rs`).
 
 ## Polish after 0.1
 
@@ -558,21 +558,21 @@ file). Lane A holds the `plot.rs` and `selection.rs` stories, one at a time;
 lane B runs beside it. Opus stories (GUP-628, GUP-585, GUP-631) are best started
 early in the week.
 
-| Step | Lane A                      | Lane B                        |
-| ---- | --------------------------- | ----------------------------- |
-| 1    | GUP-612                     | GUP-618                       |
-| 2    | GUP-615                     | GUP-617                       |
-| 3    | GUP-616                     | GUP-613                       |
-| 4    | GUP-619                     | GUP-614                       |
-| 5    | GUP-620                     | GUP-584 (`render.rs`)         |
-| 6    | GUP-621                     | GUP-627                       |
-| 7    | GUP-628 (opus)              | GUP-623 (WASM scenes)         |
-| 8    | GUP-624 (WASM scenes)       | GUP-622                       |
-| 9    | GUP-585 (opus, `render.rs`) | GUP-625 (`lib.rs`)            |
-| 10   | GUP-629 (`encoding.rs`)     | GUP-611                       |
-| 11   | GUP-631 (opus spike)        | GUP-630 (`maskfile.md`)       |
-| 12   | GUP-631's follow-ups        | GUP-626 (`src/lib.rs`)        |
-| 13   | GUP-632                     | GUP-492 (after a scribe pass) |
+| Step | Lane A                      | Lane B                  |
+| ---- | --------------------------- | ----------------------- |
+| 1    | GUP-612                     | GUP-618                 |
+| 2    | GUP-615                     | GUP-617                 |
+| 3    | GUP-616                     | GUP-613                 |
+| 4    | GUP-619                     | GUP-614                 |
+| 5    | GUP-620                     | GUP-584 (`render.rs`)   |
+| 6    | GUP-621                     | GUP-627                 |
+| 7    | GUP-628 (opus)              | GUP-623 (WASM scenes)   |
+| 8    | GUP-624 (WASM scenes)       | GUP-622                 |
+| 9    | GUP-585 (opus, `render.rs`) | GUP-625 (`lib.rs`)      |
+| 10   | GUP-629 (`encoding.rs`)     | GUP-611                 |
+| 11   | GUP-631 (opus spike)        | GUP-630 (`maskfile.md`) |
+| 12   | GUP-631's follow-ups        | GUP-626 (`src/lib.rs`)  |
+| 13   | GUP-632                     | GUP-492                 |
 
 GUP-625 touches `lib.rs` and must not run beside GUP-628 or GUP-619. GUP-611
 (💡) needs its candidate-list setter named before it starts. Close GUP-376 when
