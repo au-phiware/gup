@@ -225,3 +225,31 @@ scatter whose labels and discs share rows) and needs no cross-layer plumbing.
       code change"
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
+
+## Blocked (2026-11-08)
+
+**Question**: two Escalation Triggers fire on the 1,000-point scatter (800x600,
+discs and boxes of radius 4, offsets dy=-5 and fallbacks 6 px, so a label can
+clear its own disc). Do we relax the AC2 nearest-point rule and the kept-label
+expectation, or add a nearest-neighbour query?
+
+**Numbers** (`avoid_points_keeps_labels_off_the_discs`, `--nocapture`):
+
+- Kept labels: 374 with `avoid_points`, 647 without (same offsets), GUP-611's
+  599 on its offsets. 374 is 38% below 599 (42% below 647): more than a third.
+- Labels touching a disc: 563 without, 0 with (the seeding rule works).
+- Nearest-point rule: a box nearer another row's point than its own: 597/647
+  (92%) without, 158/374 (42%) with. Far above 5%.
+- The 300-point golden scene with `.avoid_points(Px(4.0))` keeps 156 labels; the
+  render (not blessed) shows no label on a disc and labels beside their points.
+
+**Options**: (a) accept the dense-scatter numbers: drop the 5% rule to a printed
+figure and the kept-count floor to the measured one; the golden is the visible
+win. (b) A real nearest-point rule (a nearest-neighbour query, reject a
+candidate nearer another point than its own): a design question. (c) Smaller
+discs/offsets: the 1,000 points have ~18% disc coverage, so little room is left.
+**Recommendation**: (a) for the count, and (b) as a follow-up (GUP-662).
+
+State: WIP commit; seeding and `avoid_points` are implemented with a doctest;
+the nearest-point assertion is commented out and the kept-count assertion is
+disabled; no golden blessed, CHANGELOG not yet edited.
