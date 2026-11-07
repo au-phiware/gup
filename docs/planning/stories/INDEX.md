@@ -495,7 +495,7 @@ GUP-628 and GUP-631 (shared `selection.rs`).
   `scale_bench` example timing each ingest phase (closures, f64 columns, chunk
   conversion and upload, first resolve, first frame, zoom) with peak RSS, run at
   1M–100M rows, so N5 is designed from numbers. Deps: GUP-457 ✅, GUP-482 ✅.
-- [GUP-628](GUP-628_Columnar_Layers.md) 📋 — `Columns`/`Column` (`Arc`'d f64 and
+- [GUP-628](GUP-628_Columnar_Layers.md) 🚧 — `Columns`/`Column` (`Arc`'d f64 and
   f32), `Plot::add_columns::<M>` over `()` rows, `x_column`/`y_column` and
   `encode_column`: identical pictures to the rows path, and an f32 fast path
   chosen by a measured rule. Opus. Deps: GUP-627 📋.
