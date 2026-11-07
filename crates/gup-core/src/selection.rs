@@ -7,10 +7,11 @@
 
 use crate::append::{Appender, FeedRx};
 use crate::channel::{Channel, ChannelDesc, ConstValue, Geometry, HitShape, Mark, Role, Visual};
-use crate::column::{ColumnData, ColumnFormat, ColumnStore};
+use crate::column::{ColumnData, ColumnFormat, ColumnSlice, ColumnStore};
+use crate::columns::Column;
 use crate::context::Context;
 use crate::cull::{self, PixelBox};
-use crate::encoding::{AxisEncoding, Encoding, IntoEncoding, Resource};
+use crate::encoding::{AxisEncoding, AxisSource, Encoding, IntoEncoding, Resource};
 use crate::error::{Error, Result};
 use crate::geom::Rect;
 use crate::input::{Event, EventInfo};
@@ -231,7 +232,7 @@ pub struct Selection<T, M: Mark> {
     /// Closures on position channels, by channel slot, waiting to be
     /// encoded through the plot's scales (GUP-447). A slot with one has no
     /// encoding until [`Layer::bind_axes`] makes it a column.
-    axes: Vec<Option<AxisFn<T>>>,
+    axes: Vec<Option<AxisSource<T>>>,
     /// The plot's axes generation the closures were last bound at (0: not).
     axes_bound: u64,
     /// Legend titles, by channel slot.
@@ -311,6 +312,38 @@ fn numbers(data: &ColumnData) -> &[f64] {
     }
 }
 
+/// One column's new rows on their way into the store: an accessor's
+/// output, or a columnar layer's shared column, which the store reads in
+/// place (GUP-628).
+enum Input {
+    Owned(ColumnData),
+    Shared(Column),
+}
+
+impl Input {
+    fn len(&self) -> usize {
+        match self {
+            Self::Owned(d) => d.len(),
+            Self::Shared(c) => c.len(),
+        }
+    }
+
+    fn slice(&self) -> ColumnSlice<'_> {
+        match self {
+            Self::Owned(d) => d.as_slice(),
+            Self::Shared(Column::F64(v)) => ColumnSlice::F64(v),
+            Self::Shared(Column::F32(v)) => ColumnSlice::F32(v),
+        }
+    }
+
+    fn into_owned(self) -> ColumnData {
+        match self {
+            Self::Owned(d) => d,
+            Self::Shared(c) => ColumnData::Values(c.to_f64()),
+        }
+    }
+}
+
 /// The last three of `x`, `y`'s rows, after `tail`'s.
 fn tail_of(tail: &[[f64; 2]], x: &[f64], y: &[f64]) -> Vec<[f64; 2]> {
     let rows: Vec<[f64; 2]> = tail
@@ -373,6 +406,52 @@ impl<T: Send + Sync + 'static> Selection<T, Line> {
             self.curve = curve;
             self.gpu = None;
         }
+        self
+    }
+}
+
+/// The slot of `channels`' first channel of `role`, if any (a `const fn`,
+/// so a mark without one fails to compile where it is asked for).
+const fn first_of_role(channels: &[ChannelDesc], role: Role) -> Option<usize> {
+    let mut i = 0;
+    while i < channels.len() {
+        if let Some(r) = channels[i].role
+            && r as u8 == role as u8
+        {
+            return Some(i);
+        }
+        i += 1;
+    }
+    None
+}
+
+/// A columnar layer: rows of `()`, one per column row, whose channels
+/// read [`Column`]s (see [`Plot::add_columns`](crate::Plot::add_columns)).
+impl<M: Mark> Selection<(), M> {
+    /// Bind the mark's first x channel to the plot's x axis, reading
+    /// `column` (shared, not copied), as the generated `.x(|r| ..)` setter
+    /// binds a closure. The column must have the layer's length, or
+    /// resolving the plot is an error naming the channel.
+    pub fn x_column(&mut self, column: &Column) -> &mut Self {
+        let slot =
+            const { first_of_role(M::CHANNELS, Role::X).expect("the mark has no x-role channel") };
+        self.axis_column(slot, column)
+    }
+
+    /// Bind the mark's first y channel to the plot's y axis, reading
+    /// `column`: see [`x_column`](Self::x_column).
+    pub fn y_column(&mut self, column: &Column) -> &mut Self {
+        let slot =
+            const { first_of_role(M::CHANNELS, Role::Y).expect("the mark has no y-role channel") };
+        self.axis_column(slot, column)
+    }
+
+    fn axis_column(&mut self, slot: usize, column: &Column) -> &mut Self {
+        self.encodings[slot] = None;
+        self.axes[slot] = Some(AxisSource::Column(column.clone()));
+        self.axes_bound = 0;
+        self.columns = None;
+        self.gpu = None;
         self
     }
 }
@@ -449,7 +528,21 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
     /// # Ok(())
     /// # }
     /// ```
+    ///
+    /// A columnar layer ([`Plot::add_columns`](crate::Plot::add_columns))
+    /// cannot be appended to: this (and so a resolve that drains its
+    /// [`appender`](Self::appender)) is an error.
     pub fn append(&mut self, rows: impl IntoIterator<Item = T>) -> Result<()> {
+        if self.reads_shared_columns() {
+            return Err(Error::config(
+                "append",
+                format!(
+                    "{} layer: a columnar layer (`Plot::add_columns`) cannot be appended to; \
+                     build a new layer from the grown columns",
+                    M::NAME
+                ),
+            ));
+        }
         self.appended = self.appended.wrapping_add(1);
         let start = self.rows.len();
         self.rows.extend(rows);
@@ -590,9 +683,22 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         self.bits_stale = true;
     }
 
+    /// Whether a channel reads a columnar layer's shared column (GUP-628).
+    fn reads_shared_columns(&self) -> bool {
+        self.axes
+            .iter()
+            .any(|a| matches!(a, Some(AxisSource::Column(_))))
+            || self
+                .encodings
+                .iter()
+                .any(|e| matches!(e, Some(Encoding::Column(c)) if c.shared().is_some()))
+    }
+
     /// A handle that appends rows to this selection from any thread. Rows
     /// pushed between two frames are drained into one [`append`](Self::append)
-    /// by the next resolve of the plot holding the selection.
+    /// by the next resolve of the plot holding the selection. A columnar
+    /// layer cannot be appended to, so for one, the resolve that drains
+    /// pushed rows is an error that says so.
     pub fn appender(&mut self) -> Appender<T> {
         let feed = self.feed.get_or_insert_with(FeedRx::new);
         if let Some(w) = &self.waker {
@@ -729,7 +835,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
     {
         let slot = usize::from(channel.slot());
         self.encodings[slot] = None;
-        self.axes[slot] = Some(Arc::new(move |r| f(r).to_f64()));
+        self.axes[slot] = Some(AxisSource::Rows(Arc::new(move |r| f(r).to_f64())));
         self.axes_bound = 0;
         self.columns = None;
         self.gpu = None;
@@ -871,31 +977,31 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
                     ),
                 ));
             }
-            let rows = &self.rows;
-            let mut values = self
-                .encodings
-                .iter_mut()
-                .filter_map(|e| match e {
-                    Some(Encoding::Column(c)) => Some(c.evaluate(rows)),
-                    _ => None,
-                })
-                .collect::<Result<Vec<_>>>()?;
-            self.order = self.size_order(&values);
-            if let Some(c) = controls {
-                let (xs, ys) = (numbers(&values[c.x]), numbers(&values[c.y]));
-                let (c1, c2) = crate::monotone::controls(xs, ys);
-                self.tail = tail_of(&[], xs, ys);
-                self.widths = crate::monotone::Widths::default();
-                self.widths.add(xs, ys);
-                values.push(ColumnData::Values(c1));
-                values.push(ColumnData::Values(c2));
-            }
+            let mut inputs = self.column_inputs()?;
+            self.order = self.size_order(&inputs);
             let mut store = ColumnStore::new(formats, chunk_rows)?;
-            if let Some(order) = &mut self.order {
-                order.push_runs(&mut values, &runs(self.window, &store, self.rows.len()));
-                order.mark_evaluated();
+            if self.order.is_some() || controls.is_some() {
+                // Sorting by size permutes the columns, and control values
+                // read x and y as f64: both work on owned columns.
+                let mut values: Vec<ColumnData> =
+                    inputs.into_iter().map(Input::into_owned).collect();
+                if let Some(c) = controls {
+                    let (xs, ys) = (numbers(&values[c.x]), numbers(&values[c.y]));
+                    let (c1, c2) = crate::monotone::controls(xs, ys);
+                    self.tail = tail_of(&[], xs, ys);
+                    self.widths = crate::monotone::Widths::default();
+                    self.widths.add(xs, ys);
+                    values.push(ColumnData::Values(c1));
+                    values.push(ColumnData::Values(c2));
+                }
+                if let Some(order) = &mut self.order {
+                    order.push_runs(&mut values, &runs(self.window, &store, self.rows.len()));
+                    order.mark_evaluated();
+                }
+                inputs = values.into_iter().map(Input::Owned).collect();
             }
-            store.append(self.rows.len(), &values)?;
+            let slices: Vec<ColumnSlice<'_>> = inputs.iter().map(Input::slice).collect();
+            store.append_slices(self.rows.len(), &slices)?;
             self.columns = Some(store);
             // Stored rows (and so GPU pick ids) are new.
             self.epoch = self.epoch.wrapping_add(1);
@@ -905,12 +1011,45 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         Ok(self.columns.as_mut().expect("evaluated above"))
     }
 
+    /// Every column-encoded channel's data for the rows held, in channel
+    /// order: a shared column as it is, else the accessor run over the
+    /// rows. Each must have one value per row; a column of another length
+    /// is an error naming its channel.
+    fn column_inputs(&mut self) -> Result<Vec<Input>> {
+        let rows = &self.rows;
+        let mut inputs = Vec::new();
+        for (slot, e) in self.encodings.iter_mut().enumerate() {
+            let Some(Encoding::Column(c)) = e else {
+                continue;
+            };
+            let input = match c.shared() {
+                Some(column) => Input::Shared(column.clone()),
+                None => Input::Owned(c.evaluate(rows)?),
+            };
+            if input.len() != rows.len() {
+                return Err(Error::config(
+                    "column",
+                    format!(
+                        "{} layer: the column of `{}::{}` has {} rows, but the layer has {}",
+                        M::NAME,
+                        M::NAME,
+                        M::CHANNELS[slot].name.to_ascii_uppercase(),
+                        input.len(),
+                        rows.len()
+                    ),
+                ));
+            }
+            inputs.push(input);
+        }
+        Ok(inputs)
+    }
+
     /// The draw order for columns `values`, when the mark's size channel
     /// is one of them: largest first, by value, or by negated value when
     /// the encoding maps a larger value to a smaller size (its image of
     /// the values' extent, end by end; an encoding without an image is
     /// taken as increasing).
-    fn size_order(&self, values: &[crate::column::ColumnData]) -> Option<DrawOrder> {
+    fn size_order(&self, values: &[Input]) -> Option<DrawOrder> {
         // A polyline joins rows in data order, whatever their size.
         if M::GEOMETRY == Geometry::Polyline {
             return None;
@@ -921,14 +1060,18 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
                 continue;
             };
             if d.role == Some(Role::Size) {
-                let (lo, hi) = match &values[column] {
-                    crate::column::ColumnData::Values(v) => v
-                        .iter()
-                        .filter(|v| v.is_finite())
-                        .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), &v| {
+                fn extent<V: Copy + Into<f64>>(v: &[V]) -> (f64, f64) {
+                    v.iter()
+                        .map(|&v| v.into())
+                        .filter(|v: &f64| v.is_finite())
+                        .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), v| {
                             (lo.min(v), hi.max(v))
-                        }),
-                    crate::column::ColumnData::Codes(_) => (0.0, 1.0),
+                        })
+                }
+                let (lo, hi) = match values[column].slice() {
+                    ColumnSlice::F64(v) => extent(v),
+                    ColumnSlice::F32(v) => extent(v),
+                    ColumnSlice::Codes(_) => (0.0, 1.0),
                 };
                 let end = |v: f64| c.image((v, v)).map(|(a, _)| a);
                 let reversed = matches!((end(lo), end(hi)), (Some(a), Some(b)) if a > b);
@@ -1221,8 +1364,6 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         Ok(bytes)
     }
 }
-
-type AxisFn<T> = Arc<dyn Fn(&T) -> f64 + Send + Sync>;
 
 /// How far a layer's marks reach past their positions, in pixels
 /// ([`Layer::overhang`]).
@@ -1552,7 +1693,11 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             return Some(v);
         }
         match self.encodings.get(slot)? {
-            Some(Encoding::Column(e)) => held.map(|r| e.row_value(r)),
+            Some(Encoding::Column(e)) => match e.shared() {
+                // A columnar layer's data row is its column index.
+                Some(column) => column.value(usize::try_from(data).ok()?),
+                None => held.map(|r| e.row_value(r)),
+            },
             _ => None,
         }
     }
@@ -1675,7 +1820,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             let Some(f) = f else { continue };
             let scale = axis_scale_for(M::NAME, &M::CHANNELS[slot], x, y)?;
             self.encodings[slot] = Some(Encoding::Column(Box::new(AxisEncoding::new(
-                Arc::clone(f),
+                f.clone(),
                 scale.dyn_encode(),
             ))));
         }

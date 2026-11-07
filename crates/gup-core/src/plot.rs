@@ -13,6 +13,7 @@
 //! later RFC-001 step.
 
 use crate::channel::{Mark, Px};
+use crate::columns::Columns;
 use crate::context::{Context, ContextId};
 use crate::cull;
 use crate::error::{Error, Result};
@@ -1093,6 +1094,44 @@ impl Plot {
             .last_mut()
             .and_then(|l| l.as_any_mut().downcast_mut())
             .expect("the layer just pushed has this type")
+    }
+
+    /// Add a columnar layer of mark `M` over `columns`' rows and return it:
+    /// bind its positions with [`x_column`](Selection::x_column) and
+    /// [`y_column`](Selection::y_column), and other channels with
+    /// [`attr`](Selection::attr) and
+    /// [`encode_column`](crate::EncodeFn::encode_column). No row type and no
+    /// closure per row: each column is stored as it is, without a copy.
+    ///
+    /// The layer's rows are `()`, so every [`Selection`] method works on it:
+    /// [`Retain`](crate::Retain), culling, picking and vector output. A
+    /// picked [`RowId`](crate::RowId)'s `row` is the column index, and
+    /// [`row_fields`](Self::row_fields) reads the columns;
+    /// [`pick::<()>`](Self::pick) only says that some row was hit. A
+    /// columnar layer cannot be appended to.
+    ///
+    /// ```
+    /// use gup_core::prelude::*;
+    /// # fn main() -> gup_core::Result<()> {
+    /// let n = 1_000;
+    /// let x: Vec<f64> = (0..n).map(f64::from).collect();
+    /// let y: Vec<f64> = x.iter().map(|x| (x / 50.0).sin()).collect();
+    /// let cols = Columns::new().with("x", x)?.with("y", y.clone())?.with("v", y)?;
+    ///
+    /// let mut plot = Plot::new();
+    /// plot.add_columns::<Circle>(&cols)
+    ///     .x_column(&cols["x"])
+    ///     .y_column(&cols["y"])
+    ///     .attr(Circle::FILL, Sequential::viridis().encode_column(&cols["v"]))
+    ///     .attr(Circle::RADIUS, Px(2.0));
+    /// let cx = Context::new_blocking()?;
+    /// let image = plot.render(&cx, 320, 200)?;
+    /// assert!(image.pixels().any(|p| p.0 != [255, 255, 255, 255]));
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub fn add_columns<M: Mark>(&mut self, columns: &Columns) -> &mut Selection<(), M> {
+        self.add(Selection::new(vec![(); columns.len()]))
     }
 
     /// The first layer of type `Selection<T, M>`, or `None`.

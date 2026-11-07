@@ -301,19 +301,52 @@ impl ColumnData {
             Self::Codes(c) => c.len(),
         }
     }
-
-    /// Whether this data can fill a column of `format`.
-    fn fits(&self, format: ColumnFormat) -> bool {
-        match self {
-            Self::Values(_) => format.has_validity(),
-            Self::Codes(_) => format == ColumnFormat::U32,
-        }
-    }
 }
 
 impl From<Vec<f64>> for ColumnData {
     fn from(values: Vec<f64>) -> Self {
         Self::Values(values)
+    }
+}
+
+/// New rows of one column, borrowed: a [`ColumnData`]'s, or a columnar
+/// layer's shared column (GUP-628), which the store writes without a copy.
+#[derive(Copy, Clone, Debug)]
+pub(crate) enum ColumnSlice<'a> {
+    /// Numbers (see [`ColumnData::Values`]).
+    F64(&'a [f64]),
+    /// Numbers given as `f32`: each widens to `f64` exactly, so a chunk
+    /// stores the same bytes as for the widened values.
+    F32(&'a [f32]),
+    /// Dictionary codes (see [`ColumnData::Codes`]).
+    Codes(&'a [u32]),
+}
+
+impl ColumnSlice<'_> {
+    fn len(&self) -> usize {
+        match self {
+            Self::F64(v) => v.len(),
+            Self::F32(v) => v.len(),
+            Self::Codes(c) => c.len(),
+        }
+    }
+
+    /// Whether this data can fill a column of `format`.
+    fn fits(&self, format: ColumnFormat) -> bool {
+        match self {
+            Self::F64(_) | Self::F32(_) => format.has_validity(),
+            Self::Codes(_) => format == ColumnFormat::U32,
+        }
+    }
+}
+
+impl ColumnData {
+    /// The data, borrowed.
+    pub(crate) fn as_slice(&self) -> ColumnSlice<'_> {
+        match self {
+            Self::Values(v) => ColumnSlice::F64(v),
+            Self::Codes(c) => ColumnSlice::Codes(c),
+        }
     }
 }
 
@@ -436,14 +469,27 @@ impl ChunkColumn {
         self.stats.non_finite
     }
 
-    /// Store `values` as rows `at..` of this numeric column in `bytes`
-    /// (the chunk's CPU copy), updating the origin and stats.
-    fn write(&mut self, bytes: &mut [u8], at: u32, values: &[f64]) {
+    /// Store `values` as rows `at..` of this numeric column (validity
+    /// plane `plane` of `planes`) in the chunk's CPU copy, updating the
+    /// origin and stats. Each value is widened to `f64` before the origin
+    /// is subtracted, so `f32` input stores exactly the bytes its widened
+    /// values would.
+    fn write<V: Copy + Into<f64>>(
+        &mut self,
+        cpu: &mut ChunkCpu,
+        at: u32,
+        values: &[V],
+        planes: usize,
+        plane: usize,
+    ) {
         if self.origin.is_none() {
             // Rows already stored are non-finite, so the origin they were
             // written against does not matter.
             self.origin = if self.format.is_relative() {
-                values.iter().copied().find(|v| v.is_finite())
+                values
+                    .iter()
+                    .map(|&v| v.into())
+                    .find(|v: &f64| v.is_finite())
             } else {
                 Some(0.0)
             };
@@ -451,14 +497,21 @@ impl ChunkColumn {
         let origin = self.origin();
         let stride = self.format.stride() as usize;
         let start = self.offset as usize + at as usize * stride;
-        let dst = &mut bytes[start..start + values.len() * stride];
+        let dst = &mut cpu.bytes[start..start + values.len() * stride];
         for (cell, &v) in dst.chunks_exact_mut(stride).zip(values) {
+            let v: f64 = v.into();
             let [hi, lo] = self.format.split(v - origin);
             cell[..4].copy_from_slice(&hi.to_le_bytes());
             if stride == 8 {
                 cell[4..].copy_from_slice(&lo.to_le_bytes());
             }
             self.stats.push(v);
+        }
+        for (i, &v) in values.iter().enumerate() {
+            if Into::<f64>::into(v).is_finite() {
+                let row = at as usize + i;
+                cpu.validity[row / 32 * planes + plane] |= 1 << (row % 32);
+            }
         }
     }
 
@@ -666,24 +719,21 @@ impl Chunk {
     }
 
     /// Store rows `range` of `columns` as the chunk's rows `len..`.
-    fn write(&mut self, columns: &[ColumnData], range: std::ops::Range<usize>, planes: usize) {
+    fn write(&mut self, columns: &[ColumnSlice<'_>], range: std::ops::Range<usize>, planes: usize) {
         let at = self.len;
         let cpu = Arc::make_mut(self.cpu.as_mut().expect("only full chunks are released"));
         let mut plane = 0;
         for (col, data) in self.columns.iter_mut().zip(columns) {
             match data {
-                ColumnData::Values(values) => {
-                    let values = &values[range.clone()];
-                    col.write(&mut cpu.bytes, at, values);
-                    for (i, v) in values.iter().enumerate() {
-                        if v.is_finite() {
-                            let row = at as usize + i;
-                            cpu.validity[row / 32 * planes + plane] |= 1 << (row % 32);
-                        }
-                    }
+                ColumnSlice::F64(values) => {
+                    col.write(cpu, at, &values[range.clone()], planes, plane);
                     plane += 1;
                 }
-                ColumnData::Codes(codes) => {
+                ColumnSlice::F32(values) => {
+                    col.write(cpu, at, &values[range.clone()], planes, plane);
+                    plane += 1;
+                }
+                ColumnSlice::Codes(codes) => {
                     col.write_codes(&mut cpu.bytes, at, &codes[range.clone()]);
                 }
             }
@@ -1070,6 +1120,13 @@ impl ColumnStore {
     /// never touched. The next [`upload`](Self::upload) writes only the new
     /// rows' bytes.
     pub fn append(&mut self, rows: usize, columns: &[ColumnData]) -> Result<()> {
+        let columns: Vec<ColumnSlice<'_>> = columns.iter().map(ColumnData::as_slice).collect();
+        self.append_slices(rows, &columns)
+    }
+
+    /// [`append`](Self::append) from borrowed columns: a columnar layer's
+    /// shared columns are written straight into the chunks (GUP-628).
+    pub(crate) fn append_slices(&mut self, rows: usize, columns: &[ColumnSlice<'_>]) -> Result<()> {
         if columns.len() != self.formats.len() {
             return Err(Error::config(
                 "column store",
@@ -1093,8 +1150,8 @@ impl ColumnStore {
                     format!(
                         "column {i} is {format:?} but was given {}",
                         match c {
-                            ColumnData::Values(_) => "numbers",
-                            ColumnData::Codes(_) => "codes",
+                            ColumnSlice::F64(_) | ColumnSlice::F32(_) => "numbers",
+                            ColumnSlice::Codes(_) => "codes",
                         }
                     ),
                 ));

@@ -140,6 +140,7 @@ pub mod builder;
 pub mod channel;
 mod chart;
 pub mod column;
+mod columns;
 mod context;
 mod cull;
 mod describe;
@@ -189,12 +190,14 @@ pub use channel::{
     Role, Unit, Visual,
 };
 pub use chart::{Chart, ChartExt};
+pub use columns::{Column, Columns};
 pub use context::{Caps, Context, ContextId, ContextOptions, Upload, UploadStats, WriteCount};
 pub use describe::Description;
 pub use encoding::{
-    ColumnMarker, ColumnValue, ConstMarker, CpuMirror, Derived, DerivedMarker, DynColumnEncoding,
-    DynShaderFn, EncodeFn, Encoded, Encoding, Feeds, IntoEncoding, KeyAccessor, KeyEncoded,
-    KeyMarker, KeySource, NullableKey, NullableOwnedKey, OwnedKey, Resource, ShaderFn, Then,
+    ColumnEncoded, ColumnMarker, ColumnValue, ConstMarker, CpuMirror, Derived, DerivedMarker,
+    DynColumnEncoding, DynShaderFn, EncodeFn, Encoded, Encoding, Feeds, IntoEncoding, KeyAccessor,
+    KeyEncoded, KeyMarker, KeySource, NullableKey, NullableOwnedKey, OwnedKey, Resource, ShaderFn,
+    Then,
 };
 pub use error::{Error, Result};
 pub use gpu_pick::{GpuPick, PickTicket};
@@ -382,10 +385,11 @@ pub mod prelude {
     pub use crate::scene::Anchor;
     pub use crate::{
         Area, AreaAttrs, Axes, Band, Bins, Categorical, Chart, ChartExt, Circle, CircleAttrs,
-        Color, ColorScale, Context, CpuMirror, Curve, Derived, Description, Diverging, Drag,
-        EncodeFn, Event, Line, LineAttrs, Linear, Log, Mark, Offset, Plot, Point, PositionScale,
-        Pow, Px, Rect, RectAttrs, Retain, ScaleRef, Segment, SegmentAttrs, Selection, Sequential,
-        ShaderFn, Symlog, Theme, Time, Unbrushed, Unit, Window, wgsl_function,
+        Color, ColorScale, Columns, Context, CpuMirror, Curve, Derived, Description, Diverging,
+        Drag, EncodeFn, Event, Line, LineAttrs, Linear, Log, Mark, Offset, Plot, Point,
+        PositionScale, Pow, Px, Rect, RectAttrs, Retain, ScaleRef, Segment, SegmentAttrs,
+        Selection, Sequential, ShaderFn, Symlog, Theme, Time, Unbrushed, Unit, Window,
+        wgsl_function,
     };
     pub use crate::{
         AreaChart, BarChart, BoxPlotChart, HeatmapChart, HistogramChart, LineChart, ScatterChart,
