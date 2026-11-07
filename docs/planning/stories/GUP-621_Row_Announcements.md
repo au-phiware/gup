@@ -206,8 +206,15 @@ plus a count, and a box is a five-number summary.
 - Tests: `tests/row_text.rs` (15), `Time::value_label`, `stored_of`, two
   doctests. Rendered output unchanged (text only); `mask wasm-browser` not
   needed (GUP-623).
-- WASM size: `mask wasm-size` scatter gz 369536 vs recorded 360399 (+2.5%, limit
-  +2%: FAIL). Not re-recorded; needs the coordinator's decision.
+- WASM size (same session): main f9a55df5 scatter gz 366463 B; this branch
+  369678 B (+3215 B gz, +16 KB raw). Attribution: `Layer::row_fields` 5.4 KB raw
+  over 6 instantiations (after moving the logic into non-generic `compose_row`;
+  it was 11.5 KB), about 7 KB raw of non-generic code, and 2.5 KB of rodata
+  strings. No second float formatter: numbers go through `sig3`, `group_digits`
+  and `typographic`, shared with the axis ticks. Not re-recorded.
+- Numbers are said as the axis labels them: `number_label` (three significant
+  digits, `,` groups when the axis ticks group, U+2212 minus), the same helpers
+  `format_with_step` uses.
 
 ## Retrospective
 

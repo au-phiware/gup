@@ -156,7 +156,7 @@ pub trait PositionScale: ShaderFn<Out = Px> + EncodeFn<Output = Px> + CpuMirror 
     /// ([`Plot::x_tick_format`](crate::Plot::x_tick_format)) takes
     /// precedence.
     fn value_label(&self, v: f64) -> String {
-        crate::describe::sig3(v)
+        number_label(v, groups_thousands(&self.ticks(10).values))
     }
 }
 
@@ -680,6 +680,24 @@ fn group_digits(digits: &str) -> String {
         out.push_str(f);
     }
     out
+}
+
+/// `v` to three significant digits as the axis ticks write numbers: the
+/// typographic minus, and `,` between groups of three integer digits when
+/// `grouped` (see [`groups_thousands`]).
+pub(crate) fn number_label(v: f64, grouped: bool) -> String {
+    let s = crate::describe::sig3(v);
+    let unsigned = s.trim_start_matches('-');
+    let body = if grouped && unsigned.chars().all(|c| c.is_ascii_digit() || c == '.') {
+        group_digits(unsigned)
+    } else {
+        unsigned.to_owned()
+    };
+    typographic(if s.starts_with('-') {
+        format!("-{body}")
+    } else {
+        body
+    })
 }
 
 /// Format `v` with as many decimals as `step` needs (no `−0`), with a

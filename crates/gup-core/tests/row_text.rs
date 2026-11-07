@@ -389,6 +389,22 @@ fn focus_text_follows_focus_and_counts_the_layers_rows() {
 }
 
 #[test]
+fn numbers_read_as_the_axis_ticks_do() {
+    let cx = cx();
+    let mut chart = gup_core::scatter(vec![(20_000.0, -5.5), (61_000.5, 3.0)])
+        .x(|r| r.0)
+        .y(|r| r.1);
+    chart.resolve(&cx, W, H).unwrap();
+    let plot = chart.plot_mut();
+    // Digit groups when the x ticks have them; the minus is U+2212.
+    assert_eq!(
+        plot.row_text(id(0, 0)).as_deref(),
+        Some("x: 20,000; y: \u{2212}5.5")
+    );
+    assert_eq!(plot.row_text(id(0, 1)).as_deref(), Some("x: 61,000; y: 3"));
+}
+
+#[test]
 fn an_append_while_focused_updates_the_count() {
     let cx = cx();
     let mut chart = gup_core::scatter(vec![(1.0, 2.0), (2.0, 3.0)])

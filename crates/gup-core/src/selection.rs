@@ -1431,6 +1431,92 @@ fn axis_scale_for<'s>(
     Ok(scale)
 }
 
+/// The first column-encoded channel of each role X, Y and Color.
+fn first_slots(channels: &[ChannelDesc], is_column: &[bool]) -> [Option<usize>; 3] {
+    let mut out = [None; 3];
+    for (slot, desc) in channels.iter().enumerate() {
+        let target = match desc.role {
+            Some(Role::X) => 0,
+            Some(Role::Y) => 1,
+            Some(Role::Color) => 2,
+            _ => continue,
+        };
+        if out[target].is_none() && is_column[slot] {
+            out[target] = Some(slot);
+        }
+    }
+    out
+}
+
+/// Column `k`'s raw value at data row `data`, from the CPU columns (the
+/// chunk's origin added back); `None` when its chunk was released.
+fn read_stored(store: &ColumnStore, order: Option<&DrawOrder>, k: usize, data: u64) -> Option<f64> {
+    let stored = match order {
+        Some(order) => order.stored_of(data)?,
+        None => data,
+    };
+    let chunks = store.chunks();
+    let c = chunks.partition_point(|c| c.row_base() + u64::from(c.rows()) <= stored);
+    let chunk = chunks.get(c)?;
+    let values = store.chunk_values(c, k)?;
+    values.get((stored - chunk.row_base()) as usize).copied()
+}
+
+/// A row's colour channel, as read.
+struct ColorRead {
+    value: f64,
+    /// A key column: the value is a code into the legend's swatches.
+    is_key: bool,
+    legend: Option<Legend>,
+    title: Option<String>,
+}
+
+/// The fields of a row from its raw values: a key colour (or the layer's
+/// series) names the series, then x, then y, then a numeric colour value.
+/// `None` when nothing was read.
+fn compose_row(
+    axes: &RowAxes<'_>,
+    x: Option<f64>,
+    y: Option<f64>,
+    color: Option<ColorRead>,
+    series: Option<&str>,
+) -> Option<Vec<(String, String)>> {
+    let title = |default: &str| {
+        color
+            .as_ref()
+            .and_then(|c| c.title.clone())
+            .unwrap_or_else(|| default.to_owned())
+    };
+    let key_label = color.as_ref().filter(|c| c.is_key).and_then(|c| {
+        let Some(Legend::Swatches(swatches)) = &c.legend else {
+            return None;
+        };
+        swatches.get(c.value as usize).map(|s| s.label.to_string())
+    });
+    let mut out = Vec::new();
+    if let Some(label) = key_label {
+        out.push((title("Series"), label));
+    } else if let Some(name) = series {
+        out.push((title("Series"), name.to_owned()));
+    }
+    for (axis, v) in [(&axes.x, x), (&axes.y, y)] {
+        if let Some(v) = v {
+            out.push((axis.name.clone(), axis.say(v)));
+        }
+    }
+    if let Some(c) = color.as_ref().filter(|c| !c.is_key) {
+        let grouped = match &c.legend {
+            Some(Legend::Ramp(r)) => {
+                let values: Vec<f64> = r.ticks.iter().map(|t| t.value).collect();
+                crate::scale::groups_thousands(&values)
+            }
+            _ => false,
+        };
+        out.push((title("Value"), crate::scale::number_label(c.value, grouped)));
+    }
+    (!out.is_empty()).then_some(out)
+}
+
 impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
     /// Whether channel `slot` is a key column (dictionary codes).
     fn is_key_channel(&self, slot: usize) -> bool {
@@ -1460,18 +1546,10 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
     /// accessor on the row `held`. `NaN` for a missing value.
     fn read_value(&self, slot: usize, data: u64, held: Option<&T>) -> Option<f64> {
         let k = self.column_index(slot)?;
-        if let Some(store) = &self.columns {
-            let stored = match &self.order {
-                Some(order) => order.stored_of(data)?,
-                None => data,
-            };
-            let chunks = store.chunks();
-            let c = chunks.partition_point(|c| c.row_base() + u64::from(c.rows()) <= stored);
-            if let Some(chunk) = chunks.get(c)
-                && let Some(values) = store.chunk_values(c, k)
-            {
-                return values.get((stored - chunk.row_base()) as usize).copied();
-            }
+        if let Some(store) = &self.columns
+            && let Some(v) = read_stored(store, self.order.as_ref(), k, data)
+        {
+            return Some(v);
         }
         match self.encodings.get(slot)? {
             Some(Encoding::Column(e)) => held.map(|r| e.row_value(r)),
@@ -1479,15 +1557,12 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         }
     }
 
-    /// The label of key `code` of colour channel `slot`, from its legend.
-    fn color_label(&self, slot: usize, code: f64) -> Option<String> {
+    /// The legend of colour channel `slot`'s encoding.
+    fn legend_of(&self, slot: usize) -> Option<Legend> {
         let Some(Encoding::Column(c)) = &self.encodings[slot] else {
             return None;
         };
-        let Legend::Swatches(swatches) = c.legend()? else {
-            return None;
-        };
-        swatches.get(code as usize).map(|s| s.label.to_string())
+        c.legend()
     }
 
     /// The batch's vector slot: the snapshot with the `svg` feature.
@@ -2634,50 +2709,25 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             return held.map(|r| f(r, axes));
         }
         let data = (row as u64).checked_sub(self.evicted)?;
-        let (mut x, mut y, mut color) = (None, None, None);
-        for (slot, desc) in M::CHANNELS.iter().enumerate() {
-            let target = match desc.role {
-                Some(Role::X) => &mut x,
-                Some(Role::Y) => &mut y,
-                Some(Role::Color) => &mut color,
-                _ => continue,
-            };
-            if target.is_none() && matches!(self.encodings[slot], Some(Encoding::Column(_))) {
-                *target = Some(slot);
-            }
-        }
-        let read = |slot: Option<usize>| -> Option<(usize, f64)> {
-            let slot = slot?;
-            let v = self.read_value(slot, data, held)?;
-            (!v.is_nan()).then_some((slot, v))
+        let is_column: Vec<bool> = self
+            .encodings
+            .iter()
+            .map(|e| matches!(e, Some(Encoding::Column(_))))
+            .collect();
+        let [x, y, color] = first_slots(M::CHANNELS, &is_column);
+        let read = |slot: Option<usize>| {
+            slot.and_then(|s| self.read_value(s, data, held))
+                .filter(|v| !v.is_nan())
         };
-        let mut out = Vec::new();
-        let color = read(color);
-        let key_color = color.filter(|&(slot, _)| self.is_key_channel(slot));
-        let title = |slot: Option<usize>| {
-            slot.and_then(|s| self.legend_titles[s].as_deref())
-                .unwrap_or("Series")
-                .to_owned()
-        };
-        // A key colour names the series, else the builder's name for it.
-        let series = key_color
-            .and_then(|(slot, v)| Some((title(Some(slot)), self.color_label(slot, v)?)))
-            .or_else(|| {
-                let name = self.series.as_ref()?;
-                Some((title(color.map(|c| c.0)), name.to_string()))
-            });
-        out.extend(series);
-        for (axis, slot) in [(&axes.x, x), (&axes.y, y)] {
-            if let Some((_, v)) = read(slot) {
-                out.push((axis.name.clone(), axis.say(v)));
-            }
-        }
-        if let Some((slot, v)) = color.filter(|_| key_color.is_none()) {
-            let title = self.legend_titles[slot].as_deref().unwrap_or("Value");
-            out.push((title.to_owned(), crate::describe::sig3(v)));
-        }
-        // Nothing read: the layer holds neither its rows nor its columns.
-        (!out.is_empty()).then_some(out)
+        let color = color.and_then(|slot| {
+            Some(ColorRead {
+                value: read(Some(slot))?,
+                is_key: self.is_key_channel(slot),
+                legend: self.legend_of(slot),
+                title: self.legend_titles[slot].clone(),
+            })
+        });
+        compose_row(axes, read(x), read(y), color, self.series.as_deref())
     }
 
     fn tooltip_text(&self, row: usize) -> Option<String> {
