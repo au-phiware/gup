@@ -11,7 +11,10 @@ use std::sync::Arc;
 /// ([`Plot::add_columns`](crate::Plot::add_columns)).
 ///
 /// Columns are shared, not copied: cloning a `Columns` (or binding one
-/// column to several channels or layers) clones an [`Arc`].
+/// column to several channels or layers) clones an [`Arc`]. A `Vec` given
+/// to [`with`](Self::with) is copied once into its `Arc`; for the largest
+/// columns, collect straight into an `Arc<[f64]>` (one allocation from an
+/// iterator of known length) and pass that.
 ///
 /// ```
 /// use gup_core::{Column, Columns};
