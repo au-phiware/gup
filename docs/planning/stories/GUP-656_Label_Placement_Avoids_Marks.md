@@ -226,30 +226,39 @@ scatter whose labels and discs share rows) and needs no cross-layer plumbing.
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
 
-## Blocked (2026-11-08)
+## Decisions (revised 2026-11-08, after the escalation)
 
-**Question**: two Escalation Triggers fire on the 1,000-point scatter (800x600,
-discs and boxes of radius 4, offsets dy=-5 and fallbacks 6 px, so a label can
-clear its own disc). Do we relax the AC2 nearest-point rule and the kept-label
-expectation, or add a nearest-neighbour query?
+- `avoid_points` also enforces the nearest-point rule: a candidate is viable
+  only if no other row's point is nearer its box than its own point (ties to the
+  own point; rows with empty text count). `Kept` holds the points in a parallel
+  grid of the same cell size; only cells within the own distance of the box are
+  tested. Both guarantees are exact by construction.
+- The kept-count floor is replaced by: at least 25% of rows kept on the
+  1,000-point scatter (measured 275).
+- Golden: `gup_core/text_fallbacks` re-recorded with `avoid_points(Px(4.0))`.
 
-**Numbers** (`avoid_points_keeps_labels_off_the_discs`, `--nocapture`):
+## Implementation Summary
 
-- Kept labels: 374 with `avoid_points`, 647 without (same offsets), GUP-611's
-  599 on its offsets. 374 is 38% below 599 (42% below 647): more than a third.
-- Labels touching a disc: 563 without, 0 with (the seeding rule works).
-- Nearest-point rule: a box nearer another row's point than its own: 597/647
-  (92%) without, 158/374 (42%) with. Far above 5%.
-- The 300-point golden scene with `.avoid_points(Px(4.0))` keeps 156 labels; the
-  render (not blessed) shows no label on a disc and labels beside their points.
+- `TextLayer::avoid_points`, `Kept::add_point` / `point_nearer_than`
+  (`text_layer.rs`); tests in `text_halo.rs`; cost metric in `text_layer.rs`.
+- 1,000-point scatter (800x600, radius 4, offsets 5/6 px): labels touching a
+  disc 563 without, 0 with; nearer another point 597 of 647 without (92%), 0 of
+  275 with; kept 647 without, 275 with (GUP-611 on its offsets: 599).
+- Cost (release, 6 runs, `text_layer.avoid_points_ms` delta over fallbacks):
+  0.418, 0.018, 0.209, 0.272, 0.271, 0.093 ms; median about 0.24 ms, under the
+  0.3 ms budget (noisy).
+- Golden read: 88 of 300 labels kept, none on a disc, each beside its own point.
+- Sweep: `hide_overlaps` appears only in `text_layer.rs`, `plot.rs` docs and the
+  text tests; none changed (opt-in). Gallery or tutorial charts: none use text
+  layers over circles with `hide_overlaps`.
 
-**Options**: (a) accept the dense-scatter numbers: drop the 5% rule to a printed
-figure and the kept-count floor to the measured one; the golden is the visible
-win. (b) A real nearest-point rule (a nearest-neighbour query, reject a
-candidate nearer another point than its own): a design question. (c) Smaller
-discs/offsets: the 1,000 points have ~18% disc coverage, so little room is left.
-**Recommendation**: (a) for the count, and (b) as a follow-up (GUP-662).
+## Retrospective
 
-State: WIP commit; seeding and `avoid_points` are implemented with a doctest;
-the nearest-point assertion is commented out and the kept-count assertion is
-disabled; no golden blessed, CHANGELOG not yet edited.
+**Completed**: 2026-11-08
+
+- The 5% nearest-point AC was unreachable by luck in a dense scatter (92% of
+  labels failed without the rule); making it a placement rule was cheap: a local
+  grid query bounded by the own distance.
+- Trade: fewer labels (275 vs 647) on dense plots; documented on the setter.
+- Follow-up: per-row radii from the mark layer remain out of scope (no new
+  story).

@@ -548,6 +548,13 @@ impl<T: Send + Sync + 'static> TextLayer<T> {
     /// offset the label (`dx`, `dy`) by more than the radius. A `radius` of
     /// 0 or less, or NaN, is off. Ignored without `hide_overlaps(true)`.
     ///
+    /// Two guarantees, both exact: no kept label's box overlaps a point's
+    /// box, and no kept label's box is nearer another row's point than its
+    /// own row's point (box-to-point distance; ties go to its own; rows
+    /// without a label count as points). A candidate that breaks either is
+    /// rejected and the next one tried. The trade is fewer labels on dense
+    /// plots: a label is better missing than naming the wrong point.
+    ///
     /// ```
     /// use gup_core::prelude::*;
     /// use gup_core::scene::TextRole;
@@ -753,6 +760,8 @@ struct Kept {
     rows: usize,
     /// Per cell, the kept boxes that touch it.
     cells: Vec<Vec<Rect>>,
+    /// Per cell, the row points (`avoid_points`) that fall in it.
+    points: Vec<Vec<(usize, f32, f32)>>,
 }
 
 impl Kept {
@@ -768,7 +777,36 @@ impl Kept {
             cols,
             rows,
             cells: vec![Vec::new(); cols * rows],
+            points: vec![Vec::new(); cols * rows],
         }
+    }
+
+    /// Record row `i`'s point.
+    fn add_point(&mut self, i: usize, x: f32, y: f32) {
+        let (c, _, r, _) = self.span(Rect::new(x, y, 0.0, 0.0));
+        self.points[r * self.cols + c].push((i, x, y));
+    }
+
+    /// Whether a point of a row other than `i` is nearer `b` than `own`
+    /// is (ties go to `own`).
+    fn point_nearer_than(&self, i: usize, own: (f32, f32), b: Rect) -> bool {
+        let dist = |p: (f32, f32)| {
+            let dx = (b.left() - p.0).max(p.0 - b.right()).max(0.0);
+            let dy = (b.top() - p.1).max(p.1 - b.bottom()).max(0.0);
+            dx.hypot(dy)
+        };
+        let d = dist(own);
+        if d == 0.0 {
+            return false;
+        }
+        let (x0, x1, y0, y1) = self.span(b.inflate(d));
+        (y0..=y1).any(|y| {
+            (x0..=x1).any(|x| {
+                self.points[y * self.cols + x]
+                    .iter()
+                    .any(|&(j, px, py)| j != i && dist((px, py)) < d)
+            })
+        })
     }
 
     /// The cells `b` covers, clamped to the grid: `(x0..=x1, y0..=y1)`.
@@ -900,6 +938,7 @@ impl<T: Send + Sync + 'static> AnnotationLayer for TextLayer<T> {
             for i in 0..ev.text.len() {
                 let (px, py) = (pixel(&ev.x, i, x) as f32, pixel(&ev.y, i, y) as f32);
                 if px.is_finite() && py.is_finite() {
+                    kept.add_point(i, px, py);
                     kept.push(Rect::from_edges(px - r, py - r, px + r, py + r));
                 }
             }
@@ -940,7 +979,9 @@ impl<T: Send + Sync + 'static> AnnotationLayer for TextLayer<T> {
                 };
                 if let Some(kept) = &mut kept {
                     let b = bounds.inflate(self.halo);
-                    if kept.overlaps(b) {
+                    if kept.overlaps(b)
+                        || (self.avoid > 0.0 && kept.point_nearer_than(i, (px, py), bounds))
+                    {
                         continue;
                     }
                     kept.push(b);

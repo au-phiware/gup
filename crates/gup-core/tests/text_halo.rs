@@ -611,7 +611,7 @@ fn avoid_points_keeps_labels_off_the_discs() {
         kept.len(),
         labels(&without).len()
     );
-    // assert!(kept.len() > 599 * 2 / 3);
+    assert!(kept.len() >= 250, "{} kept of 1000", kept.len());
     let points: Vec<(f32, f32)> = discs
         .iter()
         .map(|d| ((d.left() + d.right()) / 2.0, (d.top() + d.bottom()) / 2.0))
@@ -623,7 +623,7 @@ fn avoid_points_keeps_labels_off_the_discs() {
         100.0 * bad_without as f64 / n_without as f64,
         100.0 * bad as f64 / n as f64
     );
-    // BLOCKED (GUP-656): fails, see story. assert!(bad * 20 < n, "{bad} of {n}");
+    assert_eq!(bad, 0, "{bad} of {n} nearer another point");
     let (again, _) = run(DISC);
     assert_eq!(labels(&with), labels(&again));
 }
@@ -675,7 +675,7 @@ fn text_fallbacks_golden() {
     let rows = scatter(300);
     let mut plot = Plot::new();
     plot.legends(false);
-    plot.title("Labels try other anchors before they hide");
+    plot.title("Labels try other anchors and keep off the points");
     plot.x(Linear::new().domain(0.0, 100.0));
     plot.y(Linear::new().domain(0.0, 100.0));
     plot.circles(rows.clone())
@@ -694,7 +694,8 @@ fn text_fallbacks_golden() {
             (Anchor::TOP, 0.0, 7.0),
         ])
         .halo(Px(2.0))
-        .hide_overlaps(true);
+        .hide_overlaps(true)
+        .avoid_points(Px(4.0));
     let resolved = plot.resolve(&cx, w as f32, h as f32).unwrap().clone();
     println!("golden kept {}", labels(&resolved.layout).len());
     let image = ImageTarget::new(&cx, w, h)
