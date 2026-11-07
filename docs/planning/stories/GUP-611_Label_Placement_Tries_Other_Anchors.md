@@ -51,21 +51,21 @@ it reuses GUP-527's grid of kept boxes (`Kept` in `text_layer.rs`).
       takes the first candidate whose box overlaps no kept box, and is hidden
       only if none fits. Without it the first candidate is used. Documented with
       a doctest.
-- [ ] Tested on `Layout::texts`: no two kept boxes overlap; a label hidden by
+- [x] Tested on `Layout::texts`: no two kept boxes overlap; a label hidden by
       GUP-527's rule but placeable at its second candidate is kept there; and
       the result is deterministic (row order, then candidate order).
-- [ ] Edge room (GUP-555) accounts for every candidate's reach, or the story
+- [x] Edge room (GUP-555) accounts for every candidate's reach, or the story
       records why not.
-- [ ] Cost in release with 1,000 labels and 4 candidates is measured; it stays
+- [x] Cost in release with 1,000 labels and 4 candidates is measured; it stays
       under +0.3 ms over GUP-527's culling.
-- [ ] The `gup_core/text_halo` golden, or a new one, shows the gain, read by
+- [x] The `gup_core/text_halo` golden, or a new one, shows the gain, read by
       eye.
 
 ## Technical Tasks
 
-- [ ] Measure each candidate's box once per label (as `Measured` does for the
+- [x] Measure each candidate's box once per label (as `Measured` does for the
       single anchor) and test candidates against `Kept`.
-- [ ] Tests, golden, cost measurement; commit.
+- [x] Tests, golden, cost measurement; commit.
 
 ## Dependencies
 
@@ -79,7 +79,7 @@ it reuses GUP-527's grid of kept boxes (`Kept` in `text_layer.rs`).
 
 ## Success Metrics
 
-- [ ] On the 1,000-point scatter, clearly more labels are kept than with
+- [x] On the 1,000-point scatter, clearly more labels are kept than with
       GUP-527's single anchor, and none overlap.
 
 ## Risk Assessment
@@ -89,11 +89,63 @@ it reuses GUP-527's grid of kept boxes (`Kept` in `text_layer.rs`).
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -p gup-core -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] Rendered output verified by eye
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -p gup-core -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] Rendered output verified by eye
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+`TextLayer::fallbacks` (`crates/gup-core/src/text_layer.rs`): `Measured` keeps
+the ink boxes per fallback anchor (only when culling); `runs` tries candidates
+in order against `Kept`, whose cells now hold the boxes inline (faster for
+GUP-527's culling too); `reach` and `edges` take the largest reach over all
+candidates, one edge per label. Tests in `tests/text_halo.rs` (four, one the
+`gup_core/text_fallbacks` golden, new) and the cost metric in
+`tests/text_layer.rs`. `gup_core/text_halo` is unchanged (0 pixels differ).
+
+Evidence:
+
+- 1,000-point scatter, 800x600, no halo, 3 fallbacks (right, left, below): 521
+  labels kept, 599 with fallbacks (+15%); none overlap.
+- Golden read by eye: labels sit above, beside and below their discs, no
+  overlaps, all inside the plot.
+- Release cost, same session, 3 runs: culling 0.42-0.43 ms, with 4 candidates
+  0.63-0.69 ms: +0.20 to +0.26 ms over culling (budget 0.3 ms). The test prints
+  the metric and does not assert it (timing).
+- `mask merge-check`: PASS.
+
+## Retrospective
+
+**Completed**: 2026-11-07
+
+### Key Technical Learnings
+
+#### Cost was in the edge pass, not the culling
+
+- **Challenge**: first measurement was +0.47 ms.
+- **Solution**: `edges` pushed one edge per candidate (4x); folding to one edge
+  per label with the maximum reach halved the cost. Hoisting the pixel position
+  out of the candidate loop and storing boxes inline in `Kept` cells helped
+  `runs` (560 us to 390 us).
+- **Pattern**: time the pieces (a temporary `Instant` in `runs`) before tuning.
+
+### Architectural Decisions
+
+#### Fallbacks need `hide_overlaps`
+
+- **Decision**: ignored (not measured, no edge room) without culling.
+- **Trade-off**: edge room changes when `hide_overlaps` is toggled.
+
+### Development Workflow Insights
+
+- Gain is modest on a uniform dense scatter (+15%): the greedy row order, not
+  the candidate set, dominates. More candidates (diagonals) were not tried.
+
+### Follow-up Stories
+
+None.
