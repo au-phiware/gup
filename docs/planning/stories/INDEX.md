@@ -448,7 +448,7 @@ and run one at a time; the run order is at the end of "Polish after 0.1".
   and `0` to `Input::KeyDown`; the window closes on an Escape the chart did not
   use, and the egui widget takes and locks focus. Deps: GUP-619 📋, GUP-620 📋
   (soft).
-- [GUP-623](GUP-623_Browser_Keyboard_And_Live_Region.md) 📋 — `CanvasApp` makes
+- [GUP-623](GUP-623_Browser_Keyboard_And_Live_Region.md) ✅ — `CanvasApp` makes
   the canvas focusable, forwards mapped keys (preventing only their default) and
   speaks `focus_text()` through a hidden `aria-live` region, checked by new
   browser smoke steps. Deps: GUP-619 📋, GUP-621 📋, GUP-622 📋 (soft).

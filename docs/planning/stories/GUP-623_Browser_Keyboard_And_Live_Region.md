@@ -16,8 +16,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Track N4: Accessibility **Status**: 📋 Planned **Created**:
-2026-11-04
+**Initiative**: Track N4: Accessibility **Status**: ✅ Complete (2026-11-07)
+**Created**: 2026-11-04
 
 ## Context
 
@@ -56,29 +56,29 @@ the keyboard focus is on. GUP-619–621 give the chart keys and a
 
 ### AC1: A focusable canvas that forwards keys
 
-- [ ] `CanvasApp::new` sets `tabindex="0"` on the canvas unless the page set a
+- [x] `CanvasApp::new` sets `tabindex="0"` on the canvas unless the page set a
       `tabindex` of its own (as `aria-label` is respected today).
-- [ ] A `keydown` listener on the canvas maps `KeyboardEvent.key` with GUP-622's
+- [x] A `keydown` listener on the canvas maps `KeyboardEvent.key` with GUP-622's
       mapping (`"ArrowLeft"`, …, `"Home"`, `"End"`, `"Enter"`, `" "`,
       `"Escape"`, `"+"`, `"="`, `"-"`, `"0"`) and the event's modifier flags,
       dispatches `Input::KeyDown`, and calls `preventDefault()` only for keys it
       mapped (never Tab), so arrows and Space do not scroll the page while the
       canvas has focus.
-- [ ] The listener is not passive (it must be able to prevent the default) and
+- [x] The listener is not passive (it must be able to prevent the default) and
       is removed on drop with the others.
 
 ### AC2: Live region
 
-- [ ] `CanvasApp::new` inserts, immediately after the canvas, a `div` with
+- [x] `CanvasApp::new` inserts, immediately after the canvas, a `div` with
       `aria-live="polite"`, `aria-atomic="true"`, a `data-gup-live` attribute
       and the visually hidden style of Decisions; it is removed on drop.
-- [ ] After each frame, when `chart.focus_text()` differs from the text last
+- [x] After each frame, when `chart.focus_text()` differs from the text last
       written, the region's `textContent` becomes the new text (empty string
       when focus clears). The DOM is written only on change.
 
 ### AC3: Browser smoke test
 
-- [ ] New steps in `crates/gup-core/wasm-size/scatter/index.html`, after the
+- [x] New steps in `crates/gup-core/wasm-size/scatter/index.html`, after the
       `aria-kept` step: the canvas has `tabIndex === 0`; dispatching
       `new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true })` on
       the canvas makes `app.hovered_row()` the row with the smallest x pixel
@@ -86,9 +86,9 @@ the keyboard focus is on. GUP-619–621 give the chart keys and a
       row's tooltip with line breaks replaced by `"; "` plus `" (1 of 6)"`; the
       event's `defaultPrevented` is true; `Escape` clears the hover and empties
       the region.
-- [ ] A canvas whose page set `tabindex="-1"` keeps it (a second canvas, as the
+- [x] A canvas whose page set `tabindex="-1"` keeps it (a second canvas, as the
       `aria-kept` step does).
-- [ ] `mask wasm-browser` passes and prints `GUP PASS`.
+- [x] `mask wasm-browser` passes and prints `GUP PASS`.
 
 ## Decisions
 
@@ -119,9 +119,9 @@ the keyboard focus is on. GUP-619–621 give the chart keys and a
 
 ## Technical Tasks
 
-- [ ] `tabindex`, the keydown listener and mapping, preventDefault rules.
-- [ ] The live region: create, update after frames, remove on drop.
-- [ ] Browser smoke test steps; web-sys features.
+- [x] `tabindex`, the keydown listener and mapping, preventDefault rules.
+- [x] The live region: create, update after frames, remove on drop.
+- [x] Browser smoke test steps; web-sys features.
 
 ## Dependencies
 
@@ -144,7 +144,7 @@ the keyboard focus is on. GUP-619–621 give the chart keys and a
 
 ## Success Metrics
 
-- [ ] A Gup chart in a page can be reached with Tab and read point by point.
+- [x] A Gup chart in a page can be reached with Tab and read point by point.
 
 ## Risk Assessment
 
@@ -152,15 +152,65 @@ the keyboard focus is on. GUP-619–621 give the chart keys and a
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -p gup-core -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye: not needed, DOM only (the ring is
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -p gup-core -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye: not needed, DOM only (the ring is
       GUP-619's)
-- [ ] `mask wasm-browser` passes (AC3)
-- [ ] WASM size: `mask wasm-size` scatter gz bytes
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] `mask wasm-browser` passes (AC3)
+- [x] WASM size: `mask wasm-size` scatter gz bytes
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `crates/gup-core/src/input.rs`: `Input::from_key_name(&str, Modifiers)`
+  (`pub(crate)`), GUP-622's mapping keyed by W3C `KeyboardEvent.key` names.
+  `app.rs::key_input` now converts winit keys to those names and calls it, so
+  the window and browser hosts share one table (its unit tests still pass).
+- `crates/gup-core/src/web.rs`: `tabindex="0"` unless set, a non-passive
+  `keydown` listener (`preventDefault` only for mapped keys), the live region
+  (`canvas.after`, removed on drop) written after each frame only on change.
+- Harness: `InteractiveScatter::focus_text`; new smoke steps `tabindex-kept`,
+  `live-region-added/removed`, `tabindex`, `live-region`, `key-focus`,
+  `key-announced`, `key-default-prevented`, `key-escape`.
+- Smoke output: `GUP live region: "Tui; x 10 (1 of 6)"`,
+  `GUP PASS ... interactive=ok`.
+- WASM scatter gz: 370,055 B (before, same session) to 371,571 B (after), +1,516
+  B.
+- Decision: the live-region expectation is `focus_text()`; for the scatter that
+  still equals the tooltip with `"; "` plus `" (1 of 6)"`, so the AC text holds
+  and the test asserts both.
+
+## Retrospective
+
+**Completed**: 2026-11-07
+
+### Key Technical Learnings
+
+#### One key table for three hosts
+
+- **Challenge**: GUP-622's mapping took winit types, unusable on wasm32.
+- **Solution**: a string-keyed `Input::from_key_name` using W3C names; winit
+  converts to names first.
+- **Pattern**: share a table at the lowest common representation, not a type.
+
+### Architectural Decisions
+
+#### Live region owned by `State`
+
+- **Decision**: the element lives in `State` and is removed in `Drop`.
+- **Trade-off**: the page cannot supply its own region; GUP-624 may want that.
+
+### Development Workflow Insights
+
+- The worktree sandbox refuses long compound shell commands with heredocs; write
+  scripts with the Write tool and run them plainly.
+- Not run with a screen reader (no Orca).
+
+### Follow-up Stories
+
+None.

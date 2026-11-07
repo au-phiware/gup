@@ -209,38 +209,24 @@ fn input_from(event: &WindowEvent, cursor: Option<Point>, scale: f64) -> Option<
 }
 
 /// Map a winit key press to a chart input; `None` for a key the chart
-/// does not use. Named keys carry `modifiers` as held; the characters
-/// `+`, `=`, `-` and `0` drop Shift (`+` needs it on some layouts only).
+/// does not use. The mapping itself is [`Input::from_key_name`], shared
+/// with the browser host.
 fn key_input(key: &winit::keyboard::Key<SmolStr>, modifiers: Modifiers) -> Option<Input> {
     use winit::keyboard::Key as WKey;
-    let named = |k| Some(Input::key_with(k, modifiers));
-    match key {
-        WKey::Named(NamedKey::ArrowLeft) => named(crate::Key::Left),
-        WKey::Named(NamedKey::ArrowRight) => named(crate::Key::Right),
-        WKey::Named(NamedKey::ArrowUp) => named(crate::Key::Up),
-        WKey::Named(NamedKey::ArrowDown) => named(crate::Key::Down),
-        WKey::Named(NamedKey::Home) => named(crate::Key::Home),
-        WKey::Named(NamedKey::End) => named(crate::Key::End),
-        WKey::Named(NamedKey::Enter | NamedKey::Space) => named(crate::Key::Enter),
-        WKey::Named(NamedKey::Escape) => named(crate::Key::Escape),
-        WKey::Character(c) => {
-            let key = match c.as_str() {
-                "+" | "=" => crate::Key::ZoomIn,
-                "-" => crate::Key::ZoomOut,
-                "0" => crate::Key::ResetView,
-                " " => return named(crate::Key::Enter),
-                _ => return None,
-            };
-            Some(Input::key_with(
-                key,
-                Modifiers {
-                    shift: false,
-                    ..modifiers
-                },
-            ))
-        }
-        _ => None,
-    }
+    let name = match key {
+        WKey::Named(NamedKey::ArrowLeft) => "ArrowLeft",
+        WKey::Named(NamedKey::ArrowRight) => "ArrowRight",
+        WKey::Named(NamedKey::ArrowUp) => "ArrowUp",
+        WKey::Named(NamedKey::ArrowDown) => "ArrowDown",
+        WKey::Named(NamedKey::Home) => "Home",
+        WKey::Named(NamedKey::End) => "End",
+        WKey::Named(NamedKey::Enter) => "Enter",
+        WKey::Named(NamedKey::Space) => " ",
+        WKey::Named(NamedKey::Escape) => "Escape",
+        WKey::Character(c) => c.as_str(),
+        _ => return None,
+    };
+    Input::from_key_name(name, modifiers)
 }
 
 /// Escape closes the window only when the chart had nothing to clear.

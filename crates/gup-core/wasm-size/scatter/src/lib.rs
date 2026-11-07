@@ -965,6 +965,12 @@ impl InteractiveScatter {
         self.hovered.load(Ordering::SeqCst)
     }
 
+    /// What a screen reader says for the keyboard-focused row, if any.
+    pub fn focus_text(&self) -> Option<String> {
+        self.app
+            .with_chart(|chart| chart.focus_text().map(str::to_owned))
+    }
+
     /// The tooltip's lines joined with `\n`, if one is shown.
     pub fn tooltip_text(&self) -> Result<Option<String>, JsValue> {
         let resolved = self.resolved()?;
