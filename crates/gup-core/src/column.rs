@@ -434,6 +434,61 @@ impl Acc {
     }
 }
 
+/// `stats` widened by `values`, whose validity bits are set. `rows` are
+/// `(at, validity, planes, plane)`: the values are rows `at..` of
+/// validity plane `plane` (of `planes`). The rows up to a word boundary go
+/// one by one, then a word (32 rows) at a time with four independent min
+/// and max lanes: about twice as fast as [`Acc::push`] and a bit per row
+/// (GUP-628).
+fn scan<V: Copy + Into<f64>>(
+    stats: Acc,
+    values: &[V],
+    rows: (usize, &mut [u32], usize, usize),
+) -> Acc {
+    let (at, validity, planes, plane) = rows;
+    let mut stats = stats;
+    let head = ((32 - at % 32) % 32).min(values.len());
+    for (i, &v) in values[..head].iter().enumerate() {
+        let v: f64 = v.into();
+        stats.push(v);
+        if v.is_finite() {
+            let row = at + i;
+            validity[row / 32 * planes + plane] |= 1 << (row % 32);
+        }
+    }
+    let (mut lo, mut hi) = ([f64::INFINITY; 4], [f64::NEG_INFINITY; 4]);
+    let (mut integral, mut non_finite) = (stats.integral, 0u32);
+    for (word, block) in ((at + head) / 32..).zip(values[head..].chunks(32)) {
+        let mut mask = 0u32;
+        for (j, &v) in block.iter().enumerate() {
+            let v: f64 = v.into();
+            let finite = v.is_finite();
+            mask |= u32::from(finite) << j;
+            let (a, b) = if finite {
+                (v, v)
+            } else {
+                (f64::INFINITY, f64::NEG_INFINITY)
+            };
+            let lane = j % 4;
+            lo[lane] = if a < lo[lane] { a } else { lo[lane] };
+            hi[lane] = if b > hi[lane] { b } else { hi[lane] };
+            if integral && finite {
+                integral = is_whole(v);
+            }
+        }
+        non_finite += block.len() as u32 - mask.count_ones();
+        validity[word * planes + plane] |= mask;
+    }
+    let min = lo.into_iter().fold(f64::INFINITY, f64::min);
+    let max = hi.into_iter().fold(f64::NEG_INFINITY, f64::max);
+    stats.merge(Acc {
+        min,
+        max,
+        non_finite,
+        integral,
+    })
+}
+
 /// One column of one chunk.
 #[derive(Clone, Debug)]
 pub struct ChunkColumn {
@@ -498,21 +553,23 @@ impl ChunkColumn {
         let stride = self.format.stride() as usize;
         let start = self.offset as usize + at as usize * stride;
         let dst = &mut cpu.bytes[start..start + values.len() * stride];
-        for (cell, &v) in dst.chunks_exact_mut(stride).zip(values) {
-            let v: f64 = v.into();
-            let [hi, lo] = self.format.split(v - origin);
-            cell[..4].copy_from_slice(&hi.to_le_bytes());
-            if stride == 8 {
+        // The cells, then the stats and validity bits: two simple passes
+        // are faster than one (GUP-628).
+        if stride == 4 {
+            // `split`'s high half: the low half is not stored.
+            for (cell, &v) in dst.chunks_exact_mut(4).zip(values) {
+                let v: f64 = v.into();
+                cell.copy_from_slice(&((v - origin) as f32).to_le_bytes());
+            }
+        } else {
+            for (cell, &v) in dst.chunks_exact_mut(stride).zip(values) {
+                let [hi, lo] = self.format.split(v.into() - origin);
+                cell[..4].copy_from_slice(&hi.to_le_bytes());
                 cell[4..].copy_from_slice(&lo.to_le_bytes());
             }
-            self.stats.push(v);
         }
-        for (i, &v) in values.iter().enumerate() {
-            if Into::<f64>::into(v).is_finite() {
-                let row = at as usize + i;
-                cpu.validity[row / 32 * planes + plane] |= 1 << (row % 32);
-            }
-        }
+        let rows = (at as usize, &mut cpu.validity[..], planes, plane);
+        self.stats = scan(self.stats, values, rows);
     }
 
     /// Encode `value` as this numeric column stores it against its origin
@@ -1910,6 +1967,43 @@ mod tests {
         let clean =
             ColumnStore::from_columns(vec![(ColumnFormat::F32, vec![1.0, 2.0])], ALL).unwrap();
         assert!(!clean.has_nulls());
+    }
+
+    /// GUP-628: the word-at-a-time scan gives the stats and bits that
+    /// [`Acc::push`] and one bit per row give, from any starting row, for
+    /// `f64` and `f32` input alike.
+    #[test]
+    fn the_blocked_scan_matches_the_row_by_row_one() {
+        let values: Vec<f64> = (0..200)
+            .map(|i| match i % 37 {
+                5 => f64::NAN,
+                11 => f64::NEG_INFINITY,
+                _ if i < 70 => f64::from(i) - 40.0,
+                _ => f64::from(i) * 0.25 - 3.0,
+            })
+            .collect();
+        let narrow: Vec<f32> = values.iter().map(|&v| v as f32).collect();
+        let planes = 2;
+        for at in [0, 1, 31, 32, 45] {
+            for len in [0, 3, 40, 155] {
+                let slice = &values[..len];
+                let mut want = Acc::EMPTY;
+                let mut want_bits = vec![0u32; validity_words(256, planes)];
+                for (i, &v) in slice.iter().enumerate() {
+                    want.push(v);
+                    if v.is_finite() {
+                        let row = at + i;
+                        want_bits[row / 32 * planes + 1] |= 1 << (row % 32);
+                    }
+                }
+                let mut bits = vec![0u32; validity_words(256, planes)];
+                let got = scan(Acc::EMPTY, slice, (at, &mut bits, planes, 1));
+                assert_eq!((got, &bits), (want, &want_bits), "at {at}, {len} rows");
+                let mut bits32 = vec![0u32; validity_words(256, planes)];
+                let got32 = scan(Acc::EMPTY, &narrow[..len], (at, &mut bits32, planes, 1));
+                assert_eq!((got32, &bits32), (want, &want_bits), "f32 at {at}");
+            }
+        }
     }
 
     /// S4b: keys get codes in first-seen order, across appends and chunks;
