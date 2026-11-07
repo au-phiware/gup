@@ -108,10 +108,10 @@ what each release contains and what its version number promises.
 
 - The default categorical palette order is `OKABE_ITO_DISTINCT` (blue,
   vermillion, reddish purple, bluish green, sky blue, orange, yellow, black),
-  with `OKABE_ITO_DISTINCT_DARK` for `Theme::dark`: the first four series are
-  four different hues, and series 1 is the marks' default blue. `OKABE_ITO` and
-  `OKABE_ITO_DARK` keep the published order. A single-series builder chart is
-  now blue rather than orange.
+  with `OKABE_ITO_DISTINCT_DARK` for `Theme::dark` (sky blue first, as blue is
+  dim on dark): the first four series are four different hues, and series 1 is
+  the marks' default blue. `OKABE_ITO` and `OKABE_ITO_DARK` keep the published
+  order. A single-series builder chart is now blue rather than orange.
 
 ### Known limitations
 

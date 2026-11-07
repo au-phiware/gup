@@ -540,11 +540,24 @@ mod tests {
         assert!(floor(&OKABE_ITO_DISTINCT, 5) >= 10.0);
     }
 
-    /// The dark palette differs from the light one only in the last colour.
+    /// The dark palette is the light one with the two blues swapped and black lightened.
     #[test]
     fn dark_palette_replaces_only_black() {
-        assert_eq!(OKABE_ITO_DISTINCT_DARK[..7], OKABE_ITO_DISTINCT[..7]);
-        assert_eq!(OKABE_ITO_DISTINCT_DARK[7], Color::hex(0xe8e8e8));
+        // The light order with the two blues swapped and black lightened.
+        let mut want = OKABE_ITO_DISTINCT;
+        want.swap(0, 4);
+        want[7] = Color::hex(0xe8e8e8);
+        assert_eq!(OKABE_ITO_DISTINCT_DARK, want);
+        assert!(contrast(OKABE_ITO_DISTINCT_DARK[0], Theme::dark().background) >= 4.5);
+        for n in [3, 4, 5] {
+            let row: Vec<String> = VIEWS
+                .iter()
+                .map(|(v, m)| format!("{v} {:.2}", min_delta_e(&OKABE_ITO_DISTINCT_DARK[..n], m)))
+                .collect();
+            eprintln!("TABLE dark[..{n}]: {}", row.join(", "));
+        }
+        assert!(floor(&OKABE_ITO_DISTINCT_DARK, 4) >= 10.0);
+        assert!(floor(&OKABE_ITO_DISTINCT_DARK, 5) >= 10.0);
         assert_eq!(Theme::dark().palette, OKABE_ITO_DISTINCT_DARK);
     }
 

@@ -84,13 +84,15 @@ pub const OKABE_ITO_DISTINCT: [Color; 8] = [
 ];
 
 /// [`OKABE_ITO_DISTINCT`] for a dark background (`Theme::dark`): black is
-/// replaced by `#E8E8E8`, as in [`OKABE_ITO_DARK`].
+/// replaced by `#E8E8E8`, as in [`OKABE_ITO_DARK`], and the two blues swap
+/// places (sky blue first, blue fifth) because `#0072B2` is the dimmest
+/// colour on dark (about 3.3:1 on `#1E1E22`) while sky blue reaches about 7:1.
 pub const OKABE_ITO_DISTINCT_DARK: [Color; 8] = [
-    OKABE_ITO_DISTINCT[0],
+    OKABE_ITO_DISTINCT[4],
     OKABE_ITO_DISTINCT[1],
     OKABE_ITO_DISTINCT[2],
     OKABE_ITO_DISTINCT[3],
-    OKABE_ITO_DISTINCT[4],
+    OKABE_ITO_DISTINCT[0],
     OKABE_ITO_DISTINCT[5],
     OKABE_ITO_DISTINCT[6],
     Color::hex(0xe8e8e8),
