@@ -197,3 +197,19 @@ already scores well on it.)
 - [ ] WASM size: `mask wasm-size` scatter gz bytes (two consts added)
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
+
+## Blocked (2026-11-07, second)
+
+**Question**: `gup-core` test `histogram_png::histogram_golden` fails its
+SVG-versus-GPU comparison with the new palette (`svg_marks::assert_matches`: 51
+of 16000 4x4 blocks differ by more than ΔE 3, limit 0.25 percent = 40 blocks;
+max block ΔE 3.4, under `MAX_BLOCK_DE` 5.5). The differences are bar-edge
+antialiasing (white gaps between bars against blue and vermillion fills), not
+geometry. It is the only failing test in `mask merge-check` and
+`cargo test -p gup`. Options: (1) raise `max_differing_fraction` for this case
+(a gate change, so not done); (2) change the histogram test's data or bins so
+fewer edges fall on quarter-coverage steps (re-blesses `gup_core/histogram`
+again); (3) accept a per-case override in `svg_marks`. Recommendation: (2) or
+(3), the orchestrator's call. Everything else in the story is done and
+committed; `mask all-check` and the story's Implementation Summary and
+retrospective are not yet written.
