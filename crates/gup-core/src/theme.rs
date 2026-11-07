@@ -5,7 +5,7 @@
 //! styles itself with (RFC-001 S7).
 
 use crate::channel::{Color, Px};
-use crate::scale::{NULL_COLOR, OKABE_ITO, OKABE_ITO_DARK};
+use crate::scale::{HIGH_CONTRAST, NULL_COLOR, OKABE_ITO, OKABE_ITO_DARK};
 
 /// How rows outside a brush are drawn while one exists.
 ///
@@ -208,6 +208,60 @@ impl Theme {
             ..Self::default()
         }
     }
+
+    /// A high-contrast theme for low-vision readers: black text and axes,
+    /// a grid at 3:1, larger text and a palette ([`HIGH_CONTRAST`]) whose
+    /// colours are each at least 3:1 on the white background. WCAG 2
+    /// contrast against the background (tested): label, title, axis and
+    /// tooltip text 21:1, subtitle 12.6:1, grid 3.03:1, null colour 4.54:1,
+    /// palette 3.06:1 to 21:1. The keyboard focus ring (drawn in
+    /// [`title`](Self::title)) is 21:1.
+    ///
+    /// Dimmed (unbrushed) rows are drawn in the grid grey, which stays at
+    /// 3:1 but loses its colour. Mark sizes, line widths and the sequential
+    /// and diverging palettes are not themed.
+    ///
+    /// ```
+    /// use gup_core::prelude::*;
+    ///
+    /// struct Row { x: f64, y: f64 }
+    /// let rows = vec![Row { x: 1.0, y: 2.0 }, Row { x: 2.0, y: 1.0 }];
+    /// let mut chart = gup_core::scatter(rows)
+    ///     .x(|r| r.x)
+    ///     .y(|r| r.y)
+    ///     .theme(Theme::high_contrast());
+    /// let image = chart.render(&Context::shared()?, 320, 200)?;
+    /// assert_eq!(image.get_pixel(0, 0).0, Color::WHITE.to_rgba8());
+    /// # Ok::<(), gup_core::Error>(())
+    /// ```
+    pub fn high_contrast() -> Self {
+        let black = Color::hex(0x000000);
+        let blue = HIGH_CONTRAST[0];
+        let grey = Color::hex(0x949494);
+        Self {
+            axis: black,
+            label: black,
+            title: black,
+            subtitle: Color::hex(0x333333),
+            grid: grey,
+            null_color: Color::hex(0x767676),
+            title_size: Px(20.0),
+            subtitle_size: Px(15.0),
+            axis_title_size: Px(15.0),
+            tick_size: Px(14.0),
+            tick_len: Px(6.0),
+            x_tick_spacing: Px(96.0),
+            y_tick_spacing: Px(52.0),
+            tooltip_border: black,
+            tooltip_text: black,
+            tooltip_size: Px(14.0),
+            brush_fill: Color { a: 0.2, ..blue },
+            brush_stroke: black,
+            unbrushed: Unbrushed::Grey(grey),
+            palette: HIGH_CONTRAST,
+            ..Self::default()
+        }
+    }
 }
 
 #[cfg(test)]
@@ -266,6 +320,109 @@ mod tests {
         }
         assert!(contrast(t.null_color, bg) >= 3.0);
         assert!(contrast(t.brush_stroke, bg) >= 3.0);
+    }
+
+    /// AC2: the high-contrast theme's contrast ratios (GUP-625).
+    #[test]
+    fn high_contrast_colours_meet_their_contrast_targets() {
+        let t = Theme::high_contrast();
+        let bg = t.background;
+        assert_eq!(bg, Color::WHITE);
+        for (name, c) in [
+            ("label", t.label),
+            ("title", t.title),
+            ("axis", t.axis),
+            ("subtitle", t.subtitle),
+        ] {
+            let r = contrast(c, bg);
+            assert!(r >= 7.0, "{name}: {r:.2}");
+        }
+        assert!(contrast(t.tooltip_text, t.tooltip_background) >= 7.0);
+        assert!(contrast(t.grid, bg) >= 3.0, "{:.3}", contrast(t.grid, bg));
+        assert!(contrast(t.grid, bg) < contrast(t.axis, bg));
+        assert!(contrast(t.null_color, bg) >= 4.5);
+        // The keyboard focus ring is drawn in the title colour (GUP-619).
+        assert!(contrast(t.title, bg) >= 3.0);
+        assert!(contrast(t.brush_stroke, bg) >= 3.0);
+        match t.unbrushed {
+            Unbrushed::Grey(g) => assert!(contrast(g, bg) >= 3.0),
+            Unbrushed::Fade(_) => panic!("unbrushed rows are grey"),
+        }
+        for (i, c) in t.palette.iter().enumerate() {
+            let r = contrast(*c, bg);
+            assert!(r >= 3.0, "palette[{i}] {c:?}: {r:.2}");
+        }
+        assert_eq!(t.palette, HIGH_CONTRAST);
+        assert!(t.tick_size > Theme::default().tick_size);
+    }
+
+    /// Machado 2009 (severity 1) in linear sRGB, clamped, re-encoded.
+    fn simulate(c: Color, m: &[[f64; 3]; 3]) -> gup_visual_regression::Rgba8 {
+        let lin = |v: f32| {
+            let v = f64::from(v);
+            if v <= 0.040_45 {
+                v / 12.92
+            } else {
+                ((v + 0.055) / 1.055).powf(2.4)
+            }
+        };
+        let rgb = [lin(c.r), lin(c.g), lin(c.b)];
+        let enc = |v: f64| {
+            let v = v.clamp(0.0, 1.0);
+            let e = if v <= 0.003_130_8 {
+                v * 12.92
+            } else {
+                1.055 * v.powf(1.0 / 2.4) - 0.055
+            };
+            (e * 255.0).round() as u8
+        };
+        let out = |row: &[f64; 3]| enc(row[0] * rgb[0] + row[1] * rgb[1] + row[2] * rgb[2]);
+        gup_visual_regression::Rgba8::rgb(out(&m[0]), out(&m[1]), out(&m[2]))
+    }
+
+    const DEUTERANOPIA: [[f64; 3]; 3] = [
+        [0.367322, 0.860646, -0.227968],
+        [0.280085, 0.672501, 0.047413],
+        [-0.011820, 0.042940, 0.968881],
+    ];
+    const PROTANOPIA: [[f64; 3]; 3] = [
+        [0.152286, 1.052583, -0.204868],
+        [0.114503, 0.786281, 0.099216],
+        [-0.003882, -0.048116, 1.051998],
+    ];
+    const IDENTITY: [[f64; 3]; 3] = [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]];
+
+    /// AC1: `HIGH_CONTRAST`, each colour 3:1 on white and every pair at
+    /// least CIEDE2000 12 apart in three views.
+    #[test]
+    fn high_contrast_palette_is_legible_and_distinct() {
+        use gup_visual_regression::color::{delta_e_2000, srgb_to_lab};
+        let mut weakest = (f64::MAX, 0, 0, "");
+        for (i, c) in HIGH_CONTRAST.iter().enumerate() {
+            let r = contrast(*c, Color::WHITE);
+            eprintln!("palette[{i}] {c:?}: {r:.2}");
+            assert!(r >= 3.0, "palette[{i}] {c:?}: {r:.2}");
+        }
+        for (view, m) in [
+            ("normal", &IDENTITY),
+            ("deuteranopia", &DEUTERANOPIA),
+            ("protanopia", &PROTANOPIA),
+        ] {
+            let labs: Vec<_> = HIGH_CONTRAST
+                .iter()
+                .map(|c| srgb_to_lab(simulate(*c, m)))
+                .collect();
+            for (i, a) in labs.iter().enumerate() {
+                for (j, b) in labs.iter().enumerate().skip(i + 1) {
+                    let d = delta_e_2000(*a, *b);
+                    if d < weakest.0 {
+                        weakest = (d, i, j, view);
+                    }
+                }
+            }
+        }
+        eprintln!("weakest pair: {weakest:?}");
+        assert!(weakest.0 >= 12.0, "weakest pair {weakest:?}");
     }
 
     /// The light palette is the old one; only the last colour differs.

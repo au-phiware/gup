@@ -8,7 +8,7 @@ mod common;
 
 use common::scatter::{Country, countries_n};
 use common::svg_marks;
-use common::vr::{harness, layout_metadata};
+use common::vr::{harness, layout_metadata, rgba8};
 use gup_core::prelude::*;
 use gup_core::scene::TextRole;
 use gup_visual_regression::RgbaImage;
@@ -221,4 +221,77 @@ fn long_titles_are_truncated_with_an_ellipsis() {
     // The x title is first (centred), the y title second.
     assert!(axis[0].bounds.width <= layout.plot.width);
     assert!(axis[1].bounds.width <= 320.0 - 24.0);
+}
+
+#[derive(Clone)]
+struct Obs {
+    group: &'static str,
+    x: f64,
+    y: f64,
+}
+
+const GROUPS: [&str; 4] = ["North", "South", "East", "West"];
+
+/// Four clusters of eight points, laid out deterministically.
+fn observations() -> Vec<Obs> {
+    let mut rows = Vec::new();
+    for (g, group) in GROUPS.iter().enumerate() {
+        let (cx, cy) = ((g % 2) as f64 * 4.0 + 2.0, (g / 2) as f64 * 4.0 + 2.0);
+        for k in 0..8 {
+            let a = f64::from(k) * std::f64::consts::TAU / 8.0 + g as f64;
+            let r = 0.8 + 0.3 * f64::from(k % 3);
+            rows.push(Obs {
+                group,
+                x: cx + r * a.cos(),
+                y: cy + r * a.sin(),
+            });
+        }
+    }
+    rows
+}
+
+/// GUP-625: `Theme::high_contrast()` end to end: black text and axes, a
+/// visible grid, four dark series, larger text, no clipped label. The
+/// SVG parity check rasterises the scene's SVG and compares it with the
+/// GPU image, so the SVG carries the same colours.
+#[test]
+fn high_contrast_theme_golden() {
+    let cx = Context::new_blocking().unwrap();
+    let theme = Theme::high_contrast();
+    let mut chart = gup_core::scatter(observations())
+        .x(|o| o.x)
+        .y(|o| o.y)
+        .color(|o| o.group)
+        .radius(6.0)
+        .title("Four regions")
+        .subtitle("High-contrast theme")
+        .x_title("x")
+        .y_title("y")
+        .legend_title("Region")
+        .grid(Axes::Both)
+        .theme(theme.clone());
+    let resolved = chart.resolve(&cx, 640.0, 400.0).unwrap().clone();
+    let image = gup_core::ImageTarget::new(&cx, 640, 400)
+        .unwrap()
+        .render_blocking(&cx, &resolved.scene)
+        .unwrap();
+    let vr = RgbaImage::new(640, 400, image.into_raw()).unwrap();
+    let meta = layout_metadata(&resolved.layout)
+        .with_background(rgba8(theme.background))
+        .with_expected_color("first series", rgba8(theme.palette[0]));
+    harness()
+        .run(
+            "gup_core/theme_high_contrast",
+            Ok((vr.clone(), meta.clone())),
+        )
+        .assert_ok();
+    for t in &resolved.layout.texts {
+        let b = t.bounds;
+        assert!(
+            b.left() >= 0.0 && b.right() <= 640.0 && b.top() >= 0.0 && b.bottom() <= 400.0,
+            "{:?} leaves the canvas: {b:?}",
+            t.run.text
+        );
+    }
+    svg_marks::assert_matches("gup_core/theme_high_contrast", &resolved.scene, &vr, &meta);
 }

@@ -57,6 +57,31 @@ pub const OKABE_ITO_DARK: [Color; 8] = [
     Color::hex(0xe8e8e8),
 ];
 
+/// A palette for low-vision readers (`Theme::high_contrast`): eight colours,
+/// each at least 3:1 (WCAG 2.2 1.4.11) on white, and at least CIEDE2000 12
+/// apart from each other under normal vision, deuteranopia and protanopia
+/// (Machado 2009, severity 1), all asserted by test. Five are Okabe-Ito's
+/// colours that already pass (blue, vermillion, bluish green, reddish
+/// purple, black), plus three dark ones. The weakest pair is
+/// `#0072B2`/`#CC79A7` under protanopia, at 12.3. Blue is first because it
+/// is the marks' default colour.
+///
+/// ```
+/// use gup_core::scale::HIGH_CONTRAST;
+/// use gup_core::Circle;
+/// assert_eq!(HIGH_CONTRAST[0], Circle::DEFAULT_FILL);
+/// ```
+pub const HIGH_CONTRAST: [Color; 8] = [
+    Color::hex(0x0072b2),
+    Color::hex(0xd55e00),
+    Color::hex(0x009e73),
+    Color::hex(0x000000),
+    Color::hex(0xcc79a7),
+    Color::hex(0x4411dd),
+    Color::hex(0x115500),
+    Color::hex(0x221155),
+];
+
 /// Distinct colours a categorical palette provides: its own, then
 /// generated ones up to this many. Past them, colours repeat.
 pub const CATEGORICAL_COLORS: usize = 64;
