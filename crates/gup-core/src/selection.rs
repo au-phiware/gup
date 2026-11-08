@@ -349,20 +349,17 @@ impl Input {
 /// once per row type.
 #[inline(never)]
 fn fill(store: &mut ColumnStore, len: usize, inputs: Vec<Input>) -> Result<()> {
-    let shared: Option<Vec<Column>> = inputs
-        .iter()
-        .map(|i| match i {
-            Input::Shared(c) => Some(c.clone()),
-            Input::Owned(_) => None,
-        })
-        .collect();
-    match shared {
-        Some(columns) if !columns.is_empty() => store.append_shared(len, &columns),
-        _ => {
-            let slices: Vec<ColumnSlice<'_>> = inputs.iter().map(Input::slice).collect();
-            store.append_slices(len, &slices)
+    let mut columns = Vec::with_capacity(inputs.len());
+    for input in &inputs {
+        if let Input::Shared(c) = input {
+            columns.push(c.clone());
         }
     }
+    if !columns.is_empty() && columns.len() == inputs.len() {
+        return store.append_shared(len, columns);
+    }
+    let slices: Vec<ColumnSlice<'_>> = inputs.iter().map(Input::slice).collect();
+    store.append_slices(len, &slices)
 }
 
 /// The last three of `x`, `y`'s rows, after `tail`'s.

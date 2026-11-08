@@ -521,7 +521,7 @@ fn encode_cells(dst: &mut [u8], format: ColumnFormat, origin: f64, values: &[f64
 /// the stack, so no `f64` copy of a column is made and one writer serves
 /// both (GUP-628). Blocks are whole validity words. Codes have no `f64`
 /// form: `each` is not called.
-fn for_each_f64(values: ColumnSlice<'_>, mut each: impl FnMut(usize, &[f64])) {
+fn for_each_f64(values: ColumnSlice<'_>, each: &mut dyn FnMut(usize, &[f64])) {
     match values {
         ColumnSlice::F64(v) => each(0, v),
         ColumnSlice::F32(v) => {
@@ -600,25 +600,28 @@ impl ChunkColumn {
 
     /// Store `values` as rows `at..` of this numeric column (validity
     /// plane `plane` of `planes`) in the chunk's CPU copy, updating the
-    /// origin and stats. (`f32` input arrives widened, a block at a time:
-    /// see [`for_each_f64`].)
-    fn write(&mut self, cpu: &mut ChunkCpu, at: u32, values: &[f64], planes: usize, plane: usize) {
+    /// origin and stats; without a CPU copy (shared columns, GUP-664),
+    /// only the origin and stats. (`f32` input arrives widened, a block at
+    /// a time: see [`for_each_f64`].)
+    fn write(
+        &mut self,
+        cpu: Option<&mut ChunkCpu>,
+        at: u32,
+        values: &[f64],
+        planes: usize,
+        plane: usize,
+    ) {
         self.begin(values);
-        let stride = self.format.stride() as usize;
-        let start = self.offset as usize + at as usize * stride;
-        let dst = &mut cpu.bytes[start..start + values.len() * stride];
-        // The cells, then the stats and validity bits: two simple passes
-        // are faster than one (GUP-628).
-        encode_cells(dst, self.format, self.origin(), values);
-        let rows = (at as usize, Some(&mut cpu.validity[..]), planes, plane);
-        self.stats = scan(self.stats, values, rows);
-    }
-
-    /// Take rows `at..` of a shared column (GUP-664) into this numeric
-    /// column's origin and stats; the cells stay in the shared column.
-    fn measure(&mut self, at: u32, values: &[f64]) {
-        self.begin(values);
-        self.stats = scan(self.stats, values, (at as usize, None, 1, 0));
+        let validity = cpu.map(|cpu| {
+            let stride = self.format.stride() as usize;
+            let start = self.offset as usize + at as usize * stride;
+            let dst = &mut cpu.bytes[start..start + values.len() * stride];
+            // The cells, then the stats and validity bits: two simple
+            // passes are faster than one (GUP-628).
+            encode_cells(dst, self.format, self.origin(), values);
+            &mut cpu.validity[..]
+        });
+        self.stats = scan(self.stats, values, (at as usize, validity, planes, plane));
     }
 
     /// Encode `value` as this numeric column stores it against its origin
@@ -850,22 +853,18 @@ impl Chunk {
     /// shared columns, only their origins and stats.
     fn write(&mut self, columns: &[ColumnSlice<'_>], range: std::ops::Range<usize>, planes: usize) {
         let at = self.len;
-        if self.shared {
-            for (col, data) in self.columns.iter_mut().zip(columns) {
-                for_each_f64(data.range(range.clone()), |first, values| {
-                    col.measure(at + first as u32, values);
-                });
-            }
-            return;
-        }
-        let cpu = Arc::make_mut(self.cpu.as_mut().expect("only full chunks are released"));
+        let mut cpu = (!self.shared)
+            .then(|| Arc::make_mut(self.cpu.as_mut().expect("only full chunks are released")));
         let mut plane = 0;
         for (col, data) in self.columns.iter_mut().zip(columns) {
-            match data.range(range.clone()) {
-                ColumnSlice::Codes(codes) => col.write_codes(&mut cpu.bytes, at, codes),
-                values => {
-                    for_each_f64(values, |first, values| {
-                        col.write(cpu, at + first as u32, values, planes, plane);
+            match (data.range(range.clone()), cpu.as_deref_mut()) {
+                (ColumnSlice::Codes(codes), Some(cpu)) => {
+                    col.write_codes(&mut cpu.bytes, at, codes)
+                }
+                (ColumnSlice::Codes(_), None) => unreachable!("shared columns are numbers"),
+                (values, mut cpu) => {
+                    for_each_f64(values, &mut |first, values| {
+                        col.write(cpu.as_deref_mut(), at + first as u32, values, planes, plane);
                     });
                     plane += 1;
                 }
@@ -979,7 +978,7 @@ impl Chunk {
                         let rows = shared.rows(c, stored(gpu.rows)..stored(self.len));
                         let (format, origin) = (col.format, col.origin());
                         cx.write_buffer_with(Upload::Column, &gpu.buffer, at, end - at, |dst| {
-                            for_each_f64(rows, |first, values| {
+                            for_each_f64(rows, &mut |first, values| {
                                 let dst = &mut dst[first * stride as usize..];
                                 encode_cells(dst, format, origin, values);
                             });
@@ -1128,26 +1127,7 @@ impl Cells<'_> {
 
     /// The first `len` rows of the chunk's column `col`, onto `out`.
     fn decode(&self, out: &mut Vec<f64>, col: &ChunkColumn, len: u32) {
-        match *self {
-            Cells::Shared(rows) => {
-                let (format, origin) = (col.format, col.origin());
-                let stored = |v: f64| {
-                    if v.is_finite() {
-                        as_stored(format, origin, v)
-                    } else {
-                        f64::NAN
-                    }
-                };
-                match rows {
-                    ColumnSlice::F64(v) => out.extend(v[..len as usize].iter().map(|&v| stored(v))),
-                    ColumnSlice::F32(v) => {
-                        out.extend(v[..len as usize].iter().map(|&v| stored(f64::from(v))));
-                    }
-                    ColumnSlice::Codes(_) => unreachable!("shared columns are numbers"),
-                }
-            }
-            Cells::Bytes { .. } => out.extend((0..len as usize).map(|r| self.get(col, r))),
-        }
+        out.extend((0..len as usize).map(|r| self.get(col, r)));
     }
 }
 
@@ -1181,7 +1161,7 @@ impl SharedColumns {
                 plane,
                 row_base + u64::from(first)..row_base + u64::from(len),
             );
-            for_each_f64(rows, |at, values| {
+            for_each_f64(rows, &mut |at, values| {
                 for (i, v) in values.iter().enumerate() {
                     let r = at + i;
                     words[r / 32 * planes + plane] |= u32::from(v.is_finite()) << (r % 32);
@@ -1389,7 +1369,7 @@ impl ColumnStore {
                 "a store of shared columns cannot be appended to",
             ));
         }
-        self.append_rows(rows, columns)
+        self.append_rows(rows, columns, false)
     }
 
     /// Fill an empty store with `rows` rows from `columns`, one per
@@ -1400,7 +1380,7 @@ impl ColumnStore {
     /// reader reads the columns. Shared columns are never released, so the
     /// store can always be uploaded to another context. It cannot be
     /// appended to.
-    pub(crate) fn append_shared(&mut self, rows: usize, columns: &[crate::Column]) -> Result<()> {
+    pub(crate) fn append_shared(&mut self, rows: usize, columns: Vec<crate::Column>) -> Result<()> {
         if self.rows > 0 || self.shared.is_some() {
             return Err(Error::config(
                 "column store",
@@ -1408,20 +1388,19 @@ impl ColumnStore {
             ));
         }
         let slices: Vec<ColumnSlice<'_>> = columns.iter().map(crate::Column::slice).collect();
-        self.shared = Some(SharedColumns {
-            columns: columns.to_vec(),
-            base: 0,
-        });
-        let filled = self.append_rows(rows, &slices);
-        if filled.is_err() {
-            self.shared = None;
-            self.chunks.clear();
-            self.rows = 0;
-        }
-        filled
+        self.append_rows(rows, &slices, true)?;
+        self.shared = Some(SharedColumns { columns, base: 0 });
+        Ok(())
     }
 
-    fn append_rows(&mut self, rows: usize, columns: &[ColumnSlice<'_>]) -> Result<()> {
+    /// Append `rows` rows of `columns`, checked before anything is
+    /// written; into chunks without a CPU copy if `shared`.
+    fn append_rows(
+        &mut self,
+        rows: usize,
+        columns: &[ColumnSlice<'_>],
+        shared: bool,
+    ) -> Result<()> {
         if columns.len() != self.formats.len() {
             return Err(Error::config(
                 "column store",
@@ -1468,7 +1447,7 @@ impl ColumnStore {
                     planes,
                     self.rows,
                     capacity,
-                    self.shared.is_some(),
+                    shared,
                 ));
             }
             let chunk = self.chunks.last_mut().expect("at least one chunk");
@@ -2550,7 +2529,7 @@ mod tests {
         let mut a = ColumnStore::new(formats.clone(), 128).unwrap();
         a.append(n as usize, &owned).unwrap();
         let mut b = ColumnStore::new(formats, 128).unwrap();
-        b.append_shared(n as usize, &shared).unwrap();
+        b.append_shared(n as usize, shared.to_vec()).unwrap();
         assert!(b.is_shared());
         assert_eq!(b.chunks().len(), 3);
         assert!(b.chunks().iter().all(|c| c.bytes().is_none()));
