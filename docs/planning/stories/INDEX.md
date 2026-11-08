@@ -250,7 +250,7 @@ cell labels, error bars, pie charts and facets.
   and `Chart::value(point)` (and `Plot::pixel_right`) map data to pixels and
   back for every scale; the tour and tutorial 4 drop their tick-interpolating
   helper. Edits `chart.rs`, `plot.rs`. Deps: GUP-669 ✅.
-- [GUP-686](GUP-686_Prelude_Palette_And_Input_Names.md) 📋 Ready —
+- [GUP-686](GUP-686_Prelude_Palette_And_Input_Names.md) 🚧 In Progress —
   `OKABE_ITO_DISTINCT`, `Input`, `Key`, `Button`, `Modifiers`, `Response` and
   `RowId` join the prelude; the tour uses the palette entries; `Response` stays
   `#[must_use]`. Edits `lib.rs`. Deps: GUP-658 ✅, GUP-669 ✅.
