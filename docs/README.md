@@ -98,6 +98,11 @@ are new to Gup.
 
 ## Archive
 
+### [♿ Accessibility](./ACCESSIBILITY.md)
+
+What Gup does for screen readers, keyboards and contrast, what you must do and
+what is not supported.
+
 ### [🗄️ Archived documents](./archive/README.md)
 
 Accessibility and research documents from before the RFC-001 core: history only,

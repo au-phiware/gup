@@ -6,9 +6,10 @@ as a description of the code: nothing here is current.
 
 - [`accessibility/`](./accessibility/) - the old accessibility layer (ARIA,
   AT-SPI, VoiceOver, UI Automation, keyboard focus, patterns, sonification), its
-  WCAG 2.1 AA audit and its testing guides. Release 0.1's minimal accessibility
-  (`Plot::describe()`, an SVG title and description and a canvas `aria-label`;
-  strategic review 2026-11, Decision 4) and track N4 start from these.
+  WCAG 2.1 AA audit and its testing guides. They describe deleted code (AT-SPI,
+  UI Automation, sonification and a WCAG conformance claim for it), not what Gup
+  does. What Gup does today is in
+  [`docs/ACCESSIBILITY.md`](../ACCESSIBILITY.md).
 - [`research/`](./research/) - the Rust-to-WGSL transpilation research and the
   existing-solutions analysis (an approach that was not adopted), and the
   graphics-programming patterns of the old render path.

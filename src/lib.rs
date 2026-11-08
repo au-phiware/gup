@@ -333,3 +333,11 @@ mod tutorials {
     #[doc = include_str!("../docs/tutorials/07_chart_types.md")]
     struct ChartTypes;
 }
+
+/// The accessibility guide's snippets, compiled as doctests (GUP-626).
+#[cfg(doctest)]
+mod accessibility_docs {
+    /// "Accessibility".
+    #[doc = include_str!("../docs/ACCESSIBILITY.md")]
+    struct Accessibility;
+}
