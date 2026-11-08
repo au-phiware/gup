@@ -8,34 +8,12 @@ error[E0277]: `{closure@$DIR/tests/compile_fail/closure_on_color.rs:15:45: 15:54
    |
    = help: the trait `IntoEncoding<Row, gup_core::Color, _>` is not implemented for closure `{closure@$DIR/tests/compile_fail/closure_on_color.rs:15:45: 15:54}`
    = note: a `gup_core::Color` channel accepts a constant of type `gup_core::Color` (such as `Px(3.0)`) or `f.encode(|row: &Row| …)` (or `f.encode_key(..)` for string keys) where `f: EncodeFn<Output = gup_core::Color>`
-help: the following other types implement trait `IntoEncoding<T, V, K>`
-  --> src/encoding.rs
-   |
-   |   impl<T, V: Visual> IntoEncoding<T, V, DerivedMarker> for Derived<V> {
-   |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ `gup_core::Derived<V>` implements `IntoEncoding<T, V, DerivedMarker>`
-...
-   | / impl<T, V, A, D, S> IntoEncoding<T, V, ColumnMarker<D>> for Encoded<A, S>
-   | | where
-   | |     T: 'static,
-   | |     V: Visual,
-   | |     A: Fn(&T) -> D + Send + Sync + 'static,
-   | |     D: ColumnValue,
-   | |     S: EncodeFn<Input = D::Gpu, Output = V>,
-   | |____________________________________________^ `Encoded<A, S>` implements `IntoEncoding<T, V, ColumnMarker<D>>`
-...
-   | / impl<V, S> IntoEncoding<(), V, ColumnMarker<f64>> for ColumnEncoded<S>
-   | | where
-   | |     V: Visual,
-   | |     S: EncodeFn<Input = f32, Output = V>,
-   | |_________________________________________^ `ColumnEncoded<S>` implements `IntoEncoding<(), V, ColumnMarker<f64>>`
-...
-   | / impl<T, V, K, S> IntoEncoding<T, V, KeyMarker> for KeyEncoded<K, S>
-   | | where
-   | |     T: 'static,
-   | |     V: Visual,
-   | |     K: KeyAccessor<T>,
-   | |     S: EncodeFn<Input = u32, Output = V>,
-   | |_________________________________________^ `KeyEncoded<K, S>` implements `IntoEncoding<T, V, KeyMarker>`
+   = help: the following other types implement trait `IntoEncoding<T, V, K>`:
+             `ColumnEncoded<S>` implements `IntoEncoding<(), V, ColumnMarker<f64>>`
+             `ColumnEncoded<S>` implements `IntoEncoding<(), V, KeyMarker>`
+             `Encoded<A, S>` implements `IntoEncoding<T, V, ColumnMarker<D>>`
+             `KeyEncoded<K, S>` implements `IntoEncoding<T, V, KeyMarker>`
+             `gup_core::Derived<V>` implements `IntoEncoding<T, V, DerivedMarker>`
 note: required by a bound in `gup_core::CircleAttrs::fill`
   --> src/marks.rs
    |

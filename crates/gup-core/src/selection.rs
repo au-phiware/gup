@@ -704,7 +704,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
     /// Whether every column-encoded channel reads a shared column, so the
     /// columns can be evaluated again without the rows (GUP-664).
     fn needs_no_rows(&self) -> bool {
-        self.column_encodings().all(|(_, c)| c.shared().is_some())
+        self.column_encodings().all(|(_, c)| c.columnar())
     }
 
     /// Whether a channel reads a columnar layer's shared column (GUP-628).
@@ -715,7 +715,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             || self
                 .encodings
                 .iter()
-                .any(|e| matches!(e, Some(Encoding::Column(c)) if c.shared().is_some()))
+                .any(|e| matches!(e, Some(Encoding::Column(c)) if c.columnar()))
     }
 
     /// A handle that appends rows to this selection from any thread. Rows
@@ -1048,6 +1048,17 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             let Some(Encoding::Column(c)) = e else {
                 continue;
             };
+            if let Some((expected, given)) = c.kind_mismatch() {
+                return Err(Error::config(
+                    "column",
+                    format!(
+                        "{} layer: `{}::{}` reads {expected}, but was given {given}",
+                        M::NAME,
+                        M::NAME,
+                        M::CHANNELS[slot].name.to_ascii_uppercase(),
+                    ),
+                ));
+            }
             let input = match c.shared() {
                 Some(column) => Input::Shared(column.clone()),
                 None => Input::Owned(c.evaluate(rows)?),
@@ -1598,6 +1609,50 @@ fn axis_scale_for<'s>(
     Ok(scale)
 }
 
+/// What a column bound to a position channel is encoded with: the plot's
+/// scale for that axis, over numbers (a numeric column on a numeric axis)
+/// or over keys (a key column on a Band or Point axis). The other pairing
+/// is an error naming the channel and both kinds.
+fn axis_column_encoding<T: 'static>(
+    mark: &'static str,
+    desc: &ChannelDesc,
+    column: &Column,
+    x: &dyn DynPositionScale,
+    y: &dyn DynPositionScale,
+) -> Result<Box<dyn crate::DynColumnEncoding<T>>> {
+    let (scale, axis) = match desc.role {
+        Some(Role::X) => (x, "x"),
+        _ => (y, "y"),
+    };
+    let keys = matches!(column, Column::Keys(_));
+    if keys != scale.reads_keys() {
+        let (scale_kind, column_kind) = if scale.reads_keys() {
+            ("Band or Point (it reads keys)", column.kind())
+        } else {
+            ("numeric (it reads numbers)", column.kind())
+        };
+        return Err(Error::config(
+            "channel",
+            format!(
+                "`{mark}::{}` is bound to the plot's {axis} scale, which is {scale_kind}, \
+                 but was given {column_kind}",
+                desc.name.to_ascii_uppercase()
+            ),
+        ));
+    }
+    Ok(if keys {
+        Box::new(crate::encoding::KeysEncoding::new(
+            column.clone(),
+            scale.dyn_encode(),
+        ))
+    } else {
+        Box::new(AxisEncoding::new(
+            AxisSource::Column(column.clone()),
+            scale.dyn_encode(),
+        ))
+    })
+}
+
 /// The first column-encoded channel of each role X, Y and Color.
 fn first_slots(channels: &[ChannelDesc], is_column: &[bool]) -> [Option<usize>; 3] {
     let mut out = [None; 3];
@@ -1716,11 +1771,11 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             return Some(v);
         }
         match self.encodings.get(slot)? {
-            Some(Encoding::Column(e)) => match e.shared() {
+            Some(Encoding::Column(e)) if e.columnar() => {
                 // A columnar layer's data row is its column index.
-                Some(column) => column.value(usize::try_from(data).ok()?),
-                None => held.map(|r| e.row_value(r)),
-            },
+                e.column_value(usize::try_from(data).ok()?)
+            }
+            Some(Encoding::Column(e)) => held.map(|r| e.row_value(r)),
             _ => None,
         }
     }
@@ -1843,11 +1898,16 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         }
         for (slot, f) in self.axes.iter().enumerate() {
             let Some(f) = f else { continue };
-            let scale = axis_scale_for(M::NAME, &M::CHANNELS[slot], x, y)?;
-            self.encodings[slot] = Some(Encoding::Column(Box::new(AxisEncoding::new(
-                f.clone(),
-                scale.dyn_encode(),
-            ))));
+            let encoding = match f {
+                AxisSource::Column(column) => {
+                    axis_column_encoding::<T>(M::NAME, &M::CHANNELS[slot], column, x, y)?
+                }
+                AxisSource::Rows(_) => {
+                    let scale = axis_scale_for(M::NAME, &M::CHANNELS[slot], x, y)?;
+                    Box::new(AxisEncoding::new(f.clone(), scale.dyn_encode()))
+                }
+            };
+            self.encodings[slot] = Some(Encoding::Column(encoding));
         }
         self.axes_bound = generation;
         self.columns = None;

@@ -19,6 +19,13 @@
 //!   --columns f64|f32     build the layer from `Columns` (GUP-628) instead
 //!                         of rows: no row type and no accessors, so the
 //!                         accessor and store phases are skipped
+//!   --keys N              also colour by a categorical key of N labels
+//!                         (GUP-629): with `--columns`, a `KeyColumn` of
+//!                         codes; with rows, a key closure per row (see
+//!                         `--key-closure`)
+//!   --key-closure str|string  the rows path's key closure: `str` returns a
+//!                         `&'static str` (`encode_key`, default), `string`
+//!                         a fresh `String` per row (`encode_owned_key`)
 //! ```
 //!
 //! Phases: `build` (generate the rows; not a cost of Gup), `accessor` (the
@@ -32,7 +39,7 @@
 use gup_core::column::{ColumnData, ColumnFormat, ColumnStore};
 use gup_core::geom::Point;
 use gup_core::prelude::*;
-use gup_core::{Column, ImageTarget, Retain};
+use gup_core::{Column, ImageTarget, KeyColumn, Retain};
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -47,6 +54,10 @@ struct Options {
     resolve_only: bool,
     /// `Some("f64")` or `Some("f32")`: a columnar layer.
     columns: Option<String>,
+    /// `Some(n)`: colour by a key of `n` labels.
+    keys: Option<usize>,
+    /// The rows path's key closure returns a `String`.
+    key_string: bool,
 }
 
 fn parse() -> Options {
@@ -60,6 +71,8 @@ fn parse() -> Options {
         seed: 1,
         resolve_only: false,
         columns: None,
+        keys: None,
+        key_string: false,
     };
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -89,6 +102,14 @@ fn parse() -> Options {
                 let v = value();
                 assert!(v == "f64" || v == "f32", "--columns f64|f32");
                 o.columns = Some(v);
+            }
+            "--keys" => o.keys = Some(value().parse().expect("--keys N")),
+            "--key-closure" => {
+                o.key_string = match value().as_str() {
+                    "str" => false,
+                    "string" => true,
+                    _ => panic!("--key-closure str|string"),
+                }
             }
             "--seed" => o.seed = value().parse().expect("--seed N"),
             other => panic!("unknown option {other}"),
@@ -199,6 +220,9 @@ fn main() -> gup_core::Result<()> {
     metric("build.ms", format!("{:.1}", ms(t)));
     rss("build");
 
+    if let Some(keys) = o.keys {
+        return keyed_rows_run(&o, &cx, rows, keys);
+    }
     let (fx, fy) = (|r: &(f64, f64)| r.0, |r: &(f64, f64)| r.1);
     if !o.resolve_only {
         bench_accessor_and_store(&cx, &rows, n, fx, fy)?;
@@ -209,6 +233,58 @@ fn main() -> gup_core::Result<()> {
             .y(fy)
             .attr(Circle::RADIUS, Px(1.5))
             .retain(o.retain);
+    })
+}
+
+/// The label of each of `keys` categories, leaked so a closure can return
+/// them as `&'static str`.
+fn labels(keys: usize) -> Vec<&'static str> {
+    (0..keys)
+        .map(|k| &*Box::leak(format!("category {k:04}").into_boxed_str()))
+        .collect()
+}
+
+/// A category per row, from its own generator so x and y are unchanged.
+fn key_codes(o: &Options, keys: usize) -> impl Iterator<Item = u32> + use<> {
+    let mut rng = Lcg(o.seed ^ 0x9E37_79B9_7F4A_7C15);
+    (0..o.rows).map(move |_| (rng.next() % keys as u64) as u32)
+}
+
+/// The rows path, coloured by a key closure (GUP-629): rows of
+/// `(x, y, category)`.
+fn keyed_rows_run(
+    o: &Options,
+    cx: &Context,
+    rows: Vec<(f64, f64)>,
+    keys: usize,
+) -> gup_core::Result<()> {
+    let names = labels(keys);
+    let rows: Vec<(f64, f64, u32)> = rows
+        .into_iter()
+        .zip(key_codes(o, keys))
+        .map(|((x, y), k)| (x, y, k))
+        .collect();
+    rss("keys");
+    let colour = ScaleRef::new(Categorical::okabe_ito());
+    let owned: Vec<String> = names.iter().map(|s| s.to_string()).collect();
+    first_resolve_and_after(o, cx, o.rows, |plot| {
+        let layer = plot
+            .circles(rows)
+            .x(|r: &(f64, f64, u32)| r.0)
+            .y(|r: &(f64, f64, u32)| r.1)
+            .attr(Circle::RADIUS, Px(1.5))
+            .retain(o.retain);
+        if o.key_string {
+            layer.attr(
+                Circle::FILL,
+                colour.encode_owned_key(move |r: &(f64, f64, u32)| owned[r.2 as usize].clone()),
+            );
+        } else {
+            layer.attr(
+                Circle::FILL,
+                colour.encode_key(move |r: &(f64, f64, u32)| names[r.2 as usize]),
+            );
+        }
     })
 }
 
@@ -249,14 +325,31 @@ fn columns_run(o: &Options, cx: &Context, wide: bool) -> gup_core::Result<()> {
         let (xs, ys) = walk(o, |v| v as f32);
         Columns::new().with("x", xs)?.with("y", ys)?
     };
+    // A key column of `--keys` labels (GUP-629), as codes plus labels.
+    let key_column = match o.keys {
+        Some(keys) => {
+            let codes: Arc<[u32]> = key_codes(o, keys).collect();
+            let labels: Vec<Arc<str>> = labels(keys).into_iter().map(Arc::from).collect();
+            Some(KeyColumn::new(codes, labels)?)
+        }
+        None => None,
+    };
     metric("build.ms", format!("{:.1}", ms(t)));
     rss("build");
+    let colour = ScaleRef::new(Categorical::okabe_ito());
     first_resolve_and_after(o, cx, o.rows, |plot| {
-        plot.add_columns::<Circle>(&cols)
+        let layer = plot
+            .add_columns::<Circle>(&cols)
             .x_column(&cols["x"])
             .y_column(&cols["y"])
             .attr(Circle::RADIUS, Px(1.5))
             .retain(o.retain);
+        if let Some(keys) = &key_column {
+            layer.attr(
+                Circle::FILL,
+                colour.encode_column(&Column::Keys(keys.clone())),
+            );
+        }
     })?;
     if !wide {
         // What an f64 intermediate costs: widening both columns. Measured

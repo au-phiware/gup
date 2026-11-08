@@ -373,3 +373,247 @@ fn a_released_columnar_layer_reads_its_shared_columns() {
     assert!(got.matches("<circle ").count() > N / 2, "{got:.400}");
     assert!(got == want, "the SVG differs");
 }
+
+/// GUP-629: key columns.
+mod keys {
+    use super::*;
+    use gup_core::{KeyColumn, Point as PointScale};
+    use std::sync::Arc;
+
+    type Row = (Option<&'static str>, Option<&'static str>, f64);
+
+    const SPECIES: [&str; 12] = [
+        "wren", "ash", "kite", "emu", "owl", "dove", "finch", "crow", "lark", "tern", "swift",
+        "heron",
+    ];
+    const COLOURS: [&str; 5] = ["red", "teal", "amber", "plum", "moss"];
+
+    /// (species, colour, y) per row: labels drawn in no sorted order, with
+    /// nulls in both keys.
+    fn keyed_rows() -> Vec<Row> {
+        let mut s = 7u64;
+        let mut next = move || {
+            s = s
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            (s >> 33) as usize
+        };
+        (0..N)
+            .map(|i| {
+                let species = (i % 211 != 5).then(|| SPECIES[next() % 12]);
+                let colour = (i % 97 != 3).then(|| COLOURS[next() % 5]);
+                (species, colour, (next() % 1000) as f64 / 10.0)
+            })
+            .collect()
+    }
+
+    /// Codes over `labels` listed in alphabetical order, plus one label no
+    /// row uses, so the codes are not in first-seen order.
+    fn key_column(rows: &[Option<&'static str>]) -> KeyColumn {
+        let mut labels: Vec<&str> = rows.iter().flatten().copied().collect();
+        labels.sort_unstable();
+        labels.dedup();
+        labels.push("zz-unused");
+        let codes: Vec<u32> = rows
+            .iter()
+            .map(|r| match r {
+                Some(l) => labels.iter().position(|x| x == l).unwrap() as u32,
+                None => gup_core::column::NULL_CODE,
+            })
+            .collect();
+        let labels: Vec<Arc<str>> = labels.into_iter().map(Arc::from).collect();
+        KeyColumn::new(codes, labels).unwrap()
+    }
+
+    struct Rendered {
+        image: Vec<u8>,
+        x_keys: Vec<Arc<str>>,
+        colour_keys: Vec<Arc<str>>,
+        legends: String,
+    }
+
+    fn render(
+        cx: &Context,
+        mut plot: Plot,
+        x: &ScaleRef<PointScale>,
+        c: &ScaleRef<Categorical>,
+    ) -> Rendered {
+        let image = plot.render(cx, W, H).unwrap().into_raw();
+        let legends = format!("{:?}", plot.resolve(cx, W as f32, H as f32).unwrap().layout);
+        let keys = (x.read().keys().to_vec(), c.read().keys().to_vec());
+        Rendered {
+            image,
+            x_keys: keys.0,
+            colour_keys: keys.1,
+            legends,
+        }
+    }
+
+    #[test]
+    fn a_key_column_scatter_matches_the_key_closure_one() {
+        let cx = cx();
+        let rows = keyed_rows();
+
+        let mut plot = Plot::new();
+        let (x, _y) = (plot.x(PointScale::new()), plot.y(Linear::new()));
+        let c = ScaleRef::new(Categorical::okabe_ito());
+        plot.circles(rows.clone())
+            .attr(Circle::X, x.encode_nullable_key(|r: &Row| r.0))
+            .y(|r| r.2)
+            .attr(Circle::FILL, c.encode_nullable_key(|r: &Row| r.1))
+            .attr(Circle::RADIUS, Px(3.0));
+        let expected = render(&cx, plot, &x, &c);
+
+        let species: Vec<_> = rows.iter().map(|r| r.0).collect();
+        let colours: Vec<_> = rows.iter().map(|r| r.1).collect();
+        let cols = Columns::new()
+            .with("species", key_column(&species))
+            .unwrap()
+            .with("colour", key_column(&colours))
+            .unwrap()
+            .with("y", rows.iter().map(|r| r.2).collect::<Vec<_>>())
+            .unwrap();
+        let mut plot = Plot::new();
+        let (x, _y) = (plot.x(PointScale::new()), plot.y(Linear::new()));
+        let c = ScaleRef::new(Categorical::okabe_ito());
+        plot.add_columns::<Circle>(&cols)
+            .x_column(&cols["species"])
+            .y_column(&cols["y"])
+            .attr(Circle::FILL, c.encode_column(&cols["colour"]))
+            .attr(Circle::RADIUS, Px(3.0));
+        let actual = render(&cx, plot, &x, &c);
+
+        // First-seen order, not the column's label order; no unused label.
+        assert_eq!(actual.x_keys.len(), 12);
+        assert_eq!(actual.colour_keys.len(), 5);
+        assert!(!actual.x_keys.iter().any(|k| &**k == "zz-unused"));
+        assert_eq!(actual.x_keys, expected.x_keys);
+        assert_eq!(actual.colour_keys, expected.colour_keys);
+        assert_eq!(actual.legends, expected.legends);
+        assert!(expected.image.iter().any(|&b| b != 255));
+        assert!(actual.image == expected.image, "the images differ");
+    }
+
+    #[test]
+    fn a_released_key_column_layer_announces_its_rows_like_the_closure_one() {
+        let cx = cx();
+        let rows = keyed_rows();
+        let rows = &rows[..3000];
+
+        let mut by_rows = Plot::new();
+        let (x, _y) = (by_rows.x(PointScale::new()), by_rows.y(Linear::new()));
+        let c = ScaleRef::new(Categorical::okabe_ito());
+        by_rows
+            .circles(rows.to_vec())
+            .attr(Circle::X, x.encode_nullable_key(|r: &Row| r.0))
+            .y(|r| r.2)
+            .attr(Circle::FILL, c.encode_nullable_key(|r: &Row| r.1));
+        by_rows.resolve(&cx, 320.0, 200.0).unwrap();
+
+        let species: Vec<_> = rows.iter().map(|r| r.0).collect();
+        let colours: Vec<_> = rows.iter().map(|r| r.1).collect();
+        let cols = Columns::new()
+            .with("species", key_column(&species))
+            .unwrap()
+            .with("colour", key_column(&colours))
+            .unwrap()
+            .with("y", rows.iter().map(|r| r.2).collect::<Vec<_>>())
+            .unwrap();
+        let mut by_columns = Plot::new();
+        let (_x, _y) = (by_columns.x(PointScale::new()), by_columns.y(Linear::new()));
+        let c = ScaleRef::new(Categorical::okabe_ito());
+        by_columns
+            .add_columns::<Circle>(&cols)
+            .x_column(&cols["species"])
+            .y_column(&cols["y"])
+            .attr(Circle::FILL, c.encode_column(&cols["colour"]))
+            .retain(Retain::GpuOnly)
+            .max_chunk_rows(1024);
+        by_columns.resolve(&cx, 320.0, 200.0).unwrap();
+
+        for row in [3, 5, 7, 1500, 2999] {
+            let id = RowId { layer: 0, row };
+            let (a, b) = (by_columns.row_fields(id), by_rows.row_fields(id));
+            assert!(b.is_some(), "row {row}");
+            assert_eq!(a, b, "row {row}");
+        }
+    }
+
+    #[test]
+    fn key_column_constructors() {
+        let k = KeyColumn::from_labels(["a", "b", "a"]);
+        assert_eq!(k.codes(), [0, 1, 0]);
+        assert_eq!(k.labels(), [Arc::<str>::from("a"), Arc::from("b")]);
+        assert_eq!((k.len(), k.is_empty()), (3, false));
+        let k = KeyColumn::from_optional_labels([Some("a"), None, Some("b")]);
+        assert_eq!(k.codes(), [0, gup_core::column::NULL_CODE, 1]);
+
+        let labels = |l: &[&str]| l.iter().map(|&s| Arc::from(s)).collect::<Vec<Arc<str>>>();
+        let err = KeyColumn::new(vec![0, 1, 2], labels(&["a", "b"])).unwrap_err();
+        assert!(err.to_string().contains("row 2 has code 2"), "{err}");
+        let err = KeyColumn::new(vec![0], labels(&["a", "b", "a"])).unwrap_err();
+        assert!(err.to_string().contains("`a` is listed twice"), "{err}");
+        assert!(KeyColumn::new(vec![gup_core::column::NULL_CODE], labels(&["a"])).is_ok());
+    }
+
+    #[test]
+    fn a_column_of_the_wrong_kind_is_an_error_naming_channel_and_kinds() {
+        let cx = cx();
+        let cols = Columns::new()
+            .with("n", vec![1.0, 2.0])
+            .unwrap()
+            .with("k", KeyColumn::from_labels(["a", "b"]))
+            .unwrap();
+        let resolve = |plot: &mut Plot| plot.resolve(&cx, 320.0, 200.0).unwrap_err().to_string();
+        let has = |err: &str, parts: &[&str]| {
+            assert!(parts.iter().all(|p| err.contains(p)), "{err}");
+        };
+
+        // A key column on a numeric axis.
+        let mut plot = Plot::new();
+        plot.add_columns::<Circle>(&cols)
+            .x_column(&cols["k"])
+            .y_column(&cols["n"]);
+        has(
+            &resolve(&mut plot),
+            &["`Circle::X`", "numeric", "a key column"],
+        );
+
+        // A numeric column on a key axis.
+        let mut plot = Plot::new();
+        plot.x(PointScale::new());
+        plot.add_columns::<Circle>(&cols)
+            .x_column(&cols["n"])
+            .y_column(&cols["n"]);
+        has(
+            &resolve(&mut plot),
+            &["`Circle::X`", "Band or Point", "an f64 column"],
+        );
+
+        // Categorical over a numeric column; Sequential over a key column.
+        let mut plot = Plot::new();
+        plot.add_columns::<Circle>(&cols)
+            .x_column(&cols["n"])
+            .y_column(&cols["n"])
+            .attr(
+                Circle::FILL,
+                Categorical::okabe_ito().encode_column(&cols["n"]),
+            );
+        has(
+            &resolve(&mut plot),
+            &["`Circle::FILL`", "a key column", "an f64 column"],
+        );
+        let mut plot = Plot::new();
+        plot.add_columns::<Circle>(&cols)
+            .x_column(&cols["n"])
+            .y_column(&cols["n"])
+            .attr(
+                Circle::FILL,
+                Sequential::viridis().encode_column(&cols["k"]),
+            );
+        has(
+            &resolve(&mut plot),
+            &["`Circle::FILL`", "numeric column", "a key column"],
+        );
+    }
+}

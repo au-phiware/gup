@@ -523,7 +523,11 @@ GUP-628 and GUP-631 (shared `selection.rs`).
   the marquee brush and keyboard focus for layers with more than
   `Retain::AUTO_MAX_ROWS` visible rows, without a CPU pick index of every row.
   Deps: GUP-664 ✅; before GUP-632's keys and brush at 100M.
-- [GUP-629](GUP-629_Key_Columns.md) 📋 — `Column::Keys(KeyColumn)` (codes plus
+- [GUP-674](GUP-674_Shareable_Key_Codes.md) 💡 — a keyed columnar layer keeps
+  the no-copy path: key codes beside shared numeric columns in one store
+  (GUP-629 copies all columns: 205 ms and 376 MiB at 10M against 69 ms and 184
+  MiB). Opus. Deps: GUP-629 ✅, GUP-664 ✅.
+- [GUP-629](GUP-629_Key_Columns.md) ✅ — `Column::Keys(KeyColumn)` (codes plus
   labels) through Band, Point and `Categorical` scales, remapped once per label
   in the row path's first-seen order, with images identical to key closures.
   Deps: GUP-628 ✅.
