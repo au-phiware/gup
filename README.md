@@ -7,7 +7,8 @@
 
 See [the gallery](examples/INDEX.md) for ten charts and the code that draws
 each, or [the tour](docs/tour/README.md) for what else Gup can do, one short
-page at a time.
+page at a time, or run `cargo run -p gup-egui --example tour` to page through
+the tour with every chart live.
 
 Gup (GPU Update Pattern) is a data visualization library for Rust. Data
 encodings (scales, palettes, transfer functions) are shader functions that run

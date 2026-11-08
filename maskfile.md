@@ -182,6 +182,17 @@ ICD, `xvfb-run`, backend, screen); exits 1 if the ICD or `xvfb-run` is missing
 ./scripts/headless_env.sh --check
 ```
 
+## tour
+
+Run the interactive feature tour (`gup-egui`'s `tour` example): every chapter's
+chart live in an egui window, with the code that draws it. Page Up and Page Down
+change chapter. `GUP_SCREENSHOT_PATH=DIR` saves one screenshot per chapter and
+exits
+
+```bash
+cargo run -p gup-egui --example tour
+```
+
 ## egui-screenshot
 
 Run the `gup-egui` example headless, save its screenshot, and compare it with

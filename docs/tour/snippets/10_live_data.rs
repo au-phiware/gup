@@ -6,14 +6,14 @@
 
 use gup::prelude::*;
 
-struct Sample {
+pub struct Sample {
     /// Seconds.
-    t: f64,
-    level: f64,
+    pub t: f64,
+    pub level: f64,
 }
 
 /// The sample taken `i` times in: two sine waves, summed.
-fn sample(i: u32) -> Sample {
+pub fn sample(i: u32) -> Sample {
     let t = f64::from(i) * 0.05;
     Sample {
         t,
@@ -22,7 +22,7 @@ fn sample(i: u32) -> Sample {
 }
 
 /// The reading taken `i` times in: a slow wave with some ripple on it.
-fn reading(i: u32) -> Sample {
+pub fn reading(i: u32) -> Sample {
     let t = f64::from(i) * 0.05;
     Sample {
         t,

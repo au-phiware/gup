@@ -5,6 +5,11 @@ of Rust and the image it draws, and links to the tutorial that teaches the
 topic. The tour is for seeing the breadth in ten minutes; the
 [tutorials](../tutorials/README.md) are for learning.
 
+To page through the tour with every chart live, next to the code that draws it,
+run `cargo run -p gup-egui --example tour` (or `mask tour`). Page Up and Page
+Down change chapter. It needs a GPU and a display, and the charts start fitted:
+the zooming, panning, hovering and brushing are yours.
+
 Every snippet is a real Rust file in [`snippets/`](snippets/), compiled and
 drawn by `tests/tour.rs`. Every image is a golden image of that code, and a test
 checks that each page shows exactly the code that was drawn.

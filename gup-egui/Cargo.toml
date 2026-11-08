@@ -27,6 +27,12 @@ gup-visual-regression = { path = "../crates/gup-visual-regression" }
 name = "egui_chart"
 path = "examples/egui_chart.rs"
 
+# `test = true` runs the example's checks that every chapter's code regions exist.
+[[example]]
+name = "tour"
+path = "examples/tour.rs"
+test = true
+
 [package.metadata.docs.rs]
 targets = ["x86_64-unknown-linux-gnu"]
 rustdoc-args = ["--cfg", "docsrs"]

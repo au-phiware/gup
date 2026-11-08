@@ -8,9 +8,14 @@
 
 mod common;
 
+// How a region is found in a snippet file; `gup-egui`'s tour app includes it too.
+#[path = "../docs/tour/region.rs"]
+mod region;
+
 use common::{check, check_on};
 use gup::prelude::*;
 use gup_visual_regression::Rgba8;
+use region::lines_of;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -327,55 +332,6 @@ fn read(path: &Path) -> String {
         .replace("\r\n", "\n")
 }
 
-/// A line of text for comparison: no trailing spaces.
-fn lines_of(text: &str) -> Vec<String> {
-    text.lines().map(|l| l.trim_end().to_string()).collect()
-}
-
-/// The lines between `// tour:begin ID` and `// tour:end ID` in `lines`,
-/// without the begin marker's indentation.
-fn region(file: &str, lines: &[String], id: &str, max: usize) -> Vec<String> {
-    let marker = |kind: &str| format!("// tour:{kind} {id}");
-    let find = |kind: &str| {
-        let hits: Vec<usize> = lines
-            .iter()
-            .enumerate()
-            .filter(|(_, l)| l.trim_start() == marker(kind))
-            .map(|(i, _)| i)
-            .collect();
-        assert!(
-            hits.len() == 1,
-            "{file}: expected one `{}` line, found {}",
-            marker(kind),
-            hits.len()
-        );
-        hits[0]
-    };
-    let (begin, end) = (find("begin"), find("end"));
-    assert!(begin < end, "{file}: region `{id}` ends before it begins");
-    let indent = lines[begin].len() - lines[begin].trim_start().len();
-    let body: Vec<String> = lines[begin + 1..end]
-        .iter()
-        .map(|l| {
-            if l.is_empty() {
-                String::new()
-            } else {
-                assert!(
-                    l.len() >= indent && l[..indent].trim().is_empty(),
-                    "{file}: region `{id}` has a line indented less than its begin marker: {l:?}"
-                );
-                l[indent..].to_string()
-            }
-        })
-        .collect();
-    assert!(
-        body.len() <= max,
-        "{file}: region `{id}` is {} lines; a page may show at most {max}",
-        body.len()
-    );
-    body
-}
-
 /// The fenced block that follows the marker at `lines[at]`, after at most
 /// one blank line: its lines, and the index of the line after its closing
 /// fence.
@@ -544,7 +500,7 @@ fn pages_match_their_snippets() {
                 );
             } else {
                 let id = id.unwrap_or_else(|| panic!("{name}: `{line}` has no #ID"));
-                let wanted = region(path, &source, id, max);
+                let wanted = region::region(path, &source, id, max);
                 assert!(
                     shown == wanted,
                     "{name}: the block after `{line}` differs from the snippet; {}",
