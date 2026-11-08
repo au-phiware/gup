@@ -137,6 +137,9 @@ what each release contains and what its version number promises.
 - A feature tour, `docs/tour/`: short pages, each with a snippet, the image it
   draws and a link to the tutorial; a test draws every snippet and checks that
   each page shows that code.
+- The tour as an app: `cargo run -p gup-egui --example tour` pages through the
+  thirteen chapters with every chart live, the snippet's code beside it, and the
+  live-data charts fed by a thread.
 - CI that renders and compares goldens on Linux (Vulkan), Windows (DX12, WARP)
   and macOS (Metal), a feature-combination matrix, and a publish dry run with a
   docs.rs build of all seven crates.
