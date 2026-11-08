@@ -6,7 +6,7 @@
 
 use gup_core::geom::Point;
 use gup_core::prelude::*;
-use gup_core::{Column, Retain, RowId};
+use gup_core::{Column, Retain, RowId, SvgTarget, VectorTarget};
 
 const W: u32 = 480;
 const H: u32 = 320;
@@ -297,4 +297,79 @@ fn a_columnar_row_is_announced_after_its_cpu_columns_are_released() {
         fields,
         [("x".into(), "7".into()), ("y".into(), "2.5".into())]
     );
+}
+
+/// GUP-664: a columnar layer whose rows and CPU columns its policy drops
+/// (`GpuOnly` with small chunks, as `Retain::Auto` does above
+/// `Retain::AUTO_MAX_ROWS` rows) still picks, re-encodes a channel, draws
+/// on another context and writes SVG, reading its shared columns, exactly
+/// as a layer of rows that keeps everything.
+#[test]
+fn a_released_columnar_layer_reads_its_shared_columns() {
+    let cx = cx();
+    let rows = rows();
+    let cols = columns(&rows);
+
+    let mut by_rows = Plot::new();
+    let (rx, ry) = (by_rows.x(Linear::new()), by_rows.y(Linear::new()));
+    let rows_colour = ScaleRef::new(Sequential::viridis());
+    by_rows
+        .circles(rows.clone())
+        .x(|r| r.0)
+        .y(|r| r.1)
+        .attr(Circle::FILL, rows_colour.encode(|r: &(f64, f64, f64)| r.2))
+        .attr(Circle::RADIUS, Px(3.0))
+        .max_chunk_rows(1024);
+    let expected = see(&cx, &mut by_rows, &rx, &ry, Some(&rows_colour));
+
+    let mut by_columns = Plot::new();
+    let (x, y) = (by_columns.x(Linear::new()), by_columns.y(Linear::new()));
+    let colour = ScaleRef::new(Sequential::viridis());
+    by_columns
+        .add_columns::<Circle>(&cols)
+        .x_column(&cols["x"])
+        .y_column(&cols["y"])
+        .attr(Circle::FILL, colour.encode_column(&cols["v"]))
+        .attr(Circle::RADIUS, Px(3.0))
+        .retain(Retain::GpuOnly)
+        .max_chunk_rows(1024);
+    let actual = see(&cx, &mut by_columns, &x, &y, Some(&colour));
+    let layer = by_columns.layer_mut::<(), Circle>().unwrap();
+    assert!(layer.rows_released(), "GpuOnly dropped the rows");
+    assert!(expected.picks.iter().flatten().count() >= 10);
+    assert!(actual == expected, "the released columnar scatter differs");
+    let v_domain = actual.colour;
+
+    // Re-encoding a channel evaluates the columns again without the rows.
+    by_rows
+        .layer_mut::<(f64, f64, f64), Circle>()
+        .unwrap()
+        .attr(Circle::FILL, rows_colour.encode(|r: &(f64, f64, f64)| r.1));
+    by_columns
+        .layer_mut::<(), Circle>()
+        .unwrap()
+        .attr(Circle::FILL, colour.encode_column(&cols["y"]));
+    let expected = see(&cx, &mut by_rows, &rx, &ry, Some(&rows_colour));
+    let actual = see(&cx, &mut by_columns, &x, &y, Some(&colour));
+    assert_ne!(actual.colour, v_domain, "the colour reads y now");
+    assert!(
+        actual == expected,
+        "the re-encoded columnar scatter differs"
+    );
+
+    // Another context uploads from the shared columns.
+    let other = Context::new_blocking().unwrap();
+    let image = by_columns.render(&other, W, H).unwrap().into_raw();
+    assert!(image == expected.image, "another context draws otherwise");
+
+    // SVG reads the shared columns too.
+    let svg = |plot: &mut Plot| {
+        let scene = plot.resolve(&cx, W as f32, H as f32).unwrap().scene.clone();
+        let mut target = SvgTarget::new();
+        target.render(&scene).unwrap();
+        target.into_string()
+    };
+    let (want, got) = (svg(&mut by_rows), svg(&mut by_columns));
+    assert!(got.matches("<circle ").count() > N / 2, "{got:.400}");
+    assert!(got == want, "the SVG differs");
 }

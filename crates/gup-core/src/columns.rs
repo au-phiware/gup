@@ -4,6 +4,7 @@
 //! Columnar input (GUP-628): named columns a layer reads directly, with no
 //! row type and no closure per row. See [`Plot::add_columns`](crate::Plot::add_columns).
 
+use crate::column::ColumnSlice;
 use crate::error::{Error, Result};
 use std::sync::Arc;
 
@@ -136,6 +137,14 @@ impl Column {
         match self {
             Self::F64(v) => v.get(i).copied(),
             Self::F32(v) => v.get(i).map(|&x| f64::from(x)),
+        }
+    }
+
+    /// The rows, borrowed, as the column store writes them.
+    pub(crate) fn slice(&self) -> ColumnSlice<'_> {
+        match self {
+            Self::F64(v) => ColumnSlice::F64(v),
+            Self::F32(v) => ColumnSlice::F32(v),
         }
     }
 
