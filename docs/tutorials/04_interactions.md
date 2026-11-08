@@ -57,7 +57,7 @@ marks lie on the straight lines between them, so `pixel` interpolates:
 
 ```rust
 use gup::prelude::*;
-use gup::{Input, Layout, Response};
+use gup::Layout;
 
 struct Bird {
     name: &'static str,
@@ -125,7 +125,7 @@ row:
 
 ```rust
 use gup::prelude::*;
-use gup::{Button, Event, Input, Layout, RowId};
+use gup::Layout;
 use std::sync::{Arc, Mutex};
 
 struct Bird {
@@ -198,7 +198,6 @@ a pixel. Here it shows the view move:
 
 ```rust
 use gup::prelude::*;
-use gup::{Button, Input, ScatterChart};
 
 fn main() -> gup::Result<()> {
     let birds = [(0.11, 0.35), (0.90, 0.95), (1.50, 0.55), (2.70, 0.40)];
@@ -248,7 +247,6 @@ you want for a time series, use `view_axes(Axes::X)` (`Axes::Y` and
 
 ```rust
 use gup::prelude::*;
-use gup::Input;
 
 fn main() -> gup::Result<()> {
     let readings = [(1.0, 5.0), (2.0, 7.0), (3.0, 4.0), (4.0, 8.0)];
@@ -281,7 +279,6 @@ rectangle, and on release the view becomes that rectangle:
 
 ```rust
 use gup::prelude::*;
-use gup::{Button, Input};
 
 fn main() -> gup::Result<()> {
     let points = [(0.0, 0.0), (1.0, 3.0), (2.0, 1.0), (3.0, 4.0), (4.0, 2.0)];
@@ -326,7 +323,6 @@ with `None` when the brush is cleared:
 
 ```rust
 use gup::prelude::*;
-use gup::{Button, Input};
 use std::sync::{Arc, Mutex};
 
 struct Bird {

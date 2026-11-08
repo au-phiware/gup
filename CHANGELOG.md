@@ -28,6 +28,10 @@ what each release contains and what its version number promises.
 
 ### Added
 
+- `prelude` now holds `OKABE_ITO_DISTINCT`, `Input`, `Key`, `Button`,
+  `Modifiers`, `Response` and `RowId`, so the default palette and the input
+  vocabulary need no path imports. A glob import of the prelude that also
+  defines one of these names must rename or import explicitly.
 - `Plot::hover_highlight` (and the same setter on every chart builder), on by
   default: the row under the pointer is ringed by a thin square at its tooltip
   anchor, reported as `Layout::hover`; keyboard focus keeps its heavier ring.

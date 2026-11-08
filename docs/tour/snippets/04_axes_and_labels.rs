@@ -99,11 +99,11 @@ pub fn dual_axis() -> impl Chart {
     plot.line(climate())
         .x_with(x.encode(|c: &Climate| c.month))
         .y_with(left.encode(|c: &Climate| c.celsius))
-        .color(Color::hex(0xd55e00));
+        .color(OKABE_ITO_DISTINCT[1]);
     plot.line(climate())
         .x_with(x.encode(|c: &Climate| c.month))
         .y_with(right.encode(|c: &Climate| c.rain_mm))
-        .color(Color::hex(0x0072b2));
+        .color(OKABE_ITO_DISTINCT[0]);
     plot
     // tour:end dual_axis
 }

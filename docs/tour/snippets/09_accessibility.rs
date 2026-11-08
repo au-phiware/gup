@@ -4,7 +4,7 @@
 //! Chapter 9 of the tour: keyboard focus, and the text a screen reader needs.
 
 use gup::prelude::*;
-use gup::{Input, Key, Modifiers, SvgTarget, VectorTarget};
+use gup::{SvgTarget, VectorTarget};
 use std::fmt::Write as _;
 
 struct Bird {

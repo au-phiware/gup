@@ -65,50 +65,50 @@ it drives a chart without a window.
 
 ### AC1: The additions
 
-- [ ] `prelude` gains exactly: `OKABE_ITO_DISTINCT`, `Input`, `Key`, `Button`,
+- [x] `prelude` gains exactly: `OKABE_ITO_DISTINCT`, `Input`, `Key`, `Button`,
       `Modifiers`, `Response`, `RowId`. Nothing else is added (reasons under
       Decisions).
-- [ ] A doctest on the prelude module (or an integration test from an external
+- [x] A doctest on the prelude module (or an integration test from an external
       path, `use gup_core::prelude::*` and `use gup::prelude::*`) names each of
       the seven and drives a plot with `Input::pointer_moved`.
 
 ### AC2: Collisions
 
-- [ ] `cargo check --all-targets` and `cargo check --examples` pass for the
+- [x] `cargo check --all-targets` and `cargo check --examples` pass for the
       workspace. Any file that glob-imports the prelude and defines or imports a
       clashing name is fixed by renaming the local item or by an explicit
       import, and listed in the report. (Grep first:
       `grep -rnE "(struct|enum|type|trait|fn) (Key|Input|Button|Modifiers|Response|RowId)\b" crates tests examples docs`.)
-- [ ] Doctests pass (`cargo test --doc`).
+- [x] Doctests pass (`cargo test --doc`).
 
 ### AC3: The tour and tutorials use them
 
-- [ ] `04_axes_and_labels.rs` and `06_lines_and_curves.rs` use
+- [x] `04_axes_and_labels.rs` and `06_lines_and_curves.rs` use
       `OKABE_ITO_DISTINCT[0]`, `[1]`, `[3]` in place of the three hex values
       they match (`0x0072b2`, `0xd55e00`, `0x009e73`; verify each against the
       array). Chapter prose that names a hex code is updated to name the palette
       entry.
-- [ ] Tour and tutorial imports drop
+- [x] Tour and tutorial imports drop
       `gup::{Button, Input, Key, Modifiers,     Response, RowId}` path imports
       in favour of the prelude where the prelude now covers them. `Layout`,
       `SvgTarget`, `VectorTarget`, `GupApp`, `Closed` and `ScatterChart` stay
       path imports.
-- [ ] No golden changes: `git status` after the suite shows no `.png` modified
+- [x] No golden changes: `git status` after the suite shows no `.png` modified
       (the palette values are the same colours). If one does, report it.
 
 ### AC4: `handle` and `must_use`
 
-- [ ] Decision recorded in the story retrospective and as one sentence in tour
+- [x] Decision recorded in the story retrospective and as one sentence in tour
       chapter 9 (where `let _ = chart.handle(..)` first appears): `Response`
       stays `#[must_use]`; headless drivers write `let _ =`. No new API.
-- [ ] Compile_fail snapshots: run `mask test` (or the compile_fail test with the
+- [x] Compile_fail snapshots: run `mask test` (or the compile_fail test with the
       bless variable the file documents). Any `.stderr` that changed because the
       prelude's names appear in a suggestion is re-blessed and the diff read; a
       diff that is anything but a name list is an escalation.
 
 ### AC5: CHANGELOG
 
-- [ ] `[0.1.0]` Added line naming the seven prelude items.
+- [x] `[0.1.0]` Added line naming the seven prelude items.
 
 ## Decisions
 
@@ -149,11 +149,11 @@ it drives a chart without a window.
 
 ## Technical Tasks
 
-- [ ] Add the seven re-exports; test from an external path.
-- [ ] Fix collisions found by the grep and `cargo check`.
-- [ ] Update the tour and tutorial snippets, imports and prose.
-- [ ] Re-bless compile_fail snapshots if needed; read the diff.
-- [ ] Chapter 9 sentence; CHANGELOG.
+- [x] Add the seven re-exports; test from an external path.
+- [x] Fix collisions found by the grep and `cargo check`.
+- [x] Update the tour and tutorial snippets, imports and prose.
+- [x] Re-bless compile_fail snapshots if needed; read the diff.
+- [x] Chapter 9 sentence; CHANGELOG.
 
 ## Dependencies
 
@@ -171,8 +171,8 @@ it drives a chart without a window.
 
 ## Success Metrics
 
-- [ ] The tour contains no `Color::hex` for a default-palette colour.
-- [ ] Workspace builds with no collision workarounds outside the listed files.
+- [x] The tour contains no `Color::hex` for a default-palette colour.
+- [x] Workspace builds with no collision workarounds outside the listed files.
 
 ## Risk Assessment
 
@@ -182,14 +182,43 @@ it drives a chart without a window.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye: not needed, no golden changes (AC3)
-- [ ] `mask wasm-browser`: not needed, re-exports only
-- [ ] WASM size: unchanged: re-exports only (run `mask wasm-size` to confirm)
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye: not needed, no golden changes (AC3)
+- [x] `mask wasm-browser`: not needed, re-exports only
+- [x] WASM size: unchanged: re-exports only (run `mask wasm-size` to confirm)
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `gup_core::prelude` gains `OKABE_ITO_DISTINCT`, `Input`, `Key`, `Button`,
+  `Modifiers`, `Response`, `RowId` (`gup::prelude` re-exports it, and so does
+  the egui tour). A doctest on the module drives a scatter with them.
+- Tour chapters 4 and 6 use `OKABE_ITO_DISTINCT[0]`, `[1]`, `[3]`; chapter 9's
+  snippet drops the path import and its page gains the `must_use` sentence;
+  tutorial 4 drops its `Button`/`Input`/`Key`/`Response`/`RowId`/`ScatterChart`
+  path imports. No golden changed; no compile_fail `.stderr` changed; no
+  collision outside the crate's own private `Key`/`Input` types.
+
+## Retrospective
+
+**Completed**: 2026-11-09
+
+### Architectural Decisions
+
+#### `Response` stays `#[must_use]`
+
+- **Decision**: no new API; headless drivers write `let _ =`.
+- **Reasoning**: the attribute is the safety; six characters state the intent.
+- **Trade-off**: a little noise in tours.
+
+### Development Workflow Insights
+
+- The glob-collision worry did not materialise: the workspace's own `Key` and
+  `Input` types are private or in other crates. `ScatterChart` was already in
+  the prelude, so its tutorial path import was redundant and removed.
