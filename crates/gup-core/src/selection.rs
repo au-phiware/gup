@@ -343,6 +343,28 @@ impl Input {
     }
 }
 
+/// Fill an empty `store` with `len` rows of `inputs`: a columnar layer's
+/// shared columns, which the store reads and keeps no copy of (GUP-664),
+/// or else written into the chunks. Not generic, so it is not compiled
+/// once per row type.
+#[inline(never)]
+fn fill(store: &mut ColumnStore, len: usize, inputs: Vec<Input>) -> Result<()> {
+    let shared: Option<Vec<Column>> = inputs
+        .iter()
+        .map(|i| match i {
+            Input::Shared(c) => Some(c.clone()),
+            Input::Owned(_) => None,
+        })
+        .collect();
+    match shared {
+        Some(columns) if !columns.is_empty() => store.append_shared(len, &columns),
+        _ => {
+            let slices: Vec<ColumnSlice<'_>> = inputs.iter().map(Input::slice).collect();
+            store.append_slices(len, &slices)
+        }
+    }
+}
+
 /// The last three of `x`, `y`'s rows, after `tail`'s.
 fn tail_of(tail: &[[f64; 2]], x: &[f64], y: &[f64]) -> Vec<[f64; 2]> {
     let rows: Vec<[f64; 2]> = tail
@@ -986,23 +1008,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             let mut inputs = self.column_inputs()?;
             self.order = self.size_order(&inputs);
             let mut store = ColumnStore::new(formats, chunk_rows)?;
-            let shared = self.order.is_none()
-                && controls.is_none()
-                && !inputs.is_empty()
-                && inputs.iter().all(|i| matches!(i, Input::Shared(_)));
-            if shared {
-                // A columnar layer: the store reads the columns and keeps
-                // no copy of them (GUP-664).
-                let columns: Vec<Column> = inputs
-                    .into_iter()
-                    .map(|i| match i {
-                        Input::Shared(c) => c,
-                        Input::Owned(_) => unreachable!("every input is shared"),
-                    })
-                    .collect();
-                store.append_shared(len, &columns)?;
-                inputs = Vec::new();
-            } else if self.order.is_some() || controls.is_some() {
+            if self.order.is_some() || controls.is_some() {
                 // Sorting by size permutes the columns, and control values
                 // read x and y as f64: both work on owned columns.
                 let mut values: Vec<ColumnData> =
@@ -1022,10 +1028,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
                 }
                 inputs = values.into_iter().map(Input::Owned).collect();
             }
-            if !shared {
-                let slices: Vec<ColumnSlice<'_>> = inputs.iter().map(Input::slice).collect();
-                store.append_slices(len, &slices)?;
-            }
+            fill(&mut store, len, inputs)?;
             self.columns = Some(store);
             // Stored rows (and so GPU pick ids) are new.
             self.epoch = self.epoch.wrapping_add(1);
