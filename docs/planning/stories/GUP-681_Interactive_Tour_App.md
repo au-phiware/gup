@@ -18,8 +18,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N1 Docs: feature tour) **Status**: 📋
-Ready **Created**: 2026-11-08
+**Initiative**: Strategic Review 2026-11 (N1 Docs: feature tour) **Status**: 🚧
+In Progress Ready **Created**: 2026-11-08
 
 ## Context
 
