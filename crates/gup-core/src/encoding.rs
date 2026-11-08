@@ -274,10 +274,13 @@ pub trait EncodeFn: Clone + Send + Sync + 'static {
     /// is shared, not copied, and no closure runs per row. Its length must
     /// be the layer's, or resolving the plot is an error naming the
     /// channel.
-    fn encode_column(&self, column: &Column) -> ColumnEncoded<Self>
-    where
-        Self: EncodeFn<Input = f32>,
-    {
+    ///
+    /// A function over numbers reads a numeric column, and one over
+    /// dictionary codes (`Categorical`) a [`Column::Keys`]: each distinct
+    /// label goes into the scale's dictionary once, in the order the rows
+    /// first use them, and each row's code is gathered. The other kind of
+    /// column is an error when the plot resolves, naming the channel.
+    fn encode_column(&self, column: &Column) -> ColumnEncoded<Self> {
         ColumnEncoded {
             column: column.clone(),
             func: self.clone(),
@@ -1092,6 +1095,19 @@ where
     }
 }
 
+impl<V, S> IntoEncoding<(), V, KeyMarker> for ColumnEncoded<S>
+where
+    V: Visual,
+    S: EncodeFn<Input = u32, Output = V>,
+{
+    fn into_encoding(self) -> Encoding<()> {
+        Encoding::Column(Box::new(KeysEncoding::new(
+            self.column,
+            Box::new(self.func),
+        )))
+    }
+}
+
 impl<T, V, K, S> IntoEncoding<T, V, KeyMarker> for KeyEncoded<K, S>
 where
     T: 'static,
@@ -1142,6 +1158,24 @@ pub trait DynColumnEncoding<T>: Send + Sync {
     /// reads row values from it. `None` (the default) for an accessor.
     #[doc(hidden)]
     fn shared(&self) -> Option<&Column> {
+        None
+    }
+    /// Whether the encoding reads a columnar layer's column, so it needs
+    /// none of the layer's rows (which are `()`).
+    #[doc(hidden)]
+    fn columnar(&self) -> bool {
+        self.shared().is_some()
+    }
+    /// The column value (see [`row_value`](Self::row_value)) of data row
+    /// `data` of a columnar layer, without the row.
+    #[doc(hidden)]
+    fn column_value(&self, data: usize) -> Option<f64> {
+        self.shared().and_then(|c| c.value(data))
+    }
+    /// `(expected, given)` when the channel's column is of the wrong kind
+    /// for its scale (numbers on a key scale, keys on a numeric one).
+    #[doc(hidden)]
+    fn kind_mismatch(&self) -> Option<(&'static str, &'static str)> {
         None
     }
     /// The encoding function's links, in evaluation order.
@@ -1256,7 +1290,25 @@ where
 
 impl<S: EncodeFn> DynColumnEncoding<()> for ColumnEncoded<S> {
     fn evaluate(&mut self, _rows: &[()]) -> Result<ColumnData> {
+        if let Some((expected, given)) = self.kind_mismatch() {
+            return Err(Error::config(
+                "column",
+                format!("expected {expected}, given {given}"),
+            ));
+        }
         Ok(ColumnData::Values(self.column.to_f64()))
+    }
+
+    fn kind_mismatch(&self) -> Option<(&'static str, &'static str)> {
+        matches!(self.column, Column::Keys(_)).then_some(("a numeric column", "a key column"))
+    }
+
+    fn columnar(&self) -> bool {
+        true
+    }
+
+    fn column_value(&self, data: usize) -> Option<f64> {
+        self.column.value(data)
     }
 
     /// A `()` row does not say which row it is: NaN. Rows are read
@@ -1266,7 +1318,7 @@ impl<S: EncodeFn> DynColumnEncoding<()> for ColumnEncoded<S> {
     }
 
     fn shared(&self) -> Option<&Column> {
-        Some(&self.column)
+        (!matches!(self.column, Column::Keys(_))).then_some(&self.column)
     }
 
     fn links(&self) -> Vec<&dyn DynShaderFn> {
@@ -1365,6 +1417,7 @@ pub(crate) trait DynEncodeFn: Send + Sync {
     fn dyn_links(&self) -> Vec<&dyn DynShaderFn>;
     fn dyn_fit(&mut self, extent: (f64, f64)) -> Result<()>;
     fn dyn_fit_integral(&mut self, integral: bool);
+    fn dyn_fit_dictionary(&mut self, keys: &[Arc<str>]) -> Result<()>;
     fn dyn_image(&self, extent: (f64, f64)) -> Option<(f64, f64)>;
     #[cfg(feature = "svg")]
     fn dyn_mirror(&self) -> Arc<dyn ColumnMirror>;
@@ -1382,6 +1435,9 @@ impl<E: EncodeFn> DynEncodeFn for E {
     }
     fn dyn_fit_integral(&mut self, integral: bool) {
         EncodeFn::fit_integral(self, integral);
+    }
+    fn dyn_fit_dictionary(&mut self, keys: &[Arc<str>]) -> Result<()> {
+        EncodeFn::fit_dictionary(self, keys)
     }
     fn dyn_image(&self, extent: (f64, f64)) -> Option<(f64, f64)> {
         EncodeFn::image(self, extent)
@@ -1437,6 +1493,10 @@ impl<T> AxisEncoding<T> {
 }
 
 impl<T> DynColumnEncoding<T> for AxisEncoding<T> {
+    fn columnar(&self) -> bool {
+        matches!(self.source, AxisSource::Column(_))
+    }
+
     fn evaluate(&mut self, rows: &[T]) -> Result<ColumnData> {
         Ok(ColumnData::Values(match &self.source {
             AxisSource::Rows(f) => rows.iter().map(|r| f(r)).collect(),
@@ -1483,6 +1543,133 @@ impl<T> DynColumnEncoding<T> for AxisEncoding<T> {
         self.func
             .dyn_legend()
             .or_else(|| self.func.dyn_legend_over(self.extent?))
+    }
+
+    fn apply_theme(&mut self, theme: &Theme) {
+        self.func.dyn_apply_theme(theme);
+    }
+}
+
+/// A [`KeyColumn`](crate::KeyColumn) of a columnar layer encoded through a
+/// dictionary (GUP-629): the channel of a `Categorical`, or of a Band or
+/// Point axis. The source column's codes are mapped into the scale's
+/// dictionary one label at a time, in the order the rows first use them
+/// (the row path's first-seen order), and each row's code is gathered
+/// through that table. The store holds the mapped codes, so a key column
+/// is not read in place like a numeric one: its codes are not the
+/// scale's until mapped.
+pub(crate) struct KeysEncoding {
+    column: Column,
+    func: Box<dyn DynEncodeFn>,
+    dictionary: Arc<Mutex<Dictionary>>,
+    mismatch: Option<String>,
+    /// The scale's code of each label of the column, once a row has used
+    /// it ([`NULL_CODE`] before).
+    remap: Vec<u32>,
+}
+
+impl KeysEncoding {
+    pub(crate) fn new(column: Column, func: Box<dyn DynEncodeFn>) -> Self {
+        let slot = func.dyn_links().first().and_then(|l| l.dictionary_slot());
+        let (dictionary, mismatch) = match slot.map(DictionarySlot::get_or_insert::<Arc<str>>) {
+            Some(Ok(d)) => (d, None),
+            Some(Err((existing, requested))) => (
+                Arc::default(),
+                Some(format!(
+                    "layers share one scale but key it by different types: \
+                     {existing} and {requested}"
+                )),
+            ),
+            None => (Arc::default(), None),
+        };
+        Self {
+            column,
+            func,
+            dictionary,
+            mismatch,
+            remap: Vec::new(),
+        }
+    }
+}
+
+impl<T> DynColumnEncoding<T> for KeysEncoding {
+    fn evaluate(&mut self, _rows: &[T]) -> Result<ColumnData> {
+        if let Some(detail) = &self.mismatch {
+            return Err(Error::config("shared key scale", detail.clone()));
+        }
+        let Column::Keys(keys) = &self.column else {
+            return Err(Error::config(
+                "column",
+                format!("expected a key column, given {}", self.column.kind()),
+            ));
+        };
+        let mut dictionary = self.dictionary.lock().unwrap_or_else(|p| p.into_inner());
+        self.remap.resize(keys.labels().len(), NULL_CODE);
+        let mut codes = Vec::with_capacity(keys.len());
+        for &code in keys.codes() {
+            codes.push(if code == NULL_CODE {
+                NULL_CODE
+            } else {
+                let mapped = &mut self.remap[code as usize];
+                if *mapped == NULL_CODE {
+                    *mapped = dictionary.encode_borrowed(&*keys.labels()[code as usize])?;
+                }
+                *mapped
+            });
+        }
+        Ok(ColumnData::Codes(codes))
+    }
+
+    /// A `()` row does not say which row it is: NaN. See
+    /// [`column_value`](Self::column_value).
+    fn row_value(&self, _row: &T) -> f64 {
+        f64::NAN
+    }
+
+    fn columnar(&self) -> bool {
+        true
+    }
+
+    fn column_value(&self, data: usize) -> Option<f64> {
+        let Column::Keys(keys) = &self.column else {
+            return None;
+        };
+        let code = *keys.codes().get(data)?;
+        Some(match self.remap.get(code as usize) {
+            Some(&mapped) if code != NULL_CODE && mapped != NULL_CODE => f64::from(mapped),
+            _ => f64::NAN,
+        })
+    }
+
+    fn kind_mismatch(&self) -> Option<(&'static str, &'static str)> {
+        (!matches!(self.column, Column::Keys(_))).then(|| ("a key column", self.column.kind()))
+    }
+
+    fn links(&self) -> Vec<&dyn DynShaderFn> {
+        self.func.dyn_links()
+    }
+
+    fn fit(&mut self, _stats: Option<ColumnStats>) -> Result<()> {
+        let labels = self
+            .dictionary
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .labels()
+            .to_vec();
+        self.func.dyn_fit_dictionary(&labels)
+    }
+
+    fn image(&self, extent: (f64, f64)) -> Option<(f64, f64)> {
+        self.func.dyn_image(extent)
+    }
+
+    #[cfg(feature = "svg")]
+    fn mirror(&self) -> Arc<dyn ColumnMirror> {
+        self.func.dyn_mirror()
+    }
+
+    fn legend(&self) -> Option<crate::Legend> {
+        self.func.dyn_legend()
     }
 
     fn apply_theme(&mut self, theme: &Theme) {

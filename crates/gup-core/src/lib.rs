@@ -190,7 +190,7 @@ pub use channel::{
     Role, Unit, Visual,
 };
 pub use chart::{Chart, ChartExt};
-pub use columns::{Column, Columns};
+pub use columns::{Column, Columns, KeyColumn};
 pub use context::{Caps, Context, ContextId, ContextOptions, Upload, UploadStats, WriteCount};
 pub use describe::{DataTable, Description};
 pub use encoding::{

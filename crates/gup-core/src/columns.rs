@@ -4,7 +4,7 @@
 //! Columnar input (GUP-628): named columns a layer reads directly, with no
 //! row type and no closure per row. See [`Plot::add_columns`](crate::Plot::add_columns).
 
-use crate::column::ColumnSlice;
+use crate::column::{ColumnSlice, NULL_CODE};
 use crate::error::{Error, Result};
 use std::sync::Arc;
 
@@ -45,6 +45,113 @@ pub enum Column {
     F64(Arc<[f64]>),
     /// 32-bit floats.
     F32(Arc<[f32]>),
+    /// Categories: dictionary codes and their labels (a [`KeyColumn`]),
+    /// for a Band or Point axis or a `Categorical` colour.
+    Keys(KeyColumn),
+}
+
+/// A column of categories, stored as dictionary codes plus the label of
+/// each code: how columnar sources already hold them. A plot maps the
+/// labels into its scale's dictionary once each and gathers the rows, so
+/// no key closure and no string hash runs per row.
+///
+/// [`NULL_CODE`] marks a null row. A label no row uses stays out of the
+/// scale's domain, as an unused key does on the row path.
+///
+/// ```
+/// use gup_core::KeyColumn;
+/// let k = KeyColumn::from_labels(["a", "b", "a"]);
+/// assert_eq!(k.codes(), [0, 1, 0]);
+/// assert_eq!(k.labels().len(), 2);
+/// // A code past the labels is refused.
+/// assert!(KeyColumn::new(vec![0, 2], vec![std::sync::Arc::<str>::from("a")]).is_err());
+/// ```
+#[derive(Clone, Debug)]
+pub struct KeyColumn {
+    codes: Arc<[u32]>,
+    labels: Arc<[Arc<str>]>,
+}
+
+impl KeyColumn {
+    /// Rows `codes`, each indexing `labels` (or [`NULL_CODE`]). `Err` for a
+    /// code outside `labels` or a repeated label.
+    pub fn new(codes: impl Into<Arc<[u32]>>, labels: impl Into<Arc<[Arc<str>]>>) -> Result<Self> {
+        let (codes, labels) = (codes.into(), labels.into());
+        let mut seen = std::collections::HashSet::with_capacity(labels.len());
+        if let Some(l) = labels.iter().find(|l| !seen.insert(&***l)) {
+            return Err(Error::config(
+                "key column",
+                format!("the label `{l}` is listed twice; labels must be distinct"),
+            ));
+        }
+        if let Some((row, &code)) = codes
+            .iter()
+            .enumerate()
+            .find(|&(_, &c)| c != NULL_CODE && c as usize >= labels.len())
+        {
+            return Err(Error::config(
+                "key column",
+                format!(
+                    "row {row} has code {code}, but there are only {} labels",
+                    labels.len()
+                ),
+            ));
+        }
+        Ok(Self { codes, labels })
+    }
+
+    /// The labels of `labels`, one per row, coded in first-seen order.
+    pub fn from_labels<S: AsRef<str>>(labels: impl IntoIterator<Item = S>) -> Self {
+        Self::from_optional_labels(labels.into_iter().map(Some))
+    }
+
+    /// Like [`from_labels`](Self::from_labels); `None` is a null row
+    /// ([`NULL_CODE`]).
+    pub fn from_optional_labels<S: AsRef<str>>(
+        labels: impl IntoIterator<Item = Option<S>>,
+    ) -> Self {
+        let mut dictionary = crate::column::Dictionary::<Arc<str>>::new();
+        let codes: Vec<u32> = labels
+            .into_iter()
+            .map(|l| match l {
+                // More than u32::MAX - 1 distinct labels is not a column.
+                Some(l) => dictionary
+                    .encode_borrowed(l.as_ref())
+                    .expect("fewer than u32::MAX distinct labels"),
+                None => NULL_CODE,
+            })
+            .collect();
+        Self {
+            codes: codes.into(),
+            labels: dictionary.labels().into(),
+        }
+    }
+
+    /// Each row's code.
+    pub fn codes(&self) -> &[u32] {
+        &self.codes
+    }
+
+    /// The label of each code.
+    pub fn labels(&self) -> &[Arc<str>] {
+        &self.labels
+    }
+
+    /// The number of rows.
+    pub fn len(&self) -> usize {
+        self.codes.len()
+    }
+
+    /// Whether there are no rows.
+    pub fn is_empty(&self) -> bool {
+        self.codes.is_empty()
+    }
+}
+
+impl From<KeyColumn> for Column {
+    fn from(k: KeyColumn) -> Self {
+        Self::Keys(k)
+    }
 }
 
 impl Columns {
@@ -124,6 +231,16 @@ impl Column {
         match self {
             Self::F64(v) => v.len(),
             Self::F32(v) => v.len(),
+            Self::Keys(k) => k.len(),
+        }
+    }
+
+    /// What the column holds, for error messages.
+    pub(crate) fn kind(&self) -> &'static str {
+        match self {
+            Self::F64(_) => "an f64 column",
+            Self::F32(_) => "an f32 column",
+            Self::Keys(_) => "a key column",
         }
     }
 
@@ -137,6 +254,11 @@ impl Column {
         match self {
             Self::F64(v) => v.get(i).copied(),
             Self::F32(v) => v.get(i).map(|&x| f64::from(x)),
+            // The source code, which is the scale's only before a remap.
+            Self::Keys(k) => k.codes.get(i).map(|&c| match c {
+                NULL_CODE => f64::NAN,
+                c => f64::from(c),
+            }),
         }
     }
 
@@ -145,6 +267,7 @@ impl Column {
         match self {
             Self::F64(v) => ColumnSlice::F64(v),
             Self::F32(v) => ColumnSlice::F32(v),
+            Self::Keys(k) => ColumnSlice::Codes(&k.codes),
         }
     }
 
@@ -153,6 +276,9 @@ impl Column {
         match self {
             Self::F64(v) => v.to_vec(),
             Self::F32(v) => v.iter().map(|&x| f64::from(x)).collect(),
+            Self::Keys(k) => (0..k.len())
+                .map(|i| self.value(i).unwrap_or(f64::NAN))
+                .collect(),
         }
     }
 }
