@@ -30,6 +30,8 @@ what each release contains and what its version number promises.
 
 ### Added
 
+- `ChartExt::to_svg` and `ChartExt::save_svg` (feature `svg`): a chart renders
+  itself as SVG in one call, like `save_png`.
 - `TextLayer::fallbacks`: with `hide_overlaps(true)`, a label that collides
   tries a ranked list of `(Anchor, dx, dy)` positions before it is hidden.
 - `TextLayer::avoid_points`: with `hide_overlaps(true)`, labels keep off the

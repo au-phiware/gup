@@ -16,8 +16,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (polish before 0.1) **Status**: 📋
-Ready **Created**: 2026-11-08
+**Initiative**: Strategic Review 2026-11 (polish before 0.1) **Status**: ✅
+Complete 2026-11-08 **Created**: 2026-11-08
 
 ## Context
 
@@ -51,7 +51,7 @@ published, so the asymmetry is cheap to fix now.
 
 ## Acceptance Criteria
 
-- [ ] Two provided methods next to `save_png`, both `#[cfg(feature = "svg")]`,
+- [x] Two provided methods next to `save_png`, both `#[cfg(feature = "svg")]`,
       with the signatures below, doc comments and a doctest for `save_svg`
       (writing to a temp dir).
 
@@ -66,15 +66,15 @@ fn save_svg(
 ) -> Result<()>;
 ```
 
-- [ ] `save_svg` creates missing parent directories exactly as `save_png` does
+- [x] `save_svg` creates missing parent directories exactly as `save_png` does
       (shared helper or the same code path; no second copy of the logic).
-- [ ] A test in `crates/gup-core/tests/svg.rs`: for a builder scatter, `to_svg`
+- [x] A test in `crates/gup-core/tests/svg.rs`: for a builder scatter, `to_svg`
       equals the three-call output byte for byte; `save_svg` writes the same
       string to a nested path that did not exist.
-- [ ] Tutorial 1's "save" section mentions `save_svg` beside `save_png` (one
+- [x] Tutorial 1's "save" section mentions `save_svg` beside `save_png` (one
       sentence and the call); its doctest or test still passes.
-- [ ] CHANGELOG `[0.1.0]` Added line.
-- [ ] `mask feature-matrix` passes (the methods vanish cleanly without `svg`).
+- [x] CHANGELOG `[0.1.0]` Added line.
+- [x] `mask feature-matrix` passes (the methods vanish cleanly without `svg`).
 
 ## Decisions
 
@@ -96,10 +96,25 @@ fn save_svg(
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -p gup-core -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -p gup-core -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+`ChartExt::to_svg` and `save_svg` (feature `svg`) in
+`crates/gup-core/src/chart.rs`. `save_svg` goes through `SvgTarget::save`, which
+already creates parent directories (no second copy of that logic). Test
+`chart_saves_itself_as_svg` in `tests/svg.rs`; tutorial 1 and CHANGELOG updated.
+
+## Retrospective
+
+**Completed**: 2026-11-08
+
+- `SvgTarget::save` already made parent directories, so the AC was met by reuse.
+- The two methods repeat three lines of resolve/render; a hidden helper on the
+  public trait was rejected as extra API.

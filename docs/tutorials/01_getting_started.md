@@ -252,9 +252,10 @@ fn main() -> gup::Result<()> {
 }
 ```
 
-Save that with `chart.save_png(&cx, "scatter.png", 640, 400)?` and you get
-twelve discs in four colours on a logarithmic GDP axis, under a title, with a
-grid and a legend of the four regions:
+Save that with `chart.save_png(&cx, "scatter.png", 640, 400)?` (or, for a vector
+file, `chart.save_svg(&cx, "scatter.svg", 640, 400)?`) and you get twelve discs
+in four colours on a logarithmic GDP axis, under a title, with a grid and a
+legend of the four regions:
 
 ![The scatter chart](../../tests/golden/tutorials/01_scatter.png)
 
