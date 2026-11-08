@@ -266,8 +266,8 @@ fn window_run(cx: &Context, kind: Kind, retain: Retain) -> Run {
 fn x_domain(plot: &mut Plot) -> (f64, f64) {
     let rect = plot.layout().expect("resolved").plot;
     let mid = rect.top() + rect.height / 2.0;
-    let lo = plot.invert(Point::new(rect.left(), mid)).unwrap().0;
-    let hi = plot.invert(Point::new(rect.right(), mid)).unwrap().0;
+    let lo = plot.value(Point::new(rect.left(), mid)).unwrap().0;
+    let hi = plot.value(Point::new(rect.right(), mid)).unwrap().0;
     (lo, hi)
 }
 

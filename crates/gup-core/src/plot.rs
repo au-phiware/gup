@@ -1398,52 +1398,6 @@ impl Plot {
         ]
     }
 
-    /// The data values drawn at `at` (logical pixels) as of the current
-    /// scales: `None` before the first resolve or outside the plot rect
-    /// (edges inclusive). Band and point axes give a code.
-    ///
-    /// ```
-    /// use gup_core::geom::Point;
-    /// use gup_core::prelude::*;
-    ///
-    /// let cx = Context::new_blocking()?;
-    /// let mut plot = Plot::new();
-    /// let (x, y) = (
-    ///     plot.x(Linear::new()),
-    ///     plot.y(Linear::new()),
-    /// );
-    /// plot.add(Selection::<(f64, f64), Circle>::new(vec![(1.0, 1.0), (9.0, 3.0)]))
-    ///     .attr(Circle::X, x.encode(|r: &(f64, f64)| r.0))
-    ///     .attr(Circle::Y, y.encode(|r: &(f64, f64)| r.1))
-    ///     .attr(Circle::RADIUS, Px(4.0));
-    /// assert!(plot.invert(Point::new(100.0, 100.0)).is_none());
-    /// let r = plot.resolve(&cx, 400.0, 300.0)?.layout.plot;
-    /// let c = Point::new(r.x + r.width / 2.0, r.y + r.height / 2.0);
-    /// let (vx, vy) = plot.invert(c).unwrap();
-    /// // Fitted domains are widened, so the centre is the domain's midpoint.
-    /// let mid = |s: &ScaleRef<Linear>| {
-    ///     let (a, b) = s.read().current_domain().unwrap();
-    ///     (a + b) / 2.0
-    /// };
-    /// let (mx, my) = (mid(&x), mid(&y));
-    /// assert!((vx - mx).abs() <= 1e-9 * mx.abs().max(1.0), "{vx} {mx}");
-    /// assert!((vy - my).abs() <= 1e-9 * my.abs().max(1.0), "{vy} {my}");
-    /// assert!(plot.invert(Point::new(r.x - 1.0, c.y)).is_none());
-    /// # Ok::<(), gup_core::Error>(())
-    /// ```
-    pub fn invert(&self, at: impl Into<Point>) -> Option<(f64, f64)> {
-        let at = at.into();
-        let plot = self.layout()?.plot;
-        let inside = (plot.left()..=plot.right()).contains(&at.x)
-            && (plot.top()..=plot.bottom()).contains(&at.y);
-        inside.then(|| {
-            (
-                self.x.invert(f64::from(at.x)),
-                self.y.invert(f64::from(at.y)),
-            )
-        })
-    }
-
     /// Resolve domains, ticks, text, the plot rect and GPU state for a
     /// `width × height` logical-pixel chart.
     ///
@@ -1671,10 +1625,42 @@ impl Plot {
         Self::to_pixel(&*self.x, &*self.y, x, y)
     }
 
-    /// The data values drawn at `at`; see [`Chart::value`](crate::Chart::value).
-    pub fn value(&self, at: Point) -> Option<(f64, f64)> {
+    /// The data values drawn at `at` (logical pixels); see
+    /// [`Chart::value`](crate::Chart::value). `at` is a [`Point`] or anything
+    /// that converts to one (`(x, y)`, `[x, y]`). A position outside the plot
+    /// rect extrapolates; compare it with `layout().plot` to tell.
+    ///
+    /// ```
+    /// use gup_core::geom::Point;
+    /// use gup_core::prelude::*;
+    ///
+    /// let cx = Context::new_blocking()?;
+    /// let mut plot = Plot::new();
+    /// let (x, y) = (
+    ///     plot.x(Linear::new()),
+    ///     plot.y(Linear::new()),
+    /// );
+    /// plot.add(Selection::<(f64, f64), Circle>::new(vec![(1.0, 1.0), (9.0, 3.0)]))
+    ///     .attr(Circle::X, x.encode(|r: &(f64, f64)| r.0))
+    ///     .attr(Circle::Y, y.encode(|r: &(f64, f64)| r.1))
+    ///     .attr(Circle::RADIUS, Px(4.0));
+    /// assert!(plot.value(Point::new(100.0, 100.0)).is_none());
+    /// let r = plot.resolve(&cx, 400.0, 300.0)?.layout.plot;
+    /// let c = Point::new(r.x + r.width / 2.0, r.y + r.height / 2.0);
+    /// let (vx, vy) = plot.value(c).unwrap();
+    /// // Fitted domains are widened, so the centre is the domain's midpoint.
+    /// let mid = |s: &ScaleRef<Linear>| {
+    ///     let (a, b) = s.read().current_domain().unwrap();
+    ///     (a + b) / 2.0
+    /// };
+    /// let (mx, my) = (mid(&x), mid(&y));
+    /// assert!((vx - mx).abs() <= 1e-9 * mx.abs().max(1.0), "{vx} {mx}");
+    /// assert!((vy - my).abs() <= 1e-9 * my.abs().max(1.0), "{vy} {my}");
+    /// # Ok::<(), gup_core::Error>(())
+    /// ```
+    pub fn value(&self, at: impl Into<Point>) -> Option<(f64, f64)> {
         self.layout()?;
-        Some(Self::to_value(&*self.x, &*self.y, at))
+        Some(Self::to_value(&*self.x, &*self.y, at.into()))
     }
 
     /// Like [`pixel`](Self::pixel), on the right y axis; `None` without one.
@@ -1702,9 +1688,13 @@ impl Plot {
     }
 
     /// Like [`value`](Self::value), on the right y axis; `None` without one.
-    pub fn value_right(&self, at: Point) -> Option<(f64, f64)> {
+    pub fn value_right(&self, at: impl Into<Point>) -> Option<(f64, f64)> {
         self.layout()?;
-        Some(Self::to_value(&*self.x, &**self.y_right.as_ref()?, at))
+        Some(Self::to_value(
+            &*self.x,
+            &**self.y_right.as_ref()?,
+            at.into(),
+        ))
     }
 
     fn to_pixel(

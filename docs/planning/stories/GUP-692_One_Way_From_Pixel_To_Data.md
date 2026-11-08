@@ -21,8 +21,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (polish before 0.1) **Status**: 🚧 In
-Progress **Created**: 2026-11-08 Complete 2026-11-08 **Created**: 2026-11-08
+**Initiative**: Strategic Review 2026-11 (polish before 0.1) **Status**: ✅
+Complete 2026-11-09 **Created**: 2026-11-08
 
 ## Context
 
@@ -62,3 +62,24 @@ choose between two.
 ## Definition of Done
 
 - [x] As above; CHANGELOG needs no entry (`invert` was never in [0.1.0]).
+
+## Implementation Summary
+
+`Plot::invert` is deleted. `Plot::value` and `value_right` take
+`impl Into<Point>`; `Chart::value` keeps `Point` (object safety). Tests migrated
+to `value` (the outside-the-rect cases now assert extrapolation); the wasm
+scatter's `value_at` checks `layout().plot` itself; tutorial 4 uses
+`chart.value(..into())` and drops the comparison prose. The centre-maps-to-
+midpoint doctest is on `Plot::value`.
+
+Note: `gup-egui` tour tests `every_chapter_has_its_code_and_summary` and
+`the_code_is_on_the_page` already fail on main (tour.rs still names the removed
+`pixel` region of chapter 8); not touched here.
+
+## Retrospective
+
+**Completed**: 2026-11-09
+
+- Tuples need `.into()` against `Chart::value(Point)`; the geometry `Point` is
+  not in the prelude (it clashes with the scale `Point`), so `.into()` reads
+  better than an import.

@@ -14,9 +14,9 @@ fn call_all(plot: &mut Plot) {
 
     plot.zoom((1.0, 2.0), 2.0).unwrap();
     plot.zoom(point, 2.0).unwrap();
-    let _ = plot.invert((1.0, 2.0));
-    let _ = plot.invert(point);
-    let _ = plot.invert([1.0, 2.0]);
+    let _ = plot.value((1.0, 2.0));
+    let _ = plot.value(point);
+    let _ = plot.value([1.0, 2.0]);
     let _ = plot.pick_row((1.0, 2.0));
     let _ = plot.pick_row(point);
     let _ = plot.pick::<u32>((1.0, 2.0));

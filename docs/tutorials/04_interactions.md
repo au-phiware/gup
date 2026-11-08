@@ -176,9 +176,8 @@ primary-button drag pans, on both axes. Both only change the scales' domains, so
 the next `resolve` is cheap: it writes a few uniforms and uploads no data. (They
 do nothing until the first `resolve` has fitted the scales.)
 
-`chart.value(at)` is the opposite of `chart.pixel`, and `Plot::invert(at)` is
-the same for a pixel inside the plot (it gives `None` outside). Here the latter
-shows the view move:
+`chart.value(at)` is the opposite of `chart.pixel`: the data values drawn at a
+pixel. Here it shows the view move:
 
 ```rust
 use gup::prelude::*;
@@ -193,34 +192,34 @@ fn main() -> gup::Result<()> {
     let middle = (plot.x + plot.width / 2.0, plot.y + plot.height / 2.0);
 
     // The width of the x domain, read at the plot's left and right edges.
-    let width = |chart: &mut ScatterChart<(f64, f64)>| {
-        let left = chart.plot_mut().invert((plot.left(), middle.1));
-        let right = chart.plot_mut().invert((plot.right(), middle.1));
+    let width = |chart: &ScatterChart<(f64, f64)>| {
+        let left = chart.value((plot.left(), middle.1).into());
+        let right = chart.value((plot.right(), middle.1).into());
         right.unwrap().0 - left.unwrap().0
     };
-    let full = width(&mut chart);
+    let full = width(&chart);
 
     // One turn of the wheel zooms in about the pointer.
     let response = chart.handle(Input::wheel(middle, 1.0));
     assert!(response.redraw);
-    let zoomed = width(&mut chart);
+    let zoomed = width(&chart);
     assert!(zoomed < full, "{zoomed} < {full}");
 
     // A drag pans: the values under the pointer follow it, so dragging right
     // shows what was further left.
-    let before = chart.plot_mut().invert(middle).unwrap().0;
+    let before = chart.value(middle.into()).unwrap().0;
     let button = Button::Primary;
     let to = (middle.0 + 60.0, middle.1);
     let _ = chart.handle(Input::pointer_down(middle, button));
     let _ = chart.handle(Input::pointer_moved(to));
     let _ = chart.handle(Input::pointer_up(to, button));
-    assert!(chart.plot_mut().invert(middle).unwrap().0 < before);
-    assert!((width(&mut chart) - zoomed).abs() < 1e-9); // panning keeps the zoom
+    assert!(chart.value(middle.into()).unwrap().0 < before);
+    assert!((width(&chart) - zoomed).abs() < 1e-9); // panning keeps the zoom
 
     // Back to the fitted view.
     chart.plot_mut().reset_view();
     chart.resolve(&cx, 640.0, 400.0)?;
-    assert!((width(&mut chart) - full).abs() < 1e-9);
+    assert!((width(&chart) - full).abs() < 1e-9);
     Ok(())
 }
 ```
@@ -245,9 +244,9 @@ fn main() -> gup::Result<()> {
 
     // The values at the top of the plot, before and after a wheel turn.
     let top = (plot.left(), plot.top());
-    let (x0, y0) = chart.plot_mut().invert(top).unwrap();
+    let (x0, y0) = chart.value(top.into()).unwrap();
     let _ = chart.handle(Input::wheel(middle, 2.0));
-    let (x1, y1) = chart.plot_mut().invert(top).unwrap();
+    let (x1, y1) = chart.value(top.into()).unwrap();
 
     assert_ne!(x0, x1); // x zoomed
     assert_eq!(y0, y1); // y did not
@@ -279,7 +278,7 @@ fn main() -> gup::Result<()> {
     // data units.
     let from = (plot.x + plot.width * 0.25, plot.y + plot.height * 0.25);
     let to = (plot.x + plot.width * 0.75, plot.y + plot.height * 0.75);
-    let corner = chart.plot_mut().invert(from).unwrap();
+    let corner = chart.value(from.into()).unwrap();
 
     let button = Button::Primary;
     let _ = chart.handle(Input::pointer_down(from, button));
@@ -289,7 +288,7 @@ fn main() -> gup::Result<()> {
 
     // The rectangle's top-left corner is now the plot's.
     let top_left = (plot.left(), plot.top());
-    let (x, y) = chart.plot_mut().invert(top_left).unwrap();
+    let (x, y) = chart.value(top_left.into()).unwrap();
     assert!((x - corner.0).abs() < 1e-6, "{x} {}", corner.0);
     assert!((y - corner.1).abs() < 1e-6, "{y} {}", corner.1);
     Ok(())
