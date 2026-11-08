@@ -71,6 +71,10 @@ mod s10_live_data;
 #[allow(dead_code)]
 mod s11_big_data;
 
+#[path = "../docs/tour/snippets/12_under_the_builders.rs"]
+#[allow(dead_code)]
+mod s12_under_the_builders;
+
 // Chapter 1.
 
 #[test]
@@ -294,6 +298,20 @@ fn window() {
 fn columns() {
     let mut chart = s11_big_data::columns().unwrap();
     check("tour/11_columns", &mut chart, W, H);
+}
+
+// Chapter 12.
+
+#[test]
+fn function() {
+    let mut chart = s12_under_the_builders::function();
+    check("tour/12_function", &mut chart, W, H);
+}
+
+#[test]
+fn mark() {
+    let mut chart = s12_under_the_builders::mark();
+    check("tour/12_mark", &mut chart, W, H);
 }
 
 // The sync test: the pages show the code that was rendered.

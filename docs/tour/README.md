@@ -29,6 +29,7 @@ checks that each page shows exactly the code that was drawn.
 10. [Live data](10_live_data.md): rows that arrive while the chart is on screen.
 11. [Big data](11_big_data.md): charts of millions of rows, with measured
     numbers.
-12. Under the builders: your own scale and mark in WGSL (coming in GUP-670)
-13. Everywhere it runs: the window, egui, Bevy and the browser (coming in
-    GUP-670)
+12. [Under the builders](12_under_the_builders.md): your own colour ramp and
+    mark in WGSL.
+13. [Everywhere it runs](13_everywhere.md): the window, files, egui, Bevy and
+    the browser.
