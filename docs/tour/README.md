@@ -27,8 +27,8 @@ checks that each page shows exactly the code that was drawn.
 9. [Accessibility](09_accessibility.md): keyboard navigation and text for screen
    readers.
 10. [Live data](10_live_data.md): rows that arrive while the chart is on screen.
-11. Big data: charts of millions of rows, with measured numbers (coming in
-    GUP-670)
+11. [Big data](11_big_data.md): charts of millions of rows, with measured
+    numbers.
 12. Under the builders: your own scale and mark in WGSL (coming in GUP-670)
 13. Everywhere it runs: the window, egui, Bevy and the browser (coming in
     GUP-670)

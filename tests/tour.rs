@@ -67,6 +67,10 @@ mod s09_accessibility;
 #[allow(dead_code)]
 mod s10_live_data;
 
+#[path = "../docs/tour/snippets/11_big_data.rs"]
+#[allow(dead_code)]
+mod s11_big_data;
+
 // Chapter 1.
 
 #[test]
@@ -282,6 +286,14 @@ fn append() {
 fn window() {
     let mut chart = s10_live_data::window().unwrap();
     check("tour/10_window", &mut chart, W, H);
+}
+
+// Chapter 11.
+
+#[test]
+fn columns() {
+    let mut chart = s11_big_data::columns().unwrap();
+    check("tour/11_columns", &mut chart, W, H);
 }
 
 // The sync test: the pages show the code that was rendered.
@@ -572,5 +584,43 @@ fn the_palette_table_lists_the_default_palette() {
             .find(&hex)
             .unwrap_or_else(|| panic!("05_colour_and_themes.md does not list {hex} in order"));
         from += at + hex.len();
+    }
+}
+
+/// Chapter 11 quotes three rows of `PERF_BUDGETS.md`; a re-recorded budget
+/// fails this test until the page is updated. It also keeps the page free of
+/// claims it must not make.
+#[test]
+fn chapter_11_quotes_the_budget() {
+    let budgets = read(&root().join("crates/gup-core/PERF_BUDGETS.md"));
+    let page = read(&root().join("docs/tour/11_big_data.md"));
+    for metric in [
+        "zoom.columns.bytes",
+        "zoom_culled.draws.median",
+        "zoom_culled.gpu_pass.median_ms",
+    ] {
+        let tag = format!("| `{metric}`");
+        let row = budgets
+            .lines()
+            .find(|l| l.starts_with(&tag))
+            .unwrap_or_else(|| panic!("PERF_BUDGETS.md has no row for {metric}"));
+        let recorded = row.split('|').nth(2).unwrap().trim();
+        let shown = page
+            .lines()
+            .find(|l| l.contains(&format!("`{metric}`")))
+            .unwrap_or_else(|| panic!("11_big_data.md does not name {metric}"));
+        let quotes_it = shown.split('|').any(|cell| {
+            cell.trim()
+                .strip_prefix(recorded)
+                .is_some_and(|rest| !rest.starts_with(|c: char| c.is_ascii_digit() || c == '.'))
+        });
+        assert!(
+            quotes_it,
+            "11_big_data.md: the row for {metric} does not show the recorded value {recorded}: {shown}"
+        );
+    }
+    let lower = page.to_lowercase();
+    for banned in ["billion", "interactive 100", "real time", "chunk_culling"] {
+        assert!(!lower.contains(banned), "11_big_data.md says {banned:?}");
     }
 }
