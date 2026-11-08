@@ -465,8 +465,8 @@ In addition to the standing triggers in `story-worker.md`:
   - `09_keys` (re-blessed after review): two key zooms and five Shift pans put
     the flock in view (x 0 to 1.4); a ring around the Kokako with its tooltip,
     birds on every side.
-  - `10_append`: a red line of two summed sine waves over 6 s, titled, both axes
-    titled.
+  - `10_append`: a blue (default colour) line of two summed sine waves over 6 s,
+    titled, both axes titled.
   - `10_window` (re-blessed): a line of a slow wave with ripple, drawn from the
     newest rows only; the time axis starts near 2,355, not zero. It is a
     `gup::line` now, not a scatter.
