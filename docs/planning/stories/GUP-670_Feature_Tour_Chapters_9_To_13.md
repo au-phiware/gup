@@ -462,19 +462,20 @@ In addition to the standing triggers in `story-worker.md`:
 - The sandbox here refuses heredocs and compound commands: write scripts with
   the Write tool and run them as one plain command.
 - Goldens read by eye:
-  - `09_keys`: a zoomed view with a ring around the Morepork and its tooltip
-    beside it; ticks finer than the fitted view; the Takahe is off the right
-    edge.
+  - `09_keys` (re-blessed after review): two key zooms and five Shift pans put
+    the flock in view (x 0 to 1.4); a ring around the Kokako with its tooltip,
+    birds on every side.
   - `10_append`: a red line of two summed sine waves over 6 s, titled, both axes
     titled.
-  - `10_window`: a slow wave of dots; the time axis starts near 2,340 (the data
-    at 2,355), not zero.
+  - `10_window` (re-blessed): a line of a slow wave with ripple, drawn from the
+    newest rows only; the time axis starts near 2,355, not zero. It is a
+    `gup::line` now, not a scatter.
   - `11_columns`: a spiral of 200,000 points, purple at the bottom to yellow at
     the top, with a legend.
   - `12_function`: 40 discs in an 8 by 5 grid, near black at the bottom left to
     pale yellow at the top right.
-  - `12_mark`: 28 squares in 7 columns and 4 rows on viridis, with a "Steps"
-    legend.
+  - `12_mark` (re-blessed): 28 squares in 7 columns and 4 rows on viridis, with
+    `Mon` to `Sun` and `Week 1` to `Week 4` tick labels and a "Steps" legend.
 
 ### Follow-up Stories
 

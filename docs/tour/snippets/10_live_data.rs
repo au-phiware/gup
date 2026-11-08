@@ -21,13 +21,12 @@ fn sample(i: u32) -> Sample {
     }
 }
 
-/// The reading taken `i` times in: a slow wave and a little jitter.
+/// The reading taken `i` times in: a slow wave with some ripple on it.
 fn reading(i: u32) -> Sample {
     let t = f64::from(i) * 0.05;
-    let jitter = f64::from(i * 7919 % 100) / 100.0 - 0.5;
     Sample {
         t,
-        level: (t * 0.1).sin() + 0.3 * jitter,
+        level: (t * 0.1).sin() + 0.12 * (t * 2.3).sin() + 0.06 * (t * 5.7).sin(),
     }
 }
 
@@ -56,15 +55,15 @@ pub fn append() -> gup::Result<impl Chart> {
 pub fn window() -> gup::Result<impl Chart> {
     // tour:begin window
     let cx = Context::shared()?;
-    let mut chart = gup::scatter(Vec::<Sample>::new())
+    let mut chart = gup::line(Vec::<Sample>::new())
         .x(|s| s.t)
         .y(|s| s.level)
-        .radius(2.0)
+        .width(1.5)
         .title("A window on the newest readings")
         .x_title("Time (s)")
         .y_title("Level")
         .window(Window::LastRows(2_000));
-    chart.layer_mut().retain(Retain::GpuOnly);
+    chart.layers_mut()[0].retain(Retain::GpuOnly);
     let feed = chart.appender();
 
     for batch in 0..25 {
@@ -74,7 +73,7 @@ pub fn window() -> gup::Result<impl Chart> {
     }
     // 50,000 rows came in. Rows leave a chunk (1,024 rows or more) at a
     // time, so the layer holds the 2,000 newest and up to two chunks more.
-    let held = chart.layer_mut().len();
+    let held = chart.layers_mut()[0].len();
     assert!((2_000..=2_000 + 2 * 1_024).contains(&held), "{held}");
     Ok(chart)
     // tour:end window

@@ -97,6 +97,24 @@ fn days() -> Vec<Day> {
         .collect()
 }
 
+/// The label of the tick at `v` on the weekday axis: no label between days.
+fn weekday(v: f64) -> String {
+    const NAMES: [&str; 7] = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    match NAMES.get(v as usize) {
+        Some(name) if v.fract() == 0.0 && v >= 0.0 => name.to_string(),
+        _ => String::new(),
+    }
+}
+
+/// The label of the tick at `v` on the week axis, which counts from week 1.
+fn week(v: f64) -> String {
+    if v.fract() == 0.0 && v >= 0.0 {
+        format!("Week {}", v as u32 + 1)
+    } else {
+        String::new()
+    }
+}
+
 pub fn mark() -> impl Chart {
     // tour:begin mark
     #[derive(Debug, Mark)]
@@ -155,8 +173,8 @@ pub fn mark() -> impl Chart {
 
     let mut plot = Plot::new();
     plot.title("Steps per day")
-        .x_title("Weekday (Monday is 0)")
-        .y_title("Week");
+        .x_tick_format(weekday)
+        .y_tick_format(week);
     plot.add(Selection::<Day, Square>::new(days()))
         .x(|d| d.weekday)
         .y(|d| d.week)

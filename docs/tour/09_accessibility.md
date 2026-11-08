@@ -21,10 +21,13 @@ let mut chart = gup::scatter(birds())
 let cx = Context::shared()?;
 chart.resolve(&cx, 640.0, 400.0)?;
 
-// Zoom in about the centre of the plot, then pan left with Shift.
-let _ = chart.handle(Input::key(Key::ZoomIn));
-let _ = chart.handle(Input::key_with(Key::Left, Modifiers::SHIFT));
-let _ = chart.handle(Input::key_with(Key::Left, Modifiers::SHIFT));
+// Zoom in twice about the centre of the plot, then pan left with Shift.
+for _ in 0..2 {
+    let _ = chart.handle(Input::key(Key::ZoomIn));
+}
+for _ in 0..5 {
+    let _ = chart.handle(Input::key_with(Key::Left, Modifiers::SHIFT));
+}
 // Right focuses the first row in view, in x order, then the next.
 let _ = chart.handle(Input::key(Key::Right));
 let _ = chart.handle(Input::key(Key::Right));
@@ -32,14 +35,14 @@ chart.resolve(&cx, 640.0, 400.0)?;
 Ok(chart)
 ```
 
-![A zoomed scatter chart with a ring around the Morepork and its tooltip beside it](../../tests/golden/tour/09_keys.png)
+![A zoomed scatter chart with a ring around the Kokako and its tooltip beside it](../../tests/golden/tour/09_keys.png)
 
 The ring is drawn into the chart, so it shows in a PNG too. The view is zoomed:
-the ticks are finer than in the fitted chart, and the Takahe, at 2.7 kg, is off
-to the right. The keys are the arrows (Left and Right walk the rows of a layer,
-Up and Down move between layers), Home and End, Enter and Space (run the row's
-click handlers), Escape (clear focus), `+` or `=`, `-`, and `0` (reset the
-view).
+the ticks are finer than in the fitted chart, and four of the twelve birds (the
+Bellbird, Tui, Harrier and Takahe) are out of view. The keys are the arrows
+(Left and Right walk the rows of a layer, Up and Down move between layers), Home
+and End, Enter and Space (run the row's click handlers), Escape (clear focus),
+`+` or `=`, `-`, and `0` (reset the view).
 
 ## What a screen reader is given
 
@@ -82,11 +85,11 @@ It prints:
 <!-- tour-output: docs/tour/snippets/09_accessibility.rs#read_aloud -->
 
 ```text
-focus: Morepork; 0.17 kg, 0.55 m (2 of 9)
+focus: Kokako; 0.25 kg, 0.6 m (2 of 8)
 title: Birds of Aotearoa
-text: Scatter chart, 12 data rows. X axis "Mass (kg)": 0.0 to 2.0. Y axis "Wingspan (m)": 0.4 to 1.1.
+text: Scatter chart, 12 data rows. X axis "Mass (kg)": 0.0 to 1.4. Y axis "Wingspan (m)": 0.5 to 1.0.
 svg title: Birds of Aotearoa
-svg desc: Scatter chart, 12 data rows. X axis &quot;Mass (kg)&quot;: 0.0 to 2.0. Y axis &quot;Wingspan (m)&quot;: 0.4 to 1.1.
+svg desc: Scatter chart, 12 data rows. X axis &quot;Mass (kg)&quot;: 0.0 to 1.4. Y axis &quot;Wingspan (m)&quot;: 0.5 to 1.0.
 table caption: Birds of Aotearoa
 table headers: Mass (kg), Wingspan (m)
 table row 1: 0.03, 0.2

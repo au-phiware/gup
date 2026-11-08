@@ -66,15 +66,15 @@ of each row after it is uploaded, so the rows live on the GPU alone.
 
 ```rust
 let cx = Context::shared()?;
-let mut chart = gup::scatter(Vec::<Sample>::new())
+let mut chart = gup::line(Vec::<Sample>::new())
     .x(|s| s.t)
     .y(|s| s.level)
-    .radius(2.0)
+    .width(1.5)
     .title("A window on the newest readings")
     .x_title("Time (s)")
     .y_title("Level")
     .window(Window::LastRows(2_000));
-chart.layer_mut().retain(Retain::GpuOnly);
+chart.layers_mut()[0].retain(Retain::GpuOnly);
 let feed = chart.appender();
 
 for batch in 0..25 {
@@ -84,12 +84,12 @@ for batch in 0..25 {
 }
 // 50,000 rows came in. Rows leave a chunk (1,024 rows or more) at a
 // time, so the layer holds the 2,000 newest and up to two chunks more.
-let held = chart.layer_mut().len();
+let held = chart.layers_mut()[0].len();
 assert!((2_000..=2_000 + 2 * 1_024).contains(&held), "{held}");
 Ok(chart)
 ```
 
-![A scatter of a slow wave whose time axis starts near 2,355 seconds, not at zero](../../tests/golden/tour/10_window.png)
+![A smooth wave drawn as a line whose time axis starts near 2,355 seconds, not at zero](../../tests/golden/tour/10_window.png)
 
 The 50,000 rows run to 2,500 seconds, and the axis starts near 2,355, so only
 the newest rows are held (the test checks the count, and the snippet asserts

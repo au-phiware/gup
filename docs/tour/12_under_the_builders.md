@@ -160,8 +160,8 @@ struct Square {
 
 let mut plot = Plot::new();
 plot.title("Steps per day")
-    .x_title("Weekday (Monday is 0)")
-    .y_title("Week");
+    .x_tick_format(weekday)
+    .y_tick_format(week);
 plot.add(Selection::<Day, Square>::new(days()))
     .x(|d| d.weekday)
     .y(|d| d.week)
@@ -174,8 +174,11 @@ plot
 ![A grid of seven columns and four rows of squares coloured from purple to yellow, with a legend titled Steps](../../tests/golden/tour/12_mark.png)
 
 `Plot::add` takes the layer, and its `fill` channel is encoded through viridis
-like any other. `legend_title` names the colour legend. The mark's `path` is
-`tour_square` here, and like a function's, it is a name for the whole process.
+like any other. The data stays numeric: `x_tick_format` and `y_tick_format` take
+two small helpers, kept outside the snippet to save space, that turn a tick's
+number into its label (`Mon`, `Week 1`). `legend_title` names the colour legend.
+The mark's `path` is `tour_square` here, and like a function's, it is a name for
+the whole process.
 
 **Go deeper**: [Tutorial 2](../tutorials/02_data_binding.md), "Step 1: Drop From
 a Builder to Its Plot" and "Step 2: Build a Plot From Layers";

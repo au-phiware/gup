@@ -52,10 +52,13 @@ pub fn keys() -> gup::Result<impl Chart> {
     let cx = Context::shared()?;
     chart.resolve(&cx, 640.0, 400.0)?;
 
-    // Zoom in about the centre of the plot, then pan left with Shift.
-    let _ = chart.handle(Input::key(Key::ZoomIn));
-    let _ = chart.handle(Input::key_with(Key::Left, Modifiers::SHIFT));
-    let _ = chart.handle(Input::key_with(Key::Left, Modifiers::SHIFT));
+    // Zoom in twice about the centre of the plot, then pan left with Shift.
+    for _ in 0..2 {
+        let _ = chart.handle(Input::key(Key::ZoomIn));
+    }
+    for _ in 0..5 {
+        let _ = chart.handle(Input::key_with(Key::Left, Modifiers::SHIFT));
+    }
     // Right focuses the first row in view, in x order, then the next.
     let _ = chart.handle(Input::key(Key::Right));
     let _ = chart.handle(Input::key(Key::Right));
