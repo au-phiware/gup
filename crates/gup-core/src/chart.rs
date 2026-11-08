@@ -103,6 +103,59 @@ pub trait Chart: 'static {
         let _ = max_rows;
         None
     }
+    /// Where the data point `(x, y)` is drawn, in logical pixels, as of the
+    /// last successful resolve (resolve first: after a pan or zoom the
+    /// domain is new but the range is the old one). The scales' own maps, so
+    /// right for log, symlog, pow and time axes; not clamped, so a point
+    /// outside the view lands outside the plot rect. A band or point axis
+    /// takes the key's code and gives the band centre. `None` before a
+    /// resolve, for a chart that cannot say, and where a scale cannot map the
+    /// value (the log of zero, NaN).
+    ///
+    /// ```
+    /// use gup_core::prelude::*;
+    ///
+    /// struct Row { x: f64, y: f64 }
+    /// let mut plot = Plot::new();
+    /// plot.circles(vec![Row { x: 1.0, y: 2.0 }, Row { x: 3.0, y: 4.0 }])
+    ///     .x(|r| r.x)
+    ///     .y(|r| r.y);
+    /// assert!(Chart::pixel(&plot, 2.0, 3.0).is_none()); // not resolved yet
+    /// let cx = Context::new_blocking().unwrap();
+    /// plot.resolve(&cx, 400.0, 300.0).unwrap();
+    /// let at = Chart::pixel(&plot, 2.0, 3.0).unwrap();
+    /// let layout = plot.layout().unwrap();
+    /// assert!(at.x > layout.plot.left() && at.x < layout.plot.right());
+    /// assert!(at.y > layout.plot.top() && at.y < layout.plot.bottom());
+    /// ```
+    fn pixel(&self, x: f64, y: f64) -> Option<Point> {
+        let _ = (x, y);
+        None
+    }
+    /// The data values drawn at `at` (logical pixels), the inverse of
+    /// [`pixel`](Self::pixel): the scales' `invert`, not clamped for a
+    /// numeric axis (a band axis gives the nearest band code, clamped to the
+    /// first or last). `None` before a resolve and for a chart that cannot
+    /// say.
+    ///
+    /// ```
+    /// use gup_core::prelude::*;
+    ///
+    /// struct Row { x: f64, y: f64 }
+    /// let mut plot = Plot::new();
+    /// plot.circles(vec![Row { x: 1.0, y: 2.0 }, Row { x: 3.0, y: 4.0 }])
+    ///     .x(|r| r.x)
+    ///     .y(|r| r.y);
+    /// let cx = Context::new_blocking().unwrap();
+    /// plot.resolve(&cx, 400.0, 300.0).unwrap();
+    /// let at = Chart::pixel(&plot, 2.0, 3.0).unwrap();
+    /// let (x, y) = Chart::value(&plot, at).unwrap();
+    /// assert!((x - 2.0).abs() < 1e-3 && (y - 3.0).abs() < 1e-3);
+    /// ```
+    fn value(&self, at: Point) -> Option<(f64, f64)> {
+        let _ = at;
+        None
+    }
     /// The chart as [`Any`], to downcast to its concrete type.
     fn as_any(&self) -> &dyn Any;
     /// The chart as mutable [`Any`], to downcast to its concrete type.

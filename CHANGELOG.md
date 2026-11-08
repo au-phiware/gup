@@ -143,6 +143,11 @@ what each release contains and what its version number promises.
 - CI that renders and compares goldens on Linux (Vulkan), Windows (DX12, WARP)
   and macOS (Metal), a feature-combination matrix, and a publish dry run with a
   docs.rs build of all seven crates.
+- `Chart::pixel(x, y)` and `Chart::value(point)` (and `Plot::pixel_right` and
+  `value_right` for the right y axis): where a data point is drawn and what data
+  a pixel stands for, through the axes' own scales, so right on log, symlog, pow
+  and time axes too. The tour and tutorial 4 no longer interpolate tick marks by
+  hand.
 
 ### Changed
 

@@ -132,13 +132,9 @@ impl AxisFormat {
 /// let image = ImageTarget::new(&cx, 320, 200)?.render_blocking(&cx, &resolved.scene)?;
 ///
 /// // Each row is a dot of the default fill (#0072B2) at its position.
-/// let at = |ticks: &[(f64, f32)], v: f64| {
-///     let (a, b) = (ticks[0], ticks[ticks.len() - 1]);
-///     f64::from(a.1) + (v - a.0) * f64::from(b.1 - a.1) / (b.0 - a.0)
-/// };
 /// for (a, b) in [(1.0, 2.0), (2.0, 5.0), (3.0, 3.0), (4.0, 8.0)] {
-///     let (x, y) = (at(&resolved.layout.x_ticks, a), at(&resolved.layout.y_ticks, b));
-///     let p = image.get_pixel(x as u32, y as u32).0;
+///     let at = plot.pixel(a, b).expect("resolved");
+///     let p = image.get_pixel(at.x as u32, at.y as u32).0;
 ///     assert!(p[0] < 10 && (100..130).contains(&p[1]) && p[2] > 160, "{p:?}");
 /// }
 /// # Ok::<(), gup_core::Error>(())
@@ -504,6 +500,12 @@ impl crate::chart::Chart for Plot {
     }
     fn data_table(&self, max_rows: usize) -> Option<crate::DataTable> {
         Plot::data_table(self, max_rows)
+    }
+    fn pixel(&self, x: f64, y: f64) -> Option<Point> {
+        Plot::pixel(self, x, y)
+    }
+    fn value(&self, at: Point) -> Option<(f64, f64)> {
+        Plot::value(self, at)
     }
     fn as_any(&self) -> &dyn std::any::Any {
         self
@@ -1663,6 +1665,62 @@ impl Plot {
         }
     }
 
+    /// Where the data point `(x, y)` is drawn; see [`Chart::pixel`](crate::Chart::pixel).
+    pub fn pixel(&self, x: f64, y: f64) -> Option<Point> {
+        self.layout()?;
+        Self::to_pixel(&*self.x, &*self.y, x, y)
+    }
+
+    /// The data values drawn at `at`; see [`Chart::value`](crate::Chart::value).
+    pub fn value(&self, at: Point) -> Option<(f64, f64)> {
+        self.layout()?;
+        Some(Self::to_value(&*self.x, &*self.y, at))
+    }
+
+    /// Like [`pixel`](Self::pixel), on the right y axis; `None` without one.
+    ///
+    /// ```
+    /// use gup_core::prelude::*;
+    ///
+    /// struct Row { x: f64, y: f64, z: f64 }
+    /// let mut plot = Plot::new();
+    /// plot.circles(vec![Row { x: 1.0, y: 2.0, z: 10.0 }, Row { x: 3.0, y: 4.0, z: 30.0 }])
+    ///     .x(|r| r.x)
+    ///     .y(|r| r.y);
+    /// plot.y_right(Linear::new());
+    /// let cx = Context::new_blocking().unwrap();
+    /// plot.resolve(&cx, 400.0, 300.0).unwrap();
+    /// // Secondary axis tick values land on their tick marks.
+    /// for &(v, px) in &plot.layout().unwrap().y_right_ticks {
+    ///     let at = plot.pixel_right(1.0, v).unwrap();
+    ///     assert!((at.y - px).abs() < 0.01);
+    /// }
+    /// ```
+    pub fn pixel_right(&self, x: f64, y: f64) -> Option<Point> {
+        self.layout()?;
+        Self::to_pixel(&*self.x, &**self.y_right.as_ref()?, x, y)
+    }
+
+    /// Like [`value`](Self::value), on the right y axis; `None` without one.
+    pub fn value_right(&self, at: Point) -> Option<(f64, f64)> {
+        self.layout()?;
+        Some(Self::to_value(&*self.x, &**self.y_right.as_ref()?, at))
+    }
+
+    fn to_pixel(
+        sx: &dyn DynPositionScale,
+        sy: &dyn DynPositionScale,
+        x: f64,
+        y: f64,
+    ) -> Option<Point> {
+        let (px, py) = (sx.eval(x), sy.eval(y));
+        (px.is_finite() && py.is_finite()).then(|| Point::new(px as f32, py as f32))
+    }
+
+    fn to_value(sx: &dyn DynPositionScale, sy: &dyn DynPositionScale, at: Point) -> (f64, f64) {
+        (sx.invert(f64::from(at.x)), sy.invert(f64::from(at.y)))
+    }
+
     /// The row the pointer is over, as of the last
     /// [`handle`](Self::handle).
     pub fn hovered(&self) -> Option<RowId> {
@@ -2511,15 +2569,10 @@ impl Plot {
     /// let cx = Context::new_blocking()?;
     /// let mut plot = Plot::new();
     /// plot.circles(rows).x(|r| r.x).y(|r| r.y);
-    /// let resolved = plot.resolve(&cx, 320.0, 200.0)?;
-    /// let layout = &resolved.layout;
+    /// plot.resolve(&cx, 320.0, 200.0)?;
     ///
-    /// // The second row's position, from the tick pixels.
-    /// let at = |ticks: &[(f64, f32)], v: f64| {
-    ///     let (a, b) = (ticks[0], ticks[ticks.len() - 1]);
-    ///     f64::from(a.1) + (v - a.0) * f64::from(b.1 - a.1) / (b.0 - a.0)
-    /// };
-    /// let p = Point::new(at(&layout.x_ticks, 2.0) as f32, at(&layout.y_ticks, 3.0) as f32);
+    /// // The second row's position.
+    /// let p = plot.pixel(2.0, 3.0).expect("resolved");
     /// let row = plot.pick::<Row>(p).expect("a row is drawn there");
     /// assert_eq!(row.name, "b");
     /// # Ok(())

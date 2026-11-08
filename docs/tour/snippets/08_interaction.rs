@@ -6,7 +6,7 @@
 
 use gup::geom::Point;
 use gup::prelude::*;
-use gup::{Button, Input, Layout};
+use gup::{Button, Input};
 
 struct Bird {
     name: &'static str,
@@ -40,18 +40,6 @@ fn birds() -> Vec<Bird> {
     .into()
 }
 
-// tour:begin pixel
-/// Where the data point `(x, y)` is drawn, in the chart's pixels.
-fn pixel(layout: &Layout, x: f64, y: f64) -> Point {
-    let along = |ticks: &[(f64, f32)], v: f64| {
-        let (value0, pixel0) = ticks[0];
-        let (value1, pixel1) = ticks[ticks.len() - 1];
-        pixel0 + ((v - value0) * f64::from(pixel1 - pixel0) / (value1 - value0)) as f32
-    };
-    Point::new(along(&layout.x_ticks, x), along(&layout.y_ticks, y))
-}
-// tour:end pixel
-
 pub fn tooltip() -> gup::Result<impl Chart> {
     // tour:begin tooltip
     let mut chart = gup::scatter(birds())
@@ -66,7 +54,7 @@ pub fn tooltip() -> gup::Result<impl Chart> {
     chart.resolve(&cx, 640.0, 400.0)?;
 
     // Zoom with the wheel over the flock, then drag the view to centre it.
-    let flock = pixel(chart.layout().unwrap(), 0.7, 0.8);
+    let flock = chart.pixel(0.7, 0.8).unwrap();
     let _ = chart.handle(Input::wheel(flock, 5.0));
     let to = Point::new(flock.x + 110.0, flock.y);
     let _ = chart.handle(Input::pointer_down(flock, Button::Primary));
@@ -75,7 +63,7 @@ pub fn tooltip() -> gup::Result<impl Chart> {
     chart.resolve(&cx, 640.0, 400.0)?;
 
     // Point at the Kereru where it is now: the next resolve draws the tooltip.
-    let kereru = pixel(chart.layout().unwrap(), 0.65, 0.80);
+    let kereru = chart.pixel(0.65, 0.80).unwrap();
     let _ = chart.handle(Input::pointer_moved(kereru));
     chart.resolve(&cx, 640.0, 400.0)?;
     Ok(chart)
@@ -96,7 +84,7 @@ pub fn brush() -> gup::Result<impl Chart> {
     let plot = chart.resolve(&cx, 640.0, 400.0)?.layout.plot;
 
     // Drag from the bottom-left corner to just right of the Kea.
-    let right = pixel(chart.layout().unwrap(), 0.95, 0.0).x;
+    let right = chart.pixel(0.95, 0.0).unwrap().x;
     let from = Point::new(plot.left() + 1.0, plot.bottom() - 1.0);
     let to = Point::new(right, plot.top() + 1.0);
     let _ = chart.handle(Input::pointer_down(from, Button::Primary));
