@@ -38,11 +38,10 @@ Quick access to all documents in `docs/`. For stories and planning, see
 
 ## Tutorials
 
-The tutorials are out of date until track N1 (strategic review 2026-11): they
-were written for the API before the RFC-001 flip.
-
-- [tutorials/README.md](tutorials/README.md) — Tutorial series index (six
-  tutorials, out of date until track N1)
+- [tour/README.md](tour/README.md) — A tour of what Gup can do: thirteen short
+  pages, each with the code and the image it draws
+- [tutorials/README.md](tutorials/README.md) — Tutorial series index (seven
+  tutorials)
 
 ---
 

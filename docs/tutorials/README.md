@@ -62,6 +62,8 @@ every image that changed, and commit them. Every code block is a doctest:
 
 ## Further Reading
 
+- [A Tour of Gup](../tour/README.md) — what Gup can do, one short page at a
+  time, each with its code and the image it draws
 - [Technical Approach](../TECHNICAL_APPROACH.md) — a deep dive into the unified
   shader function architecture
 - The API reference: run `cargo doc --open -p gup` (the `gup` crate re-exports

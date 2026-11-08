@@ -6,7 +6,8 @@
 ![A Gup scatter chart: GDP per person against life expectancy, sized by population and coloured by region](https://raw.githubusercontent.com/au-phiware/gup/main/tests/golden/gallery/hero.png)
 
 See [the gallery](examples/INDEX.md) for ten charts and the code that draws
-each.
+each, or [the tour](docs/tour/README.md) for what else Gup can do, one short
+page at a time.
 
 Gup (GPU Update Pattern) is a data visualization library for Rust. Data
 encodings (scales, palettes, transfer functions) are shader functions that run
@@ -154,6 +155,8 @@ N6).
 
 - [`CHANGELOG.md`](CHANGELOG.md) - What each release contains, and the
   versioning policy
+- [`docs/tour/README.md`](./docs/tour/README.md) - A tour of what Gup can do:
+  short pages, each with the code and the image it draws
 - [`docs/tutorials/README.md`](./docs/tutorials/README.md) - Seven tested
   tutorials, from a first chart to custom marks
 - [`MISSION_AND_GOALS.md`](./docs/MISSION_AND_GOALS.md) - Project vision and

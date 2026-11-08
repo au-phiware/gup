@@ -123,6 +123,9 @@ what each release contains and what its version number promises.
   and a page that shows them.
 - Seven tutorials, from a first chart to custom marks and a tour of the chart
   types, and runnable examples.
+- A feature tour, `docs/tour/`: short pages, each with a snippet, the image it
+  draws and a link to the tutorial; a test draws every snippet and checks that
+  each page shows that code.
 - CI that renders and compares goldens on Linux (Vulkan), Windows (DX12, WARP)
   and macOS (Metal), a feature-combination matrix, and a publish dry run with a
   docs.rs build of all seven crates.
