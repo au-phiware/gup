@@ -91,6 +91,10 @@ run_step() {
 run_step story-ids ./scripts/check_story_ids.sh
 run_step doc mask doc
 run_step gup-core cargo test -p gup-core --all-features -- --test-threads=1
+# The tour's pages, goldens and interactive app read the same snippet regions
+# (docs/tour/), across the gup and gup-egui crates.
+run_step tour-pages cargo test -p gup --test tour -- --test-threads=1
+run_step tour-app cargo test -p gup-egui --example tour
 run_step wasm-size ./scripts/wasm_size.sh
 run_step wasm-browser ./scripts/wasm_browser.sh
 if ((dogfood)); then
