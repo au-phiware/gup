@@ -168,9 +168,10 @@ A chart that runs for days cannot keep every row. `window(Window::LastRows(n))`
 keeps the newest `n` rows and lets older ones go. `Window::All` is the default.
 
 Rows leave a whole chunk at a time (a chunk is the unit of the GPU buffers), so
-a layer holds between `n` and about `1.25 × n` rows, not exactly `n`. That is
-what makes eviction cheap: it moves no data. Set the window before the first
-resolve, because changing it changes the chunk size.
+a layer holds between `n` and about `1.25 × n` rows, not exactly `n` (a chunk
+holds at least 1,024 rows, so a window under 4,096 rows can hold up to `n` plus
+two chunks). That is what makes eviction cheap: it moves no data. Set the window
+before the first resolve, because changing it changes the chunk size.
 
 ```rust
 use gup::prelude::*;

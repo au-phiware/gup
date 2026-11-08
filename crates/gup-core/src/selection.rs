@@ -171,8 +171,10 @@ pub enum Window {
     /// Keep every row (the default).
     #[default]
     All,
-    /// Keep at least the newest `n` rows. Older rows go a whole chunk at a
-    /// time, so between `n` and about `1.25 × n` rows are held.
+    /// Keep at least the newest `n` rows. Older rows go a whole chunk of
+    /// `max(1024, n / 4)` rows at a time, so between `n` and about
+    /// `1.25 × n` rows are held once `n` is 4,096 or more; a smaller window
+    /// holds up to `n` plus two 1,024-row chunks.
     LastRows(usize),
 }
 
