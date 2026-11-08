@@ -505,6 +505,12 @@ impl crate::chart::Chart for Plot {
     fn data_table(&self, max_rows: usize) -> Option<crate::DataTable> {
         Plot::data_table(self, max_rows)
     }
+    fn pixel(&self, x: f64, y: f64) -> Option<Point> {
+        Plot::pixel(self, x, y)
+    }
+    fn value(&self, at: Point) -> Option<(f64, f64)> {
+        Plot::value(self, at)
+    }
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -1661,6 +1667,62 @@ impl Plot {
             (_, Some((_, r))) => Some(&r.layout),
             _ => None,
         }
+    }
+
+    /// Where the data point `(x, y)` is drawn; see [`Chart::pixel`](crate::Chart::pixel).
+    pub fn pixel(&self, x: f64, y: f64) -> Option<Point> {
+        self.layout()?;
+        Self::to_pixel(&*self.x, &*self.y, x, y)
+    }
+
+    /// The data values drawn at `at`; see [`Chart::value`](crate::Chart::value).
+    pub fn value(&self, at: Point) -> Option<(f64, f64)> {
+        self.layout()?;
+        Some(Self::to_value(&*self.x, &*self.y, at))
+    }
+
+    /// Like [`pixel`](Self::pixel), on the right y axis; `None` without one.
+    ///
+    /// ```
+    /// use gup_core::prelude::*;
+    ///
+    /// struct Row { x: f64, y: f64, z: f64 }
+    /// let mut plot = Plot::new();
+    /// plot.circles(vec![Row { x: 1.0, y: 2.0, z: 10.0 }, Row { x: 3.0, y: 4.0, z: 30.0 }])
+    ///     .x(|r| r.x)
+    ///     .y(|r| r.y);
+    /// plot.y_right(Linear::new());
+    /// let cx = Context::new_blocking().unwrap();
+    /// plot.resolve(&cx, 400.0, 300.0).unwrap();
+    /// // Secondary axis tick values land on their tick marks.
+    /// for &(v, px) in &plot.layout().unwrap().y_right_ticks {
+    ///     let at = plot.pixel_right(1.0, v).unwrap();
+    ///     assert!((at.y - px).abs() < 0.01);
+    /// }
+    /// ```
+    pub fn pixel_right(&self, x: f64, y: f64) -> Option<Point> {
+        self.layout()?;
+        Self::to_pixel(&*self.x, &**self.y_right.as_ref()?, x, y)
+    }
+
+    /// Like [`value`](Self::value), on the right y axis; `None` without one.
+    pub fn value_right(&self, at: Point) -> Option<(f64, f64)> {
+        self.layout()?;
+        Some(Self::to_value(&*self.x, &**self.y_right.as_ref()?, at))
+    }
+
+    fn to_pixel(
+        sx: &dyn DynPositionScale,
+        sy: &dyn DynPositionScale,
+        x: f64,
+        y: f64,
+    ) -> Option<Point> {
+        let (px, py) = (sx.eval(x), sy.eval(y));
+        (px.is_finite() && py.is_finite()).then(|| Point::new(px as f32, py as f32))
+    }
+
+    fn to_value(sx: &dyn DynPositionScale, sy: &dyn DynPositionScale, at: Point) -> (f64, f64) {
+        (sx.invert(f64::from(at.x)), sy.invert(f64::from(at.y)))
     }
 
     /// The row the pointer is over, as of the last

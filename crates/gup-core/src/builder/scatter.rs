@@ -389,6 +389,12 @@ impl<T: Send + Sync + 'static> Chart for ScatterChart<T> {
     fn data_table(&self, max_rows: usize) -> Option<crate::DataTable> {
         self.plot.data_table(max_rows)
     }
+    fn pixel(&self, x: f64, y: f64) -> Option<Point> {
+        Chart::pixel(&self.plot, x, y)
+    }
+    fn value(&self, at: Point) -> Option<(f64, f64)> {
+        Chart::value(&self.plot, at)
+    }
     fn as_any(&self) -> &dyn Any {
         self
     }
