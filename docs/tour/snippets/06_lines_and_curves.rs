@@ -34,15 +34,15 @@ pub fn curves() -> impl Chart {
         .x(|r| r.hour)
         .y(|r| r.value)
         .curve(Curve::StepAfter)
-        .color(Color::hex(0x0072b2));
+        .color(OKABE_ITO_DISTINCT[0]);
     plot.line(readings())
         .x(|r| r.hour)
         .y(|r| r.value)
         .curve(Curve::MonotoneX)
-        .color(Color::hex(0xd55e00));
+        .color(OKABE_ITO_DISTINCT[1]);
     let translucent = Color {
         a: 0.4,
-        ..Color::hex(0x009e73)
+        ..OKABE_ITO_DISTINCT[3]
     };
     plot.line(readings())
         .x(|r| r.hour)
