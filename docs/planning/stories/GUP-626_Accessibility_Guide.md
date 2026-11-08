@@ -17,7 +17,7 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Track N4: Accessibility **Status**: 📋 Planned **Created**:
+**Initiative**: Track N4: Accessibility **Status**: 🚧 In Progress **Created**:
 2026-11-04
 
 ## Context
