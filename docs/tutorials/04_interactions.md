@@ -52,26 +52,17 @@ The data is a handful of New Zealand birds: each has a name, a mass in kilograms
 
 `.tooltip(|row| text)` on a builder gives its marks a tooltip. The text is built
 from the row, and `\n` starts a new line. To point at a mark, the block needs
-its pixel position as `(x, y)`. The layout lists where its ticks are, and the
-marks lie on the straight lines between them, so `pixel` interpolates:
+its pixel position. `chart.pixel(x, y)` gives where a data point is drawn, as of
+the last `resolve`, through the axes' own scales:
 
 ```rust
 use gup::prelude::*;
-use gup::{Input, Layout, Response};
+use gup::{Input, Response};
 
 struct Bird {
     name: &'static str,
     mass: f64,
     span: f64,
-}
-
-/// Where the data point `(x, y)` is drawn, in the chart's pixels.
-fn pixel(layout: &Layout, x: f64, y: f64) -> (f32, f32) {
-    let along = |ticks: &[(f64, f32)], v: f64| {
-        let (first, last) = (ticks[0], ticks[ticks.len() - 1]);
-        first.1 + ((v - first.0) * f64::from(last.1 - first.1) / (last.0 - first.0)) as f32
-    };
-    (along(&layout.x_ticks, x), along(&layout.y_ticks, y))
 }
 
 fn main() -> gup::Result<()> {
@@ -88,7 +79,7 @@ fn main() -> gup::Result<()> {
     assert!(chart.layout().unwrap().tooltip.is_none());
 
     // Move the pointer onto the Kea.
-    let kea = pixel(chart.layout().unwrap(), 0.90, 0.95);
+    let kea = chart.pixel(0.90, 0.95).unwrap();
     let response = chart.handle(Input::pointer_moved(kea));
     assert_eq!(response, Response { redraw: true });
 
@@ -97,7 +88,7 @@ fn main() -> gup::Result<()> {
     assert!(chart.layout().unwrap().tooltip.is_some());
 
     // Moving off the point takes it away.
-    let away = (kea.0 + 100.0, kea.1 + 100.0);
+    let away = (kea.x + 100.0, kea.y + 100.0);
     assert!(chart.handle(Input::pointer_moved(away)).redraw);
     chart.resolve(&cx, 640.0, 400.0)?;
     assert!(chart.layout().unwrap().tooltip.is_none());
@@ -125,21 +116,13 @@ row:
 
 ```rust
 use gup::prelude::*;
-use gup::{Button, Event, Input, Layout, RowId};
+use gup::{Button, Event, Input, RowId};
 use std::sync::{Arc, Mutex};
 
 struct Bird {
     name: &'static str,
     mass: f64,
     span: f64,
-}
-
-fn pixel(layout: &Layout, x: f64, y: f64) -> (f32, f32) {
-    let along = |ticks: &[(f64, f32)], v: f64| {
-        let (first, last) = (ticks[0], ticks[ticks.len() - 1]);
-        first.1 + ((v - first.0) * f64::from(last.1 - first.1) / (last.0 - first.0)) as f32
-    };
-    (along(&layout.x_ticks, x), along(&layout.y_ticks, y))
 }
 
 fn main() -> gup::Result<()> {
@@ -156,7 +139,7 @@ fn main() -> gup::Result<()> {
 
     let cx = Context::shared()?;
     chart.resolve(&cx, 640.0, 400.0)?;
-    let takahe = pixel(chart.layout().unwrap(), 2.70, 0.40);
+    let takahe = chart.pixel(2.70, 0.40).unwrap();
 
     // Hover, press and release on the Takahe.
     let button = Button::Primary;
@@ -193,8 +176,9 @@ primary-button drag pans, on both axes. Both only change the scales' domains, so
 the next `resolve` is cheap: it writes a few uniforms and uploads no data. (They
 do nothing until the first `resolve` has fitted the scales.)
 
-`Plot::invert(at)` is the opposite of `pixel`: it gives the data values drawn at
-a pixel. Here it shows the view move:
+`chart.value(at)` is the opposite of `chart.pixel`, and `Plot::invert(at)` is
+the same for a pixel inside the plot (it gives `None` outside). Here the latter
+shows the view move:
 
 ```rust
 use gup::prelude::*;
@@ -367,12 +351,10 @@ fn main() -> gup::Result<()> {
 
     let cx = Context::shared()?;
     let plot = chart.resolve(&cx, 640.0, 400.0)?.layout.plot;
-    let ticks = chart.layout().unwrap().x_ticks.clone();
 
     // Drag from the bottom-left corner to the right of the Kea and the top
     // of the plot: five birds are inside.
-    let (first, last) = (ticks[0], ticks[ticks.len() - 1]);
-    let kea_x = first.1 + ((0.95 - first.0) * f64::from(last.1 - first.1) / (last.0 - first.0)) as f32;
+    let kea_x = chart.pixel(0.95, 0.0).unwrap().x;
     let from = (plot.left() + 1.0, plot.bottom() - 1.0);
     let to = (kea_x, plot.top() + 1.0);
     let button = Button::Primary;
@@ -416,20 +398,11 @@ and want the row, ask the chart. `pick_row(at)` answers with a `RowId`, and
 
 ```rust
 use gup::prelude::*;
-use gup::Layout;
 
 struct Bird {
     name: &'static str,
     mass: f64,
     span: f64,
-}
-
-fn pixel(layout: &Layout, x: f64, y: f64) -> (f32, f32) {
-    let along = |ticks: &[(f64, f32)], v: f64| {
-        let (first, last) = (ticks[0], ticks[ticks.len() - 1]);
-        first.1 + ((v - first.0) * f64::from(last.1 - first.1) / (last.0 - first.0)) as f32
-    };
-    (along(&layout.x_ticks, x), along(&layout.y_ticks, y))
 }
 
 fn main() -> gup::Result<()> {
@@ -439,13 +412,13 @@ fn main() -> gup::Result<()> {
 
     let cx = Context::shared()?;
     chart.resolve(&cx, 640.0, 400.0)?;
-    let kea = pixel(chart.layout().unwrap(), 0.90, 0.95);
+    let kea = chart.pixel(0.90, 0.95).unwrap();
 
     assert_eq!(chart.pick(kea).map(|b| b.name), Some("Kea"));
     assert!(chart.plot_mut().pick_row(kea).is_some());
 
     // Empty space, and anywhere outside the plot area, picks nothing.
-    assert!(chart.plot_mut().pick_row((kea.0 + 60.0, kea.1 + 60.0)).is_none());
+    assert!(chart.plot_mut().pick_row((kea.x + 60.0, kea.y + 60.0)).is_none());
     assert!(chart.plot_mut().pick_row((2.0, 2.0)).is_none());
     Ok(())
 }

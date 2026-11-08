@@ -132,13 +132,9 @@ impl AxisFormat {
 /// let image = ImageTarget::new(&cx, 320, 200)?.render_blocking(&cx, &resolved.scene)?;
 ///
 /// // Each row is a dot of the default fill (#0072B2) at its position.
-/// let at = |ticks: &[(f64, f32)], v: f64| {
-///     let (a, b) = (ticks[0], ticks[ticks.len() - 1]);
-///     f64::from(a.1) + (v - a.0) * f64::from(b.1 - a.1) / (b.0 - a.0)
-/// };
 /// for (a, b) in [(1.0, 2.0), (2.0, 5.0), (3.0, 3.0), (4.0, 8.0)] {
-///     let (x, y) = (at(&resolved.layout.x_ticks, a), at(&resolved.layout.y_ticks, b));
-///     let p = image.get_pixel(x as u32, y as u32).0;
+///     let at = plot.pixel(a, b).expect("resolved");
+///     let p = image.get_pixel(at.x as u32, at.y as u32).0;
 ///     assert!(p[0] < 10 && (100..130).contains(&p[1]) && p[2] > 160, "{p:?}");
 /// }
 /// # Ok::<(), gup_core::Error>(())
@@ -2573,15 +2569,10 @@ impl Plot {
     /// let cx = Context::new_blocking()?;
     /// let mut plot = Plot::new();
     /// plot.circles(rows).x(|r| r.x).y(|r| r.y);
-    /// let resolved = plot.resolve(&cx, 320.0, 200.0)?;
-    /// let layout = &resolved.layout;
+    /// plot.resolve(&cx, 320.0, 200.0)?;
     ///
-    /// // The second row's position, from the tick pixels.
-    /// let at = |ticks: &[(f64, f32)], v: f64| {
-    ///     let (a, b) = (ticks[0], ticks[ticks.len() - 1]);
-    ///     f64::from(a.1) + (v - a.0) * f64::from(b.1 - a.1) / (b.0 - a.0)
-    /// };
-    /// let p = Point::new(at(&layout.x_ticks, 2.0) as f32, at(&layout.y_ticks, 3.0) as f32);
+    /// // The second row's position.
+    /// let p = plot.pixel(2.0, 3.0).expect("resolved");
     /// let row = plot.pick::<Row>(p).expect("a row is drawn there");
     /// assert_eq!(row.name, "b");
     /// # Ok(())
