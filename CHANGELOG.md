@@ -24,31 +24,12 @@ what each release contains and what its version number promises.
   can come in a patch, and are listed under "Changed".
 - Default feature changes and removals are breaking.
 
-## [Unreleased]
-
-### Added
-
-- Keyboard focus over rows: the arrows, Home and End move focus (`Key`,
-  `Input::key`, `Plot::focused`), with a focus ring drawn in the chart and
-  `Selection::focusable` to leave decoration out of the order. Enter clicks the
-  focused row and Escape clears focus.
-- Keyboard view keys: `+` and `-` zoom about the centre, Shift with an arrow
-  pans, `0` resets the view.
-- Row announcements: `Plot::focus_text`, `row_text` and `row_fields` say the
-  focused row as the axes label its numbers.
-- The window and egui hosts forward keys to the chart (see 0.1.0 below), and the
-  browser canvas does too (`tabindex`, `keydown`).
-- A browser live region after the canvas that speaks `focus_text`.
-- A hidden browser data table (`Plot::data_table`, `DataTable`, at most 1,000
-  rows with the rest counted in `omitted`).
-- `Theme::high_contrast()` (see 0.1.0 below).
-- The [accessibility guide](docs/ACCESSIBILITY.md): what each feature does, what
-  you must do and what is not supported.
-
 ## [0.1.0] - Unreleased
 
 ### Added
 
+- The [accessibility guide](docs/ACCESSIBILITY.md): what each feature does, what
+  you must do and what is not supported.
 - `ChartExt::to_svg` and `ChartExt::save_svg` (feature `svg`): a chart renders
   itself as SVG in one call, like `save_png`.
 - `TextLayer::fallbacks`: with `hide_overlaps(true)`, a label that collides
