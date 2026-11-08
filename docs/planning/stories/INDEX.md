@@ -499,10 +499,15 @@ GUP-628 and GUP-631 (shared `selection.rs`).
   f32), `Plot::add_columns::<M>` over `()` rows, `x_column`/`y_column` and
   `encode_column`: identical pictures to the rows path, and an f32 fast path
   chosen by a measured rule. Opus. Deps: GUP-627 ✅.
-- [GUP-664](GUP-664_Shared_Columns_As_The_CPU_Copy.md) 🚧 — a columnar layer
-  keeps no chunk CPU copy (its shared columns are the copy): about 76 MiB and 60
-  ms less at 10M rows, and picking, re-encoding and other contexts work above
+- [GUP-664](GUP-664_Shared_Columns_As_The_CPU_Copy.md) ✅ — a columnar layer
+  keeps no chunk CPU copy (its shared columns are the copy): 79 MiB less at 10M
+  rows (the columns plus 2 MiB), first resolve 39% of the rows path's, and
+  picking, re-encoding, other contexts and SVG work above
   `Retain::AUTO_MAX_ROWS`. Opus. Deps: GUP-628 ✅; before GUP-632.
+- [GUP-667](GUP-667_Interaction_Above_The_CPU_Pick_Bound.md) 💡 — `pick_row`,
+  the marquee brush and keyboard focus for layers with more than
+  `Retain::AUTO_MAX_ROWS` visible rows, without a CPU pick index of every row.
+  Deps: GUP-664 ✅; before GUP-632's keys and brush at 100M.
 - [GUP-629](GUP-629_Key_Columns.md) 📋 — `Column::Keys(KeyColumn)` (codes plus
   labels) through Band, Point and `Categorical` scales, remapped once per label
   in the row path's first-seen order, with images identical to key closures.
