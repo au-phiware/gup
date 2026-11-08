@@ -143,6 +143,45 @@ pub trait ChartExt: Chart {
     ) -> Result<()> {
         crate::target::save_png(&self.render(cx, width, height)?, path)
     }
+
+    /// Resolve and render to an SVG document of `width × height` units.
+    #[cfg(feature = "svg")]
+    fn to_svg(&mut self, cx: &Context, width: u32, height: u32) -> Result<String> {
+        use crate::VectorTarget;
+        let resolved = self.resolve(cx, width as f32, height as f32)?;
+        let mut svg = crate::SvgTarget::new();
+        svg.render(&resolved.scene)?;
+        Ok(svg.svg().to_string())
+    }
+
+    /// Resolve, render and write an SVG, creating missing parent directories
+    /// as [`save_png`](Self::save_png) does.
+    ///
+    /// ```no_run
+    /// use gup_core::prelude::*;
+    /// # fn main() -> gup_core::Result<()> {
+    /// let cx = Context::new_blocking()?;
+    /// let mut chart = gup_core::scatter(vec![(1.0, 2.0), (3.0, 4.0)])
+    ///     .x(|r| r.0)
+    ///     .y(|r| r.1);
+    /// let dir = std::env::temp_dir().join("gup-save-svg-doc");
+    /// chart.save_svg(&cx, dir.join("chart.svg"), 640, 400)?;
+    /// # Ok(()) }
+    /// ```
+    #[cfg(feature = "svg")]
+    fn save_svg(
+        &mut self,
+        cx: &Context,
+        path: impl AsRef<std::path::Path>,
+        width: u32,
+        height: u32,
+    ) -> Result<()> {
+        use crate::VectorTarget;
+        let resolved = self.resolve(cx, width as f32, height as f32)?;
+        let mut svg = crate::SvgTarget::new();
+        svg.render(&resolved.scene)?;
+        svg.save(path)
+    }
 }
 
 impl<C: Chart + ?Sized> ChartExt for C {}

@@ -231,7 +231,7 @@ cell labels, error bars, pie charts and facets.
   `TextLayer::avoid_points(Px)` seeds the kept-box grid with a disc per row so
   labels stay off the points and name their own. Edits `text_layer.rs`. Deps:
   GUP-611 ✅.
-- [GUP-671](GUP-671_Chart_Save_Svg.md) 🚧 — `chart.save_svg(&cx, path, w, h)`
+- [GUP-671](GUP-671_Chart_Save_Svg.md) ✅ — `chart.save_svg(&cx, path, w, h)`
   and `to_svg` mirror `save_png` (found by the tour, GUP-669 chapter 1). Edits
   `chart.rs`. Deps: none.
 - [GUP-543](GUP-543_Horizontal_Bars_And_Group_Padding.md) ✅ — `gup::barh`

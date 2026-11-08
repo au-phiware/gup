@@ -462,3 +462,27 @@ fn undescribed_scene_has_no_title_desc_or_role() {
         assert!(!svg.contains(needle), "{needle} in {svg}");
     }
 }
+
+/// GUP-671: `to_svg` and `save_svg` are the three-call path in one call.
+#[test]
+fn chart_saves_itself_as_svg() {
+    use gup_core::prelude::*;
+    let cx = Context::new_blocking().unwrap();
+    let mut chart = gup_core::scatter(vec![(1.0, 2.0), (3.0, 4.0)])
+        .x(|r| r.0)
+        .y(|r| r.1)
+        .title("One call");
+    let resolved = chart.resolve(&cx, 640.0, 400.0).unwrap();
+    let mut target = SvgTarget::new();
+    target.render(&resolved.scene).unwrap();
+    let expected = target.svg().to_owned();
+
+    assert_eq!(chart.to_svg(&cx, 640, 400).unwrap(), expected);
+
+    let dir = std::env::temp_dir().join(format!("gup-671-{}", std::process::id()));
+    let path = dir.join("nested/deeper/chart.svg");
+    assert!(!dir.exists());
+    chart.save_svg(&cx, &path, 640, 400).unwrap();
+    assert_eq!(std::fs::read_to_string(&path).unwrap(), expected);
+    std::fs::remove_dir_all(&dir).unwrap();
+}
