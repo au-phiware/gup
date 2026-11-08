@@ -6,25 +6,79 @@
 
 use gup::prelude::*;
 
-/// Share of a survey who agree, daily from 1 January 2020 (Unix seconds).
-fn survey() -> Vec<(f64, f64)> {
+struct Survey {
+    /// Unix seconds.
+    day: f64,
+    /// Percent who agree.
+    support: f64,
+}
+
+/// Daily from 1 January 2020.
+fn survey() -> Vec<Survey> {
     let t0 = 1_577_836_800.0;
     (0..900)
         .map(|d| {
             let d = f64::from(d);
-            (
-                t0 + d * 86_400.0,
-                40.0 + 15.0 * (d / 70.0).sin() + d / 40.0 + 5.0 * (d / 9.0).sin(),
-            )
+            Survey {
+                day: t0 + d * 86_400.0,
+                support: 40.0 + 15.0 * (d / 70.0).sin() + d / 40.0 + 5.0 * (d / 9.0).sin(),
+            }
         })
         .collect()
+}
+
+#[derive(Clone)]
+struct Climate {
+    month: f64,
+    celsius: f64,
+    rain_mm: f64,
+}
+
+/// Warm in January, wet in July.
+fn climate() -> Vec<Climate> {
+    (1..=12)
+        .map(|n| {
+            let season = (f64::from(n - 1) * std::f64::consts::TAU / 12.0).cos();
+            Climate {
+                month: f64::from(n),
+                celsius: 17.0 + 8.0 * season,
+                rain_mm: 90.0 - 80.0 * season,
+            }
+        })
+        .collect()
+}
+
+struct Revenue {
+    region: &'static str,
+    dollars: f64,
+}
+
+fn revenue() -> [Revenue; 4] {
+    [
+        Revenue {
+            region: "North",
+            dollars: 480.0,
+        },
+        Revenue {
+            region: "South",
+            dollars: 1250.0,
+        },
+        Revenue {
+            region: "East",
+            dollars: 920.0,
+        },
+        Revenue {
+            region: "West",
+            dollars: 1730.0,
+        },
+    ]
 }
 
 pub fn time_axis() -> impl Chart {
     // tour:begin time_axis
     gup::line(survey())
-        .x(|r| r.0)
-        .y(|r| r.1)
+        .x(|s| s.day)
+        .y(|s| s.support)
         .x_scale(Time::new())
         .y_tick_format(|v| format!("{v:.0}%"))
         .title("Support for the proposal")
@@ -34,13 +88,6 @@ pub fn time_axis() -> impl Chart {
 
 pub fn dual_axis() -> impl Chart {
     // tour:begin dual_axis
-    // Warm in January, wet in July.
-    let months: Vec<(f64, f64, f64)> = (1..=12)
-        .map(|n| {
-            let season = (f64::from(n - 1) * std::f64::consts::TAU / 12.0).cos();
-            (f64::from(n), 17.0 + 8.0 * season, 90.0 - 80.0 * season)
-        })
-        .collect();
     let mut plot = Plot::new();
     plot.legends(false)
         .title("Temperature and rainfall")
@@ -49,13 +96,13 @@ pub fn dual_axis() -> impl Chart {
     let x = plot.x(Linear::new());
     let left = plot.y(Linear::new());
     let right = plot.y_right(Linear::new());
-    plot.line(months.clone())
-        .x_with(x.encode(|m: &(f64, f64, f64)| m.0))
-        .y_with(left.encode(|m: &(f64, f64, f64)| m.1))
+    plot.line(climate())
+        .x_with(x.encode(|c: &Climate| c.month))
+        .y_with(left.encode(|c: &Climate| c.celsius))
         .color(Color::hex(0xd55e00));
-    plot.line(months)
-        .x_with(x.encode(|m: &(f64, f64, f64)| m.0))
-        .y_with(right.encode(|m: &(f64, f64, f64)| m.2))
+    plot.line(climate())
+        .x_with(x.encode(|c: &Climate| c.month))
+        .y_with(right.encode(|c: &Climate| c.rain_mm))
         .color(Color::hex(0x0072b2));
     plot
     // tour:end dual_axis
@@ -74,15 +121,9 @@ fn dollars(v: f64) -> String {
 
 pub fn bar_labels() -> impl Chart {
     // tour:begin bar_labels
-    let revenue = [
-        ("North", 480.0),
-        ("South", 1250.0),
-        ("East", 920.0),
-        ("West", 1730.0),
-    ];
-    gup::bar(revenue)
-        .x(|r| r.0)
-        .y(|r| r.1)
+    gup::bar(revenue())
+        .x(|r| r.region)
+        .y(|r| r.dollars)
         .y_tick_format(dollars)
         .value_labels_with(dollars)
         .title("Revenue by region")

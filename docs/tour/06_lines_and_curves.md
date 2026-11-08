@@ -11,13 +11,13 @@ plot.legends(false)
     .x_title("Hour")
     .y_title("Reading");
 plot.line(readings())
-    .x(|r| r.0)
-    .y(|r| r.1)
+    .x(|r| r.hour)
+    .y(|r| r.value)
     .curve(Curve::StepAfter)
     .color(Color::hex(0x0072b2));
 plot.line(readings())
-    .x(|r| r.0)
-    .y(|r| r.1)
+    .x(|r| r.hour)
+    .y(|r| r.value)
     .curve(Curve::MonotoneX)
     .color(Color::hex(0xd55e00));
 let translucent = Color {
@@ -25,8 +25,8 @@ let translucent = Color {
     ..Color::hex(0x009e73)
 };
 plot.line(readings())
-    .x(|r| r.0)
-    .y(|r| r.1)
+    .x(|r| r.hour)
+    .y(|r| r.value)
     .width(Px(12.0))
     .color(translucent);
 plot
@@ -34,12 +34,13 @@ plot
 
 ![Three lines through one set of readings: step, smooth and translucent](../../tests/golden/tour/06_curves.png)
 
-A builder sets one `curve` for the whole chart, so this chart is a `Plot` with a
-line layer for each. `Curve::StepAfter` holds each value until the next row,
-which suits a price or a setting. `Curve::MonotoneX` is smooth and stays within
-the values of the two rows it joins. A translucent colour has one opacity along
-the whole line: where the wide green line turns, the arms do not darken. `Curve`
-has five variants: `Linear`, `Step`, `StepBefore`, `StepAfter` and `MonotoneX`.
+`readings()` returns eight `Reading { hour, value }` rows. A builder sets one
+`curve` for the whole chart, so this chart is a `Plot` with a line layer for
+each. `Curve::StepAfter` holds each value until the next row, which suits a
+price or a setting. `Curve::MonotoneX` is smooth and stays within the values of
+the two rows it joins. A translucent colour has one opacity along the whole
+line: where the wide green line turns, the arms do not darken. `Curve` has five
+variants: `Linear`, `Step`, `StepBefore`, `StepAfter` and `MonotoneX`.
 
 **Go deeper**: [Tutorial 7, "Line"](../tutorials/07_chart_types.md#line) and
 [Tutorial 2, Step 2](../tutorials/02_data_binding.md#step-2-build-a-plot-from-layers).

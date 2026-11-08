@@ -2,24 +2,36 @@
 
 A chart starts from your rows and one closure for each thing you want to see.
 
+Rows are your own structs. This one is all the chart needs to know about:
+
+<!-- tour: docs/tour/snippets/01_five_lines.rs#country -->
+
+```rust
+struct Country {
+    region: &'static str,
+    gdp: f64,
+    life: f64,
+    people: f64,
+}
+```
+
 <!-- tour: docs/tour/snippets/01_five_lines.rs#five_lines -->
 
 ```rust
 gup::scatter(countries())
-    .x(|c| c.1)
-    .y(|c| c.2)
-    .color(|c| c.0)
+    .x(|c| c.gdp)
+    .y(|c| c.life)
+    .color(|c| c.region)
     .x_title("GDP per person (US$)")
     .y_title("Life expectancy (years)")
 ```
 
 ![A scatter chart of twelve countries in four colours, with a legend](../../tests/golden/tour/01_five_lines.png)
 
-`countries()` returns twelve tuples of region, GDP, life expectancy and
-population. Any iterator of any type works, so a `Vec` of your own structs does
-too. `.x` and `.y` say where each row goes, `.color` gives each region a colour
-and a legend entry, and the two titles label the axes. Everything else (axis
-ranges, ticks, theme) has a default.
+`countries()` returns twelve of them. Any iterator of any type works, so a `Vec`
+of your own structs does. `.x` and `.y` say where each row goes, `.color` gives
+each region a colour and a legend entry, and the two titles label the axes.
+Everything else (axis ranges, ticks, theme) has a default.
 
 To keep the chart, ask it to save itself. `save_png` and `save_svg` take the
 same arguments.

@@ -8,16 +8,16 @@ points.
 ```rust
 let rows = stations();
 gup::scatter(rows.clone())
-    .x(|s| s.1)
-    .y(|s| s.2)
+    .x(|s| s.distance)
+    .y(|s| s.reading)
     .radius(3.0)
     .title("Sixty stations")
     .x_title("Distance (km)")
     .y_title("Reading")
     .text(rows, |t| {
-        t.x(|s| s.1)
-            .y(|s| s.2)
-            .text(|s| s.0.to_string())
+        t.x(|s| s.distance)
+            .y(|s| s.reading)
+            .text(|s| s.id.to_string())
             .anchor(Anchor::BOTTOM)
             .dy(-5.0)
             .halo(Px(2.0))
@@ -33,8 +33,8 @@ gup::scatter(rows.clone())
 
 ![A scatter chart of sixty points, each labelled with a halo](../../tests/golden/tour/07_labels.png)
 
-`.text(rows, ..)` adds a layer of labels at data positions. Four settings keep a
-crowded chart legible:
+Each row is a `Station { id, distance, reading }`. `.text(rows, ..)` adds a
+layer of labels at data positions. Four settings keep a crowded chart legible:
 
 - `.halo(Px(2.0))` draws each label over an outline in the background colour.
 - `.hide_overlaps(true)` drops a label that would overlap one already placed.

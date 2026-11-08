@@ -7,10 +7,10 @@ a scale.
 
 ```rust
 gup::scatter(countries())
-    .x(|c| c.0)
-    .y(|c| c.1)
-    .size(|c| c.2)
-    .color_value(|c| c.3)
+    .x(|c| c.gdp)
+    .y(|c| c.life)
+    .size(|c| c.people)
+    .color_value(|c| c.schooling)
     .color_value_scale(Sequential::viridis())
     .legend_title("Years of schooling")
     .x_scale(Log::new())
@@ -20,12 +20,12 @@ gup::scatter(countries())
 
 ![A scatter chart on a log axis, sized by population, coloured by a ramp](../../tests/golden/tour/03_encodings.png)
 
-`.x_scale(Log::new())` spreads GDP, which covers more than two orders of
-magnitude, across the axis; its ticks fall at 1, 2 and 5 times a power of ten.
-`.size` sizes each disc so that its area follows the value. `.color_value`
-colours each disc by a number through a continuous scale, here
-`Sequential::viridis()`, and the legend is a colour ramp. (`.color`, in chapter
-1, colours by a category instead.)
+Each row is a `Country { gdp, life, people, schooling }`. `.x_scale(Log::new())`
+spreads GDP, which covers more than two orders of magnitude, across the axis;
+its ticks fall at 1, 2 and 5 times a power of ten. `.size` sizes each disc so
+that its area follows the value. `.color_value` colours each disc by a number
+through a continuous scale, here `Sequential::viridis()`, and the legend is a
+colour ramp. (`.color`, in chapter 1, colours by a category instead.)
 
 ## The scales
 

@@ -5,9 +5,16 @@
 
 use gup::prelude::*;
 
-/// Sixty points, each with an id: a line plus noise from a small linear
-/// congruential generator, so that every run draws the same chart.
-fn stations() -> Vec<(u32, f64, f64)> {
+#[derive(Clone)]
+struct Station {
+    id: u32,
+    distance: f64,
+    reading: f64,
+}
+
+/// Sixty stations: a line plus noise from a small linear congruential
+/// generator, so that every run draws the same chart.
+fn stations() -> Vec<Station> {
     let mut state = 12_345_u32;
     let mut next = move || {
         state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
@@ -15,8 +22,12 @@ fn stations() -> Vec<(u32, f64, f64)> {
     };
     (1..=60)
         .map(|id| {
-            let x = next() * 100.0;
-            (id, x, 20.0 + 0.6 * x + 25.0 * next())
+            let distance = next() * 100.0;
+            Station {
+                id,
+                distance,
+                reading: 20.0 + 0.6 * distance + 25.0 * next(),
+            }
         })
         .collect()
 }
@@ -25,16 +36,16 @@ pub fn labels() -> impl Chart {
     // tour:begin labels
     let rows = stations();
     gup::scatter(rows.clone())
-        .x(|s| s.1)
-        .y(|s| s.2)
+        .x(|s| s.distance)
+        .y(|s| s.reading)
         .radius(3.0)
         .title("Sixty stations")
         .x_title("Distance (km)")
         .y_title("Reading")
         .text(rows, |t| {
-            t.x(|s| s.1)
-                .y(|s| s.2)
-                .text(|s| s.0.to_string())
+            t.x(|s| s.distance)
+                .y(|s| s.reading)
+                .text(|s| s.id.to_string())
                 .anchor(Anchor::BOTTOM)
                 .dy(-5.0)
                 .halo(Px(2.0))

@@ -4,8 +4,9 @@ Each kind of chart has its own builder, and the setters have the same names on
 all of them.
 
 Every chart on this page is the call shown above its image. The rows come from a
-small function in `docs/tour/snippets/02_vocabulary.rs`, so each block is only
-the chart.
+small function in `docs/tour/snippets/02_vocabulary.rs`, each returning a `Vec`
+of a struct with named fields (`Student { hours, score, shift }`,
+`Sale { quarter, product, units }` and so on), so each block is only the chart.
 
 ## Scatter
 
@@ -13,9 +14,9 @@ the chart.
 
 ```rust
 gup::scatter(students())
-    .x(|s| s.0)
-    .y(|s| s.1)
-    .color(|s| s.2)
+    .x(|s| s.hours)
+    .y(|s| s.score)
+    .color(|s| s.shift)
     .title("Exam score by study time")
     .x_title("Hours studied per week")
     .y_title("Exam score")
@@ -31,9 +32,9 @@ A disc for each row. `.color` splits the rows into groups.
 
 ```rust
 gup::line(temperatures())
-    .x(|r| f64::from(r.0))
-    .y(|r| r.2)
-    .color(|r| r.1)
+    .x(|t| t.month)
+    .y(|t| t.celsius)
+    .color(|t| t.city)
     .curve(Curve::MonotoneX)
     .title("Average daily maximum")
     .x_title("Month")
@@ -51,9 +52,9 @@ curve that never overshoots a row's value.
 
 ```rust
 gup::bar(sales())
-    .x(|s| s.0)
-    .y(|s| s.2)
-    .group(|s| s.1)
+    .x(|s| s.quarter)
+    .y(|s| s.units)
+    .group(|s| s.product)
     .title("Units sold, grouped")
     .y_title("Units (thousands)")
 ```
@@ -66,9 +67,9 @@ gup::bar(sales())
 
 ```rust
 gup::bar(sales())
-    .x(|s| s.0)
-    .y(|s| s.2)
-    .stack(|s| s.1)
+    .x(|s| s.quarter)
+    .y(|s| s.units)
+    .stack(|s| s.product)
     .title("Units sold, stacked")
     .y_title("Units (thousands)")
 ```
@@ -83,8 +84,8 @@ gup::bar(sales())
 
 ```rust
 gup::barh(languages())
-    .y(|l| l.0)
-    .x(|l| l.1)
+    .y(|l| l.name)
+    .x(|l| l.share)
     .title("Services by language")
     .x_title("Share of services (%)")
 ```
@@ -100,9 +101,9 @@ value is `.x`.
 
 ```rust
 gup::area(visits())
-    .x(|v| v.0)
-    .y(|v| v.2)
-    .stack(|v| v.1)
+    .x(|v| v.month)
+    .y(|v| v.count)
+    .stack(|v| v.source)
     .title("Visits by source")
     .x_title("Month")
     .y_title("Visits (thousands)")
@@ -118,8 +119,8 @@ the total.
 <!-- tour: docs/tour/snippets/02_vocabulary.rs#histogram -->
 
 ```rust
-gup::histogram(scores())
-    .x(|s| *s)
+gup::histogram(exams())
+    .x(|e| e.score)
     .bins(Bins::Width(10.0))
     .title("Exam scores")
     .x_title("Score")
@@ -137,9 +138,9 @@ fixes the width; the default, `Bins::Auto`, picks one.
 
 ```rust
 gup::heatmap(customers())
-    .x(|v| v.0)
-    .y(|v| v.1)
-    .color_value(|v| v.2)
+    .x(|c| c.hour)
+    .y(|c| c.day)
+    .color_value(|c| c.visits)
     .legend_title("Visits")
     .title("When customers visit")
     .x_title("Hour of day")
@@ -156,8 +157,8 @@ is no counting: one row is one cell.
 
 ```rust
 gup::boxplot(requests())
-    .x(|r| r.0)
-    .y(|r| r.1)
+    .x(|r| r.service)
+    .y(|r| r.ms)
     .title("Response time by service")
     .y_title("Milliseconds")
 ```

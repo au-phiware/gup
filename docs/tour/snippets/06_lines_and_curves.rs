@@ -6,12 +6,20 @@
 
 use gup::prelude::*;
 
+struct Reading {
+    hour: f64,
+    value: f64,
+}
+
 /// Eight readings of a sensor, one per hour.
-fn readings() -> Vec<(f64, f64)> {
+fn readings() -> Vec<Reading> {
     [2.0, 6.0, 3.0, 8.0, 5.0, 9.0, 4.0, 7.0]
         .iter()
         .enumerate()
-        .map(|(hour, &value)| (hour as f64, value))
+        .map(|(hour, &value)| Reading {
+            hour: hour as f64,
+            value,
+        })
         .collect()
 }
 
@@ -23,13 +31,13 @@ pub fn curves() -> impl Chart {
         .x_title("Hour")
         .y_title("Reading");
     plot.line(readings())
-        .x(|r| r.0)
-        .y(|r| r.1)
+        .x(|r| r.hour)
+        .y(|r| r.value)
         .curve(Curve::StepAfter)
         .color(Color::hex(0x0072b2));
     plot.line(readings())
-        .x(|r| r.0)
-        .y(|r| r.1)
+        .x(|r| r.hour)
+        .y(|r| r.value)
         .curve(Curve::MonotoneX)
         .color(Color::hex(0xd55e00));
     let translucent = Color {
@@ -37,8 +45,8 @@ pub fn curves() -> impl Chart {
         ..Color::hex(0x009e73)
     };
     plot.line(readings())
-        .x(|r| r.0)
-        .y(|r| r.1)
+        .x(|r| r.hour)
+        .y(|r| r.value)
         .width(Px(12.0))
         .color(translucent);
     plot

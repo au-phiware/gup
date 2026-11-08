@@ -8,8 +8,8 @@ Time axes, a second y axis and tick labels you write yourself.
 
 ```rust
 gup::line(survey())
-    .x(|r| r.0)
-    .y(|r| r.1)
+    .x(|s| s.day)
+    .y(|s| s.support)
     .x_scale(Time::new())
     .y_tick_format(|v| format!("{v:.0}%"))
     .title("Support for the proposal")
@@ -18,26 +18,19 @@ gup::line(survey())
 
 ![A line over 2020 to 2022 with year labels in bold and a percent axis](../../tests/golden/tour/04_time_axis.png)
 
-`survey()` returns 900 daily rows with x in Unix seconds. `Time::new()` picks
-the unit of its ticks (here months) and labels each January with its year in a
-heavier weight, so nobody has to count. A tick format is a closure from the
-tick's value to its label, so a percent sign is one `format!`. There is no
-built-in percent, date or currency formatter; a custom date label is a closure
-over Unix seconds, and `crates/gup-core/tests/tick_format.rs` has one
-(`date_axis`).
+`survey()` returns 900 daily `Survey { day, support }` rows, with `day` in Unix
+seconds. `Time::new()` picks a calendar step for its ticks (here three months)
+and labels each January with its year in a heavier weight, so nobody has to
+count. A tick format is a closure from the tick's value to its label, so a
+percent sign is one `format!`. There is no built-in percent, date or currency
+formatter; a custom date label is a closure over Unix seconds, and
+`crates/gup-core/tests/tick_format.rs` has one (`date_axis`).
 
 ## A second y axis
 
 <!-- tour: docs/tour/snippets/04_axes_and_labels.rs#dual_axis -->
 
 ```rust
-// Warm in January, wet in July.
-let months: Vec<(f64, f64, f64)> = (1..=12)
-    .map(|n| {
-        let season = (f64::from(n - 1) * std::f64::consts::TAU / 12.0).cos();
-        (f64::from(n), 17.0 + 8.0 * season, 90.0 - 80.0 * season)
-    })
-    .collect();
 let mut plot = Plot::new();
 plot.legends(false)
     .title("Temperature and rainfall")
@@ -46,13 +39,13 @@ plot.legends(false)
 let x = plot.x(Linear::new());
 let left = plot.y(Linear::new());
 let right = plot.y_right(Linear::new());
-plot.line(months.clone())
-    .x_with(x.encode(|m: &(f64, f64, f64)| m.0))
-    .y_with(left.encode(|m: &(f64, f64, f64)| m.1))
+plot.line(climate())
+    .x_with(x.encode(|c: &Climate| c.month))
+    .y_with(left.encode(|c: &Climate| c.celsius))
     .color(Color::hex(0xd55e00));
-plot.line(months)
-    .x_with(x.encode(|m: &(f64, f64, f64)| m.0))
-    .y_with(right.encode(|m: &(f64, f64, f64)| m.2))
+plot.line(climate())
+    .x_with(x.encode(|c: &Climate| c.month))
+    .y_with(right.encode(|c: &Climate| c.rain_mm))
     .color(Color::hex(0x0072b2));
 plot
 ```
@@ -82,15 +75,9 @@ fn dollars(v: f64) -> String {
 <!-- tour: docs/tour/snippets/04_axes_and_labels.rs#bar_labels -->
 
 ```rust
-let revenue = [
-    ("North", 480.0),
-    ("South", 1250.0),
-    ("East", 920.0),
-    ("West", 1730.0),
-];
-gup::bar(revenue)
-    .x(|r| r.0)
-    .y(|r| r.1)
+gup::bar(revenue())
+    .x(|r| r.region)
+    .y(|r| r.dollars)
     .y_tick_format(dollars)
     .value_labels_with(dollars)
     .title("Revenue by region")

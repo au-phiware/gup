@@ -6,9 +6,18 @@
 use gup::prelude::*;
 use std::path::Path;
 
-/// Twelve countries: region, GDP per person (US$), life expectancy (years),
-/// population (illustrative figures).
-fn countries() -> [(&'static str, f64, f64, f64); 12] {
+// tour:begin country
+struct Country {
+    region: &'static str,
+    gdp: f64,
+    life: f64,
+    people: f64,
+}
+// tour:end country
+
+/// Twelve countries (illustrative figures): region, GDP per person (US$), life
+/// expectancy (years) and population.
+fn countries() -> Vec<Country> {
     [
         ("Africa", 2.1e3, 53.0, 200e6),
         ("Africa", 1.7e3, 67.0, 54e6),
@@ -23,14 +32,21 @@ fn countries() -> [(&'static str, f64, f64, f64); 12] {
         ("Americas", 7.5e3, 75.0, 212e6),
         ("Americas", 9.9e3, 75.0, 128e6),
     ]
+    .map(|(region, gdp, life, people)| Country {
+        region,
+        gdp,
+        life,
+        people,
+    })
+    .into()
 }
 
 pub fn five_lines() -> impl Chart {
     // tour:begin five_lines
     gup::scatter(countries())
-        .x(|c| c.1)
-        .y(|c| c.2)
-        .color(|c| c.0)
+        .x(|c| c.gdp)
+        .y(|c| c.life)
+        .color(|c| c.region)
         .x_title("GDP per person (US$)")
         .y_title("Life expectancy (years)")
     // tour:end five_lines

@@ -6,9 +6,16 @@
 
 use gup::prelude::*;
 
+struct Country {
+    gdp: f64,
+    life: f64,
+    people: f64,
+    schooling: f64,
+}
+
 /// Twelve countries: GDP per person (US$), life expectancy (years),
 /// population, years of schooling (illustrative figures).
-fn countries() -> [(f64, f64, f64, f64); 12] {
+fn countries() -> Vec<Country> {
     [
         (2.1e3, 53.0, 200e6, 6.0),
         (1.7e3, 67.0, 54e6, 7.5),
@@ -23,15 +30,22 @@ fn countries() -> [(f64, f64, f64, f64); 12] {
         (7.5e3, 75.0, 212e6, 8.5),
         (9.9e3, 75.0, 128e6, 9.0),
     ]
+    .map(|(gdp, life, people, schooling)| Country {
+        gdp,
+        life,
+        people,
+        schooling,
+    })
+    .into()
 }
 
 pub fn encodings() -> impl Chart {
     // tour:begin encodings
     gup::scatter(countries())
-        .x(|c| c.0)
-        .y(|c| c.1)
-        .size(|c| c.2)
-        .color_value(|c| c.3)
+        .x(|c| c.gdp)
+        .y(|c| c.life)
+        .size(|c| c.people)
+        .color_value(|c| c.schooling)
         .color_value_scale(Sequential::viridis())
         .legend_title("Years of schooling")
         .x_scale(Log::new())
