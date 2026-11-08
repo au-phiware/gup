@@ -18,8 +18,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (polish before 0.1) **Status**: 🚧 In
-Progress **Created**: 2026-11-08
+**Initiative**: Strategic Review 2026-11 (polish before 0.1) **Status**: ✅
+Complete (2026-11-08) **Created**: 2026-11-08
 
 ## Context
 
@@ -69,59 +69,59 @@ needs the methods on the `Chart` trait, which has default-method precedent
 
 ### AC1: The API
 
-- [ ] `Chart` gains two default methods (signatures under Decisions); the
+- [x] `Chart` gains two default methods (signatures under Decisions); the
       defaults return `None`. `Plot` implements them, and every builder's
       `Chart` impl forwards to its plot (all eight impls found by
       `grep -rn "impl.*Chart for" crates/gup-core/src`).
-- [ ] `Plot` also has `pixel_right` and `value_right` for the secondary y axis
+- [x] `Plot` also has `pixel_right` and `value_right` for the secondary y axis
       (`None` without one).
-- [ ] Both return `None` before a successful resolve. After one they use the
+- [x] Both return `None` before a successful resolve. After one they use the
       scales' ranges of that resolve.
 
 ### AC2: Behaviour per scale
 
-- [ ] Round trip, one test each, tolerance 0.01 px for pixels and a relative
+- [x] Round trip, one test each, tolerance 0.01 px for pixels and a relative
       1e-9 for values: `value(pixel(x, y)) == (x, y)` for linear, log, symlog,
       pow and time x axes (time values are epoch seconds as the scale defines;
       follow whatever `Time::eval` takes).
-- [ ] Band or point x: `x` is the band code (the index of the key, as
+- [x] Band or point x: `x` is the band code (the index of the key, as
       `PositionScale::key_code` gives), `pixel` returns the band centre, and
       `value` returns the nearest code. Test with three keys: `pixel` of codes
       0, 1, 2 equals the centres of the tick marks in `layout.x_ticks`, and
       `value` of a point between centres returns the nearer code.
-- [ ] Secondary y: `pixel_right(x, y)` on a plot with `y_right(Linear)` equals
+- [x] Secondary y: `pixel_right(x, y)` on a plot with `y_right(Linear)` equals
       the tick position for a tick value of `layout.y_right_ticks`.
-- [ ] Outside the plot: a value beyond the domain (or a pixel outside the plot
+- [x] Outside the plot: a value beyond the domain (or a pixel outside the plot
       rect) is extrapolated, not clamped, for numeric scales (so the result can
       be outside `layout.plot`); a band `value` clamps to the first or last code
       (that is `invert`'s behaviour). A value the scale cannot map (log of 0 or
       a negative, NaN, a null band code) gives `None` from `pixel`.
-- [ ] Agreement with the old helper: on the tour's linear scatter, `pixel`
+- [x] Agreement with the old helper: on the tour's linear scatter, `pixel`
       equals the tick-interpolation within 0.01 px.
 
 ### AC3: The tour and the tutorial use it
 
-- [ ] `docs/tour/snippets/08_interaction.rs` drops the `pixel` helper and its
+- [x] `docs/tour/snippets/08_interaction.rs` drops the `pixel` helper and its
       `tour:begin pixel` region; callers use `chart.pixel(x, y).unwrap()` (the
       chart is resolved when it is called; keep the existing ordering). Chapter
       8's prose in `docs/tour/08_interaction.md` is updated where it quotes the
       helper (grep `pixel` in that file).
-- [ ] Tutorial 4's three `pixel` helpers and the inline Kea interpolation are
+- [x] Tutorial 4's three `pixel` helpers and the inline Kea interpolation are
       replaced; its snippets compile (they are run by the tutorial test; find it
       with `grep -rn "04_interactions" crates tests`).
-- [ ] No golden changes: `git status` after the suite shows no `.png` modified.
+- [x] No golden changes: `git status` after the suite shows no `.png` modified.
       If one changes, a position moved by more than the old helper's error: read
       it and report.
-- [ ] Search for other hand interpolations
+- [x] Search for other hand interpolations
       (`grep -rn "x_ticks\[0\]\|along\b"     crates tests docs examples`).
       Replace those in docs and examples; leave tests that assert on
       `Layout::x_ticks` itself.
 
 ### AC4: Public API and docs
 
-- [ ] A doctest on `Chart::pixel` and on `Chart::value` (external-crate path,
+- [x] A doctest on `Chart::pixel` and on `Chart::value` (external-crate path,
       `use gup_core::prelude::*`), and a doctest on `Plot::pixel_right`.
-- [ ] CHANGELOG `[0.1.0]` Added line.
+- [x] CHANGELOG `[0.1.0]` Added line.
 
 ## Decisions
 
@@ -175,11 +175,11 @@ needs the methods on the `Chart` trait, which has default-method precedent
 
 ## Technical Tasks
 
-- [ ] `Chart::pixel` and `Chart::value`; `Plot` impl and the `_right` pair;
+- [x] `Chart::pixel` and `Chart::value`; `Plot` impl and the `_right` pair;
       forwarding in every builder.
-- [ ] Tests per AC2 in a new `crates/gup-core/tests/pixel_value.rs`.
-- [ ] Tour chapter 8 snippet and prose; tutorial 4.
-- [ ] Doctests; CHANGELOG.
+- [x] Tests per AC2 in a new `crates/gup-core/tests/pixel_value.rs`.
+- [x] Tour chapter 8 snippet and prose; tutorial 4.
+- [x] Doctests; CHANGELOG.
 
 ## Dependencies
 
@@ -197,8 +197,8 @@ needs the methods on the `Chart` trait, which has default-method precedent
 
 ## Success Metrics
 
-- [ ] Neither the tour nor tutorial 4 contains a hand-written axis helper.
-- [ ] Round trips pass on five numeric scales and the band scale.
+- [x] Neither the tour nor tutorial 4 contains a hand-written axis helper.
+- [x] Round trips pass on five numeric scales and the band scale.
 
 ## Risk Assessment
 
@@ -208,15 +208,66 @@ needs the methods on the `Chart` trait, which has default-method precedent
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye: not needed, no golden changes (AC3)
-- [ ] `mask wasm-browser`: not needed, no layout, input or wasm code changes
-- [ ] WASM size: `mask wasm-size` scatter gz bytes (the trait gains two methods,
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye: not needed, no golden changes (AC3)
+- [x] `mask wasm-browser`: not needed, no layout, input or wasm code changes
+- [x] WASM size: `mask wasm-size` scatter gz bytes (the trait gains two methods,
       which dead-code elimination should drop; report)
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `Chart::pixel` and `Chart::value` (default `None`); `Plot` has inherent
+  `pixel`, `value`, `pixel_right`, `value_right` and implements the trait; the
+  seven builders forward (`Waiting` in `app.rs` is a test impl and keeps the
+  defaults). `None` before a resolve; `pixel` is `None` when a scale gives a
+  non-finite value.
+- Tour chapter 8: the 10-line `pixel` helper region is gone; callers are
+  `chart.pixel(x, y).unwrap()`. Snippet function names and signatures are
+  unchanged. Tutorial 4: three helpers and the inline Kea interpolation removed.
+  Two doc examples in `plot.rs` that interpolated ticks now use `plot.pixel`.
+- `crates/gup-core/tests/pixel_value.rs`: 10 tests (linear, log, symlog, pow,
+  time round trips; band; right axis; outside and `None`; trait forwarding;
+  agreement with tick interpolation). No golden changed.
+- Deviation: the relative 1e-9 on the value cannot hold through an `f32`
+  `Point`; the tests check `value` then `pixel` to 0.01 px, and the data to a
+  thousandth of what one pixel spans.
+- WASM scatter gz: 378318 B on main (96ffe3d7), 378450 B on the branch (+132).
+- Note: `Plot::invert` already existed (None outside the plot rect); `value`
+  overlaps it and differs only by not clamping to the rect.
+
+## Retrospective
+
+**Completed**: 2026-11-08
+
+### Key Technical Learnings
+
+#### Pixels are f32
+
+- **Challenge**: the AC asked for 1e-9 relative value round trips.
+- **Solution**: test the pixel round trip at 0.01 px, and the value against one
+  pixel's span.
+- **Pattern**: a round trip through `Point` is bounded by `f32`, not the scale.
+
+### Architectural Decisions
+
+#### Methods on `Chart`, not `Layout`
+
+- **Decision**: as the story set; `Plot` reads its live scales.
+- **Trade-off**: between a pan and the next resolve, the range is stale.
+- **Future**: `Plot::invert` could become a call to `value` plus a rect test.
+
+### Development Workflow Insights
+
+- Every scale round trip passed first time; the scales' `eval` and `invert`
+  already agreed.
+
+### Follow-up Stories
+
+None written. Candidate (small): fold `Plot::invert` into `Plot::value`.
