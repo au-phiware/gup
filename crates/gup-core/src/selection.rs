@@ -988,6 +988,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             let mut store = ColumnStore::new(formats, chunk_rows)?;
             let shared = self.order.is_none()
                 && controls.is_none()
+                && !inputs.is_empty()
                 && inputs.iter().all(|i| matches!(i, Input::Shared(_)));
             if shared {
                 // A columnar layer: the store reads the columns and keeps
@@ -999,7 +1000,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
                         Input::Owned(_) => unreachable!("every input is shared"),
                     })
                     .collect();
-                store.append_shared(&columns)?;
+                store.append_shared(len, &columns)?;
                 inputs = Vec::new();
             } else if self.order.is_some() || controls.is_some() {
                 // Sorting by size permutes the columns, and control values

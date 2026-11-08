@@ -100,8 +100,11 @@ what each release contains and what its version number promises.
   `Window` to bound how many rows are kept.
 - Columnar layers: `Plot::add_columns` draws `Columns` of `f64` or `f32`
   directly, with `x_column`, `y_column` and `encode_column`, without a row type
-  or a closure per row; a 10M-point scatter loads in about half the time and two
-  thirds of the memory of the same rows.
+  or a closure per row. Gup keeps no copy of the columns: a 10M-point scatter
+  loads in about 40% of the time of the same rows, using the columns plus a few
+  MiB. A columnar layer above `Retain::AUTO_MAX_ROWS` still answers `pick_row`,
+  re-encodes a channel, draws on another context and writes SVG from its
+  columns.
 - `gup-egui`, a widget that shows a chart in an egui panel, and `gup-bevy`, a
   plugin that shows a chart in a Bevy app.
 - A text alternative for every chart: `Plot::describe` returns a title and a

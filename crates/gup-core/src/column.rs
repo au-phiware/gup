@@ -1392,21 +1392,21 @@ impl ColumnStore {
         self.append_rows(rows, columns)
     }
 
-    /// Fill an empty store from `columns`, one per column, all numeric:
+    /// Fill an empty store with `rows` rows from `columns`, one per
+    /// column, all numeric:
     /// the store keeps no CPU copy of their cells (GUP-664). Each chunk
     /// takes its origins and stats now; every upload encodes the cells
     /// from the columns into the upload's staging memory, and every CPU
     /// reader reads the columns. Shared columns are never released, so the
     /// store can always be uploaded to another context. It cannot be
     /// appended to.
-    pub(crate) fn append_shared(&mut self, columns: &[crate::Column]) -> Result<()> {
+    pub(crate) fn append_shared(&mut self, rows: usize, columns: &[crate::Column]) -> Result<()> {
         if self.rows > 0 || self.shared.is_some() {
             return Err(Error::config(
                 "column store",
                 "shared columns fill an empty store only",
             ));
         }
-        let rows = columns.first().map_or(0, crate::Column::len);
         let slices: Vec<ColumnSlice<'_>> = columns.iter().map(crate::Column::slice).collect();
         self.shared = Some(SharedColumns {
             columns: columns.to_vec(),
@@ -2550,7 +2550,7 @@ mod tests {
         let mut a = ColumnStore::new(formats.clone(), 128).unwrap();
         a.append(n as usize, &owned).unwrap();
         let mut b = ColumnStore::new(formats, 128).unwrap();
-        b.append_shared(&shared).unwrap();
+        b.append_shared(n as usize, &shared).unwrap();
         assert!(b.is_shared());
         assert_eq!(b.chunks().len(), 3);
         assert!(b.chunks().iter().all(|c| c.bytes().is_none()));
