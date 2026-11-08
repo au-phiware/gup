@@ -220,6 +220,13 @@ impl<T: Send + Sync + 'static> BoxPlotChart<T> {
         self
     }
 
+    /// Whether the row under the pointer is ringed (default `true`): see
+    /// [`Plot::hover_highlight`].
+    pub fn hover_highlight(mut self, on: bool) -> Self {
+        self.plot.hover_highlight(on);
+        self
+    }
+
     /// The category summaries in first-seen order, each with the key that
     /// colours it.
     fn summaries(&self, rows: &[T]) -> Vec<Boxed> {

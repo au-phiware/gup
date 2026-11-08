@@ -58,7 +58,8 @@ Ok(chart)
 ![A zoomed scatter chart with a tooltip beside the Kereru](../../tests/golden/tour/08_tooltip.png)
 
 `.tooltip(..)` builds the text from the row. `handle` records what the pointer
-is over and says whether to redraw; the tooltip itself is drawn by the next
+is over and says whether to redraw; the tooltip itself, and a thin ring on the
+hovered point (`hover_highlight(false)` turns it off), are drawn by the next
 `resolve`. The wheel zooms about the pointer and a drag pans; here both bring
 the middle of the flock into view, so five of the twelve birds are out of the
 picture.

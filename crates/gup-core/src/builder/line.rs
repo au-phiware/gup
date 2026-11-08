@@ -263,6 +263,13 @@ impl<T: Send + Sync + 'static> LineChart<T> {
         })
     }
 
+    /// Whether the row under the pointer is ringed (default `true`): see
+    /// [`Plot::hover_highlight`].
+    pub fn hover_highlight(mut self, on: bool) -> Self {
+        self.plot.hover_highlight(on);
+        self
+    }
+
     /// Partition the rows by key, moving them, in first-seen key order.
     fn split(rows: Vec<T>, key: Option<&Key<T>>) -> Vec<Vec<T>> {
         let Some(key) = key else {

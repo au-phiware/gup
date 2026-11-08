@@ -224,6 +224,13 @@ impl<T: Send + Sync + 'static> ScatterChart<T> {
         })
     }
 
+    /// Whether the row under the pointer is ringed (default `true`): see
+    /// [`Plot::hover_highlight`].
+    pub fn hover_highlight(mut self, on: bool) -> Self {
+        self.plot.hover_highlight(on);
+        self
+    }
+
     /// How many rows to keep as rows are appended (default [`Window::All`]):
     /// see [`Selection::window`].
     ///

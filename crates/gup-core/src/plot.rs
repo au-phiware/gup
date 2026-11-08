@@ -26,7 +26,7 @@ use crate::render::{LayerGpu, Span};
 use crate::scale::{DynPositionScale, Linear, PositionScale, ScaleRef, TickFormat, Ticks};
 use crate::scene::{
     Anchor, HAlign, Item, ItemKind, RectPrim, Rule, Scene, TextRole, TextRun, TextStyle, VAlign,
-    Weight, Z_AXES, Z_BRUSH, Z_FOCUS, Z_GRID, Z_TITLE,
+    Weight, Z_AXES, Z_BRUSH, Z_FOCUS, Z_GRID, Z_HOVER, Z_TITLE,
 };
 use crate::selection::{AxisText, Layer, RowAxes, Selection};
 use crate::text_layer::{AnnotationLayer, TextLayer};
@@ -79,6 +79,10 @@ pub struct Layout {
     /// The keyboard focus ring's outer box, `Some` exactly while one is
     /// drawn (see [`Plot::focused`]).
     pub focus: Option<Rect>,
+    /// The pointer hover ring's outer box, `Some` exactly while one is drawn
+    /// (the pointer is over a row, [`Plot::hover_highlight`] is on, and the
+    /// hover is not keyboard focus).
+    pub hover: Option<Rect>,
 }
 
 /// A layout plus the scene drawn from it.
@@ -246,6 +250,8 @@ pub struct Plot {
     hover: Option<(RowId, Point, u64)>,
     /// Whether the hover is keyboard focus (see [`Plot::focused`]).
     hover_from_keys: bool,
+    /// Whether the hovered row is ringed (default on).
+    hover_highlight: bool,
     /// The focusable rows by layer, each in focus order, with the key and
     /// plot rect of the pick index they came from.
     focus_order: Option<FocusOrder>,
@@ -367,33 +373,58 @@ fn brush_item(theme: &Theme, rect: Rect) -> Item {
     }
 }
 
-/// The keyboard focus ring centred on `anchor`, and its outer box: a 16 px
-/// square of 2 px sides in the title colour inside an 18 px square of 1 px
-/// sides in the background colour, so it shows on any mark or background.
-fn focus_item(theme: &Theme, anchor: Point) -> (Item, Rect) {
-    let l = anchor.x.round() - 9.0;
-    let t = anchor.y.round() - 9.0;
+/// A square ring centred on `anchor`: sides of `ink_width` px in the title
+/// colour inside a one-pixel edge in the background colour, `outer` px across
+/// (even), so it shows on any mark or background. Returns the item (at `z`)
+/// and its outer box.
+fn ring_item(theme: &Theme, anchor: Point, outer: f32, ink_width: f32, z: i32) -> (Item, Rect) {
+    let half = outer / 2.0;
+    let l = anchor.x.round() - half;
+    let t = anchor.y.round() - half;
     let prim = |x, y, w, h, color| RectPrim {
         rect: Rect::new(x, y, w, h),
         color,
     };
     let (edge, ink) = (theme.background, theme.title);
+    let inner = outer - 2.0;
+    let side = inner - 2.0 * ink_width;
+    let far = outer - 1.0;
     let rects = vec![
-        prim(l, t, 18.0, 1.0, edge),
-        prim(l, t + 17.0, 18.0, 1.0, edge),
-        prim(l, t + 1.0, 1.0, 16.0, edge),
-        prim(l + 17.0, t + 1.0, 1.0, 16.0, edge),
-        prim(l + 1.0, t + 1.0, 16.0, 2.0, ink),
-        prim(l + 1.0, t + 15.0, 16.0, 2.0, ink),
-        prim(l + 1.0, t + 3.0, 2.0, 12.0, ink),
-        prim(l + 15.0, t + 3.0, 2.0, 12.0, ink),
+        prim(l, t, outer, 1.0, edge),
+        prim(l, t + far, outer, 1.0, edge),
+        prim(l, t + 1.0, 1.0, inner, edge),
+        prim(l + far, t + 1.0, 1.0, inner, edge),
+        prim(l + 1.0, t + 1.0, inner, ink_width, ink),
+        prim(l + 1.0, t + far - ink_width, inner, ink_width, ink),
+        prim(l + 1.0, t + 1.0 + ink_width, ink_width, side, ink),
+        prim(
+            l + far - ink_width,
+            t + 1.0 + ink_width,
+            ink_width,
+            side,
+            ink,
+        ),
     ];
     let item = Item {
-        z: Z_FOCUS,
+        z,
         clip: None,
         kind: ItemKind::Rects(rects),
     };
-    (item, Rect::new(l, t, 18.0, 18.0))
+    (item, Rect::new(l, t, outer, outer))
+}
+
+/// The keyboard focus ring centred on `anchor`, and its outer box: a 16 px
+/// square of 2 px sides in the title colour inside an 18 px square of 1 px
+/// sides in the background colour.
+fn focus_item(theme: &Theme, anchor: Point) -> (Item, Rect) {
+    ring_item(theme, anchor, 18.0, 2.0, Z_FOCUS)
+}
+
+/// The pointer hover ring centred on `anchor`, and its outer box: a 14 px
+/// square of 1 px sides in the title colour inside a 16 px square of 1 px
+/// sides in the background colour. Thinner and smaller than the focus ring.
+fn hover_item(theme: &Theme, anchor: Point) -> (Item, Rect) {
+    ring_item(theme, anchor, 16.0, 1.0, Z_HOVER)
 }
 
 /// An axis as it was before the view moved.
@@ -582,6 +613,7 @@ impl Plot {
             gpu_pick: None,
             hover: None,
             hover_from_keys: false,
+            hover_highlight: true,
             focus_order: None,
             focus_text: None,
             press: None,
@@ -780,6 +812,22 @@ impl Plot {
     pub fn legends(&mut self, on: bool) -> &mut Self {
         self.revision = self.revision.wrapping_add(1);
         self.legends_off = !on;
+        self
+    }
+
+    /// Whether the row under the pointer is ringed (default `true`). The ring
+    /// is a thin square at the row's tooltip anchor ([`Layout::hover`]),
+    /// drawn above the marks and below the tooltip; keyboard focus draws its
+    /// own, heavier ring ([`Layout::focus`]) instead. `false` draws none.
+    ///
+    /// ```
+    /// use gup_core::prelude::*;
+    /// let mut plot = Plot::new();
+    /// plot.hover_highlight(false);
+    /// ```
+    pub fn hover_highlight(&mut self, on: bool) -> &mut Self {
+        self.hover_highlight = on;
+        self.overlay = None;
         self
     }
 
@@ -1567,6 +1615,10 @@ impl Plot {
             .hover
             .filter(|_| self.hover_from_keys)
             .map(|(_, anchor, _)| focus_item(&self.theme, anchor));
+        let hover_ring = self
+            .hover
+            .filter(|_| self.hover_highlight && !self.hover_from_keys)
+            .map(|(_, anchor, _)| hover_item(&self.theme, anchor));
         let tooltip = self.hover.and_then(|(row, anchor, _)| {
             let text = self.layers.get(row.layer)?.tooltip_text(row.row)?;
             Some((text, anchor))
@@ -1574,13 +1626,17 @@ impl Plot {
         let Some((_, base)) = &self.cache else {
             return;
         };
-        if brush_px.is_none() && tooltip.is_none() && ring.is_none() {
+        if brush_px.is_none() && tooltip.is_none() && ring.is_none() && hover_ring.is_none() {
             return;
         }
         let mut composed = base.clone();
         if let Some((item, rect)) = ring {
             composed.scene.push(item);
             composed.layout.focus = Some(rect);
+        }
+        if let Some((item, rect)) = hover_ring {
+            composed.scene.push(item);
+            composed.layout.hover = Some(rect);
         }
         if let Some(rect) = brush_px {
             composed.scene.push(brush_item(&self.theme, rect));
@@ -3494,6 +3550,7 @@ impl Plot {
                 legend: legend_bounds,
                 tooltip: None,
                 focus: None,
+                hover: None,
             },
             scene,
         })

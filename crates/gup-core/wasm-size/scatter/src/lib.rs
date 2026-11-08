@@ -999,6 +999,17 @@ impl InteractiveScatter {
             .unwrap_or_default())
     }
 
+    /// The pointer hover ring's box `[x, y, width, height]`, empty when none
+    /// is drawn.
+    pub fn hover_ring_rect(&self) -> Result<Vec<f32>, JsValue> {
+        Ok(self
+            .resolved()?
+            .layout
+            .hover
+            .map(|r| vec![r.x, r.y, r.width, r.height])
+            .unwrap_or_default())
+    }
+
     /// The x axis's current domain `[lo, hi]`.
     pub fn x_domain(&self) -> Vec<f64> {
         self.x

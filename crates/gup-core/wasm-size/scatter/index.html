@@ -267,9 +267,9 @@
               table?.tagName === "TABLE" && table.hasAttribute("data-gup-table")
           );
           await step("table-caption", async () =>
-            table.querySelector("caption")?.textContent.startsWith(
-              "Interactive scatter"
-            )
+            table
+              .querySelector("caption")
+              ?.textContent.startsWith("Interactive scatter")
           );
           await step("table-rows", async () => bodyRows() === 6);
           await step(
@@ -280,7 +280,9 @@
               table.querySelectorAll("thead th").length === 2 &&
               table.querySelector("tbody tr").children.length === 2
           );
-          console.log("GUP table: " + table.querySelector("caption")?.textContent);
+          console.log(
+            "GUP table: " + table.querySelector("caption")?.textContent
+          );
           console.log("GUP table html: " + table.outerHTML.slice(0, 600));
           let rightKey = null;
           await step("key-focus", async () => {
@@ -350,11 +352,20 @@
               }
             return n > 0 && white >= 0.5 * n && dark >= 20;
           });
+          await step("hover-ring", async () => {
+            const [x, y, rw, rh] = app.hover_ring_rect();
+            if (rw === undefined) return false;
+            return (
+              Math.abs(x + rw / 2 - rx) <= 3 && Math.abs(y + rh / 2 - ry) <= 3
+            );
+          });
           canvas.dispatchEvent(new PointerEvent("pointerleave"));
           await frames();
           await step("leave", async () => {
             const t = [app.hovered_row(), app.tooltip_text()];
-            return t[0] === -1 && t[1] == null;
+            return (
+              t[0] === -1 && t[1] == null && app.hover_ring_rect().length === 0
+            );
           });
           const [cx1, cy1] = app.row_px(1);
           fire("pointerdown", cx1, cy1);
