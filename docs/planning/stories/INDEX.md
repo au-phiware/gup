@@ -246,10 +246,10 @@ cell labels, error bars, pie charts and facets.
   (from the pick index) instead of a small square at its top edge; marks without
   a rectangle keep the ring. Edits `plot.rs`, `pick.rs`. Deps: GUP-676 ✅,
   GUP-619 ✅.
-- [GUP-685](GUP-685_Layout_Pixel_And_Value.md) 📋 Ready — `Chart::pixel(x, y)`
-  and `Chart::value(point)` (and `Plot::pixel_right`) map data to pixels and
-  back for every scale; the tour and tutorial 4 drop their tick-interpolating
-  helper. Edits `chart.rs`, `plot.rs`. Deps: GUP-669 ✅.
+- [GUP-685](GUP-685_Layout_Pixel_And_Value.md) 🚧 In Progress —
+  `Chart::pixel(x, y)` and `Chart::value(point)` (and `Plot::pixel_right`) map
+  data to pixels and back for every scale; the tour and tutorial 4 drop their
+  tick-interpolating helper. Edits `chart.rs`, `plot.rs`. Deps: GUP-669 ✅.
 - [GUP-686](GUP-686_Prelude_Palette_And_Input_Names.md) 📋 Ready —
   `OKABE_ITO_DISTINCT`, `Input`, `Key`, `Button`, `Modifiers`, `Response` and
   `RowId` join the prelude; the tour uses the palette entries; `Response` stays
