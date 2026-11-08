@@ -24,8 +24,8 @@ checks that each page shows exactly the code that was drawn.
 7. [Text and annotation](07_text_and_annotation.md): halos, overlap hiding and
    fallback positions for labels.
 8. [Interaction](08_interaction.md): tooltips, zoom, pan and brushing.
-9. Accessibility: keyboard navigation and text for screen readers (coming in
-   GUP-670)
+9. [Accessibility](09_accessibility.md): keyboard navigation and text for screen
+   readers.
 10. Live data: rows that arrive while the chart is on screen (coming in GUP-670)
 11. Big data: charts of millions of rows, with measured numbers (coming in
     GUP-670)

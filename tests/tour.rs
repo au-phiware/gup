@@ -59,6 +59,10 @@ mod s07_text_and_annotation;
 #[allow(dead_code)]
 mod s08_interaction;
 
+#[path = "../docs/tour/snippets/09_accessibility.rs"]
+#[allow(dead_code)]
+mod s09_accessibility;
+
 // Chapter 1.
 
 #[test]
@@ -254,6 +258,14 @@ fn brush() {
     check("tour/08_brush", &mut chart, W, H);
 }
 
+// Chapter 9.
+
+#[test]
+fn keys() {
+    let mut chart = s09_accessibility::keys().unwrap();
+    check("tour/09_keys", &mut chart, W, H);
+}
+
 // The sync test: the pages show the code that was rendered.
 
 fn root() -> PathBuf {
@@ -274,7 +286,7 @@ fn lines_of(text: &str) -> Vec<String> {
 
 /// The lines between `// tour:begin ID` and `// tour:end ID` in `lines`,
 /// without the begin marker's indentation.
-fn region(file: &str, lines: &[String], id: &str) -> Vec<String> {
+fn region(file: &str, lines: &[String], id: &str, max: usize) -> Vec<String> {
     let marker = |kind: &str| format!("// tour:{kind} {id}");
     let find = |kind: &str| {
         let hits: Vec<usize> = lines
@@ -309,8 +321,8 @@ fn region(file: &str, lines: &[String], id: &str) -> Vec<String> {
         })
         .collect();
     assert!(
-        body.len() <= MAX_REGION_LINES,
-        "{file}: region `{id}` is {} lines; a page may show at most {MAX_REGION_LINES}",
+        body.len() <= max,
+        "{file}: region `{id}` is {} lines; a page may show at most {max}",
         body.len()
     );
     body
@@ -319,15 +331,15 @@ fn region(file: &str, lines: &[String], id: &str) -> Vec<String> {
 /// The fenced block that follows the marker at `lines[at]`, after at most
 /// one blank line: its lines, and the index of the line after its closing
 /// fence.
-fn block_after(page: &str, lines: &[String], at: usize) -> Vec<String> {
+fn block_after(page: &str, lines: &[String], at: usize, language: &str) -> Vec<String> {
     let mut i = at + 1;
     if lines.get(i).is_some_and(|l| l.is_empty()) {
         i += 1;
     }
     let fence = lines.get(i).map(String::as_str).unwrap_or("");
     assert!(
-        fence.starts_with("```rust"),
-        "{page}: the marker `{}` is not followed by a ```rust block (found {fence:?})",
+        fence.starts_with(&format!("```{language}")),
+        "{page}: the marker `{}` is not followed by a ```{language} block (found {fence:?})",
         lines[at]
     );
     let body: Vec<String> = lines[i + 1..]
@@ -343,17 +355,60 @@ fn block_after(page: &str, lines: &[String], at: usize) -> Vec<String> {
     body
 }
 
-/// What the marker on `line` asks for: `(kind, path, id)`.
-fn parse_marker(line: &str) -> Option<(&str, &str, Option<&str>)> {
+/// What a marker line asks for.
+struct Marker<'a> {
+    /// `snippet`, `quote` or `output`.
+    kind: &'static str,
+    path: &'a str,
+    id: Option<&'a str>,
+    /// The most lines of the block (`max=N` raises it for a snippet).
+    max: usize,
+}
+
+fn parse_marker(line: &str) -> Option<Marker<'_>> {
     let inner = line.strip_prefix("<!-- tour")?.strip_suffix("-->")?.trim();
-    let (kind, rest) = match inner.strip_prefix("-quote:") {
-        Some(rest) => ("quote", rest),
-        None => ("snippet", inner.strip_prefix(':')?),
+    let (kind, rest) = if let Some(rest) = inner.strip_prefix("-quote:") {
+        ("quote", rest)
+    } else if let Some(rest) = inner.strip_prefix("-output:") {
+        ("output", rest)
+    } else {
+        ("snippet", inner.strip_prefix(':')?)
     };
-    let rest = rest.trim();
-    match rest.split_once('#') {
-        Some((path, id)) => Some((kind, path, Some(id))),
-        None => Some((kind, rest, None)),
+    let mut max = MAX_REGION_LINES;
+    let mut words = rest.split_whitespace();
+    let target = words.next()?;
+    for word in words {
+        let n = word
+            .strip_prefix("max=")
+            .and_then(|n| n.parse().ok())
+            .unwrap_or_else(|| panic!("`{line}`: unknown option {word:?} (only max=N)"));
+        assert!(kind == "snippet", "`{line}`: max=N is for snippet blocks");
+        max = n;
+    }
+    Some(match target.split_once('#') {
+        Some((path, id)) => Marker {
+            kind,
+            path,
+            id: Some(id),
+            max,
+        },
+        None => Marker {
+            kind,
+            path: target,
+            id: None,
+            max,
+        },
+    })
+}
+
+/// The text a snippet's `pub fn <ID>_output()` returns, for the
+/// `tour-output` blocks.
+fn snippet_output(path_and_id: &str) -> String {
+    match path_and_id {
+        "docs/tour/snippets/09_accessibility.rs#read_aloud" => {
+            s09_accessibility::read_aloud_output().unwrap()
+        }
+        other => panic!("no output function is wired for {other} in tests/tour.rs"),
     }
 }
 
@@ -406,10 +461,27 @@ fn pages_match_their_snippets() {
         let text = read(&page);
         let lines = lines_of(&text);
         for (at, line) in lines.iter().enumerate() {
-            let Some((kind, path, id)) = parse_marker(line) else {
+            let Some(marker) = parse_marker(line) else {
                 continue;
             };
-            let shown = block_after(&name, &lines, at);
+            let Marker {
+                kind,
+                path,
+                id,
+                max,
+            } = marker;
+            if kind == "output" {
+                let id = id.unwrap_or_else(|| panic!("{name}: `{line}` has no #ID"));
+                let shown = block_after(&name, &lines, at, "text");
+                let wanted = lines_of(&snippet_output(&format!("{path}#{id}")));
+                assert!(
+                    shown == wanted,
+                    "{name}: the block after `{line}` differs from the output; {}",
+                    first_difference(&shown, &wanted)
+                );
+                continue;
+            }
+            let shown = block_after(&name, &lines, at, "rust");
             let source = lines_of(&read(&root().join(path)));
             if kind == "quote" {
                 let found = source.windows(shown.len()).any(|w| w == shown.as_slice());
@@ -424,7 +496,7 @@ fn pages_match_their_snippets() {
                 );
             } else {
                 let id = id.unwrap_or_else(|| panic!("{name}: `{line}` has no #ID"));
-                let wanted = region(path, &source, id);
+                let wanted = region(path, &source, id, max);
                 assert!(
                     shown == wanted,
                     "{name}: the block after `{line}` differs from the snippet; {}",
