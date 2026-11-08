@@ -110,6 +110,11 @@ what each release contains and what its version number promises.
   MiB. A columnar layer above `Retain::AUTO_MAX_ROWS` still answers `pick_row`,
   re-encodes a channel, draws on another context and writes SVG from its
   columns.
+- Key columns: `KeyColumn` (dictionary codes plus labels, `Column::Keys`)
+  colours or positions a columnar layer by category on a `Categorical`, Band or
+  Point scale, with no key closure and no string hash per row. At 10M rows with
+  50 labels, the first resolve takes about 30-45% of the time of the same rows
+  with a key closure.
 - `gup-egui`, a widget that shows a chart in an egui panel, and `gup-bevy`, a
   plugin that shows a chart in a Bevy app.
 - A text alternative for every chart: `Plot::describe` returns a title and a
