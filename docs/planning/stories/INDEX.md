@@ -160,14 +160,14 @@ GUP-535 in turn (they share `src/lib.rs`); GUP-536 after N2's builders.
   the gallery page is regenerated (96 of 101 source links were dead), and
   `all-check` runs the gallery link check. Edits `maskfile.md`. Deps: GUP-531
   ✅, GUP-499 ✅.
-- [GUP-669](GUP-669_Feature_Tour_Infrastructure_And_Chapters_1_To_8.md) 🚧 —
+- [GUP-669](GUP-669_Feature_Tour_Infrastructure_And_Chapters_1_To_8.md) ✅ —
   Feature tour (N1 Docs: feature tour): `tests/tour.rs` renders each page's
   snippet file as a golden and a sync test ties every page's code to it, plus
   `docs/tour/README.md` and chapters 1-8 (first chart, vocabulary, encodings,
   axes, colour and themes, lines, text, interaction). Deps: GUP-536 ✅.
 - [GUP-670](GUP-670_Feature_Tour_Chapters_9_To_13.md) 📋 — Feature tour chapters
   9-13 (accessibility, live data, big data with measured figures only, under the
-  builders, everywhere it runs). Deps: GUP-669 📋, GUP-624 ✅, GUP-664 📋.
+  builders, everywhere it runs). Deps: GUP-669 ✅, GUP-624 ✅, GUP-664 📋.
 
 ## Track N2: Chart Vocabulary
 
