@@ -80,8 +80,8 @@ X) or `info` (printed, never fails).
 | `pipeline.link_create.cold_ms`     | 1.04      | <= 10     | `pipeline_timings`, its first run                                             |
 | `pipeline.link_create.max_ms`      | 1.06      | info      | `pipeline_timings`                                                            |
 | `wasm.wgpu.gz_bytes`               | 32,360    | info      | `scripts/wasm_size.sh`, bare wgpu                                             |
-| `wasm.scatter.gz_bytes`            | 370,070   | +2%       | `scripts/wasm_size.sh`, the reference scatter                                 |
-| `wasm.over_wgpu.gz_bytes`          | 337,710   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10                                   |
+| `wasm.scatter.gz_bytes`            | 376,445   | +2%       | `scripts/wasm_size.sh`, the reference scatter                                 |
+| `wasm.over_wgpu.gz_bytes`          | 344,085   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10                                   |
 | `wasm.per_row_type.gz_bytes`       | 1,730     | <= 2600   | `scripts/wasm_size.sh`, one more Selection row type                           |
 | `wasm.svg_export.gz_bytes`         | 4,057     | info      | `scripts/wasm_size.sh`, the scatter with `svg-export` minus without (GUP-557) |
 
@@ -557,3 +557,10 @@ seeded violation (GUP-417 retrospective).
   point of track N4, and GUP-623's live region needs it in the browser. The
   scatter reads 370,070 B gz, over bare wgpu 337,710 (62 KB of headroom under
   the 400,000 cap).
+- **GUP-664 merged (2026-11-08, orchestrator)**: GUP-623 (browser keys and live
+  region, +1,516), GUP-628 (columnar layers, +1,778), GUP-624 (hidden data
+  table, +1,648), GUP-658 (palette order, about 0) and GUP-664 (shared columns,
+  +1,701 after trimming) take the scatter from 370,070 to 376,445 B gz, within
+  the +2% tolerance but 1 KB from it. Re-recorded so the tolerance measures the
+  next stories, not these. Over bare wgpu 344,085 (56 KB of headroom under the
+  400,000 cap).
