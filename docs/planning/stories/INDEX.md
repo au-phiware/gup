@@ -168,7 +168,7 @@ GUP-535 in turn (they share `src/lib.rs`); GUP-536 after N2's builders.
 - [GUP-670](GUP-670_Feature_Tour_Chapters_9_To_13.md) ✅ — Feature tour chapters
   9-13 (accessibility, live data, big data with measured figures only, under the
   builders, everywhere it runs). Deps: GUP-669 ✅, GUP-624 ✅, GUP-664 ✅.
-- [GUP-681](GUP-681_Interactive_Tour_App.md) 📋 — The tour as an interactive
+- [GUP-681](GUP-681_Interactive_Tour_App.md) ✅ — The tour as an interactive
   egui app (`cargo run -p gup-egui --example tour`): chapters in a side panel,
   each chart live beside the snippet region that drew it. Deps: GUP-670 ✅.
 
