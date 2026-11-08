@@ -28,6 +28,9 @@ what each release contains and what its version number promises.
 
 ### Added
 
+- `Plot::hover_highlight` (and the same setter on every chart builder), on by
+  default: the row under the pointer is ringed by a thin square at its tooltip
+  anchor, reported as `Layout::hover`; keyboard focus keeps its heavier ring.
 - The [accessibility guide](docs/ACCESSIBILITY.md): what each feature does, what
   you must do and what is not supported.
 - `ChartExt::to_svg` and `ChartExt::save_svg` (feature `svg`): a chart renders

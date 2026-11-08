@@ -234,8 +234,8 @@ cell labels, error bars, pie charts and facets.
 - [GUP-671](GUP-671_Chart_Save_Svg.md) ✅ — `chart.save_svg(&cx, path, w, h)`
   and `to_svg` mirror `save_png` (found by the tour, GUP-669 chapter 1). Edits
   `chart.rs`. Deps: none.
-- [GUP-676](GUP-676_Hovered_Row_Is_Highlighted.md) 🚧 In Progress — The hovered
-  row gets a thin ring at its pick anchor (default on, `hover_highlight(bool)`
+- [GUP-676](GUP-676_Hovered_Row_Is_Highlighted.md) ✅ Complete — The hovered row
+  gets a thin ring at its pick anchor (default on, `hover_highlight(bool)`
   opt-out), distinct from the GUP-619 focus ring; `Layout::hover`, browser step.
   Edits `plot.rs`. Deps: GUP-619 ✅, GUP-625 ✅.
 - [GUP-543](GUP-543_Horizontal_Bars_And_Group_Padding.md) ✅ — `gup::barh`
