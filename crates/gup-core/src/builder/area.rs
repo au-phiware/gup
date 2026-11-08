@@ -383,6 +383,13 @@ impl<T: Send + Sync + 'static> AreaChart<T> {
         self
     }
 
+    /// Whether the row under the pointer is ringed (default `true`): see
+    /// [`Plot::hover_highlight`].
+    pub fn hover_highlight(mut self, on: bool) -> Self {
+        self.plot.hover_highlight(on);
+        self
+    }
+
     /// Row indices by key, in first-seen key order, with each key's label.
     fn split(rows: &[T], key: &Key<T>) -> Vec<(Arc<str>, Vec<usize>)> {
         let mut index: HashMap<Arc<str>, usize> = HashMap::new();

@@ -323,6 +323,13 @@ impl<T: Send + Sync + 'static> HistogramChart<T> {
         })
     }
 
+    /// Whether the row under the pointer is ringed (default `true`): see
+    /// [`Plot::hover_highlight`].
+    pub fn hover_highlight(mut self, on: bool) -> Self {
+        self.plot.hover_highlight(on);
+        self
+    }
+
     /// Build the layers from the recorded settings, once.
     fn materialise(&mut self) {
         let Some(rows) = self.rows.take() else {
