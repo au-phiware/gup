@@ -224,13 +224,16 @@ cell labels, error bars, pie charts and facets.
   the theme's background colour, and `hide_overlaps(true)` (greedy in row order,
   grid of kept boxes, +0.05 ms per 1,000 labels) on text layers. Default: no
   halo. Deps: GUP-542 ✅, GUP-405 ✅ (soft).
-- [GUP-611](GUP-611_Label_Placement_Tries_Other_Anchors.md) 💡 — A ranked list
+- [GUP-611](GUP-611_Label_Placement_Tries_Other_Anchors.md) ✅ — A ranked list
   of anchors per label, tried against GUP-527's grid before a label is hidden.
   Deps: GUP-527 ✅.
 - [GUP-656](GUP-656_Label_Placement_Avoids_Marks.md) ✅ Complete — Opt-in
   `TextLayer::avoid_points(Px)` seeds the kept-box grid with a disc per row so
   labels stay off the points and name their own. Edits `text_layer.rs`. Deps:
   GUP-611 ✅.
+- [GUP-671](GUP-671_Chart_Save_Svg.md) 📋 — `chart.save_svg(&cx, path, w, h)`
+  and `to_svg` mirror `save_png` (found by the tour, GUP-669 chapter 1). Edits
+  `chart.rs`. Deps: none.
 - [GUP-543](GUP-543_Horizontal_Bars_And_Group_Padding.md) ✅ — `gup::barh`
   (`BarChart<T, Horizontal>`, categories top to bottom) and
   `BarChart::group_padding`. Deps: GUP-537 📋.
