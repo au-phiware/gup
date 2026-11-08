@@ -261,6 +261,10 @@ struct State {
     live: web_sys::Element,
     /// The text last written to it (empty before the first).
     live_text: String,
+    /// The hidden `<table>` after the live region.
+    table: web_sys::Element,
+    /// The alt text the table was built for (empty before the first).
+    table_alt: String,
 }
 
 impl State {
@@ -278,6 +282,7 @@ impl State {
         renderer.render(cx, &resolved.scene, target)?;
         self.update_label();
         self.update_live();
+        self.update_table();
         Ok(())
     }
 
@@ -312,6 +317,64 @@ impl State {
         if text != self.live_text {
             self.live.set_text_content(Some(text));
             self.live_text = text.to_owned();
+        }
+    }
+}
+
+/// Rows the hidden table carries; the description states the full count.
+const TABLE_MAX_ROWS: usize = 1_000;
+
+impl State {
+    /// Rebuild the hidden data table when the chart's alt text changes (it
+    /// counts the rows, so it changes when rows arrive), not on zoom or
+    /// hover.
+    fn update_table(&mut self) {
+        let Some(alt) = self.chart.describe().map(|d| d.alt_text()) else {
+            return;
+        };
+        if alt == self.table_alt {
+            return;
+        }
+        self.table_alt = alt;
+        let Some(data) = self.chart.data_table(TABLE_MAX_ROWS) else {
+            return;
+        };
+        let Some(document) = self.table.owner_document() else {
+            return;
+        };
+        let make = |tag: &str| document.create_element(tag).ok();
+        let cell = |tag: &str, text: &str, scope: bool| {
+            let c = make(tag)?;
+            c.set_text_content(Some(text));
+            if scope {
+                let _ = c.set_attribute("scope", "col");
+            }
+            Some(c)
+        };
+        self.table.set_text_content(None);
+        if let Some(caption) = cell("caption", &data.caption, false) {
+            let _ = self.table.append_child(&caption);
+        }
+        if let (Some(head), Some(tr)) = (make("thead"), make("tr")) {
+            for h in &data.headers {
+                if let Some(th) = cell("th", h, true) {
+                    let _ = tr.append_child(&th);
+                }
+            }
+            let _ = head.append_child(&tr);
+            let _ = self.table.append_child(&head);
+        }
+        if let Some(body) = make("tbody") {
+            for row in &data.rows {
+                let Some(tr) = make("tr") else { continue };
+                for v in row {
+                    if let Some(td) = cell("td", v, false) {
+                        let _ = tr.append_child(&td);
+                    }
+                }
+                let _ = body.append_child(&tr);
+            }
+            let _ = self.table.append_child(&body);
         }
     }
 }
@@ -452,6 +515,26 @@ fn live_region(canvas: &HtmlCanvasElement) -> Result<web_sys::Element> {
     Ok(live)
 }
 
+/// Insert the hidden data table after `live` (`State::update_table` fills
+/// it).
+fn table_element(live: &web_sys::Element) -> Result<web_sys::Element> {
+    let config = |what: &str, e: JsValue| Error::config("canvas", format!("{what}: {e:?}"));
+    let document = live
+        .owner_document()
+        .ok_or_else(|| Error::config("canvas", "there is no document"))?;
+    let table = document
+        .create_element("table")
+        .map_err(|e| config("cannot create the data table", e))?;
+    for (name, value) in [("data-gup-table", ""), ("style", LIVE_REGION_STYLE)] {
+        table
+            .set_attribute(name, value)
+            .map_err(|e| config("cannot set a data table attribute", e))?;
+    }
+    live.after_with_node_1(&table)
+        .map_err(|e| config("cannot insert the data table", e))?;
+    Ok(table)
+}
+
 fn pointer_at(canvas: &HtmlCanvasElement, e: &MouseEvent) -> Point {
     let rect = canvas.get_bounding_client_rect();
     Point::new(
@@ -479,6 +562,7 @@ impl CanvasApp {
         let cx = Context::new().await?;
         let target = CanvasTarget::new(&cx, canvas.clone())?;
         let live = live_region(&canvas)?;
+        let table = table_element(&live)?;
         let mut st = State {
             cx: cx.clone(),
             target,
@@ -491,6 +575,8 @@ impl CanvasApp {
             label: String::new(),
             live,
             live_text: String::new(),
+            table,
+            table_alt: String::new(),
         };
         st.draw()?;
         cx.settle_gpu_errors().await?;
@@ -664,6 +750,7 @@ impl Drop for CanvasApp {
             let mut st = self.state.borrow_mut();
             st.closed = true;
             st.live.remove();
+            st.table.remove();
         }
         CANVASES.with(|c| c.borrow_mut().retain(|e| e.0 != self.wake_id));
         for l in self.listeners.drain(..) {

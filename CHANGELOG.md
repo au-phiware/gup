@@ -110,6 +110,10 @@ what each release contains and what its version number promises.
 - A text alternative for every chart: `Plot::describe` returns a title and a
   description in words, SVG files carry them as `title`, `desc` and
   `role="img"`, and the browser canvas gets an `aria-label`.
+- `Plot::data_table` and `Chart::data_table` (`DataTable`): the chart's rows as
+  a captioned table of the row fields, and in the browser `CanvasApp` carries it
+  as a visually hidden `<table data-gup-table>` (up to 1,000 rows, rebuilt when
+  the description changes) for screen-reader table navigation.
 - The `gup` crate as the one dependency to add, with features `window` and `svg`
   (both on by default) and `web` (the browser canvas, wasm32 only). Every
   supported combination of features builds and tests.

@@ -471,6 +471,9 @@ impl crate::chart::Chart for Plot {
     fn focus_text(&self) -> Option<&str> {
         Plot::focus_text(self)
     }
+    fn data_table(&self, max_rows: usize) -> Option<crate::DataTable> {
+        Plot::data_table(self, max_rows)
+    }
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -1679,6 +1682,37 @@ impl Plot {
             },
         };
         layer.row_fields(row.row, &axes)
+    }
+
+    /// The chart's data as a table ([`DataTable`](crate::DataTable)): every
+    /// row of every focusable data layer (not only those in view), in plot
+    /// order of layers and data order of rows, as
+    /// [`row_fields`](Self::row_fields) says them; a row without fields is
+    /// skipped. The first `max_rows` are included and the rest counted in
+    /// `omitted` (counted as rows the layer still holds). `None` before the
+    /// first resolve.
+    pub fn data_table(&self, max_rows: usize) -> Option<crate::DataTable> {
+        let title = &self.describe()?.title;
+        let mut fields = Vec::new();
+        let mut omitted = 0;
+        for (layer_index, layer) in self.layers.iter().enumerate() {
+            if !layer.is_focusable() {
+                continue;
+            }
+            for row in 0..layer.len() {
+                if fields.len() < max_rows {
+                    if let Some(f) = self.row_fields(RowId {
+                        layer: layer_index,
+                        row,
+                    }) {
+                        fields.push(f);
+                    }
+                } else if layer.holds(row) {
+                    omitted += 1;
+                }
+            }
+        }
+        Some(crate::DataTable::build(title, fields, omitted))
     }
 
     /// What a screen reader says of `row`: its layer's tooltip with the line

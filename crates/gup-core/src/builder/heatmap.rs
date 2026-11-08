@@ -290,6 +290,9 @@ impl<T: Send + Sync + 'static> Chart for HeatmapChart<T> {
     fn focus_text(&self) -> Option<&str> {
         self.plot.focus_text()
     }
+    fn data_table(&self, max_rows: usize) -> Option<crate::DataTable> {
+        self.plot.data_table(max_rows)
+    }
     fn as_any(&self) -> &dyn Any {
         self
     }

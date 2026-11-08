@@ -96,6 +96,13 @@ pub trait Chart: 'static {
     fn focus_text(&self) -> Option<&str> {
         None
     }
+    /// The chart's data as a table of at most `max_rows` rows
+    /// ([`Plot::data_table`](crate::Plot::data_table)); `None` before a
+    /// resolve, and for a chart that has none.
+    fn data_table(&self, max_rows: usize) -> Option<crate::DataTable> {
+        let _ = max_rows;
+        None
+    }
     /// The chart as [`Any`], to downcast to its concrete type.
     fn as_any(&self) -> &dyn Any;
     /// The chart as mutable [`Any`], to downcast to its concrete type.

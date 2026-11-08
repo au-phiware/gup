@@ -38,6 +38,73 @@ impl Description {
     }
 }
 
+/// A chart's data as a table: what a screen reader browses with table
+/// navigation (GUP-624).
+///
+/// Read it with [`Plot::data_table`](crate::Plot::data_table) after a
+/// resolve. Cells are the row fields as the axes label them
+/// ([`Plot::row_fields`](crate::Plot::row_fields)).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct DataTable {
+    /// The description's title, plus " (first {k} of {n} rows)" when rows
+    /// were omitted.
+    pub caption: String,
+    /// Field names, in first-seen order over the rows included.
+    pub headers: Vec<String>,
+    /// One entry per row, aligned with `headers` ("" where a row lacks a
+    /// field).
+    pub rows: Vec<Vec<String>>,
+    /// Rows not included because of `max_rows`.
+    pub omitted: usize,
+}
+
+impl DataTable {
+    /// Assemble a table from each row's fields; `omitted` is the number of
+    /// further rows left out.
+    pub(crate) fn build(
+        title: &str,
+        fields: Vec<Vec<(String, String)>>,
+        omitted: usize,
+    ) -> DataTable {
+        let mut headers: Vec<String> = Vec::new();
+        for row in &fields {
+            for (name, _) in row {
+                if !headers.contains(name) {
+                    headers.push(name.clone());
+                }
+            }
+        }
+        let rows: Vec<Vec<String>> = fields
+            .into_iter()
+            .map(|row| {
+                headers
+                    .iter()
+                    .map(|h| {
+                        row.iter()
+                            .find(|(n, _)| n == h)
+                            .map(|(_, v)| v.clone())
+                            .unwrap_or_default()
+                    })
+                    .collect()
+            })
+            .collect();
+        let mut caption = title.to_owned();
+        if omitted > 0 {
+            caption.push_str(" (first ");
+            push_count(&mut caption, rows.len());
+            caption.push_str(" of ");
+            push_count(&mut caption, rows.len() + omitted);
+            caption.push_str(" rows)");
+        }
+        DataTable {
+            caption,
+            headers,
+            rows,
+            omitted,
+        }
+    }
+}
+
 /// What [`describe`] reads.
 pub(crate) struct DescribeInput<'a> {
     pub title: Option<&'a str>,
