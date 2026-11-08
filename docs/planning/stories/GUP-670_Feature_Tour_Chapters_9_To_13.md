@@ -10,8 +10,8 @@ touches: [tests/tour.rs, tests/golden/tour/, docs/tour/]
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N1 Docs: feature tour) **Status**: 📋
-Ready **Created**: 2026-11-08
+**Initiative**: Strategic Review 2026-11 (N1 Docs: feature tour) **Status**: 🚧
+In Progress **Created**: 2026-11-08
 
 ## Context
 
