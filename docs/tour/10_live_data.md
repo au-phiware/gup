@@ -15,7 +15,6 @@ calls are the same from a producer thread.
 let mut chart = gup::line(Vec::<Sample>::new())
     .x(|s| s.t)
     .y(|s| s.level)
-    .stroke(Color::hex(0xd62728))
     .width(2.0)
     .title("Signal")
     .x_title("Time (s)")
@@ -31,7 +30,7 @@ chart.resolve(&Context::shared()?, 640.0, 400.0)?;
 Ok(chart)
 ```
 
-![A red line of a sum of two sine waves, 120 samples long, with a title and both axes titled](../../tests/golden/tour/10_append.png)
+![A blue line of a sum of two sine waves, 120 samples long, with a title and both axes titled](../../tests/golden/tour/10_append.png)
 
 `push` adds one row and `extend` adds a batch. Both return an error once the
 chart has been dropped, which is how a producer thread learns to stop. In a

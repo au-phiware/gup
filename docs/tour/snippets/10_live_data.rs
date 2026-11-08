@@ -35,7 +35,6 @@ pub fn append() -> gup::Result<impl Chart> {
     let mut chart = gup::line(Vec::<Sample>::new())
         .x(|s| s.t)
         .y(|s| s.level)
-        .stroke(Color::hex(0xd62728))
         .width(2.0)
         .title("Signal")
         .x_title("Time (s)")
