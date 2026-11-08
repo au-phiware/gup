@@ -26,6 +26,25 @@ what each release contains and what its version number promises.
 
 ## [Unreleased]
 
+### Added
+
+- Keyboard focus over rows: the arrows, Home and End move focus (`Key`,
+  `Input::key`, `Plot::focused`), with a focus ring drawn in the chart and
+  `Selection::focusable` to leave decoration out of the order. Enter clicks the
+  focused row and Escape clears focus.
+- Keyboard view keys: `+` and `-` zoom about the centre, Shift with an arrow
+  pans, `0` resets the view.
+- Row announcements: `Plot::focus_text`, `row_text` and `row_fields` say the
+  focused row as the axes label its numbers.
+- The window and egui hosts forward keys to the chart (see 0.1.0 below), and the
+  browser canvas does too (`tabindex`, `keydown`).
+- A browser live region after the canvas that speaks `focus_text`.
+- A hidden browser data table (`Plot::data_table`, `DataTable`, at most 1,000
+  rows with the rest counted in `omitted`).
+- `Theme::high_contrast()` (see 0.1.0 below).
+- The [accessibility guide](docs/ACCESSIBILITY.md): what each feature does, what
+  you must do and what is not supported.
+
 ## [0.1.0] - Unreleased
 
 ### Added
@@ -144,6 +163,7 @@ what each release contains and what its version number promises.
 - No CSV, serde or Arrow input: rows enter through closures.
 - Nothing above 10M rows is measured, and there is no level of detail.
 - No PDF export.
-- Accessibility is a text alternative and keyboard navigation of rows and the
-  view: no data table and no high-contrast theme.
+- Accessibility: no screen reader has been tested by hand, nothing outside the
+  browser speaks `focus_text`, and keyboard focus skips a layer that dropped its
+  CPU data above 10M visible rows. See `docs/ACCESSIBILITY.md`.
 - No pie, violin, density or choropleth charts, and no facets.

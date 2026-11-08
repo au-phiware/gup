@@ -57,6 +57,9 @@ were written for the API before the RFC-001 flip.
 - [references/msdfgen.txt](references/msdfgen.txt) — MSDF glyph generation
   reference
 
+- [ACCESSIBILITY.md](ACCESSIBILITY.md) — Accessibility guide: text alternatives,
+  keyboard, screen readers, contrast, what is not supported
+
 ---
 
 ## Archive

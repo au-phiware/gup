@@ -17,8 +17,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Track N4: Accessibility **Status**: 📋 Planned **Created**:
-2026-11-04
+**Initiative**: Track N4: Accessibility **Status**: ✅ Complete (2026-11-08)
+**Created**: 2026-11-04
 
 ## Context
 
@@ -49,25 +49,25 @@ there is no keyboard navigation, no data table and no high-contrast theme.
 
 ### AC1: The guide
 
-- [ ] `docs/ACCESSIBILITY.md` with the sections of Decisions, each feature shown
+- [x] `docs/ACCESSIBILITY.md` with the sections of Decisions, each feature shown
       in a short compiled example.
-- [ ] Every Rust block in it is a doctest of `gup`, included from `src/lib.rs`
+- [x] Every Rust block in it is a doctest of `gup`, included from `src/lib.rs`
       in a `#[cfg(doctest)]` module as the tutorials are, and
       `cargo test --doc -p gup` passes.
-- [ ] Examples that need a browser are `no_run` and compile for the host target
+- [x] Examples that need a browser are `no_run` and compile for the host target
       only where they compile today (mark wasm-only code `ignore` with a
       one-line reason, at most one block).
 
 ### AC2: Other docs agree
 
-- [ ] README "Not yet" no longer lists keyboard navigation, a data table or a
+- [x] README "Not yet" no longer lists keyboard navigation, a data table or a
       high-contrast theme; it links the guide from its feature list.
-- [ ] `CHANGELOG.md` `[Unreleased]` has an "Added" entry per feature (keyboard
+- [x] `CHANGELOG.md` `[Unreleased]` has an "Added" entry per feature (keyboard
       focus, keyboard view keys, row announcements, hosts forwarding keys, the
       live region, the data table, the high-contrast theme).
-- [ ] `docs/archive/README.md` says the archived accessibility guides describe
+- [x] `docs/archive/README.md` says the archived accessibility guides describe
       deleted code and points to `docs/ACCESSIBILITY.md`.
-- [ ] `git grep -n "no keyboard navigation\|keyboard navigation, a data table" -- README.md CHANGELOG.md docs/*.md`
+- [x] `git grep -n "no keyboard navigation\|keyboard navigation, a data table" -- README.md CHANGELOG.md docs/*.md`
       shows only the historical 0.1.0 limitation in the CHANGELOG.
 
 ## Decisions
@@ -99,15 +99,15 @@ there is no keyboard navigation, no data table and no high-contrast theme.
 
 ## Technical Tasks
 
-- [ ] Write the guide and its examples; include it in `src/lib.rs`.
-- [ ] README, CHANGELOG and archive README edits.
+- [x] Write the guide and its examples; include it in `src/lib.rs`.
+- [x] README, CHANGELOG and archive README edits.
 
 ## Dependencies
 
 ### Prerequisite Stories
 
-- GUP-619 📋, GUP-620 📋, GUP-621 📋, GUP-622 📋, GUP-623 📋, GUP-624 📋,
-  GUP-625 📋 — the features documented.
+- GUP-619 ✅, GUP-620 ✅, GUP-621 ✅, GUP-622 ✅, GUP-623 ✅, GUP-624 ✅,
+  GUP-625 ✅ — the features documented.
 
 ## Testing Strategy
 
@@ -115,7 +115,7 @@ there is no keyboard navigation, no data table and no high-contrast theme.
 
 ## Success Metrics
 
-- [ ] One page answers "what does Gup do for accessibility?" with working code.
+- [x] One page answers "what does Gup do for accessibility?" with working code.
 
 ## Risk Assessment
 
@@ -124,15 +124,64 @@ there is no keyboard navigation, no data table and no high-contrast theme.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test --doc -p gup` and
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test --doc -p gup` and
       `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye: not needed, documentation only
-- [ ] `mask wasm-browser`: not needed, documentation only
-- [ ] WASM size: unchanged: no library code change
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye: not needed, documentation only
+- [x] `mask wasm-browser`: not needed, documentation only
+- [x] WASM size: unchanged: no library code change
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `docs/ACCESSIBILITY.md`: the Decisions' sections in order, plus a closing
+  "Tested and untested" section (no screen reader has been run by hand). Seven
+  Rust blocks are doctests (included by `src/lib.rs`, module
+  `accessibility_docs`); the one wasm-only block is `ignore`.
+- README (feature bullet links the guide; "Not yet" item removed), CHANGELOG
+  (`[Unreleased]` "Added" entries; the 0.1.0 known limitation rewritten to the
+  real ones), `docs/archive/README.md`, `docs/README.md` and `docs/INDEX.md`.
+- Tests: `cargo test -p gup --doc accessibility` 6 passed, 1 ignored.
+
+## Retrospective
+
+**Completed**: 2026-11-08
+
+### Key Technical Learnings
+
+#### Guides as doctests catch wording drift
+
+- **Challenge**: the guide quotes strings (caption, focus text) that are easy to
+  get slightly wrong.
+- **Solution**: every block asserts the exact string. Two first-draft errors
+  surfaced at once: `Plot::line`, not `lines`, and the caption groups digits
+  ("first 1,000 of 2,500 rows"), not "1000 of 2500".
+- **Pattern**: write the prose, then paste the asserted values back into it.
+
+### Architectural Decisions
+
+#### The guide states absences from the code, not from tests
+
+- **Decision**: "no OS preference following", "Bevy does not forward keys" and
+  "nothing speaks `focus_text` outside the browser" are stated plainly.
+- **Reasoning**: the story's Decisions and the N4 summaries say so, and no code
+  reads such a preference.
+- **Trade-off**: no test proves an absence; a later feature makes the sentence
+  false without failing anything.
+
+### Development Workflow Insights
+
+- `mdl` rejects `:-:` table alignment (MD057); use plain `---` separators.
+- Not verified: the `ignore`d wasm-only block (`gup::web::show`) was not
+  compiled; the `mask wasm-browser` smoke covers the real calls. No screen
+  reader was run.
+
+### Follow-up Stories
+
+None. The guide's limits point at GUP-667 (the CPU pick bound) and the hosts'
+platform-API routing is out of scope.
