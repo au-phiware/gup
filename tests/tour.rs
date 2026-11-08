@@ -63,6 +63,10 @@ mod s08_interaction;
 #[allow(dead_code)]
 mod s09_accessibility;
 
+#[path = "../docs/tour/snippets/10_live_data.rs"]
+#[allow(dead_code)]
+mod s10_live_data;
+
 // Chapter 1.
 
 #[test]
@@ -264,6 +268,20 @@ fn brush() {
 fn keys() {
     let mut chart = s09_accessibility::keys().unwrap();
     check("tour/09_keys", &mut chart, W, H);
+}
+
+// Chapter 10.
+
+#[test]
+fn append() {
+    let mut chart = s10_live_data::append().unwrap();
+    check("tour/10_append", &mut chart, W, H);
+}
+
+#[test]
+fn window() {
+    let mut chart = s10_live_data::window().unwrap();
+    check("tour/10_window", &mut chart, W, H);
 }
 
 // The sync test: the pages show the code that was rendered.
