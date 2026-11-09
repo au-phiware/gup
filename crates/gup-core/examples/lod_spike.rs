@@ -20,6 +20,8 @@
 //!   --radius PX         circle radius (default 1.5, as scale_bench)
 //!   --shuffle           permute the rows (chunks then overlap)
 //!   --out DIR           write <candidate>-<view>-<rows>.png into DIR
+//!   --pyramid-bias N    (B) draws N tiers finer than the
+//!                       one-point-per-pixel tier (default 0)
 //!   --fidelity          compare every candidate's image with the base
 //!                       image of the same view (needs base in the list)
 //! ```
@@ -115,6 +117,8 @@ struct Options {
     out: Option<PathBuf>,
     fidelity: bool,
     seed: u64,
+    /// Tiers finer than the one-point-per-pixel tier that (B) draws.
+    bias: u32,
 }
 
 fn parse() -> Options {
@@ -131,6 +135,7 @@ fn parse() -> Options {
         out: None,
         fidelity: false,
         seed: 1,
+        bias: 0,
     };
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -172,6 +177,7 @@ fn parse() -> Options {
             "--out" => o.out = Some(PathBuf::from(value())),
             "--fidelity" => o.fidelity = true,
             "--seed" => o.seed = value().parse().expect("--seed N"),
+            "--pyramid-bias" => o.bias = value().parse().expect("--pyramid-bias N"),
             _ => panic!("unknown option {arg}"),
         }
     }
@@ -481,8 +487,14 @@ impl Pyramid {
     }
 
     /// Per visible chunk: its tier prefix, or `None` for every row.
-    fn select(&self, data: &Data, view: &View, margin: f64) -> Vec<(usize, Option<u32>)> {
-        let t = view.tier(data) as usize;
+    fn select(
+        &self,
+        data: &Data,
+        view: &View,
+        margin: f64,
+        bias: u32,
+    ) -> Vec<(usize, Option<u32>)> {
+        let t = (view.tier(data) + bias).min(TMAX) as usize;
         data.chunks
             .iter()
             .enumerate()
@@ -1564,19 +1576,10 @@ fn main() -> gup_core::Result<()> {
         let rss0 = read_line("/proc/self/status", "VmRSS:").unwrap_or(0.0);
         match cand {
             Cand::Base => {
-                let t = Instant::now();
                 let mut lib =
                     LibPlot::circles(Arc::clone(&data.xs), Arc::clone(&data.ys), o.radius);
                 for (v, view) in &views {
                     let mut m = measure_lib(&mut gpu, &o, &mut lib, view.dom, || {})?;
-                    if *v == views[0].0 {
-                        metric(
-                            cand,
-                            None,
-                            "first_frame_ms",
-                            format!("{:.1}", ms(t.elapsed())),
-                        );
-                    }
                     m.drawn = data
                         .chunks
                         .iter()
@@ -1626,13 +1629,13 @@ fn main() -> gup_core::Result<()> {
                 );
                 for (v, view) in &views {
                     let t = Instant::now();
-                    let sel = pyramid.select(&data, view, margin);
+                    let sel = pyramid.select(&data, view, margin, o.bias);
                     let (xs, ys) = pyramid.gather(&data, &sel);
                     let drawn = xs.len() as u64;
                     let mut lib = LibPlot::circles(xs, ys, o.radius);
                     let setup = ms(t.elapsed());
                     let mut m = measure_lib(&mut gpu, &o, &mut lib, view.dom, || {
-                        std::hint::black_box(pyramid.select(&data, view, margin));
+                        std::hint::black_box(pyramid.select(&data, view, margin, o.bias));
                     })?;
                     m.drawn = drawn;
                     m.setup_ms = setup;
