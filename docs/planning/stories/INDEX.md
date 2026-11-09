@@ -149,7 +149,7 @@ either; GUP-702 last, so its code can use the new names.
 - [GUP-703](GUP-703_Color_From_Linear.md) 📋 — `Color::from_linear`,
   `from_linear_rgba` and `to_linear`, sharing the one sRGB transfer with the
   colour scales. Edits `channel.rs`.
-- [GUP-704](GUP-704_Requirements_Up_Front.md) 📋 — A README Requirements section
+- [GUP-704](GUP-704_Requirements_Up_Front.md) 🚧 — A README Requirements section
   (Rust 1.93, wgpu 27, GPU, features, a pinned git or path dependency), tutorial
   1 corrected from "Rust 1.85", and a test that keeps the versions from
   drifting.
