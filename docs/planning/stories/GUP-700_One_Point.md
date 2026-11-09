@@ -24,7 +24,7 @@ touches:
 ## Story Overview
 
 **Initiative**: Strategic Review 2026-11 (first outside user, before 0.1)
-**Status**: 📋 Ready **Created**: 2026-11-09
+**Status**: 🚧 In Progress **Created**: 2026-11-09
 
 ## Context
 
