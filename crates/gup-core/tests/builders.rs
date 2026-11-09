@@ -9,7 +9,6 @@ mod common;
 
 use common::scatter::{HEIGHT, TITLE, WIDTH, countries, plot};
 use common::vr::{harness, layout_metadata};
-use gup_core::geom::Point;
 use gup_core::prelude::*;
 use gup_core::{Layout, OKABE_ITO_DISTINCT};
 use gup_visual_regression::RgbaImage;
@@ -529,7 +528,6 @@ fn option_positions_skip_none_rows() {
 
 mod bars {
     use super::{at, harness};
-    use gup_core::geom::Point;
     use gup_core::prelude::*;
     use gup_core::{ChartExt, Context, Layout, OKABE_ITO_DISTINCT, ScaleRef};
     use gup_visual_regression::RgbaImage;
@@ -1349,7 +1347,6 @@ mod barh {
 
 /// GUP-614: `.text(rows, |t| ..)` and an inherent `pick_row` on every builder.
 mod text_and_pick_row {
-    use gup_core::geom::Point;
     use gup_core::prelude::*;
     use gup_core::scene::TextRole;
     use gup_core::{ChartExt, Context};

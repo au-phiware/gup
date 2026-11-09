@@ -305,7 +305,6 @@ fn tutorial_6_squares() {
 /// five of them brushed, so `Unbrushed` dims the rest.
 #[test]
 fn tutorial_4_brush() {
-    use gup::geom::Point;
     use gup::{Button, Input};
 
     struct Bird {

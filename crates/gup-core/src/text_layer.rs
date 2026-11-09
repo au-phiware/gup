@@ -274,7 +274,7 @@ impl<T: Send + Sync + 'static> TextLayer<T> {
     }
 
     /// Place each label at the centre of the band (or point) of the key
-    /// `key` returns, on a [`Band`](crate::Band) or [`Point`](crate::Point)
+    /// `key` returns, on a [`Band`](crate::Band) or [`PointScale`](crate::PointScale)
     /// x axis. The key is matched by its `Display` label, as the axis shows
     /// it; a key no other layer put in the axis's domain draws nothing (a
     /// label never adds a key). On a numeric x axis this is an error at
@@ -288,7 +288,7 @@ impl<T: Send + Sync + 'static> TextLayer<T> {
     }
 
     /// Place each label at the centre of the band (or point) of the key
-    /// `key` returns, on a [`Band`](crate::Band) or [`Point`](crate::Point)
+    /// `key` returns, on a [`Band`](crate::Band) or [`PointScale`](crate::PointScale)
     /// y axis; see [`x_key`](Self::x_key).
     pub fn y_key<K: DictionaryKey>(
         &mut self,

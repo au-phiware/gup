@@ -8,8 +8,8 @@
 //! (colour).
 
 use super::{
-    Band, Categorical, Diverging, Linear, Log, NULL_COLOR, Point, PositionScale, Pow, Sequential,
-    Symlog, Time,
+    Band, Categorical, Diverging, Linear, Log, NULL_COLOR, PointScale, PositionScale, Pow,
+    Sequential, Symlog, Time,
 };
 use crate::channel::{Color, Px};
 use crate::column::{ColumnFormat, NULL_CODE};
@@ -462,7 +462,7 @@ fn categorical_gpu_matches_cpu_mirror() {
     assert_eq!(long.eval(99.0), palette[99]);
 }
 
-/// GUP-419 AC4: `Band` and `Point` within 0.25 px of their mirrors for
+/// GUP-419 AC4: `Band` and `PointScale` within 0.25 px of their mirrors for
 /// every code of dictionaries of 1 to 1000 keys, on forward and reversed
 /// (y axis) ranges, with several paddings. The null code has no position
 /// (the mirror gives NaN): the glue hides its row, which
@@ -485,7 +485,7 @@ fn band_and_point_gpu_match_cpu_mirror() {
                 worst = worst.max(max_position_error(&cx, &band, &codes, None));
             }
             for padding in [0.0, 0.5, 2.0] {
-                let mut point = Point::new().padding(padding).range(range.0, range.1);
+                let mut point = PointScale::new().padding(padding).range(range.0, range.1);
                 point.fit_keys(&keys).unwrap();
                 worst = worst.max(max_position_error(&cx, &point, &codes, None));
             }

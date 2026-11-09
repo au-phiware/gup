@@ -167,6 +167,11 @@ what each release contains and what its version number promises.
 
 ### Changed
 
+- The point scale `Point` is now `PointScale`, and `Point` at the root and in
+  the prelude is the geometry type (`geom::Point`) that `Input`, `Chart::pixel`
+  and the pick methods take, so `use gup::prelude::*;` is enough to write
+  `Input::pointer_moved(Point::new(x, y))`. Glob importers that used the scale
+  must rename it.
 - Hovering or focusing a bar, histogram bin, heatmap cell or box plot box
   outlines the whole mark (inside its rectangle, background edge outermost)
   instead of ringing its top-centre; marks under 6 px (hover) or 8 px (focus)

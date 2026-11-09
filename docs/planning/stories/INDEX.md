@@ -134,7 +134,7 @@ either; GUP-702 last, so its code can use the new names.
   host reads the view and whether the user moved it; tests pin the refit while
   home and the hold while moved, and a golden of a settled live line. Edits
   `plot.rs`, `chart.rs`. Deps: GUP-685 ✅, GUP-692 ✅.
-- [GUP-700](GUP-700_One_Point.md) 🚧 — The point scale becomes `PointScale` and
+- [GUP-700](GUP-700_One_Point.md) ✅ — The point scale becomes `PointScale` and
   `Point` in the prelude and at the root is the geometry type that `Input`
   takes; tour, tutorials and docs swept. Edits `lib.rs`. Deps: GUP-686 ✅.
 - [GUP-701](GUP-701_Row_Window_Type_Name.md) 📋 — `Window` (the streaming row

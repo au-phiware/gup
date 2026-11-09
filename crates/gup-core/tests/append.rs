@@ -5,7 +5,6 @@
 //! `Chart::set_waker`, and what the landed systems do after appends:
 //! chunking, draw order, culling, brush bits, picks and SVG.
 
-use gup_core::geom::Point;
 use gup_core::prelude::*;
 use gup_core::{Appender, ChartExt, Closed, Input, SvgTarget, VectorTarget};
 use std::sync::Arc;

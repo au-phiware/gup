@@ -4,7 +4,6 @@
 //! GUP-685: `Chart::pixel` and `Chart::value` map data to pixels and back
 //! through the scales themselves.
 
-use gup_core::geom::Point;
 use gup_core::prelude::*;
 
 const SIZE: (f32, f32) = (480.0, 320.0);

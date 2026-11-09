@@ -8,7 +8,6 @@
 mod common;
 
 use common::vr::{harness, layout_metadata};
-use gup_core::geom::Point;
 use gup_core::prelude::*;
 use gup_core::{Appender, ChartExt, Input, line};
 use gup_visual_regression::RgbaImage;

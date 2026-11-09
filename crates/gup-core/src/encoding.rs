@@ -348,7 +348,7 @@ pub trait EncodeFn: Clone + Send + Sync + 'static {
     ///
     /// let cx = Context::new_blocking()?;
     /// let mut plot = Plot::new();
-    /// let (x, y) = (plot.x(Point::new()), plot.y(Linear::new()));
+    /// let (x, y) = (plot.x(PointScale::new()), plot.y(Linear::new()));
     /// let colour = ScaleRef::new(Categorical::okabe_ito());
     /// plot.add(Selection::<Sample, Circle>::new(rows))
     ///     .attr(Circle::X, x.encode_owned_key(|s: &Sample| s.year))
@@ -690,7 +690,7 @@ pub enum Resource {
 #[diagnostic::on_unimplemented(
     message = "`{Self}` is not a column value; `encode` takes accessors returning numbers",
     label = "`encode`'s accessor returns `{Self}`",
-    note = "for string keys (categories), use `encode_key(|row| row.field.as_str())`, whose accessor may return a borrow of the row; for integer or enum keys, `encode_owned_key(|row| row.field)`; both on a dictionary function such as `Categorical`, `Band` or `Point`"
+    note = "for string keys (categories), use `encode_key(|row| row.field.as_str())`, whose accessor may return a borrow of the row; for integer or enum keys, `encode_owned_key(|row| row.field)`; both on a dictionary function such as `Categorical`, `Band` or `PointScale`"
 )]
 pub trait ColumnValue: Copy + 'static {
     /// The GPU type the column holds.

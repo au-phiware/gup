@@ -4,7 +4,6 @@
 //! GUP-628: a columnar layer (`Plot::add_columns`) draws, fits, picks and
 //! announces exactly what the same rows through closures do.
 
-use gup_core::geom::Point;
 use gup_core::prelude::*;
 use gup_core::{Column, Retain, RowId, SvgTarget, VectorTarget};
 
@@ -377,7 +376,7 @@ fn a_released_columnar_layer_reads_its_shared_columns() {
 /// GUP-629: key columns.
 mod keys {
     use super::*;
-    use gup_core::{KeyColumn, Point as PointScale};
+    use gup_core::{KeyColumn, PointScale};
     use std::sync::Arc;
 
     type Row = (Option<&'static str>, Option<&'static str>, f64);
@@ -587,7 +586,7 @@ mod keys {
             .y_column(&cols["n"]);
         has(
             &resolve(&mut plot),
-            &["`Circle::X`", "Band or Point", "an f64 column"],
+            &["`Circle::X`", "Band or PointScale", "an f64 column"],
         );
 
         // Categorical over a numeric column; Sequential over a key column.

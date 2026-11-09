@@ -1604,7 +1604,7 @@ fn axis_scale_for<'s>(
         return Err(Error::config(
             what,
             format!(
-                "the {axis} scale reads dictionary keys (Band or Point); encode keys                          with `{axis}.encode_key(|r: &T| r.key.as_str())` (`{channel}`)"
+                "the {axis} scale reads dictionary keys (Band or PointScale); encode keys                          with `{axis}.encode_key(|r: &T| r.key.as_str())` (`{channel}`)"
             ),
         ));
     }
@@ -1613,7 +1613,7 @@ fn axis_scale_for<'s>(
 
 /// What a column bound to a position channel is encoded with: the plot's
 /// scale for that axis, over numbers (a numeric column on a numeric axis)
-/// or over keys (a key column on a Band or Point axis). The other pairing
+/// or over keys (a key column on a Band or PointScale axis). The other pairing
 /// is an error naming the channel and both kinds.
 fn axis_column_encoding<T: 'static>(
     mark: &'static str,
@@ -1629,7 +1629,7 @@ fn axis_column_encoding<T: 'static>(
     let keys = matches!(column, Column::Keys(_));
     if keys != scale.reads_keys() {
         let (scale_kind, column_kind) = if scale.reads_keys() {
-            ("Band or Point (it reads keys)", column.kind())
+            ("Band or PointScale (it reads keys)", column.kind())
         } else {
             ("numeric (it reads numbers)", column.kind())
         };

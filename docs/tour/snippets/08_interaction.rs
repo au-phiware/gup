@@ -4,7 +4,6 @@
 //! Chapter 8 of the tour: a tooltip and a brush, driven by `Input` values
 //! so that the chart can be drawn without a window.
 
-use gup::geom::Point;
 use gup::prelude::*;
 use gup::{Button, Input};
 

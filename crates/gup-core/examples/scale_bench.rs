@@ -37,7 +37,6 @@
 //! Peak RSS is `VmHWM` after each phase (Linux only).
 
 use gup_core::column::{ColumnData, ColumnFormat, ColumnStore};
-use gup_core::geom::Point;
 use gup_core::prelude::*;
 use gup_core::{Column, ImageTarget, KeyColumn, Retain};
 use std::sync::Arc;

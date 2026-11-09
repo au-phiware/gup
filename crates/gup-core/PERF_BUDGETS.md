@@ -179,7 +179,7 @@ key domain), the legend types and the generic key dictionaries, reached by the
 existing dictionary scene. Two new scenes, a `Band` axis with an 11-key
 `Categorical`, its swatch legend and a hidden null key, and a `Diverging` scale
 with its ramp, each with CPU-mirror checks, cost 14,642 B (+5.2%), which
-includes `Band`, `Point` and `Diverging` themselves.
+includes `Band`, `PointScale` and `Diverging` themselves.
 
 GUP-420 (S5c) re-recorded it at 300,913 B (from 294,333). Its library changes,
 measured without the new scene, cost 1,714 B (+0.6%): the import-path clash

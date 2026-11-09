@@ -4,7 +4,6 @@
 //! The resolve cache and wheel input (GUP-444): an unchanged plot resolves
 //! for free, and every change the plot can see is a miss.
 
-use gup_core::geom::Point;
 use gup_core::prelude::*;
 use gup_core::{Button, Input, Resolved, Response};
 

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 //! Ordinal position scales over dictionary codes (RFC-001 S5b): [`Band`]
-//! gives each key a band of the range, [`Point`] a point. Both are one
+//! gives each key a band of the range, [`PointScale`] a point. Both are one
 //! WGSL function, `offset + step · code`, and take their domain, the
 //! channel's keys in first-seen order, from [`ShaderFn::fit_keys`].
 
@@ -296,7 +296,7 @@ impl ScaleRef<Band> {
 /// ```
 /// use gup_core::prelude::*;
 ///
-/// let mut point = Point::new().range(Px(0.0), Px(300.0));
+/// let mut point = PointScale::new().range(Px(0.0), Px(300.0));
 /// point.fit_keys(&["low".into(), "mid".into(), "high".into()])?;
 /// // Steps of 300 / (2 + 2 · 0.5) = 100 px, starting half a step in.
 /// assert_eq!(point.step(), 100.0);
@@ -304,15 +304,15 @@ impl ScaleRef<Band> {
 /// # Ok::<(), gup_core::Error>(())
 /// ```
 #[derive(Clone, Debug, PartialEq)]
-pub struct Point(Slots);
+pub struct PointScale(Slots);
 
-impl Default for Point {
+impl Default for PointScale {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl Point {
+impl PointScale {
     /// A point scale with 0.5 steps of padding at each end.
     pub fn new() -> Self {
         Self(Slots::new(1.0, 0.5))
@@ -324,7 +324,7 @@ impl Point {
     ///
     /// If `p` is negative or not finite.
     pub fn padding(mut self, p: f64) -> Self {
-        check_padding("Point::padding", p, f64::MAX);
+        check_padding("PointScale::padding", p, f64::MAX);
         self.0.outer = p;
         self
     }
@@ -448,7 +448,7 @@ macro_rules! ordinal_scale {
 }
 
 ordinal_scale!(Band);
-ordinal_scale!(Point);
+ordinal_scale!(PointScale);
 
 fn check_slot(what: &str, index: u32, count: u32) {
     assert!(count > 0, "{what}: count must be at least 1");
@@ -496,13 +496,13 @@ mod tests {
 
     #[test]
     fn points_have_no_width_and_one_key_sits_in_the_middle() {
-        let mut p = Point::new().range(Px(0.0), Px(200.0));
+        let mut p = PointScale::new().range(Px(0.0), Px(200.0));
         p.fit_keys(&keys(1)).unwrap();
         assert_eq!(p.eval(0.0), 100.0);
         p.fit_keys(&keys(5)).unwrap();
         assert_eq!(p.step(), 40.0);
         assert_eq!(p.eval(4.0), 180.0);
-        let edge = Point::new().padding(0.0).range(Px(0.0), Px(200.0));
+        let edge = PointScale::new().padding(0.0).range(Px(0.0), Px(200.0));
         let mut edge = edge;
         edge.fit_keys(&keys(5)).unwrap();
         assert_eq!((edge.eval(0.0), edge.eval(4.0)), (0.0, 200.0));

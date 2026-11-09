@@ -6,7 +6,6 @@
 //! windowed run is compared with a plot built directly from the rows the
 //! layer still holds.
 
-use gup_core::geom::Point;
 use gup_core::prelude::*;
 use gup_core::{Appender, ChartExt, Input, RowId};
 use std::sync::{Arc, Mutex};
