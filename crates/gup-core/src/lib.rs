@@ -381,15 +381,35 @@ pub use gup_core_macros::Mark;
 /// # Ok(())
 /// # }
 /// ```
+///
+/// So are the palette and the input vocabulary: [`OKABE_ITO_DISTINCT`] (the
+/// default categorical colours), [`Input`], [`Key`], [`Button`], [`Modifiers`],
+/// [`Response`] and [`RowId`].
+///
+/// ```
+/// use gup_core::prelude::*;
+/// # fn main() -> gup_core::Result<()> {
+/// let mut chart = gup_core::scatter(vec![(1.0, 2.0), (3.0, 4.0)])
+///     .x(|p| p.0)
+///     .y(|p| p.1)
+///     .fill(OKABE_ITO_DISTINCT[1]);
+/// let cx = Context::new_blocking()?;
+/// chart.resolve(&cx, 320.0, 200.0)?;
+/// let _: Response = chart.handle(Input::pointer_moved((160.0, 100.0)));
+/// let _ = chart.handle(Input::key_with(Key::Left, Modifiers::SHIFT));
+/// let _ = (Button::Primary, RowId { layer: 0, row: 0 });
+/// # Ok(())
+/// # }
+/// ```
 pub mod prelude {
     pub use crate::scene::Anchor;
     pub use crate::{
-        Area, AreaAttrs, Axes, Band, Bins, Categorical, Chart, ChartExt, Circle, CircleAttrs,
-        Color, ColorScale, Columns, Context, CpuMirror, Curve, DataTable, Derived, Description,
-        Diverging, Drag, EncodeFn, Event, Line, LineAttrs, Linear, Log, Mark, Offset, Plot, Point,
-        PositionScale, Pow, Px, Rect, RectAttrs, Retain, ScaleRef, Segment, SegmentAttrs,
-        Selection, Sequential, ShaderFn, Symlog, Theme, Time, Unbrushed, Unit, Window,
-        wgsl_function,
+        Area, AreaAttrs, Axes, Band, Bins, Button, Categorical, Chart, ChartExt, Circle,
+        CircleAttrs, Color, ColorScale, Columns, Context, CpuMirror, Curve, DataTable, Derived,
+        Description, Diverging, Drag, EncodeFn, Event, Input, Key, Line, LineAttrs, Linear, Log,
+        Mark, Modifiers, OKABE_ITO_DISTINCT, Offset, Plot, Point, PositionScale, Pow, Px, Rect,
+        RectAttrs, Response, Retain, RowId, ScaleRef, Segment, SegmentAttrs, Selection, Sequential,
+        ShaderFn, Symlog, Theme, Time, Unbrushed, Unit, Window, wgsl_function,
     };
     pub use crate::{
         AreaChart, BarChart, BoxPlotChart, HeatmapChart, HistogramChart, LineChart, ScatterChart,
