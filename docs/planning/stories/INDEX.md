@@ -559,7 +559,7 @@ GUP-628 and GUP-631 (shared `selection.rs`).
   floats, integers, dates, timestamps, strings, dictionaries and booleans, nulls
   kept, in the feature matrix and docs.rs. Deps: GUP-628 ✅, GUP-629 📋, GUP-602
   ✅.
-- [GUP-631](GUP-631_Level_Of_Detail_Spike.md) 📋 — Spike: per-frame density, a
+- [GUP-631](GUP-631_Level_Of_Detail_Spike.md) 🚧 — Spike: per-frame density, a
   decimation pyramid ported from `gup-culling-lod`, and binned tiles, measured
   at 100M rows for GPU time, build time, memory and fidelity, chosen by a stated
   rule, with RFC-001 findings and the follow-up stories. Opus. Deps: GUP-627 📋,
