@@ -28,6 +28,11 @@ what each release contains and what its version number promises.
 
 ### Added
 
+- `Columns::from_arrow` and `TryFrom<&RecordBatch> for Columns` (feature
+  `arrow`, off by default; `arrow-array` and `arrow-schema` 60): floats,
+  integers, dates and timestamps become numeric columns (nulls are NaN),
+  strings, dictionaries and booleans become key columns, and anything else is an
+  error naming the column and its Arrow type.
 - `prelude` now holds `OKABE_ITO_DISTINCT`, `Input`, `Key`, `Button`,
   `Modifiers`, `Response` and `RowId`, so the default palette and the input
   vocabulary need no path imports. A glob import of the prelude that also

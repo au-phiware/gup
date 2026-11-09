@@ -18,6 +18,7 @@
 //! | `window` | yes | a winit window target, `show`, `GupApp` |
 //! | `svg` | yes | data marks in `SvgTarget` (without it, guides and text only) |
 //! | `web` | no | `web::CanvasApp` and `CanvasTarget` (wasm32 only) |
+//! | `arrow` | no | `Columns::from_arrow`: Arrow record batches as columnar input |
 //!
 //! In the browser, turn the window off and the canvas on:
 //!

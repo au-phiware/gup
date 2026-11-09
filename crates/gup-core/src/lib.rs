@@ -93,6 +93,7 @@
 //! | `window` | yes | [`WindowTarget`], `show`, `GupApp` |
 //! | `svg` | yes | data marks in [`SvgTarget`] (without it, guides and text only) |
 //! | `web` | no | `web::CanvasApp` (wasm32 only) |
+//! | `arrow` | no | `Columns::from_arrow`: Arrow record batches as columnar input |
 //!
 //! ## Contracts
 //!
@@ -141,6 +142,8 @@ pub mod channel;
 mod chart;
 pub mod column;
 mod columns;
+#[cfg(feature = "arrow")]
+mod columns_arrow;
 mod context;
 mod cull;
 mod describe;
