@@ -365,7 +365,8 @@ impl View {
             * f64::from(self.rect.height)
             * (y1 - y0)
             / (e1 - e0);
-        (0.5 * a0.log2()).floor().clamp(0.0, f64::from(TMAX)) as u32
+        // Past `TMAX` no chunk has a tier: every row is drawn.
+        (0.5 * a0.log2()).floor().clamp(0.0, 31.0) as u32
     }
 
     /// Whether a chunk's box, grown by `margin` px, meets the plot rect.
@@ -460,7 +461,8 @@ impl PyramidChunk {
         let mut order: Vec<(u32, u32)> = first.into_iter().filter(|&(t, _)| t < stored).collect();
         order.sort_unstable();
         Self {
-            order: order.into_iter().map(|(_, i)| i).collect(),
+            // A fresh allocation: an in-place collect would keep 8 B a row.
+            order: order.iter().map(|&(_, i)| i).collect(),
             counts,
         }
     }
@@ -494,7 +496,7 @@ impl Pyramid {
         margin: f64,
         bias: u32,
     ) -> Vec<(usize, Option<u32>)> {
-        let t = (view.tier(data) + bias).min(TMAX) as usize;
+        let t = (view.tier(data) + bias) as usize;
         data.chunks
             .iter()
             .enumerate()
