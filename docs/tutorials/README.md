@@ -8,7 +8,7 @@ a time.
 
 Before you begin, make sure you have:
 
-- **Rust 1.85+ (edition 2024)** — install via [rustup](https://rustup.rs/)
+- **Rust 1.93+ (edition 2024)** — install via [rustup](https://rustup.rs/)
 - A **wgpu-compatible GPU** — most modern integrated and discrete GPUs work.
   Check the [wgpu wiki](https://github.com/gfx-rs/wgpu/wiki/Running-Locally) for
   details.

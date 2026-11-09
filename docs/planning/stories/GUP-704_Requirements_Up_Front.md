@@ -19,7 +19,7 @@ touches:
 ## Story Overview
 
 **Initiative**: Strategic Review 2026-11 (first outside user, before 0.1)
-**Status**: 🚧 In Progress **Created**: 2026-11-09
+**Status**: ✅ Complete **Created**: 2026-11-09
 
 ## Context
 
@@ -79,7 +79,7 @@ Checked against `main` (2026-11-09):
 
 ### AC1: A Requirements section in the README
 
-- [ ] `README.md` gains a `## Requirements` section immediately before
+- [x] `README.md` gains a `## Requirements` section immediately before
       `## Quick Start`, with these statements and no others:
   - Rust 1.93 or newer (read from `Cargo.toml`'s `rust-version`).
   - A GPU or a software driver wgpu supports: Vulkan on Linux (CI uses Mesa's
@@ -93,31 +93,31 @@ Checked against `main` (2026-11-09):
   - The features, as a table taken from `Cargo.toml`: `window` (default), `svg`
     (default), `web`, `arrow`; and that `gup-egui` and `gup-bevy` are separate
     crates.
-- [ ] The section shows how to depend on gup before crates.io, as two fenced
+- [x] The section shows how to depend on gup before crates.io, as two fenced
       `toml` blocks: a git dependency pinned with `rev` (with a placeholder
       commit and a sentence to use the commit you tested against; a branch alone
       follows `main` and can change under you) and a path dependency to a
       checkout (`gup = { path = "../gup" }`). The existing Quick Start sentence
       "Add it from git to `Cargo.toml`" now points at this section instead of
       repeating the block.
-- [ ] Every fact above is checked against the file named in "Read First" and no
+- [x] Every fact above is checked against the file named in "Read First" and no
       other fact is added (no unmeasured claims about GPUs or drivers).
 
 ### AC2: Tutorial 1 agrees
 
-- [ ] `docs/tutorials/01_getting_started.md` Step 1 says Rust 1.93 (drop "the
+- [x] `docs/tutorials/01_getting_started.md` Step 1 says Rust 1.93 (drop "the
       first release with edition 2024": true but irrelevant), shows the pinned
       `rev` form once (the placeholder from AC1), and links to the README's
       Requirements section for the rest. Its code blocks are doctests: they
       still compile and the page's tests pass.
-- [ ] `docs/tutorials/README.md` Prerequisites says Rust 1.93.
-- [ ] The git blocks in `docs/EGUI_INTEGRATION.md` and
+- [x] `docs/tutorials/README.md` Prerequisites says Rust 1.93.
+- [x] The git blocks in `docs/EGUI_INTEGRATION.md` and
       `docs/BEVY_INTEGRATION.md` gain the same `rev` (one sentence: all gup
       crates must use the same commit).
 
 ### AC3: The numbers cannot drift
 
-- [ ] A new test `tests/requirements.rs` in the root crate reads the workspace
+- [x] A new test `tests/requirements.rs` in the root crate reads the workspace
       `rust-version` from `Cargo.toml` with `toml_edit` (already a
       dev-dependency; parse with `toml_edit::DocumentMut`, read
       `workspace.package.rust-version`), and asserts that `README.md`,
@@ -127,19 +127,19 @@ Checked against `main` (2026-11-09):
       `Cargo.lock` (the `[[package]]` named `wgpu`; take its major number) and
       asserts `README.md` contains `wgpu 27` built from that major. Failure
       messages name the file and the expected string.
-- [ ] The test runs without a GPU and is in `cargo test` (no feature gate).
+- [x] The test runs without a GPU and is in `cargo test` (no feature gate).
 
 ### AC4: Release checklist and changelog
 
-- [ ] `docs/RELEASING.md` step 8 names every place that holds a pre-release
+- [x] `docs/RELEASING.md` step 8 names every place that holds a pre-release
       dependency block: the README's Requirements and Quick Start, tutorial 1,
       `docs/EGUI_INTEGRATION.md`, `docs/BEVY_INTEGRATION.md` and
       `docs/EMBEDDING.md` if it exists (GUP-702), and says to replace the `git`
       and `rev` lines with the crates.io version.
-- [ ] `CHANGELOG.md` `[0.1.0]` Changed: the tutorials' stated Rust version is
+- [x] `CHANGELOG.md` `[0.1.0]` Changed: the tutorials' stated Rust version is
       1.93, and the README has a Requirements section. (If a "Known limitations"
       or "Added" entry already says the same, do not duplicate.)
-- [ ] `grep -rn "1\.85" README.md docs crates/*/README.md` returns nothing
+- [x] `grep -rn "1\.85" README.md docs crates/*/README.md` returns nothing
       outside `docs/planning/`, `docs/archive/` and the CHANGELOG (the command
       is run and its output quoted in the summary).
 
@@ -178,10 +178,10 @@ Checked against `main` (2026-11-09):
 
 ## Technical Tasks
 
-- [ ] README Requirements section; Quick Start pointer.
-- [ ] Tutorial 1 Step 1 and tutorials README; egui and Bevy guide `rev` lines.
-- [ ] `tests/requirements.rs`.
-- [ ] RELEASING step 8; CHANGELOG; the `1.85` grep.
+- [x] README Requirements section; Quick Start pointer.
+- [x] Tutorial 1 Step 1 and tutorials README; egui and Bevy guide `rev` lines.
+- [x] `tests/requirements.rs`.
+- [x] RELEASING step 8; CHANGELOG; the `1.85` grep.
 
 ## Dependencies
 
@@ -202,8 +202,8 @@ Checked against `main` (2026-11-09):
 
 ## Success Metrics
 
-- [ ] No page in the repository states a Rust version other than `rust-version`.
-- [ ] The README names Rust, wgpu, the GPU, the features and a pinned way to
+- [x] No page in the repository states a Rust version other than `rust-version`.
+- [x] The README names Rust, wgpu, the GPU, the features and a pinned way to
       depend on gup before the Quick Start.
 
 ## Risk Assessment
@@ -213,14 +213,119 @@ Checked against `main` (2026-11-09):
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye: not needed, no rendering change
-- [ ] `mask wasm-browser`: not needed, docs and a test only
-- [ ] WASM size: unchanged: no library code change
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye: not needed, no rendering change
+- [x] `mask wasm-browser`: not needed, docs and a test only
+- [x] WASM size: unchanged: no library code change
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `README.md`: a `## Requirements` section before Quick Start (Rust 1.93, the
+  GPU drivers, wgpu 27 with `gup::wgpu` and `experimental_features`, the feature
+  table, the separate egui and Bevy crates, and two `toml` blocks: a `rev` pin
+  with a placeholder and a path dependency). The Quick Start block now points at
+  it.
+- `docs/tutorials/01_getting_started.md`: Step 1 says Rust 1.93 and links the
+  README; the dependency shows the `rev` placeholder once.
+- `docs/tutorials/README.md`: Prerequisites says Rust 1.93+.
+- `docs/EGUI_INTEGRATION.md`, `docs/BEVY_INTEGRATION.md`: `rev` on every gup
+  line, and one sentence that all gup crates use one commit.
+- `docs/RELEASING.md` step 8: names every pre-release dependency block.
+- `CHANGELOG.md` `[0.1.0]` Changed: the tutorials' Rust version and the README
+  Requirements section.
+- `tests/requirements.rs` (new): two tests, no GPU, no feature gate. They read
+  `workspace.package.rust-version` (1.93) and the single `wgpu` in `Cargo.lock`
+  (27.0.1), and check the README, both tutorial pages and CHANGELOG for the
+  version, that none of the first three says `1.85`, and that README says
+  `wgpu 27`.
+
+Tests: `tests/requirements.rs` 2 passed. `cargo test -p gup -- --test-threads=1`
+passed in every test binary (doctests: 72 and 4 passed, the ignored ones were
+already ignored). `cargo check --examples` passed. `mask all-check` exit 0.
+
+Evidence for the `1.85` grep (AC4), run from the worktree root:
+
+```text
+$ grep -rn "1\.85" README.md docs crates/*/README.md | grep -v "docs/planning/\|docs/archive/"
+(no output, exit 1)
+```
+
+Facts checked against the code and files, not against memory:
+
+- `Cargo.toml` `rust-version = "1.93"` (line 20); `rust-toolchain.toml`
+  `channel = "1.93.1"`.
+- `Cargo.lock`: one `wgpu` package, version 27.0.1.
+- `crates/gup-core/src/lib.rs` line 134: "must use the same major version"; line
+  135 `pub use wgpu;`.
+- `crates/gup-core/src/context.rs` line 300 sets
+  `experimental_features: wgpu::ExperimentalFeatures::disabled()`.
+  `wgpu-types-27.0.1` (registry source) has `experimental_features` on
+  `DeviceDescriptor`, which derives `Default`.
+- Features in `Cargo.toml`: `default = ["window", "svg"]`, `web` (wasm32 only,
+  per its comment), `arrow`.
+- `.github/workflows/README.md` lines 76-88: runners use Mesa's lavapipe.
+- Platforms workflow on `main`: latest completed run `success` (checked with
+  `gh run list`), which covers the DX12 and Metal jobs.
+
+## Retrospective
+
+**Completed**: 2026-11-09
+
+### Key Technical Learnings
+
+#### Doc facts that drift
+
+- **Challenge**: the tutorials said Rust 1.85 while the manifest said 1.93, and
+  nothing failed because the doc text is not compiled.
+- **Solution**: `tests/requirements.rs` reads the version from `Cargo.toml` and
+  the wgpu major from `Cargo.lock`, and checks the strings in the docs.
+- **Pattern**: a string check against the manifest is cheap and needs no GPU. It
+  catches a stale version, not wrong prose.
+
+#### Tutorial pages are doctests
+
+- **Challenge**: `src/lib.rs` includes the README and every tutorial as
+  doctests, so an edit to prose or a code block is compiled.
+- **Solution**: only prose and `toml` blocks changed in tutorial 1, and the
+  doctest run (72 and 4 passed) confirmed it.
+
+### Architectural Decisions
+
+#### `rev` pin as the recommended git form
+
+- **Decision**: the docs show `rev = "<full commit hash>"` and a path
+  dependency, and say a branch alone is not enough.
+- **Reasoning**: a bare git dependency follows `main`, so a rebuild can change
+  the library under an app. The first outside user pinned a commit by hand.
+- **Trade-off**: the placeholder must be replaced by the reader. A real hash
+  would be stale on arrival.
+- **Future**: RELEASING step 8 names each block to switch to crates.io.
+
+### Development Workflow Insights
+
+- `mask all-fix` runs prettier across every markdown file. It changed nothing
+  outside this story's files, but check `git status` after it.
+- Worktree-isolated shells refuse some plain commands (variables in `sed`, `git`
+  in a `python` heredoc). Plain commands with literal paths work.
+
+### Observed, not changed (outside this story's ACs)
+
+- `README.md` "Not yet" says "No CSV, serde or Arrow input", and `CHANGELOG.md`
+  `[0.1.0]` Known limitations says the same, but `Cargo.toml` has an `arrow`
+  feature (`Columns::from_arrow`). The Requirements table, which this story
+  added, lists `arrow`, so the README now contradicts itself. The fix is one
+  line in each place. It is not in this story's ACs, so it is reported rather
+  than edited.
+
+### Follow-up Stories
+
+1. **Arrow wording in "Not yet" and Known limitations**: a one-line correction
+   in `README.md` and `CHANGELOG.md`, to say Arrow record batches are optional
+   (feature `arrow`), not absent. Small enough to fold into the next docs pass.

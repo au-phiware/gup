@@ -171,6 +171,10 @@ what each release contains and what its version number promises.
   dim on dark): the first four series are four different hues, and series 1 is
   the marks' default blue. `OKABE_ITO` and `OKABE_ITO_DARK` keep the published
   order. A single-series builder chart is now blue rather than orange.
+- The minimum Rust version in the tutorials is 1.93 (the workspace
+  `rust-version`), not 1.85, and the README has a Requirements section: Rust,
+  the GPU drivers, wgpu 27, the features, and how to depend on Gup from git
+  before crates.io.
 
 ### Known limitations
 

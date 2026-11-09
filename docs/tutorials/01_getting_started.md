@@ -19,9 +19,9 @@
 ## Step 1: Set Up Your Project
 
 Gup renders on the GPU through [wgpu](https://wgpu.rs/), so you need a computer
-with a GPU wgpu supports (nearly every integrated and discrete GPU, and software
-Vulkan drivers) and Rust 1.85 or newer, which is the first release with
-edition 2024.
+with a GPU or software driver that wgpu supports, and Rust 1.93 or newer. The
+[Requirements section of the README](../../README.md#requirements) lists the
+rest.
 
 ```bash
 cargo new my-first-chart
@@ -32,12 +32,13 @@ Add Gup to the `[dependencies]` of your `Cargo.toml`:
 
 ```toml
 [dependencies]
-gup = { git = "https://github.com/au-phiware/gup" }
+gup = { git = "https://github.com/au-phiware/gup", rev = "<full commit hash>" }
 ```
 
-Release 0.1 is not on crates.io yet, which is why the dependency names the
-repository. There is nothing else to add: no async runtime, no GPU crate. Gup
-creates its own GPU context.
+Release 0.1 is not on crates.io yet, which is why the dependency names a commit.
+Replace the placeholder with the commit you tested against, and see the README's
+[Requirements](../../README.md#requirements) for the path form. There is nothing
+else to add: no async runtime, no GPU crate. Gup creates its own GPU context.
 
 ## Step 2: Draw Your First Scatter Chart
 
