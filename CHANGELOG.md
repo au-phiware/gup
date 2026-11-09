@@ -178,7 +178,8 @@ what each release contains and what its version number promises.
 
 ### Known limitations
 
-- No CSV, serde or Arrow input: rows enter through closures.
+- No CSV or serde input: rows enter through closures, `Columns` or Arrow record
+  batches (feature `arrow`).
 - Nothing above 10M rows is measured, and there is no level of detail.
 - No PDF export.
 - Accessibility: no screen reader has been tested by hand, nothing outside the

@@ -53,7 +53,8 @@ The timings apply to that machine; measure on yours before comparing.
 Each item names its track in
 [`IMPLEMENTATION_STRATEGY.md`](./docs/IMPLEMENTATION_STRATEGY.md):
 
-- No CSV, serde or Arrow input: rows enter through closures (N5).
+- No CSV or serde input: rows enter through closures, `Columns` or Arrow record
+  batches (feature `arrow`).
 - Nothing above 10M rows is measured, and there is no level of detail (N5).
 - No PDF export (N6).
 - No pie, violin, density or choropleth charts, and no facets.
