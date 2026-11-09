@@ -839,17 +839,22 @@ fn row_at(plot: &Plot, i: usize) -> Pt {
     Pt::new(px(&l.x_ticks, r[i].x), px(&l.y_ticks, r[i].y))
 }
 
-/// Resolve until nothing is in flight, at most 10 times.
+/// Resolve until nothing is in flight, or panic after ten seconds.
+///
+/// The wait is on the pick, not on a number of frames: a loaded GPU (CI
+/// runners are shared) answers late, never wrongly.
 fn settle(plot: &mut Plot, cx: &Context) {
-    for _ in 0..10 {
-        if !Chart::needs_frame(plot) {
-            return;
-        }
-        // A frame's time: the GPU finishes what was submitted.
-        std::thread::sleep(std::time::Duration::from_millis(10));
+    let start = std::time::Instant::now();
+    let limit = std::time::Duration::from_secs(10);
+    while Chart::needs_frame(plot) {
+        assert!(
+            start.elapsed() < limit,
+            "a GPU pick was still in flight {:?} after it was submitted",
+            start.elapsed()
+        );
+        std::thread::sleep(std::time::Duration::from_millis(2));
         plot.resolve(cx, W, H).unwrap();
     }
-    panic!("a pick was still in flight after 10 resolves");
 }
 
 fn events(seen: &RowLog) -> Vec<(Event, usize)> {
