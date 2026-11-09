@@ -4315,3 +4315,234 @@ f32 when the chunk span allows) was not needed.
   `Arc<[f64]>`; at 100M rows a columnar layer above `Retain::AUTO_MAX_ROWS`
   releases its rows and CPU columns, so picking needs GUP-664. The library's
   peak above the data is 8.3 B/row today (about 0.8 GiB at 100M).
+
+## GUP-631 findings (2026-11-09)
+
+[GUP-631](../stories/GUP-631_Level_Of_Detail_Spike.md) measured three
+level-of-detail designs for a scatter of tens of millions of rows against
+today's path and chose one by the story's rule. Nothing ships: the prototypes
+live in `crates/gup-core/examples/lod_spike.rs`, and **no library seam was
+needed** (B and C draw through `Plot::add_columns`; A records its own compute
+pass before `Prepared::draw` and draws after it in the same render pass). The
+library and the WASM scatter are unchanged.
+
+### The prototypes
+
+All four draw the same data: `scale_bench`'s walk (x sorted over 0..1000, y a
+random walk of uniform ±0.5 steps, f64 `Columns`), 1.5 px circles, 1920 × 1080,
+domains set explicitly (the extent padded 2%, "full", or a tenth of it on each
+axis about the middle row, "zoom"). Chunks are the library's (`chunk_rows_for`,
+1,048,576 rows). Every frame moves both domains by 1e-7 of their span, so it
+resolves and prepares like an interactive frame.
+
+- **Base**: today's path, every row of every visible chunk a circle (GUP-457
+  culling).
+- **(A) Density per frame**: per visible chunk, a compute dispatch maps each row
+  (`F32Relative`, the library's `r0 + (v + base) * k`) to a pixel and
+  `atomicAdd`s a `u32` count; a reduction finds the maximum; a full-screen
+  triangle, scissored to the plot rect, colours `log(1 + c) / log(1 + max)`
+  through `Sequential::viridis` after the plot's guides, in the same render
+  pass. The prototype uploads its own copy of the columns (8 B/row); the design
+  would bind the chunk buffers as storage.
+- **(B) Decimation pyramid**: a global grid over the layer's extent with
+  `2^t × 2^t` cells at tier `t` (t ≤ 16). Per chunk, every row gets a Morton key
+  at tier 16 (`key << 20 | local index`, one `sort_unstable` per chunk). A row
+  is its cell's representative (lowest index) at every tier from the first at
+  which its key prefix differs from its predecessor's, `16 - floor(h / 2)` for
+  the highest differing bit `h`, so tiers nest. The chunk's representatives are
+  stored in **progressive order** (by that first tier, then index): tier `t` is
+  the prefix `order[..counts[t]]`, one instanced draw per chunk. Tiers are
+  stored while the prefix holds at most half the chunk's rows; past the finest
+  stored tier the chunk draws every row. Each frame picks
+  `t = floor(log4(area of the extent in pixels))`, the finest tier whose cells
+  are at least one pixel in area (at most one point per pixel, per chunk). The
+  prototype gathers the selected prefixes into a columnar layer once per view
+  and draws it with the library's circle pipeline; the per-frame selection runs
+  inside the timed CPU frame. `lod_aggregate.compute.wgsl`'s dense `atomicMin`
+  grid was not ported: at tier 13 one grid is 8192² × 4 B = 256 MiB, and one
+  sort yields every tier.
+- **(C) Binned tiles**: the same keys and sort; per chunk, `(cell, count)` runs
+  at tiers 8, 10, 12 and 14 (while at most half the rows). Each frame merges the
+  visible chunks' cells of the finest stored tier at or below B's tier (sort and
+  sum), draws them as `Rect`s filled by `Sequential::viridis` over
+  `log10(count)`, and draws every row of a chunk past tier 14.
+
+### The table
+
+Release, Intel HD 630 (Mesa 26.0.0, Vulkan), headless 1920 × 1080, timestamp
+queries around the frame's passes (A: from its compute pass to the end of the
+render pass). Medians of 3 runs, each run one process with all four candidates
+(30 frames after 3 warm-up frames, or 5+ frames once 10-15 s of GPU time were
+spent); p95 is the median of the runs' nearest-rank p95. GPU ms (p95), CPU ms
+per frame (resolve + selection + prepare + encode + submit), build ms, and the
+design's extra memory. 100M was not run: `MemAvailable` was 6.9-9.8 GB, under
+the 20 GB required for it; 80M (77 chunks, about 3 GB peak) was the largest size
+that fit.
+
+| rows | candidate   | full GPU ms       | zoom GPU ms     | CPU full / zoom | build ms  | extra GPU            | extra CPU     |
+| ---- | ----------- | ----------------- | --------------- | --------------- | --------- | -------------------- | ------------- |
+| 10M  | base        | 934.0 (938.4)     | 27.1 (27.9)     | 0.75 / 0.56     | 0         | 0                    | 0             |
+| 10M  | (A) density | 161.8 (164.2)     | 7.25 (7.55)     | 0.50 / 0.61     | 0         | 8.3 MB               | 0             |
+| 10M  | (B) pyramid | **2.32** (2.39)   | **3.62** (3.84) | 0.38 / 0.63     | **650**   | 49.0 MB (4.08M reps) | 16.3 MB order |
+| 10M  | (C) tiles   | 2.07 (2.20)       | 1.56 (1.65)     | 1.15 / 0.56     | 493       | 0.7 MB (drawn cells) | 17.3 MB       |
+| 30M  | base        | 2,913.8 (2,937.5) | 51.6 (52.0)     | 0.53 / 0.48     | 0         | 0                    | 0             |
+| 30M  | (A) density | 530.3 (551.7)     | 8.52 (8.59)     | 0.51 / 0.44     | 0         | 8.3 MB               | 0             |
+| 30M  | (B) pyramid | **3.22** (3.24)   | **3.23** (3.26) | 0.43 / 0.43     | **2,477** | 176.6 MB (14.7M)     | 58.9 MB order |
+| 30M  | (C) tiles   | 2.85 (2.88)       | 1.38 (1.40)     | 1.64 / 1.50     | 1,867     | 1.0 MB               | 27.0 MB       |
+| 80M  | base        | 8,068.6 (8,075.8) | 282.9 (286.1)   | 1.07 / 0.85     | 0         | 0                    | 0             |
+| 80M  | (A) density | 2,254.0 (2,255.4) | 25.3 (25.9)     | 1.00 / 0.86     | 0         | 8.3 MB               | 0             |
+| 80M  | (B) pyramid | **2.04** (2.94)   | **3.92** (4.46) | 0.33 / 0.60     | **4,500** | 224.6 MB (18.7M)     | 74.9 MB order |
+| 80M  | (C) tiles   | 2.68 (2.76)       | 1.98 (2.06)     | 1.39 / 1.06     | 3,671     | 0.9 MB               | 25.5 MB       |
+
+- **Drawn**: base and A draw the visible chunks' rows (zoom: 1.05M, 2.1M and
+  7.3M rows); B draws 33,717 / 77,033 (10M), 50,014 / 74,372 (30M) and 45,648 /
+  91,612 (80M) representatives; C 28,000-50,000 cells.
+- **Build per 10M rows** (B, one thread): 650, 826 and 562 ms. The 10M runs were
+  quiet (load 0.9-1.1); the 30M runs had load 2-6 and the 80M runs 0.5-2.4 from
+  other agents. An earlier 10M batch at load 4-6 gave 629, 821 and 1,694 ms, the
+  worst single build seen. A's prototype spends 24-417 ms uploading its own
+  column copy, which the design does not need.
+- **Extra memory** is the design's: B stores x and y (`F32Relative`, 8 B) and a
+  `u32` chunk-local row (4 B) per representative, 12 B: 4.9, 5.9 and 2.8 B a
+  data row here, at most 6 B a row for a two-channel layer (the half-chunk cap).
+  Its order (4 B a representative) stays on the CPU only for SVG (below). A
+  needs the count buffer and its LUT. C keeps 8 B a stored cell on the CPU and
+  uploads the drawn cells (20 B each) per view.
+- **The GPU clock** (`gt_act_freq_mhz`, sampled per frame) sat at 950-1,100 MHz
+  for base and A, which keep the GPU busy, and at the 350-530 MHz floor for B
+  and C, which leave it idle between frames: the comparison favours base and A
+  by up to 3×.
+- One 30M base frame returned a wrapped timestamp (a p95 of 1.5e15 ms); the
+  table's 30M base p95 is the larger of the other two runs'.
+
+**The baseline at small sizes** (sorted, full view unless stated, medians of 3,
+clock 600-1,100 MHz): 100K rows 4.96 ms; 200K 7.67; 400K 20.90; 800K 51.17; 1.6M
+115.04. In the zoom view (rows spread out, fewer fragments a row) 800K visible
+rows take 10.9 ms and 1.05M 14.7-27 ms. The full view's cost grows faster than
+its rows (38 ns a row at 200K, 93 at 10M) because a sorted x sends consecutive
+instances to the same pixels: the **shuffled** 10M layer's full view takes
+222-229 ms against 934 sorted.
+
+### Fidelity
+
+ΔE00 > 10 against the full draw at 10M rows (`gup_visual_regression::Rgba8`'s
+`delta_e`), as a share of the image's 2,073,600 pixels and of the plot rect's
+(deterministic: identical in every run):
+
+| candidate                   | full: image | full: plot rect | zoom: image | zoom: plot rect | GPU ms full / zoom |
+| --------------------------- | ----------- | --------------- | ----------- | --------------- | ------------------ |
+| (A) density                 | 4.494%      | 4.867%          | 5.595%      | 5.809%          | 161.8 / 7.25       |
+| (B) pyramid                 | **0.994%**  | 1.076%          | 1.639%      | 1.682%          | 2.32 / 3.62        |
+| (B) one tier finer (≤ 4/px) | 0.580%      | 0.628%          | 1.224%      | 1.236%          | 3.34 / 3.89        |
+| (B) two tiers finer         | 0.339%      | 0.367%          | 1.122%      | 1.125%          | 10.76 / 7.93       |
+| (C) tiles                   | 4.187%      | 4.535%          | 6.724%      | 7.023%          | 2.07 / 1.56        |
+
+Read by eye: B is the full draw with a band slightly narrower at its edges (the
+lowest-index representative sits inside its cell, so the union of discs loses up
+to 1.8 px horizontally at full view, whose cells are 1.8 × 1.0 px); the residual
+1.1% in the zoom view at any tier is antialiased edges, where fewer overlapping
+discs leave lighter edge pixels. A and C are a heatmap of the data (viridis by
+count), a different look rather than an approximation, so their 4-7% are what
+any density view scores. Shuffled (10M, every chunk spanning the extent): B
+0.344% / 0.180%, because each chunk keeps its own representative in every cell
+(10 a cell). The PNGs (`<candidate>-<view>-10000000.png`, under
+`lod_spike/r10m-final/` in the spike checkout's target directory, not committed)
+are regenerated by
+`cargo run -p gup-core --release --example lod_spike -- --rows 10000000 --fidelity --out DIR`.
+
+### The decision
+
+1. **The baseline does not meet the budget at the largest size** (80M: 8,069 ms
+   full, 283 ms zoom). It stops meeting 16.7 ms between 200K (7.67 ms) and 400K
+   (20.90 ms) rows in the full view, and at about 1M visible rows in the zoom
+   view (1.05M: 14.7 ms in a 1.6M-row layer, 27.1 ms in a denser 10M-row one).
+   LOD is needed.
+2. **(B) is chosen.** It meets the budget in both views at every size (2.0-4.1
+   ms, at the lowest GPU clock), its build is 562-826 ms per 10M rows (≤ 2 s;
+   1,694 ms in the worst single run, under load), and its full-view fidelity
+   share at 10M is 0.994% of the image (≤ 1%).
+
+The pass on fidelity is by 0.006 points, and on the plot rect alone (1.076%) it
+would fail; one tier finer passes both (0.580% / 0.628%) for 1.0 ms more at 10M,
+so B is the choice whichever denominator is meant. Rules 3 and 4 were not
+reached. For the record, (A) misses the budget in the full view at every size
+from 10M: it costs 16-28 ns a row of contended atomics plus about 5 ms of
+per-pixel passes, so it cannot meet 16.7 ms above about 1M visible rows on this
+GPU. (C) meets it everywhere but is a heatmap.
+
+**The threshold.** The baseline meets 8 ms at 200K visible rows (7.67 ms, full
+view, boosted clock) and not at 400K, so LOD applies to a layer whose visible
+chunks hold more than **200,000 rows**; below that every row draws, exactly as
+today. A visible chunk past B's finest stored tier draws in full, so LOD never
+draws more than today.
+
+### Proposed API
+
+- `Selection::lod(Lod)` with `#[non_exhaustive] pub enum Lod { Auto, Off }`,
+  default `Auto`, in the prelude; `ScatterChart::lod` forwards. `Auto` draws
+  each visible chunk's tier prefix when the layer's visible rows exceed
+  `Lod::AUTO_MIN_ROWS = 200_000`; `Off` draws every row (exact output, SVG
+  parity). Only quad marks with one position per row (`Circle`, `Rect` with
+  constant extents) take it; lines and areas are out of scope.
+- The pyramid is built lazily, on the first prepare that needs it, per chunk; a
+  chunk whose tiers are not built yet draws in full.
+
+### Interaction under LOD
+
+- **GPU pick** draws what the colour pass draws, the representatives. Each
+  carries its chunk-local row (a `u32` instance column); the glue reads
+  `row_base + local` instead of `row_base + instance_index` for the brushed bit
+  and the pick id, so `Layer::row_id`, `poll_picks` and tooltips return the data
+  row of the mark under the pointer. This is a **mark-glue interface change**
+  (an "indexed rows" variant) for the implementing story.
+- **CPU pick** (`hit_items`) indexes the drawn representatives (what you see is
+  what you pick): 34,000-92,000 items here at any row count, so a scatter under
+  LOD stays CPU-pickable above `Retain::AUTO_MAX_ROWS`. This covers GUP-667's
+  case for scatters (lines still need GUP-667).
+- **Hover** (GUP-684's outline) outlines the representative; **tooltips** read
+  its data row.
+- **Brush**: the brushed-row bits stay per data row and the brush's row set is
+  exact (computed from data); a drawn representative shows its own bit, so a
+  cell whose rows are mixed shows one state.
+- **SVG** writes the representatives the GPU draws for the view (an SVG of 10M
+  circles is not a useful file), from the CPU order when the policy keeps CPU
+  columns; `GpuOnly` rasterises, as planned. `Lod::Off` writes every row.
+- **Accessibility descriptions** describe the data and are unchanged.
+- **`Window::LastRows`** evicts whole chunks, with their tiers; the stored row
+  is chunk-local, so renumbering rewrites nothing (the chunk uniform's
+  `row_base` already moves).
+- **Appends** invalidate only the tail chunk's tiers. The grid must not depend
+  on the layer's extent (the prototype's does): anchor it in data units
+  (power-of-two cells per axis), so a growing extent leaves built chunks valid.
+  The tail draws in full until it holds, say, 65,536 rows, then rebuilds at
+  doubling sizes (amortised `O(n log n)`, about 65 ms per 1M rows).
+- **Chunk culling** is unchanged (tiers of visible chunks only), and B depends
+  on it: a prefix spans its whole chunk, so chunks that overlap everywhere
+  (unsorted data) draw off-screen representatives. Shuffled 10M: B 7.3 ms full
+  but **65.4 ms zoom** (4.76M representatives), base 229 / 138 ms; C 6.8 ms GPU
+  but 75 ms CPU (merging 264,000 cells). Splitting each tier block into
+  Morton-ordered runs of a few thousand representatives with their own boxes,
+  culled per frame, is the follow-up that fixes it.
+- **GUP-492** (windowed size-order draws, queued after this story) changes the
+  spans of size-ordered layers in `selection.rs` and `order.rs`. A size-ordered
+  layer's representatives must still draw largest first: order each tier block
+  by its size bucket, not by index, and prefer the largest mark in a cell
+  (largest size, then lowest index) over the lowest index. LOD's stories should
+  follow GUP-492 and read its bucket keys.
+- **Mark size** is ignored by the tier rule (1.5 px circles at one point per
+  pixel of area). Larger marks overlap more and could take coarser tiers for the
+  same fidelity; not measured.
+
+### Proposed adjustments
+
+- **Tier offset.** The decision's B (at most one point per pixel) passes the
+  fidelity rule by 0.006 points; the implementing story should either keep it or
+  draw one tier finer (at most four points per pixel: 0.58%, +1.0 ms at 10M),
+  and say which.
+- **Build.** 562-826 ms per 10M on one thread is 7-10× the columnar first
+  resolve (82 ms at 10M, GUP-664), though it replaces a 0.9 s full-view first
+  frame. Build lazily (above the threshold only), per chunk across frames, and
+  with a radix sort; `gup-culling-lod`'s `radix_sort.compute.wgsl` is the GPU
+  route if that is not enough.
+- **GUP-632** (100M demonstration): measure B at 100M on a machine with 20 GB
+  free; by the 10M-80M trend (2.0-4.1 ms, 2.8-5.9 B a row) it fits the budget.
