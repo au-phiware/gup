@@ -90,6 +90,9 @@ run_step() {
 
 run_step story-ids ./scripts/check_story_ids.sh
 run_step doc mask doc
+# docs.rs builds each crate for every target it lists, wasm32 included;
+# an intra-doc link to a native-only item breaks only there.
+run_step docs-rs ./scripts/docs_rs.sh
 run_step gup-core cargo test -p gup-core --all-features -- --test-threads=1
 # The tour's pages, goldens and interactive app read the same snippet regions
 # (docs/tour/), across the gup and gup-egui crates.

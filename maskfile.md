@@ -448,7 +448,7 @@ lavapipe, Chromium and `wasm-bindgen` like its parts, and takes as long as its
 parts (it adds no new checks).
 
 Runs the story ID guard (`scripts/check_story_ids.sh`, GUP-504) first, then
-`mask doc`, gup-core's tests with all features, the tour's pages
+`mask doc`, `mask docs-rs`, gup-core's tests with all features, the tour's pages
 (`tests/tour.rs`) and its interactive app's tests (`gup-egui` example `tour`),
 `mask wasm-size` and `mask wasm-browser` one after another, even when one fails,
 then prints one table with a PASS, FAIL or SKIP per step. `--dogfood` adds the

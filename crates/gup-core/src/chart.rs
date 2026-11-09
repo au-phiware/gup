@@ -208,7 +208,7 @@ pub trait ChartExt: Chart {
     }
 
     /// Resolve, render and write an SVG, creating missing parent directories
-    /// as [`save_png`](Self::save_png) does.
+    /// as `save_png` does.
     ///
     /// ```no_run
     /// use gup_core::prelude::*;
