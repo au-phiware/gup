@@ -543,6 +543,12 @@ mod tests {
     }
 
     #[test]
+    fn only_include_zero_anchors_zero() {
+        assert!(!Linear::new().anchors_zero());
+        assert!(Linear::new().include_zero().anchors_zero());
+    }
+
+    #[test]
     fn fractional_ticks_label_with_enough_decimals() {
         let s = Linear::new().domain(0.0, 1.0);
         let t = s.ticks(5);

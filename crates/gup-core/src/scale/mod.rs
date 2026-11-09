@@ -121,7 +121,11 @@ pub trait PositionScale: ShaderFn<Out = Px> + EncodeFn<Output = Px> + CpuMirror 
     /// Whether the domain is data-driven (not set explicitly).
     fn is_auto(&self) -> bool;
     /// Whether the scale was asked to keep 0 in its domain
-    /// ([`Linear::include_zero`]): a zero end of the domain is a baseline.
+    /// ([`Linear::include_zero`]). When true, a domain end that is exactly 0
+    /// is a baseline, so the plot does not clear a line or area away from
+    /// it (GUP-705); every other automatic end of a line's value axis is
+    /// kept the plot padding clear of the axis line. A custom scale with no
+    /// such option keeps the default, `false`.
     fn anchors_zero(&self) -> bool {
         false
     }

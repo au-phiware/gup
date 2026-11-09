@@ -167,6 +167,12 @@ what each release contains and what its version number promises.
 
 ### Changed
 
+- An automatic y axis keeps a line's lowest and highest rows, and an area's top
+  edge, the plot padding clear of the axis line (a line at a round minimum no
+  longer sits on the x axis). `include_zero()` still puts zero on the axis, and
+  an explicit domain is unchanged. `PositionScale::anchors_zero` (default
+  `false`) tells the plot a scale's zero end is a baseline.
+
 - Hovering or focusing a bar, histogram bin, heatmap cell or box plot box
   outlines the whole mark (inside its rectangle, background edge outermost)
   instead of ringing its top-centre; marks under 6 px (hover) or 8 px (focus)
