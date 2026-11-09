@@ -16,7 +16,7 @@ touches:
 ## Story Overview
 
 **Initiative**: Strategic Review 2026-11 (first outside user, before 0.1)
-**Status**: 📋 Ready **Created**: 2026-11-09
+**Status**: ✅ Complete **Created**: 2026-11-09
 
 ## Context
 
@@ -52,41 +52,41 @@ conversion too.
 
 ### AC1: The conversions
 
-- [ ] `Color::from_linear`, `Color::from_linear_rgba` and `Color::to_linear`
+- [x] `Color::from_linear`, `Color::from_linear_rgba` and `Color::to_linear`
       exist with the signatures under Decisions, in `channel.rs`.
-- [ ] Known values, each a unit test with the tolerance stated: linear zero in
+- [x] Known values, each a unit test with the tolerance stated: linear zero in
       all three components gives `Color::BLACK` and linear one gives
       `Color::WHITE` (exactly); linear 0.5 gives every component within `1e-5`
       of `0.735357`; linear 0.001 gives every component within `1e-6` of
       `0.01292` (the linear segment); `to_linear` of the sRGB grey 0.5 is within
       `1e-5` of `[0.214041, 0.214041, 0.214041, 1.0]`.
-- [ ] Round trip: for every 8-bit value `v` in `0..=255`, with
+- [x] Round trip: for every 8-bit value `v` in `0..=255`, with
       `c = Color::rgb(v / 255.0, v / 255.0, v / 255.0)`,
       `Color::from_linear_rgba` fed the four values of `c.to_linear()` equals
       `c` within `1e-5` per component, and its `to_rgba8()` equals
       `c.to_rgba8()` exactly.
-- [ ] Alpha is not transferred: `from_linear_rgba(0.2, 0.3, 0.4, 0.25).a` is
+- [x] Alpha is not transferred: `from_linear_rgba(0.2, 0.3, 0.4, 0.25).a` is
       exactly `0.25`; `to_linear` of a colour with `a = 0.25` has `0.25` last;
       `from_linear` gives `a = 1.0`.
-- [ ] Out of range: `from_linear` of linear -0.5, 2.0 and 0.5 clamps its first
+- [x] Out of range: `from_linear` of linear -0.5, 2.0 and 0.5 clamps its first
       two components to `0.0` and `1.0` (the third as above). `to_linear` does
       not clamp.
-- [ ] No rendered output changes: `git status` after the suite shows no `.png`
+- [x] No rendered output changes: `git status` after the suite shows no `.png`
       or `.svg` modified.
 
 ### AC2: Docs
 
-- [ ] The `Color` doc comment gains a paragraph: a `Color` is sRGB-encoded; a
+- [x] The `Color` doc comment gains a paragraph: a `Color` is sRGB-encoded; a
       host that keeps colours in linear light converts with `from_linear` and
       `to_linear`, for example `theme.background.to_linear()` for a linear clear
       colour. A doctest (external-crate path, `use gup_core::prelude::*`) shows
       `Color::from_linear(0.5, 0.5, 0.5)` and the same colour's `to_linear()`
       round trip within `1e-5`.
-- [ ] CHANGELOG `[0.1.0]` Added line.
-- [ ] If `docs/EMBEDDING.md` (GUP-702) exists when this lands, add one sentence
+- [x] CHANGELOG `[0.1.0]` Added line.
+- [x] If `docs/EMBEDDING.md` (GUP-702) exists when this lands, add one sentence
       to its texture section pointing at the conversions; if not, skip and say
       so.
-- [ ] Search for hand-written transfer functions in the repository's tests,
+- [x] Search for hand-written transfer functions in the repository's tests,
       examples and docs and report each:
 
   ```bash
@@ -145,10 +145,10 @@ conversion too.
 
 ## Technical Tasks
 
-- [ ] Move `srgb_to_linear` and `linear_to_srgb` to `channel.rs`; fix imports in
+- [x] Move `srgb_to_linear` and `linear_to_srgb` to `channel.rs`; fix imports in
       `sequential.rs`.
-- [ ] Add the three methods; unit tests in `channel.rs`'s test module.
-- [ ] `Color` doc paragraph and doctest; CHANGELOG; the grep.
+- [x] Add the three methods; unit tests in `channel.rs`'s test module.
+- [x] `Color` doc paragraph and doctest; CHANGELOG; the grep.
 
 ## Dependencies
 
@@ -170,9 +170,9 @@ conversion too.
 
 ## Success Metrics
 
-- [ ] A host can make and read back a linear colour without its own transfer
+- [x] A host can make and read back a linear colour without its own transfer
       function.
-- [ ] The repository has one sRGB transfer implementation.
+- [x] The repository has one sRGB transfer implementation.
 
 ## Risk Assessment
 
@@ -181,15 +181,95 @@ conversion too.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye: not needed, no golden changes
-- [ ] `mask wasm-browser`: not needed, no layout, input or wasm code changes
-- [ ] WASM size: `mask wasm-size` scatter gz bytes (three small methods that
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye: not needed, no golden changes
+- [x] `mask wasm-browser`: not needed, no layout, input or wasm code changes
+- [x] WASM size: `mask wasm-size` scatter gz bytes (three small methods that
       dead-code elimination should drop; report)
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `Color::from_linear`, `Color::from_linear_rgba` and `Color::to_linear` in
+  `crates/gup-core/src/channel.rs`, with the signatures in Decisions.
+- The sRGB transfer functions moved from `scale/sequential.rs` to `channel.rs`
+  as `pub(crate)` functions, bodies unchanged; `sequential.rs` imports them.
+- Test-only WCAG luminance helpers in `theme.rs`, `tests/hover.rs` and
+  `tests/keyboard.rs` now read `Color::to_linear`.
+- `Color` doc paragraph and a doctest; CHANGELOG `[0.1.0]` Added entry.
+- Tests: 8 unit tests in `channel.rs` (endpoints, known values, linear segment,
+  256-value grey round trip, alpha, clamping, unclamped `to_linear`), 1 doctest.
+  No golden or `.png`/`.svg` changed.
+- `docs/EMBEDDING.md` does not exist yet (GUP-702), so its texture-section
+  sentence is skipped.
+- `mask wasm-size` before (238af703) and after: scatter gz 378613 and 378605
+  bytes (-8 B); gup-core over bare wgpu 346253 and 346245 bytes.
+
+### Hand-written transfer functions left in place (grep report)
+
+- `crates/gup-core/src/builder/bar.rs` (`luminance`, f64, production label
+  contrast): not a test or example; changing it could flip a label colour.
+- `crates/gup-core/src/scale/categorical.rs` (`luminance` over `[u8; 4]`,
+  production label contrast): same reason.
+- `crates/gup-visual-regression/src/color.rs` (`srgb_to_lab` over `Rgba8`): dev
+  crate, u8 input, not a `Color`.
+- `crates/gup-core/tests/window_parity.rs` (`double_encoded`): encodes image
+  pixels, not a `Color`.
+
+The success metric "one sRGB transfer implementation" is therefore met for
+`Color` and the colour scales, not for the four sites above. Folding them in is
+a follow-up, not done here.
+
+## Retrospective
+
+**Completed**: 2026-11-09
+
+### Key Technical Learnings
+
+#### `linear_to_srgb(1.0)` is not exactly 1.0 in f32
+
+- **Challenge**: `1.055 * 1.0 - 0.055` evaluates to `0.99999994` in f32, so
+  `Color::from_linear(1.0, 1.0, 1.0)` failed the exact `Color::WHITE` check.
+- **Solution**: `from_linear_rgba` maps a clamped `1.0` straight to `1.0`. The
+  transfer function body is unchanged, so the OKLab colour scales are unaffected
+  (their output is quantised to 8 bits anyway).
+- **Pattern**: An endpoint test on a power-curve encoder needs an explicit
+  endpoint, not a reliance on the formula.
+
+### Architectural Decisions
+
+#### One sRGB transfer implementation, in `channel.rs`
+
+- **Decision**: `srgb_to_linear` and `linear_to_srgb` live in `channel.rs` as
+  `pub(crate)` functions of one `f32`; `scale/sequential.rs` imports them.
+- **Reasoning**: The OKLab colour scales and the public conversion cannot
+  disagree.
+- **Trade-off**: `channel.rs` takes on a little colour-maths code.
+- **Future**: The production WCAG luminance helpers in `builder/bar.rs` and
+  `scale/categorical.rs` still hold their own copies (f64 and u8 inputs). They
+  were left alone because they pick label contrast, and a change could flip a
+  colour in a golden. They are candidates for a follow-up.
+
+### Development Workflow Insights
+
+- Prettier checks the appended Markdown in `mask all-check`; the story file had
+  to pass the pinned prettier before the gate would pass.
+- The test-only luminance helpers in `theme.rs`, `tests/hover.rs` and
+  `tests/keyboard.rs` now read `Color::to_linear` (f32 values, no 8-bit
+  quantisation first). No assertion needed changing.
+- `docs/EMBEDDING.md` (GUP-702) did not exist, so its texture-section sentence
+  was skipped.
+
+### Follow-up Stories
+
+1. **Fold the production luminance copies into `Color::to_linear`**: the
+   `builder/bar.rs` and `scale/categorical.rs` WCAG luminance helpers keep their
+   own transfer functions. Needs a check that label contrast choices and goldens
+   do not move. Left out of GUP-703 because it is production label code, outside
+   the story's test-and-example scope.
