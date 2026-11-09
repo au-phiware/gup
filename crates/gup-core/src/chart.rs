@@ -156,6 +156,37 @@ pub trait Chart: 'static {
         let _ = at;
         None
     }
+    /// The x values at the plot rect's left and right edges (zoom, widening
+    /// and edge insets included), as of the last resolve: what
+    /// [`value`](Self::value) gives there. `None` before a resolve and for a
+    /// chart that cannot say. A band or point axis gives its codes, as
+    /// `value` does.
+    fn x_view(&self) -> Option<(f64, f64)> {
+        None
+    }
+    /// The y values at the plot rect's bottom and top edges; see
+    /// [`x_view`](Self::x_view).
+    fn y_view(&self) -> Option<(f64, f64)> {
+        None
+    }
+    /// Whether the view is where it started: `true` until a zoom or pan, and
+    /// again after a reset ([`Key::ResetView`](crate::Key::ResetView)). While
+    /// home, an automatic axis refits the data on every resolve; once moved,
+    /// the view holds.
+    ///
+    /// ```
+    /// use gup_core::prelude::*;
+    ///
+    /// struct Row { x: f64, y: f64 }
+    /// let mut plot = Plot::new();
+    /// plot.circles(vec![Row { x: 1.0, y: 2.0 }, Row { x: 3.0, y: 4.0 }])
+    ///     .x(|r| r.x)
+    ///     .y(|r| r.y);
+    /// assert!(Chart::view_is_home(&plot));
+    /// ```
+    fn view_is_home(&self) -> bool {
+        true
+    }
     /// The chart as [`Any`], to downcast to its concrete type.
     fn as_any(&self) -> &dyn Any;
     /// The chart as mutable [`Any`], to downcast to its concrete type.

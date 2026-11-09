@@ -20,7 +20,7 @@ touches:
 ## Story Overview
 
 **Initiative**: Strategic Review 2026-11 (first outside user, before 0.1)
-**Status**: 📋 Ready **Created**: 2026-11-09
+**Status**: ✅ Complete 2026-11-09 **Created**: 2026-11-09
 
 ## Context
 
@@ -327,3 +327,76 @@ has landed):
       and a flag; report the change)
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
+
+## Implementation Summary
+
+Added `Linear::include_zero` (a `zero` flag read in `fit_domain`, ignored when
+explicit), `Chart::x_view`, `y_view` and `view_is_home` (default methods, `Plot`
+implements, all seven builders forward) and `Plot::y_right_view`.
+`tests/live_view.rs` has 8 tests; golden
+`tests/golden/gup_core/live_line_settled.png`. Tutorial 5 gained "Keeping Zero
+On The Axis"; CHANGELOG updated. `mask merge-check` PASS (all steps, dogfood not
+requested), `mask all-fix` clean, `cargo test -p gup` green. No existing golden
+changed.
+
+- **AC1 measured**: the gap between the settled line's lowest row and the plot
+  bottom is **0 px**, not the "few pixels" the story expected. A line has no
+  overhang, so nothing widens the axis and the lowest row sits exactly on the
+  axis line; the user's report is accurate. The test asserts `|gap| < 1`.
+- **AC3 deviation**: `x_view` and `y_view` are the values at the plot rect's
+  edges (what `Chart::value` gives), not the scale's `current_domain`. The two
+  differ: a non-widened axis keeps `plot_padding` of range beyond the domain at
+  its far end (x domain 0..10 gave edges 0..10.07), so "equal `value` at the
+  edges within 1e-6" (AC3) is only met by the edge definition. A band axis
+  therefore gives the first and last code that `value` clamps to.
+- **AC2 deviation**: an explicit `domain(100, 200)` gives view (100, 201.1), for
+  the same far-end padding (GUP-540), so the test allows 5 units.
+- **AC5**: the golden is not "the lower fifth": with `LastRows(1024)` the 5,000
+  peak (row 2,000) is long evicted by row 8,000, so the axis refits to 0..550
+  and the 480..520 wobble fills the upper part. What it shows: title
+  "Population", y ticks 0 to 550 with `0` on the x axis line, x ticks 6200 to
+  7800, a dense wobbling blue band at 500 clear above the axis, nothing outside
+  the plot rect.
+- **AC6 search**: `grep "domain(0.0"` found no live chart whose y domain is
+  fixed to get a zero baseline (the matches are fixed-range x axes and static
+  charts: tutorial 02, gup-egui and gup-bevy scatter, dogfood `t5_live` with a
+  -10..10 y range, `live_append` with -1.5..1.5). Nothing replaced.
+- **WASM** (`mask wasm-size`, scatter gz, same session): main 378,631 B, branch
+  378,899 B (+268 B).
+
+## Retrospective
+
+**Completed**: 2026-11-09
+
+### Key Technical Learnings
+
+#### The plot range is wider than the domain
+
+- **Challenge**: the story assumed `current_domain` equals what the plot rect
+  shows and that a line sits a few pixels clear of the axis.
+- **Solution**: measured. A non-widened axis puts the near end exactly on the
+  axis line and keeps `plot_padding` beyond the far end; so the view is read
+  back through `value` at the rect edges.
+- **Pattern**: define a "what is visible" read-back by the same inversion the
+  pointer uses, not by the scale's stored domain.
+
+### Architectural Decisions
+
+#### `x_view` is edge values, not `current_domain`
+
+- **Decision**: `Plot::x_view` and `y_view` call `value` at the plot edges.
+- **Reasoning**: AC3 demands equality with `value`; the stored domain differs by
+  the far-end padding.
+- **Trade-off**: a band axis gives clamped first and last codes, not `0..len`.
+- **Future**: GUP-701 and GUP-702 can point hosts at it unchanged.
+
+### Development Workflow Insights
+
+- The worktree sandbox refuses compound shell commands that name version
+  control; keep those calls plain and separate.
+
+### Follow-up Stories
+
+1. None. A line's lowest row sitting exactly on the axis line without
+   `include_zero` (AC1) is a possible default-padding question for the owner;
+   not written up, as the story's Decisions say no new padding.

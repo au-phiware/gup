@@ -534,6 +534,15 @@ impl crate::chart::Chart for Plot {
     fn value(&self, at: Point) -> Option<(f64, f64)> {
         Plot::value(self, at)
     }
+    fn x_view(&self) -> Option<(f64, f64)> {
+        Plot::x_view(self)
+    }
+    fn y_view(&self) -> Option<(f64, f64)> {
+        Plot::y_view(self)
+    }
+    fn view_is_home(&self) -> bool {
+        Plot::view_is_home(self)
+    }
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
@@ -1652,6 +1661,43 @@ impl Plot {
             (_, Some((_, r))) => Some(&r.layout),
             _ => None,
         }
+    }
+
+    /// The x values at the plot rect's left and right edges as of the last
+    /// resolve; see [`Chart::x_view`](crate::Chart::x_view).
+    pub fn x_view(&self) -> Option<(f64, f64)> {
+        let r = self.layout()?.plot;
+        let mid = r.top() + r.height / 2.0;
+        let lo = self.value(Point::new(r.left(), mid))?.0;
+        let hi = self.value(Point::new(r.right(), mid))?.0;
+        Some((lo, hi))
+    }
+
+    /// The y values at the plot rect's bottom and top edges as of the last
+    /// resolve; see [`Chart::y_view`](crate::Chart::y_view).
+    pub fn y_view(&self) -> Option<(f64, f64)> {
+        let r = self.layout()?.plot;
+        let mid = r.left() + r.width / 2.0;
+        let lo = self.value(Point::new(mid, r.bottom()))?.1;
+        let hi = self.value(Point::new(mid, r.top()))?.1;
+        Some((lo, hi))
+    }
+
+    /// The right-axis values at the plot rect's bottom and top edges as of
+    /// the last resolve, or `None` before one and for a plot without a
+    /// right axis.
+    pub fn y_right_view(&self) -> Option<(f64, f64)> {
+        let r = self.layout()?.plot;
+        let mid = r.left() + r.width / 2.0;
+        let lo = self.value_right(Point::new(mid, r.bottom()))?.1;
+        let hi = self.value_right(Point::new(mid, r.top()))?.1;
+        Some((lo, hi))
+    }
+
+    /// Whether no zoom or pan has moved the view since the last reset; see
+    /// [`Chart::view_is_home`](crate::Chart::view_is_home).
+    pub fn view_is_home(&self) -> bool {
+        self.home.is_none()
     }
 
     /// Where the data point `(x, y)` is drawn; see [`Chart::pixel`](crate::Chart::pixel).
