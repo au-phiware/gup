@@ -186,10 +186,11 @@ impl GoldenStore {
                     Ok(()) => format!("diff {}", diff_path.display()),
                     Err(e) => format!("diff image not written: {e}"),
                 };
+                let why = stats
+                    .rejection(&self.tolerance)
+                    .unwrap_or_else(|| "no rule broken".to_string());
                 format!(
-                    "render differs from golden beyond tolerance (ΔE > {}, max {:.2}% of pixels): {stats}. golden {}, actual {}, {diff_note}. {hint}",
-                    self.tolerance.pixel_delta_e,
-                    self.tolerance.max_differing_fraction * 100.0,
+                    "render differs from golden beyond tolerance ({why}): {stats}. golden {}, actual {}, {diff_note}. {hint}",
                     golden_path.display(),
                     actual_path.display(),
                 )
@@ -345,6 +346,7 @@ mod tests {
         // Pick an offset that stays within tolerance.
         let tolerant = store.clone().with_tolerance(DiffTolerance {
             max_differing_fraction: 1.0,
+            max_strong_pixels: usize::MAX,
             ..DiffTolerance::default()
         });
         let outcome = tolerant.clone().with_bless(false).check("r", &image(15.0));
@@ -367,6 +369,45 @@ mod tests {
         assert_eq!(rewritten, image(15.0));
         assert_ne!(rewritten, original);
         assert_ne!(std::fs::read(&path).unwrap(), bytes);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_thin_ring_fails_the_golden_check_with_a_diff_image() {
+        use crate::diff::scenes;
+        let dir = scratch("ring");
+        let store = GoldenStore::new(dir.join("golden"), dir.join("out")).with_bless(true);
+        let (plain, _) = scenes::plain();
+        store.check("ring", &plain).unwrap();
+        let store = store.with_bless(false);
+        assert!(matches!(
+            store.check("ring", &plain).unwrap(),
+            GoldenOutcome::Matched(_)
+        ));
+
+        let mut ringed = plain.clone();
+        scenes::add_ring(&mut ringed);
+        let err = store.check("ring", &ringed).unwrap_err();
+        eprintln!("{err}");
+        assert_eq!(err.check, Check::Golden);
+        assert!(err.message.contains("strong rule broken"), "{err}");
+        assert!(
+            err.message
+                .contains("the fraction rule alone would have passed"),
+            "{err}"
+        );
+        assert!(err.message.contains(BLESS_ENV), "{err}");
+
+        let diff = RgbaImage::load_png(store.diff_path("ring")).unwrap();
+        let magenta = Rgba8::rgb(255, 0, 255);
+        let ink = scenes::ring_pixels()
+            .into_iter()
+            .filter(|&(x, y)| ringed.pixel(x, y) == Rgba8::BLACK)
+            .collect::<Vec<_>>();
+        assert_eq!(ink.len(), 52);
+        assert!(ink.iter().all(|&(x, y)| diff.pixel(x, y) == magenta));
+        let marked = diff.pixels().filter(|&(_, _, p)| p == magenta).count();
+        assert!(marked <= scenes::ring_pixels().len(), "{marked} marked");
         let _ = std::fs::remove_dir_all(&dir);
     }
 

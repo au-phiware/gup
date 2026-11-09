@@ -35,13 +35,36 @@ and must be re-blessed.
 
 ## Perceptual-diff tolerance
 
-A pixel differs when its CIEDE2000 distance from the golden pixel exceeds
-**3.0**. A render matches when at most **0.25%** of pixels differ. Byte-exact
-comparison is too brittle across GPU backends and drivers. Tighten these
-(`DiffTolerance` in `crates/gup-visual-regression/src/diff.rs`) only after
-observing stability across backends. Never loosen them, or any structural
-threshold, to make a known-broken case pass; add an expected-failure entry
-instead.
+A render matches its golden image when both rules hold:
+
+- **Fraction rule**: a pixel differs when its CIEDE2000 distance from the golden
+  pixel exceeds **3.0**; at most **0.25%** of pixels may differ. This absorbs
+  antialiasing and glyph noise across backends.
+- **Strong rule** (GUP-687): a pixel is a strong difference when its distance
+  exceeds **12.0** (`STRONG_DELTA_E`); at most **8** pixels may be strong
+  (`MAX_STRONG_PIXELS`). This catches a thin, high-contrast feature that is too
+  small in count for the fraction rule: GUP-676's 16 px hover ring changed 52
+  pixels (0.02% of a 640 by 400 render), each by more than ΔE 40, and passed the
+  fraction rule alone.
+
+How the strong constants were chosen (2026-11-09): `M`, the largest number of
+strong pixels on any platform against the checked-in goldens, was 0. In nine
+Platforms runs (49 to 55 tour, tutorial and gallery goldens each) no pixel
+differed from its golden by more than ΔE 2.7 on Windows WARP or 1.2 on macOS
+Metal; on Linux lavapipe all 117 goldens were byte-equal to their renders. A
+pixel moved by one antialiasing coverage level (±8 per channel) is at most ΔE
+3.0. The limit is `max(2 * M, 8)` rounded up to a multiple of 4, so 8. To
+re-derive: run the golden tests with `--nocapture` on each platform (the
+Platforms workflow does), read `N strongly` and `max ΔE` from every
+`PASS golden` line, and apply the same rule; if `M` exceeds 24 the rule would no
+longer catch a ring and needs a new design, not a larger limit.
+
+A mismatch message names the broken rule, the counts, and whether the fraction
+rule alone would have passed. Byte-exact comparison is too brittle across GPU
+backends and drivers. Tighten these (`DiffTolerance` in
+`crates/gup-visual-regression/src/diff.rs`) only after observing stability
+across backends. Never loosen them, or any structural threshold, to make a
+known-broken case pass; add an expected-failure entry instead.
 
 ## Running
 
