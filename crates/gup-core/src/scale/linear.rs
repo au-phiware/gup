@@ -184,6 +184,10 @@ impl PositionScale for Linear {
         self.domain
     }
 
+    fn anchors_zero(&self) -> bool {
+        self.zero
+    }
+
     fn is_auto(&self) -> bool {
         !self.explicit
     }

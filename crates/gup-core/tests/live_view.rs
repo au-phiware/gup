@@ -80,20 +80,20 @@ fn small(rows: Vec<Row>) -> LineChart<Row> {
     line(rows).x(|r: &Row| r.0).y(|r: &Row| r.1)
 }
 
-/// AC1: without the flag the settled line is clear of the axis line, but
-/// only just.
+/// GUP-705: without the flag the settled line keeps the plot padding of
+/// background between its lowest row and the axis line (GUP-699 measured
+/// 0 px before the rule).
 #[test]
-fn the_settled_line_without_the_flag_is_just_clear_of_the_axis() {
+fn the_settled_line_without_the_flag_is_clear_of_the_axis() {
     let cx = Context::new_blocking().unwrap();
     let (mut chart, feed) = live(false);
     run(&mut chart, &feed, &cx, 0..8_000, population);
     let lowest = chart.pixel(7_999.0, 480.0).unwrap().y;
     let bottom = chart.layout().unwrap().plot.bottom();
     let gap = bottom - lowest;
-    println!("GUP-699 AC1: gap {gap} px");
-    // Measured: a line has no overhang, so nothing widens the axis and the
-    // lowest row is exactly on the axis line (the story expected a few px).
-    assert!(gap.abs() < 1.0, "gap {gap}");
+    println!("GUP-705: gap {gap} px");
+    let pad = Theme::default().plot_padding.0;
+    assert!(gap >= pad - 0.5, "gap {gap} < padding {pad}");
 }
 
 /// AC2: the flag grows an automatic domain to contain 0.

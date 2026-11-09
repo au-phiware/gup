@@ -120,6 +120,11 @@ pub trait PositionScale: ShaderFn<Out = Px> + EncodeFn<Output = Px> + CpuMirror 
     fn current_domain(&self) -> Option<(f64, f64)>;
     /// Whether the domain is data-driven (not set explicitly).
     fn is_auto(&self) -> bool;
+    /// Whether the scale was asked to keep 0 in its domain
+    /// ([`Linear::include_zero`]): a zero end of the domain is a baseline.
+    fn anchors_zero(&self) -> bool {
+        false
+    }
     /// Set an explicit domain, e.g. to zoom or pan. Only uniforms derived
     /// from the domain change; no column bytes are re-uploaded.
     fn set_domain(&mut self, d0: f64, d1: f64) -> Result<()>;
@@ -404,6 +409,7 @@ pub(crate) trait DynPositionScale: Send + Sync {
     /// Counts writes to the scale (see [`ScaleRef::write`]).
     fn revision(&self) -> u64;
     fn is_auto(&self) -> bool;
+    fn anchors_zero(&self) -> bool;
     fn nice(&self);
     fn nice_to(&self, count: usize, strict: bool);
     fn set_range(&self, r0: Px, r1: Px);
@@ -471,6 +477,10 @@ pub(crate) trait DynPositionScale: Send + Sync {
 }
 
 impl<S: PositionScale> DynPositionScale for ScaleRef<S> {
+    fn anchors_zero(&self) -> bool {
+        self.read().anchors_zero()
+    }
+
     fn revision(&self) -> u64 {
         self.0.revision.load(Ordering::Relaxed)
     }

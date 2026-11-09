@@ -1414,6 +1414,10 @@ pub(crate) struct Overhang {
     pub x: f32,
     /// Half a constant or derived height: the y axis only.
     pub y: f32,
+    /// Whether the layer's lowest (near) and highest (far) rows on a y axis
+    /// keep the plot padding clear of the axis line although the mark has
+    /// no overhang: a line's, an area's top edge (GUP-705).
+    pub clear_y: [bool; 2],
 }
 
 /// The runs a batch of `rows` rows appended to `store` is sorted in (see
@@ -2053,6 +2057,12 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             };
             *slot = slot.max(r);
         }
+        overhang.clear_y = match M::NAME {
+            "Line" => [true, true],
+            // The baseline stays on the axis; only the top edge clears it.
+            "Area" => [false, true],
+            _ => [false, false],
+        };
         // A step line's riser can sit on a row at the end of the x domain,
         // and its ends are capped: it reaches half its width past the row
         // along x (GUP-550). A straight line still starts at the axis.

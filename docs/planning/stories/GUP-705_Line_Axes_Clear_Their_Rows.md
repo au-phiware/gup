@@ -82,3 +82,21 @@ A line drawn on top of the axis line is hard to see and reads as "no data".
       `cargo test -p gup -- --test-threads=1`
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
+
+## Blocked (2026-11-09)
+
+**Question**: the rule (implemented, all non-golden tests pass) changes 29
+goldens, above the ~25 stop limit. Re-bless all 29?
+
+Rule as implemented: `Overhang.clear_y` (Line: near and far; Area: far only, its
+baseline stays on the axis); the plot's widen step pads an end with
+`plot_padding` when the mark has no overhang but clears; an end that is 0 on a
+scale with `include_zero` is not cleared (new `PositionScale::anchors_zero`).
+User's case: gap 0 px -> 4 px (the padding). Goldens (blessed in the WIP commit,
+not yet reviewed one by one): gallery area_stacked, dark_multiline,
+line_monotone; gup_core builder_area, builder_line, line_series, line_steps,
+line_translucent, secondary_y, subtitle, subtitle_dark; tour 02_line,
+04_dual_axis, 04_time_axis, 05_dark, 05_high_contrast, 05_palette, 06_curves,
+10_append, 10_window; tutorials 05_appended, 07_area, 07_dark, 07_line. Read so
+far: tutorials 07_line (line clear of axis, ticks 8..26 sensible) and 07_area
+(baseline on the axis at 0, top clear).
