@@ -146,7 +146,7 @@ either; GUP-702 last, so its code can use the new names.
   `TextureTarget` loop for unorm and sRGB textures, resize, input, and the
   `Renderer::prepare` and `Prepared::draw` path, with a test of the sRGB recipe.
   Deps: GUP-686 ✅, GUP-700 📋 (soft), GUP-701 📋 (soft), GUP-699 📋 (soft).
-- [GUP-703](GUP-703_Color_From_Linear.md) 📋 — `Color::from_linear`,
+- [GUP-703](GUP-703_Color_From_Linear.md) 🚧 — `Color::from_linear`,
   `from_linear_rgba` and `to_linear`, sharing the one sRGB transfer with the
   colour scales. Edits `channel.rs`.
 - [GUP-704](GUP-704_Requirements_Up_Front.md) 📋 — A README Requirements section
