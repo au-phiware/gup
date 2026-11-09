@@ -554,11 +554,15 @@ GUP-628 and GUP-631 (shared `selection.rs`).
   labels) through Band, Point and `Categorical` scales, remapped once per label
   in the row path's first-seen order, with images identical to key closures.
   Deps: GUP-628 ✅.
-- [GUP-630](GUP-630_Arrow_Record_Batches.md) 📋 — Feature `arrow`
+- [GUP-630](GUP-630_Arrow_Record_Batches.md) ✅ — Feature `arrow`
   (`arrow-array`, `arrow-schema`): `Columns::from_arrow(&RecordBatch)` for
   floats, integers, dates, timestamps, strings, dictionaries and booleans, nulls
-  kept, in the feature matrix and docs.rs. Deps: GUP-628 ✅, GUP-629 📋, GUP-602
+  kept, in the feature matrix and docs.rs. Deps: GUP-628 ✅, GUP-629 ✅, GUP-602
   ✅.
+- [GUP-697](GUP-697_Arrow_Buffers_Without_A_Copy.md) 💡 — Share a `Float64` or
+  `Float32` Arrow buffer as a column without the import copy (31 ms and 80 MB at
+  10M rows): a `Column` variant over a foreign shared buffer. Opus. Deps:
+  GUP-630 ✅, GUP-664 ✅.
 - [GUP-631](GUP-631_Level_Of_Detail_Spike.md) 📋 — Spike: per-frame density, a
   decimation pyramid ported from `gup-culling-lod`, and binned tiles, measured
   at 100M rows for GPU time, build time, memory and fidelity, chosen by a stated
