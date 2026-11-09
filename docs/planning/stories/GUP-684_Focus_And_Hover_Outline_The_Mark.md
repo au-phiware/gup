@@ -19,8 +19,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (polish before 0.1) **Status**: 🚧 In
-Progress **Created**: 2026-11-08
+**Initiative**: Strategic Review 2026-11 (polish before 0.1) **Status**: ✅
+Complete 2026-11-09 **Created**: 2026-11-08
 
 ## Context
 
@@ -66,55 +66,55 @@ have no rectangle, and keep the vertex or disc ring.
 
 ### AC1: A box-shaped mark is outlined
 
-- [ ] `PickIndex::extent(&self, row: RowId) -> Option<Rect>` returns the
+- [x] `PickIndex::extent(&self, row: RowId) -> Option<Rect>` returns the
       rectangle of a `Shape::Box` row (corners ordered, logical pixels) and
       `None` for every other shape.
       `Plot::pick_extent(&mut self, row) ->     Option<Rect>` (`#[doc(hidden)]`,
       beside `pick_anchor`) wraps it.
-- [ ] With the pointer over a bar, histogram bin, heatmap cell or box plot box
+- [x] With the pointer over a bar, histogram bin, heatmap cell or box plot box
       (and not in the small-rectangle case of AC2), `sync_overlay` pushes an
       outline of that rectangle instead of the vertex ring, and sets
       `Layout::hover` to the outline's outer box, which equals the mark's
       rectangle clipped to the plot rect and snapped to whole pixels.
-- [ ] The same for keyboard focus: `Layout::focus` is the outline's outer box.
+- [x] The same for keyboard focus: `Layout::focus` is the outline's outer box.
       Tests assert `layout.hover` and `layout.focus` for a bar, a heatmap cell
       and a box plot box (rect equal to the mark's rectangle within 1 px,
       computed from `x_ticks`/`y_ticks` or `pick_extent`).
-- [ ] Scatter (discs), line and area keep the existing ring byte-for-byte (AC4).
+- [x] Scatter (discs), line and area keep the existing ring byte-for-byte (AC4).
 
 ### AC2: Geometry rule
 
-- [ ] Outline layers, as `ring_item` does: an edge of 1 px in `theme.background`
+- [x] Outline layers, as `ring_item` does: an edge of 1 px in `theme.background`
       on the outermost pixels of the snapped rectangle, then `ink_width` px in
       `theme.title` inside it. Hover `ink_width` 1, focus 2 (thinner for hover,
       as today). The outline lies inside the mark's rectangle, so it never
       covers a neighbouring bar or cell.
-- [ ] If the clipped, snapped rectangle is narrower or shorter than
+- [x] If the clipped, snapped rectangle is narrower or shorter than
       `2 * (1 + ink_width) + 2` px (6 px hover, 8 px focus), or empty after
       clipping, the vertex ring at the anchor is drawn instead (a thin bar would
       otherwise vanish under its outline). A test covers a 3 px bar for both.
-- [ ] A GPU-picked layer (no extent) gets the vertex ring.
+- [x] A GPU-picked layer (no extent) gets the vertex ring.
 
 ### AC3: Goldens, read by eye
 
-- [ ] `hover_highlight_bar.png` re-blessed: the bar is outlined, edge outside
+- [x] `hover_highlight_bar.png` re-blessed: the bar is outlined, edge outside
       ink, the tooltip beside it. The implementer reads the PNG and reports that
       all four sides are visible and the neighbouring bars are untouched.
-- [ ] New goldens, each read: `focus_outline_bar.png` (keyboard focus on a bar,
+- [x] New goldens, each read: `focus_outline_bar.png` (keyboard focus on a bar,
       2 px ink, thicker than the hover outline), `hover_outline_heatmap.png`
       (one cell outlined between adjacent cells), `hover_outline_boxplot.png`
       (the box, not the whiskers, outlined).
-- [ ] Contrast: with `Theme::dark()` and `Theme::high_contrast()` the outline
+- [x] Contrast: with `Theme::dark()` and `Theme::high_contrast()` the outline
       ink is `theme.title` and its edge `theme.background` (extend the existing
       3:1 test in `hover.rs`).
 
 ### AC4: Nothing else changes
 
-- [ ] `git status` after the full suite shows only the re-blessed and new
+- [x] `git status` after the full suite shows only the re-blessed and new
       goldens above. Specifically unchanged: `hover_highlight_scatter.png`,
       `tooltip.png`, `hello_world.png`, `theme_dark.png`, `tour/08_tooltip.png`
       and `keyboard_focus.png` (a scatter; if it is not, report it).
-- [ ] Search every test, example, tour chapter, tutorial and browser scene that
+- [x] Search every test, example, tour chapter, tutorial and browser scene that
       hovers or focuses a bar, bin, cell or box (grep `pointer_moved`,
       `Key::Right`, `Key::Tab`, `layout.focus`, `layout.hover` under `crates/`,
       `docs/tour/snippets`, `docs/tutorials`, `examples/`) and list them. Update
@@ -122,18 +122,18 @@ have no rectangle, and keep the vertex or disc ring.
       it is now the mark's rectangle) and re-bless affected goldens, reading
       each. Hover pixel changes in a tour or tutorial golden must be listed in
       the report.
-- [ ] `hover_highlight(false)` still removes exactly the hover item.
+- [x] `hover_highlight(false)` still removes exactly the hover item.
 
 ### AC5: Browser smoke test and size
 
-- [ ] The browser scatter scene is scatter-only, so `hover_ring_rect()` and the
+- [x] The browser scatter scene is scatter-only, so `hover_ring_rect()` and the
       `hover-ring` and `key-focus` steps are unchanged and pass.
       `mask     wasm-browser` passes. If a bar scene is cheap to add to the
       scatter app (it already builds a `Plot`), do not: that is out of scope;
       say so in the retrospective.
-- [ ] `mask wasm-size` before and after; growth under 300 bytes gz. Over that,
+- [x] `mask wasm-size` before and after; growth under 300 bytes gz. Over that,
       trigger an escalation. Re-recording the budget is the orchestrator's.
-- [ ] CHANGELOG `[0.1.0]` Changed line.
+- [x] CHANGELOG `[0.1.0]` Changed line.
 
 ## Decisions
 
@@ -182,13 +182,13 @@ have no rectangle, and keep the vertex or disc ring.
 
 ## Technical Tasks
 
-- [ ] `PickIndex::extent`, `Plot::pick_extent`, with unit tests per shape.
-- [ ] `rect_ring_item`; `ring_item` through it; fallback rule.
-- [ ] `sync_overlay`: choose outline or ring for hover and focus.
-- [ ] Update `Layout::focus` and `Layout::hover` docs.
-- [ ] Tests and four goldens; read each PNG.
-- [ ] The AC4 search; update affected tests; list them.
-- [ ] CHANGELOG.
+- [x] `PickIndex::extent`, `Plot::pick_extent`, with unit tests per shape.
+- [x] `rect_ring_item`; `ring_item` through it; fallback rule.
+- [x] `sync_overlay`: choose outline or ring for hover and focus.
+- [x] Update `Layout::focus` and `Layout::hover` docs.
+- [x] Tests and four goldens; read each PNG.
+- [x] The AC4 search; update affected tests; list them.
+- [x] CHANGELOG.
 
 ## Dependencies
 
@@ -209,8 +209,8 @@ have no rectangle, and keep the vertex or disc ring.
 
 ## Success Metrics
 
-- [ ] A hovered or focused bar, cell or box shows its whole outline.
-- [ ] Scatter, line and area output is byte-identical; WASM growth under 300
+- [x] A hovered or focused bar, cell or box shows its whole outline.
+- [x] Scatter, line and area output is byte-identical; WASM growth under 300
       bytes gz.
 
 ## Risk Assessment
@@ -222,14 +222,69 @@ have no rectangle, and keep the vertex or disc ring.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (every golden read)
-- [ ] `mask wasm-browser` passes (overlay code changed)
-- [ ] WASM size: `mask wasm-size` scatter gz bytes before and after
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye (every golden read)
+- [x] `mask wasm-browser` passes (overlay code changed)
+- [x] WASM size: `mask wasm-size` scatter gz bytes before and after
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `PickIndex::extent` (`Shape::Box` rows only) and `Plot::pick_extent`
+  (`#[doc(hidden)]`); `sync_overlay` looks the rectangle up once per composed
+  overlay and passes it, with the plot rect, to `focus_item` / `hover_item`.
+- `ring_item` takes an optional `(extent, plot)`: the extent clipped to the plot
+  rect and snapped to whole pixels becomes the ring's outer box if it is at
+  least `2 * (1 + ink_width) + 2` px each way, else the old square ring at the
+  anchor. The square ring is byte-identical (scatter, tooltip, keyboard_focus
+  goldens unchanged).
+- Tests in `crates/gup-core/tests/hover.rs` (15): rectangle equality within 1 px
+  for bar, heatmap cell, box; thin-bar fallback (hover 16 px, focus 18 px);
+  scatter has no extent; dark and high-contrast pixel checks on the outline.
+- Goldens: `hover_highlight_bar.png` re-blessed (1 changed); new
+  `focus_outline_bar.png`, `hover_outline_heatmap.png`,
+  `hover_outline_boxplot.png`. Read: all four sides visible on each, neighbours
+  untouched, tooltip beside the bar; the box (not whiskers) outlined.
+- AC4 search: `pointer_moved` / `Key::Right` users are `keyboard.rs`,
+  `row_text.rs` (scatter / text only), tour 08 and 09 (scatters), tutorial 4
+  (untouched). No other golden changed (working tree clean after the suite).
+- WASM scatter gz, same session: main 378267, branch 378513 (+246 B, under 300).
+
+## Retrospective
+
+**Completed**: 2026-11-09
+
+### Key Technical Learnings
+
+#### Box plot picking
+
+- **Challenge**: a box's top-centre anchor lies on its whisker, so hovering the
+  anchor picks the whisker (layer 1), and the box's mid-height is the median
+  (layer 3). Box plot layers are boxes 0, whiskers 1, caps 2, medians 3.
+- **Solution**: tests hover inside the box a fifth down, off the whisker.
+- **Pattern**: for a box plot, the anchor is not a reliable pointer position.
+
+### Architectural Decisions
+
+#### One `ring_item` rather than `rect_ring_item` plus `ring_item`
+
+- **Decision**: a single private `ring_item(theme, anchor, outline, ..)` with
+  the fallback inside, instead of the story's two functions.
+- **Reasoning**: the two-function form grew the scatter wasm by 454 B gz (over
+  the 300 B trigger); the single form grew it 246 B.
+- **Trade-off**: slightly denser function; no public change.
+
+### Development Workflow Insights
+
+- No bar scene was added to the browser smoke test (out of scope); the scatter
+  scene's `hover-ring` and `key-focus` steps are unaffected.
+
+### Follow-up Stories
+
+None.

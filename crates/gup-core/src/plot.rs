@@ -370,12 +370,42 @@ fn brush_item(theme: &Theme, rect: Rect) -> Item {
     }
 }
 
-/// A rectangular ring: sides of `ink_width` px in the title colour inside a
-/// one-pixel edge in the background colour, on the outermost pixels of
-/// `outer` (whole pixels), so it shows on any mark or background. Returns
-/// the item (at `z`) and its outer box.
-fn rect_ring_item(theme: &Theme, outer: Rect, ink_width: f32, z: i32) -> (Item, Rect) {
-    let (l, t, w, h) = (outer.x, outer.y, outer.width, outer.height);
+/// The ring of a hovered or focused row: the outline of its box-shaped mark
+/// (`outline`: the mark's rectangle and the plot rect it is clipped to,
+/// snapped to whole pixels) if it is at least `2 * (1 + ink_width) + 2` px
+/// across each way (a thinner mark would vanish under it), else a square
+/// ring `outer` px across (even) centred on `anchor`. Sides of `ink_width`
+/// px in the title colour inside a one-pixel edge in the background colour,
+/// so it shows on any mark or background. Returns the item (at `z`) and its
+/// outer box.
+fn ring_item(
+    theme: &Theme,
+    anchor: Point,
+    outline: Option<(Rect, Rect)>,
+    outer: f32,
+    ink_width: f32,
+    z: i32,
+) -> (Item, Rect) {
+    let least = 2.0 * (1.0 + ink_width) + 2.0;
+    let boxed = outline
+        .map(|(e, p)| {
+            let (l, t) = (e.left().max(p.left()).round(), e.top().max(p.top()).round());
+            let (r, b) = (
+                e.right().min(p.right()).round(),
+                e.bottom().min(p.bottom()).round(),
+            );
+            (l, t, r - l, b - t)
+        })
+        .filter(|&(_, _, w, h)| w >= least && h >= least);
+    let (l, t, w, h) = boxed.unwrap_or_else(|| {
+        let half = outer / 2.0;
+        (
+            anchor.x.round() - half,
+            anchor.y.round() - half,
+            outer,
+            outer,
+        )
+    });
     let prim = |x, y, w, h, color| RectPrim {
         rect: Rect::new(x, y, w, h),
         color,
@@ -405,54 +435,19 @@ fn rect_ring_item(theme: &Theme, outer: Rect, ink_width: f32, z: i32) -> (Item, 
         clip: None,
         kind: ItemKind::Rects(rects),
     };
-    (item, outer)
+    (item, Rect::new(l, t, w, h))
 }
 
-/// A square ring centred on `anchor`, `outer` px across (even).
-fn ring_item(theme: &Theme, anchor: Point, outer: f32, ink_width: f32, z: i32) -> (Item, Rect) {
-    let half = outer / 2.0;
-    let l = anchor.x.round() - half;
-    let t = anchor.y.round() - half;
-    rect_ring_item(theme, Rect::new(l, t, outer, outer), ink_width, z)
-}
-
-/// The outline of a box-shaped mark: `extent` clipped to `plot` and snapped
-/// to whole pixels, as long as it is at least `2 * (1 + ink_width) + 2` px
-/// across each way (a thinner mark would vanish under it).
-fn outline_item(
-    theme: &Theme,
-    extent: Rect,
-    plot: Rect,
-    ink_width: f32,
-    z: i32,
-) -> Option<(Item, Rect)> {
-    let l = extent.left().max(plot.left()).round();
-    let t = extent.top().max(plot.top()).round();
-    let r = extent.right().min(plot.right()).round();
-    let b = extent.bottom().min(plot.bottom()).round();
-    let least = 2.0 * (1.0 + ink_width) + 2.0;
-    (r - l >= least && b - t >= least)
-        .then(|| rect_ring_item(theme, Rect::new(l, t, r - l, b - t), ink_width, z))
-}
-
-/// The keyboard focus ring centred on `anchor`, and its outer box: a 16 px
-/// square of 2 px sides in the title colour inside an 18 px square of 1 px
-/// sides in the background colour. A box-shaped mark with an `extent` is
-/// outlined instead.
+/// The keyboard focus ring: 2 px of ink inside a 1 px edge, 18 px square
+/// at `anchor` (see [`ring_item`]).
 fn focus_item(theme: &Theme, anchor: Point, outline: Option<(Rect, Rect)>) -> (Item, Rect) {
-    outline
-        .and_then(|(e, plot)| outline_item(theme, e, plot, 2.0, Z_FOCUS))
-        .unwrap_or_else(|| ring_item(theme, anchor, 18.0, 2.0, Z_FOCUS))
+    ring_item(theme, anchor, outline, 18.0, 2.0, Z_FOCUS)
 }
 
-/// The pointer hover ring centred on `anchor`, and its outer box: a 14 px
-/// square of 1 px sides in the title colour inside a 16 px square of 1 px
-/// sides in the background colour. Thinner and smaller than the focus ring.
-/// A box-shaped mark with an `extent` is outlined instead.
+/// The pointer hover ring: thinner and smaller than the focus ring, 1 px of
+/// ink inside a 1 px edge, 16 px square at `anchor` (see [`ring_item`]).
 fn hover_item(theme: &Theme, anchor: Point, outline: Option<(Rect, Rect)>) -> (Item, Rect) {
-    outline
-        .and_then(|(e, plot)| outline_item(theme, e, plot, 1.0, Z_HOVER))
-        .unwrap_or_else(|| ring_item(theme, anchor, 16.0, 1.0, Z_HOVER))
+    ring_item(theme, anchor, outline, 16.0, 1.0, Z_HOVER)
 }
 
 /// An axis as it was before the view moved.
