@@ -202,6 +202,45 @@ fn main() -> gup::Result<()> {
 A window is per layer. It applies to scatter and line charts alike, and to any
 layer through `Selection::window`.
 
+### Keeping Zero On The Axis
+
+An automatic value axis fits the rows it holds, so a live count that settles
+near 500 would fill the plot with a thin band and sit on the x axis.
+`Linear::include_zero` grows the fitted domain to contain 0, and
+`chart.view_is_home()` says whether the user has moved the view. You never
+rebuild the chart to rescale it: the axis refits on every resolve while the view
+is home (a peak that leaves the window leaves the axis), it holds once the user
+zooms or pans, and `Key::ResetView` returns it to fitting.
+
+```rust
+use gup::prelude::*;
+
+fn main() -> gup::Result<()> {
+    let cx = Context::shared()?;
+    let mut chart = gup::line(Vec::<(f64, f64)>::new())
+        .x(|p| p.0)
+        .y(|p| p.1)
+        .window(Window::LastRows(1_024))
+        .y_scale(Linear::new().include_zero());
+    let feed = chart.appender();
+
+    feed.extend((0..500).map(|i| (f64::from(i), 500.0 + f64::from(i % 7))))
+        .unwrap();
+    chart.resolve(&cx, 640.0, 400.0)?;
+    assert!(chart.view_is_home());
+    assert!(chart.y_view().unwrap().0 <= 0.0);
+
+    // The user zooms: the chart stops refitting until a reset.
+    let plot = chart.layout().unwrap().plot;
+    let centre = (plot.left() + plot.width / 2.0, plot.top() + plot.height / 2.0);
+    chart.handle(Input::wheel(centre, 1.0));
+    assert!(!chart.view_is_home());
+    chart.handle(Input::key(Key::ResetView));
+    assert!(chart.view_is_home());
+    Ok(())
+}
+```
+
 ## Step 4: Retain, for Large Layers
 
 Rows kept for a chart cost twice: once on the GPU, and once on the CPU for

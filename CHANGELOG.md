@@ -28,6 +28,13 @@ what each release contains and what its version number promises.
 
 ### Added
 
+- `Linear::include_zero`: an automatic domain grows to contain 0 before it is
+  made nice (an explicit domain wins), so a live line that settles away from
+  zero no longer sits on the axis.
+- `Chart::x_view`, `Chart::y_view` and `Chart::view_is_home`, forwarded by every
+  builder, and `Plot::y_right_view`: the values at the plot rect's edges as of
+  the last resolve, and whether the user has moved the view (an automatic axis
+  refits only while it is home).
 - `Columns::from_arrow` and `TryFrom<&RecordBatch> for Columns` (feature
   `arrow`, off by default; `arrow-array` and `arrow-schema` 60): floats,
   integers, dates and timestamps become numeric columns (nulls are NaN),
