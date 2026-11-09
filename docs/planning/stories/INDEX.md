@@ -119,6 +119,41 @@ Backlog triage for later tracks (notes only; their stories are not written):
   gallery axis writes "$500" instead of "$0.5k" (a named `dollars` function in
   the example), two goldens re-blessed. Deps: GUP-594 ✅.
 
+### First outside user, before 0.1
+
+Friction from the first outside adopter (a Game of Life app drawing gup charts
+into its own wgpu 27 renderer through `TextureTarget`, gup pinned at
+`d4a66ab4`), each checked against `main` on 2026-11-09 and ready to run. Run
+order: GUP-704 and GUP-703 anywhere (GUP-703 edits `channel.rs`); GUP-700 and
+GUP-701 together touch `lib.rs`, the tour and the tutorials, so one after the
+other (GUP-700 first); GUP-699 edits `plot.rs` and `chart.rs`, so not beside
+either; GUP-702 last, so its code can use the new names.
+
+- [GUP-699](GUP-699_Live_Charts_Keep_Data_Off_The_Axis.md) 📋 —
+  `Linear::include_zero`, and `Chart::x_view`, `y_view` and `view_is_home` so a
+  host reads the view and whether the user moved it; tests pin the refit while
+  home and the hold while moved, and a golden of a settled live line. Edits
+  `plot.rs`, `chart.rs`. Deps: GUP-685 ✅, GUP-692 ✅.
+- [GUP-700](GUP-700_One_Point.md) 📋 — The point scale becomes `PointScale` and
+  `Point` in the prelude and at the root is the geometry type that `Input`
+  takes; tour, tutorials and docs swept. Edits `lib.rs`. Deps: GUP-686 ✅.
+- [GUP-701](GUP-701_Row_Window_Type_Name.md) 📋 — `Window` (the streaming row
+  window) becomes `RowWindow`, so a winit host imports both without a clash;
+  tour, tutorials and docs swept. Edits `selection.rs`, `lib.rs`. Deps: GUP-686
+  ✅.
+- [GUP-702](GUP-702_Guide_Embedding_Gup_In_Your_Own_Wgpu_App.md) 📋 —
+  `docs/EMBEDDING.md`, compiled as doctests: `Context::from_wgpu`, a
+  `TextureTarget` loop for unorm and sRGB textures, resize, input, and the
+  `Renderer::prepare` and `Prepared::draw` path, with a test of the sRGB recipe.
+  Deps: GUP-686 ✅, GUP-700 📋 (soft), GUP-701 📋 (soft), GUP-699 📋 (soft).
+- [GUP-703](GUP-703_Color_From_Linear.md) 📋 — `Color::from_linear`,
+  `from_linear_rgba` and `to_linear`, sharing the one sRGB transfer with the
+  colour scales. Edits `channel.rs`.
+- [GUP-704](GUP-704_Requirements_Up_Front.md) 📋 — A README Requirements section
+  (Rust 1.93, wgpu 27, GPU, features, a pinned git or path dependency), tutorial
+  1 corrected from "Rust 1.85", and a test that keeps the versions from
+  drifting.
+
 ## Track N1: Docs and Tutorials
 
 Track N1 from the [November 2026 review](../STRATEGIC_REVIEW_2026-11.md):
