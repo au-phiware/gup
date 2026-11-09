@@ -38,8 +38,12 @@ All seven crates (`gup`, `gup-core`, `gup-core-macros`, `gup-wgsl`, `gup-text`,
      order and waits for each crate to appear in the index.
 - [ ] 7. **Owner**: tag `v0.1.0`, push the tag, and create a GitHub release with
      the CHANGELOG section as its notes.
-- [ ] 8. GUP-599: switch the docs to the crates.io dependency (the README's
-     Quick Start, the tutorials).
+- [ ] 8. GUP-599: switch the docs to the crates.io dependency. In each place
+     that holds a pre-release dependency block, replace the `git` and `rev`
+     lines with the crates.io version: the README's Requirements and Quick
+     Start, tutorial 1 (`docs/tutorials/01_getting_started.md`),
+     `docs/EGUI_INTEGRATION.md`, `docs/BEVY_INTEGRATION.md`, and
+     `docs/EMBEDDING.md` if it exists (GUP-702).
 - [ ] 9. Check docs.rs built all seven (`https://docs.rs/crate/<name>/0.1.0`).
      If one failed, read its build log, then fix it in a 0.1.1.
 

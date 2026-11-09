@@ -15,13 +15,15 @@ Bevy's wgpu version must match `gup-core`'s; `Cargo.lock` holds one `wgpu`.
 
 ```toml
 [dependencies]
-gup-core = { git = "https://github.com/au-phiware/gup" }
-gup-bevy = { git = "https://github.com/au-phiware/gup" }
+gup-core = { git = "https://github.com/au-phiware/gup", rev = "<full commit hash>" }
+gup-bevy = { git = "https://github.com/au-phiware/gup", rev = "<full commit hash>" }
 bevy = { version = "0.18", default-features = false, features = [
     "2d_bevy_render", "bevy_asset", "bevy_log", "bevy_window", "bevy_winit",
     "x11", "png", # replace with your platform feature
 ] }
 ```
+
+Use the same commit for every gup crate: all gup crates must use one commit.
 
 ## Minimal Example
 

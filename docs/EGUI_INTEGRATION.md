@@ -8,11 +8,13 @@ forwards pointer input to the chart.
 
 ```toml
 [dependencies]
-gup-egui = { git = "https://github.com/au-phiware/gup" }
-gup-core = { git = "https://github.com/au-phiware/gup" }
+gup-egui = { git = "https://github.com/au-phiware/gup", rev = "<full commit hash>" }
+gup-core = { git = "https://github.com/au-phiware/gup", rev = "<full commit hash>" }
 egui = "0.33"
 eframe = { version = "0.33", features = ["wgpu"] }
 ```
+
+Use the same commit for every gup crate: all gup crates must use one commit.
 
 The app must use eframe's wgpu backend
 (`NativeOptions { renderer: eframe::Renderer::Wgpu, .. }`).

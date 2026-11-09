@@ -58,15 +58,50 @@ Each item names its track in
 - No PDF export (N6).
 - No pie, violin, density or choropleth charts, and no facets.
 
-## Quick Start
+## Requirements
 
-Gup is not on crates.io yet; release 0.1 will be. Add it from git to
-`Cargo.toml`:
+- **Rust 1.93 or newer.**
+- **A GPU or software driver that wgpu supports**: Vulkan on Linux (CI uses
+  Mesa's lavapipe software driver), DX12 on Windows, Metal on macOS, or WebGPU
+  in a browser. You add no GPU crate and no async runtime.
+- **wgpu 27, if your app has its own wgpu device.** `gup::wgpu` is the exact
+  version, so use `gup::wgpu` rather than a second wgpu dependency. wgpu 27's
+  `DeviceDescriptor` has an `experimental_features` field: if you build the
+  descriptor yourself, set it, for example to
+  `wgpu::ExperimentalFeatures::disabled()`.
+
+Features:
+
+| Feature  | On by default | Adds                                                          |
+| -------- | ------------- | ------------------------------------------------------------- |
+| `window` | yes           | A winit window target: `show` and `GupApp`                    |
+| `svg`    | yes           | Data marks in `SvgTarget`                                     |
+| `web`    | no            | A `<canvas>` target and host (`web::CanvasApp`); wasm32 only  |
+| `arrow`  | no            | `Columns::from_arrow`: Arrow record batches as columnar input |
+
+The egui and Bevy integrations are separate crates, `gup-egui` and `gup-bevy`.
+
+Gup is not on crates.io yet, so depend on it from git, pinned to a commit you
+have tested against. A branch alone follows `main` and can change under you:
 
 ```toml
 [dependencies]
-gup = { git = "https://github.com/au-phiware/gup" }
+gup = { git = "https://github.com/au-phiware/gup", rev = "<full commit hash>" }
 ```
+
+Or depend on a checkout:
+
+```toml
+[dependencies]
+gup = { path = "../gup" }
+```
+
+Every gup crate in one app must come from the same commit or checkout.
+
+## Quick Start
+
+Gup is not on crates.io yet; release 0.1 will be. Add it to `Cargo.toml` as
+shown in [Requirements](#requirements).
 
 Then draw a scatter chart and save it as a PNG:
 
