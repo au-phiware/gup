@@ -566,7 +566,7 @@ GUP-628 and GUP-631 (shared `selection.rs`).
   `Float32` Arrow buffer as a column without the import copy (31 ms and 80 MB at
   10M rows): a `Column` variant over a foreign shared buffer. Opus. Deps:
   GUP-630 ✅, GUP-664 ✅.
-- [GUP-631](GUP-631_Level_Of_Detail_Spike.md) 📋 — Spike: per-frame density, a
+- [GUP-631](GUP-631_Level_Of_Detail_Spike.md) ✅ — Spike: per-frame density, a
   decimation pyramid ported from `gup-culling-lod`, and binned tiles, measured
   at 100M rows for GPU time, build time, memory and fidelity, chosen by a stated
   rule, with RFC-001 findings and the follow-up stories. Opus. Deps: GUP-627 📋,
