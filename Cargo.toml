@@ -73,6 +73,8 @@ window = ["gup-core/window"]
 svg = ["gup-core/svg"]
 # A `<canvas>` target and host (`web::CanvasApp`); wasm32 only.
 web = ["gup-core/web"]
+# `Columns::from_arrow`: Arrow record batches as columnar input.
+arrow = ["gup-core/arrow"]
 
 # Only what `tests/examples_smoke.rs` uses. The examples use `gup` alone.
 [dev-dependencies]

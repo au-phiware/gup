@@ -40,6 +40,11 @@ foldhash = "=0.2.0"
 web-time = "1.1"
 # `WindowTarget` and `show` (feature `window`, on by default).
 winit = { version = "0.30", optional = true }
+# `Columns::from_arrow` (feature `arrow`, GUP-630): the array and schema
+# crates only, not the `arrow` umbrella (no compute kernels). Apache-2.0
+# and MIT; MSRV 1.88.
+arrow-array = { version = "60.1", optional = true, default-features = false }
+arrow-schema = { version = "60.1", optional = true, default-features = false }
 
 # Drives browser error-scope promises to completion (GUP-410). Already in
 # the wasm build through wgpu's WebGPU backend.
@@ -73,6 +78,8 @@ svg = []
 window = ["dep:winit"]
 # A `<canvas>` target and host (`web::CanvasApp`); wasm32 only, no winit.
 web = ["dep:web-sys", "dep:js-sys", "dep:wasm-bindgen"]
+# `Columns::from_arrow` and `TryFrom<&RecordBatch> for Columns` (GUP-630).
+arrow = ["dep:arrow-array", "dep:arrow-schema"]
 
 [dev-dependencies]
 gup-visual-regression = { path = "../gup-visual-regression" }

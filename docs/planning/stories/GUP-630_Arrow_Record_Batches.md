@@ -19,8 +19,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Track N5: Performance at Scale **Status**: 📋 Planned
-**Created**: 2026-11-04
+**Initiative**: Track N5: Performance at Scale **Status**: ✅ Complete
+(2026-11-09) **Created**: 2026-11-04
 
 ## Context
 
@@ -50,28 +50,28 @@ and `mask feature-matrix` (GUP-602) builds every supported combination.
 
 ### AC1: Conversion
 
-- [ ] With feature `arrow`,
+- [x] With feature `arrow`,
       `Columns::from_arrow(batch: &RecordBatch) ->     Result<Columns>` converts
       every column per the table in Decisions, named by the schema's field
       names.
-- [ ] An unsupported type is an error naming the column and its Arrow type, for
+- [x] An unsupported type is an error naming the column and its Arrow type, for
       example `column "when": Arrow type Interval(DayTime) is not supported`.
-- [ ] Nulls: numeric nulls become NaN; key nulls become `NULL_CODE`.
-- [ ] A test builds a batch with one column of each supported type (with a null
+- [x] Nulls: numeric nulls become NaN; key nulls become `NULL_CODE`.
+- [x] A test builds a batch with one column of each supported type (with a null
       in each) and checks every converted value; another renders a scatter from
       a two-column Float64 batch and compares it byte for byte with the same
       data through `Columns::new().with(..)`.
 
 ### AC2: Feature plumbing
 
-- [ ] `gup-core` feature `arrow = ["dep:arrow-array", "dep:arrow-schema"]`;
+- [x] `gup-core` feature `arrow = ["dep:arrow-array", "dep:arrow-schema"]`;
       `gup` forwards it (`arrow = ["gup-core/arrow"]`); both crate docs' feature
       tables list it.
-- [ ] `mask feature-matrix` adds `--no-default-features --features arrow` to its
+- [x] `mask feature-matrix` adds `--no-default-features --features arrow` to its
       test combinations, and the wasm32 check also builds with `arrow` (docs.rs
       builds all features on wasm32).
-- [ ] `mask wasm-size` is unchanged (the scatter does not enable `arrow`).
-- [ ] `cargo deny`/`cargo audit` (whichever `mask all-check` runs) passes with
+- [x] `mask wasm-size` is unchanged (the scatter does not enable `arrow`).
+- [x] `cargo deny`/`cargo audit` (whichever `mask all-check` runs) passes with
       the new dependencies, and their licences are compatible with
       GPL-3.0-or-later (Apache-2.0 is).
 
@@ -117,9 +117,9 @@ and `mask feature-matrix` (GUP-602) builds every supported combination.
 
 ## Technical Tasks
 
-- [ ] Dependencies and features; feature-matrix lines; crate docs tables.
-- [ ] `Columns::from_arrow` and `TryFrom`; tests.
-- [ ] `mask feature-matrix`, `mask wasm-size`, licence check.
+- [x] Dependencies and features; feature-matrix lines; crate docs tables.
+- [x] `Columns::from_arrow` and `TryFrom`; tests.
+- [x] `mask feature-matrix`, `mask wasm-size`, licence check.
 
 ## Dependencies
 
@@ -136,7 +136,7 @@ and `mask feature-matrix` (GUP-602) builds every supported combination.
 
 ## Success Metrics
 
-- [ ] A Parquet-to-chart path needs only `Columns::from_arrow` and
+- [x] A Parquet-to-chart path needs only `Columns::from_arrow` and
       `add_columns`.
 
 ## Risk Assessment
@@ -146,16 +146,103 @@ and `mask feature-matrix` (GUP-602) builds every supported combination.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass:
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass:
       `cargo test -p gup-core --features arrow -- --test-threads=1` and
       `mask feature-matrix`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye: not needed, identity is tested
-- [ ] `mask wasm-browser`: not needed, no browser path changes
-- [ ] WASM size: `mask wasm-size` scatter gz bytes, expected unchanged
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye: not needed, identity is tested
+- [x] `mask wasm-browser`: not needed, no browser path changes
+- [x] WASM size: `mask wasm-size` scatter gz bytes, expected unchanged
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `Columns::from_arrow(&RecordBatch) -> Result<Columns>` and
+  `impl TryFrom<&RecordBatch> for Columns` under feature `arrow`
+  (`crates/gup-core/src/columns_arrow.rs`). The type table is the Decisions
+  table; no Arrow type appears in any other public signature.
+- Dependencies `arrow-array` and `arrow-schema` 60.1.0 (`"60.1"` in
+  `Cargo.toml`, `Cargo.lock` pins 60.1.0), `default-features = false`, MSRV
+  1.88, licences Apache-2.0 and MIT (compatible with GPL-3.0-or-later). The
+  transitive additions are `arrow-buffer`, `arrow-data`, `chrono`, `half`
+  (already present), `hashbrown` 0.17, `num-*`, `const-random`, `tiny-keccak`
+  (CC0-1.0), `getrandom` 0.2, `iana-time-zone`. `cargo audit` reports 3
+  vulnerabilities, none in the new crates (`bytes` 1.10.1 via egui, two
+  `quick-xml` advisories), all present before.
+- Feature plumbing: `gup-core/arrow`, `gup/arrow`, both crate docs' tables,
+  `mask feature-matrix` (test `--no-default-features --features arrow` and a
+  wasm32 check of `web,arrow`), CHANGELOG.
+- Tests: 6 unit tests (every type with a null, the error text, dictionary with
+  repeated/null values, a non-string dictionary, slices, empty batch) and 2
+  integration tests (`crates/gup-core/tests/arrow.rs`: a scatter and a
+  string-coloured scatter, byte for byte against `Columns::new().with(..)`).
+- Measured: `mask wasm-size` scatter 378,484 gz bytes, identical to the parent
+  commit (the scatter's lockfile has no arrow crate). The Arrow crates add 14 s
+  to a cold clippy of a bare crate (limit 60 s). `mask feature-matrix`: all 7
+  lines ok, the wasm32 `web,arrow` check 33 s.
+
+## Retrospective
+
+**Completed**: 2026-11-09
+
+### Key Technical Learnings
+
+#### One allocation from a mapped slice
+
+- **Challenge**: an Arrow buffer cannot become an `Arc<[T]>` without a copy, and
+  a null-aware copy tempts an intermediate `Vec`.
+- **Solution**: `values().iter().map(..).collect::<Arc<[_]>>()` allocates once
+  (a mapped slice iterator has a known length), then `Arc::get_mut` patches the
+  null cells to NaN. Measured at 10M rows: 31 ms (Float64), 41 ms (with nulls),
+  32 ms (Int64), 211 ms (Utf8, three distinct labels).
+- **Pattern**: build into the `Arc` directly, patch in place.
+
+#### Dictionary arrays are not key columns as they stand
+
+- **Challenge**: Arrow allows repeated and null dictionary values; `KeyColumn`
+  refuses repeated labels.
+- **Solution**: map each dictionary value to the code of its first occurrence
+  (null values map to `NULL_CODE`) and remap the keys; an out-of-range key is an
+  error naming the row. Unused values stay out of the labels.
+
+#### Timestamps keep their digits
+
+- Nanoseconds since the epoch exceed 2^53, so seconds are computed as
+  `div_euclid` plus a fraction, not `v as f64 / 1e9` (exact to the f64 of the
+  result, and correct for negatives).
+
+### Architectural Decisions
+
+#### Copy, not share (Decisions as written)
+
+- **Decision**: one copy per numeric column, as the story decided; the findings
+  (RFC-001 "GUP-628 findings") offer a foreign-buffer `Column` variant as the
+  alternative.
+- **Reasoning**: the variant changes every reader of `Column`; the copy is 31 ms
+  per 10M rows, a third of the columnar first resolve, so it does matter at
+  scale.
+- **Trade-off**: an extra 8 B per row of memory at import.
+- **Future**: GUP-697 adds the variant and shares `Float64`/`Float32` buffers.
+
+#### Version requirement `60.1`, not `=60.1.0`
+
+- **Decision**: a caret requirement; `Cargo.lock` pins 60.1.0.
+- **Reasoning**: an exact pin would stop an application that also uses arrow
+  60.x from unifying. A different major version still gives two `RecordBatch`
+  types: the user must match arrow 60.
+
+### Development Workflow Insights
+
+- `mask feature-matrix` takes about 11 minutes cold (the svg combination 271 s
+  under load); run it in the background.
+- The pre-commit hook runs prettier on Markdown: run `prettier --write` on a
+  changed `maskfile.md` or `CHANGELOG.md` before committing.
+
+### Follow-up Stories
+
+1. **GUP-697: Arrow Buffers Without a Copy** — share Float64/Float32 buffers.

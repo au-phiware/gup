@@ -30,17 +30,19 @@ cargo test -- --test-threads=1
 > Build and lib-test gup-core and gup in every supported feature combination
 > (GUP-602)
 
-`gup` and `gup-core` have the features `window`, `svg` and `web` (GUP-589), and
-a user may pick any of these combinations. The default build is the only one the
-rest of the gate tests, so this builds and runs the lib tests of both crates in
-each of: default; `--no-default-features`;
+`gup` and `gup-core` have the features `window`, `svg`, `web` (GUP-589) and
+`arrow` (GUP-630), and a user may pick any of these combinations. The default
+build is the only one the rest of the gate tests, so this builds and runs the
+lib tests of both crates in each of: default; `--no-default-features`;
 `--no-default-features --features window`;
-`--no-default-features --features svg`. It then checks (no tests, the target has
-no GPU test runner) `--no-default-features --features web` on wasm32. It prints
-one line per combination with the seconds it took, runs every combination even
-after a failure, and exits non-zero if any failed. A `#[cfg(test)]` item that
-needs a feature must be gated on it: gate the test function, not the module,
-unless the whole module needs the feature.
+`--no-default-features --features svg`;
+`--no-default-features --features arrow`. It then checks (no tests, the target
+has no GPU test runner) `--no-default-features --features web` and
+`--no-default-features --features web,arrow` on wasm32 (docs.rs builds every
+feature there). It prints one line per combination with the seconds it took,
+runs every combination even after a failure, and exits non-zero if any failed. A
+`#[cfg(test)]` item that needs a feature must be gated on it: gate the test
+function, not the module, unless the whole module needs the feature.
 
 ```bash
 set -uo pipefail
@@ -61,7 +63,7 @@ combo() {
   fi
   rm -f "$log"
 }
-for flags in "" "--no-default-features" "--no-default-features --features window" "--no-default-features --features svg"; do
+for flags in "" "--no-default-features" "--no-default-features --features window" "--no-default-features --features svg" "--no-default-features --features arrow"; do
   # shellcheck disable=SC2086 # flags are words, split on purpose
   combo "test ${flags:-default}" \
     cargo test -p gup-core -p gup --lib $flags -- --test-threads=1
@@ -69,6 +71,9 @@ done
 combo "check wasm32 --no-default-features --features web" \
   cargo check --target wasm32-unknown-unknown -p gup-core -p gup --lib \
   --no-default-features --features web
+combo "check wasm32 --no-default-features --features web,arrow" \
+  cargo check --target wasm32-unknown-unknown -p gup-core -p gup --lib \
+  --no-default-features --features web,arrow
 printf 'feature-matrix: total %ss\n' "$((SECONDS - total_start))"
 exit "$failed"
 ```
