@@ -242,13 +242,13 @@ static CHAPTERS: &[Chapter] = &[
         &[
             Tab {
                 label: "Tooltip, zoom, pan",
-                regions: &["pixel", "tooltip"],
+                regions: &["tooltip"],
                 hint: "Hover a bird for its tooltip. Scroll over the flock to zoom, drag to pan, 0 resets. The page sends these as Input values; here the window does.",
                 body: Body::Chart(|_| fitted(s08::tooltip()?)),
             },
             Tab {
                 label: "Brush",
-                regions: &["pixel", "brush"],
+                regions: &["brush"],
                 hint: "Drag a rectangle to brush it, Escape clears it. Scroll to zoom.",
                 body: Body::Chart(|_| fitted(s08::brush()?)),
             },

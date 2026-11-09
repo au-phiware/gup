@@ -253,7 +253,7 @@ cell labels, error bars, pie charts and facets.
 - [GUP-692](GUP-692_One_Way_From_Pixel_To_Data.md) ✅ Complete — `Plot::invert`
   is removed; `value` is the one way from a pixel to data; tutorial 4 migrates.
   Edits `plot.rs`. Deps: GUP-685 ✅.
-- [GUP-686](GUP-686_Prelude_Palette_And_Input_Names.md) 📋 Ready —
+- [GUP-686](GUP-686_Prelude_Palette_And_Input_Names.md) ✅ Complete —
   `OKABE_ITO_DISTINCT`, `Input`, `Key`, `Button`, `Modifiers`, `Response` and
   `RowId` join the prelude; the tour uses the palette entries; `Response` stays
   `#[must_use]`. Edits `lib.rs`. Deps: GUP-658 ✅, GUP-669 ✅.

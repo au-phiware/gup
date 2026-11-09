@@ -7,6 +7,10 @@ arrows walk the rows, `+` and `-` zoom, Shift with an arrow pans, and the
 focused row is hovered as if the pointer were on it, so its tooltip shows. This
 snippet sends the keys by hand, as chapter 8 sent the pointer.
 
+`Chart::handle` returns a `Response` that is `#[must_use]`, because a host that
+drops it never redraws; a driver with no window writes `let _ =` to say it means
+to.
+
 <!-- tour: docs/tour/snippets/09_accessibility.rs#keys -->
 
 ```rust
