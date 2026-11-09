@@ -155,6 +155,11 @@ what each release contains and what its version number promises.
 
 ### Changed
 
+- Hovering or focusing a bar, histogram bin, heatmap cell or box plot box
+  outlines the whole mark (inside its rectangle, background edge outermost)
+  instead of ringing its top-centre; marks under 6 px (hover) or 8 px (focus)
+  across, and discs, lines and areas, keep the vertex ring. `Layout::hover` and
+  `Layout::focus` are the outline's outer box.
 - The default categorical palette order is `OKABE_ITO_DISTINCT` (blue,
   vermillion, reddish purple, bluish green, sky blue, orange, yellow, black),
   with `OKABE_ITO_DISTINCT_DARK` for `Theme::dark` (sky blue first, as blue is

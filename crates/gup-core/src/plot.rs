@@ -76,10 +76,11 @@ pub struct Layout {
     /// runs are in the scene (role [`TextRole::Tooltip`]) but not in
     /// [`texts`](Self::texts).
     pub tooltip: Option<Rect>,
-    /// The keyboard focus ring's outer box, `Some` exactly while one is
-    /// drawn (see [`Plot::focused`]).
+    /// The keyboard focus outline's outer box (the mark's rectangle for a
+    /// box-shaped mark), `Some` exactly while one is drawn (see [`Plot::focused`]).
     pub focus: Option<Rect>,
-    /// The pointer hover ring's outer box, `Some` exactly while one is drawn
+    /// The pointer hover outline's outer box (the mark's rectangle for a
+    /// box-shaped mark), `Some` exactly while one is drawn
     /// (the pointer is over a row, [`Plot::hover_highlight`] is on, and the
     /// hover is not keyboard focus).
     pub hover: Option<Rect>,
@@ -369,32 +370,60 @@ fn brush_item(theme: &Theme, rect: Rect) -> Item {
     }
 }
 
-/// A square ring centred on `anchor`: sides of `ink_width` px in the title
-/// colour inside a one-pixel edge in the background colour, `outer` px across
-/// (even), so it shows on any mark or background. Returns the item (at `z`)
-/// and its outer box.
-fn ring_item(theme: &Theme, anchor: Point, outer: f32, ink_width: f32, z: i32) -> (Item, Rect) {
-    let half = outer / 2.0;
-    let l = anchor.x.round() - half;
-    let t = anchor.y.round() - half;
+/// The ring of a hovered or focused row: the outline of its box-shaped mark
+/// (`outline`: the mark's rectangle and the plot rect it is clipped to,
+/// snapped to whole pixels) if it is at least `2 * (1 + ink_width) + 2` px
+/// across each way (a thinner mark would vanish under it), else a square
+/// ring `outer` px across (even) centred on `anchor`. Sides of `ink_width`
+/// px in the title colour inside a one-pixel edge in the background colour,
+/// so it shows on any mark or background. Returns the item (at `z`) and its
+/// outer box.
+fn ring_item(
+    theme: &Theme,
+    anchor: Point,
+    outline: Option<(Rect, Rect)>,
+    outer: f32,
+    ink_width: f32,
+    z: i32,
+) -> (Item, Rect) {
+    let least = 2.0 * (1.0 + ink_width) + 2.0;
+    let boxed = outline
+        .map(|(e, p)| {
+            let (l, t) = (e.left().max(p.left()).round(), e.top().max(p.top()).round());
+            let (r, b) = (
+                e.right().min(p.right()).round(),
+                e.bottom().min(p.bottom()).round(),
+            );
+            (l, t, r - l, b - t)
+        })
+        .filter(|&(_, _, w, h)| w >= least && h >= least);
+    let (l, t, w, h) = boxed.unwrap_or_else(|| {
+        let half = outer / 2.0;
+        (
+            anchor.x.round() - half,
+            anchor.y.round() - half,
+            outer,
+            outer,
+        )
+    });
     let prim = |x, y, w, h, color| RectPrim {
         rect: Rect::new(x, y, w, h),
         color,
     };
     let (edge, ink) = (theme.background, theme.title);
-    let inner = outer - 2.0;
-    let side = inner - 2.0 * ink_width;
-    let far = outer - 1.0;
+    let (inner_w, inner_h) = (w - 2.0, h - 2.0);
+    let side = inner_h - 2.0 * ink_width;
+    let (far_x, far_y) = (w - 1.0, h - 1.0);
     let rects = vec![
-        prim(l, t, outer, 1.0, edge),
-        prim(l, t + far, outer, 1.0, edge),
-        prim(l, t + 1.0, 1.0, inner, edge),
-        prim(l + far, t + 1.0, 1.0, inner, edge),
-        prim(l + 1.0, t + 1.0, inner, ink_width, ink),
-        prim(l + 1.0, t + far - ink_width, inner, ink_width, ink),
+        prim(l, t, w, 1.0, edge),
+        prim(l, t + far_y, w, 1.0, edge),
+        prim(l, t + 1.0, 1.0, inner_h, edge),
+        prim(l + far_x, t + 1.0, 1.0, inner_h, edge),
+        prim(l + 1.0, t + 1.0, inner_w, ink_width, ink),
+        prim(l + 1.0, t + far_y - ink_width, inner_w, ink_width, ink),
         prim(l + 1.0, t + 1.0 + ink_width, ink_width, side, ink),
         prim(
-            l + far - ink_width,
+            l + far_x - ink_width,
             t + 1.0 + ink_width,
             ink_width,
             side,
@@ -406,21 +435,19 @@ fn ring_item(theme: &Theme, anchor: Point, outer: f32, ink_width: f32, z: i32) -
         clip: None,
         kind: ItemKind::Rects(rects),
     };
-    (item, Rect::new(l, t, outer, outer))
+    (item, Rect::new(l, t, w, h))
 }
 
-/// The keyboard focus ring centred on `anchor`, and its outer box: a 16 px
-/// square of 2 px sides in the title colour inside an 18 px square of 1 px
-/// sides in the background colour.
-fn focus_item(theme: &Theme, anchor: Point) -> (Item, Rect) {
-    ring_item(theme, anchor, 18.0, 2.0, Z_FOCUS)
+/// The keyboard focus ring: 2 px of ink inside a 1 px edge, 18 px square
+/// at `anchor` (see [`ring_item`]).
+fn focus_item(theme: &Theme, anchor: Point, outline: Option<(Rect, Rect)>) -> (Item, Rect) {
+    ring_item(theme, anchor, outline, 18.0, 2.0, Z_FOCUS)
 }
 
-/// The pointer hover ring centred on `anchor`, and its outer box: a 14 px
-/// square of 1 px sides in the title colour inside a 16 px square of 1 px
-/// sides in the background colour. Thinner and smaller than the focus ring.
-fn hover_item(theme: &Theme, anchor: Point) -> (Item, Rect) {
-    ring_item(theme, anchor, 16.0, 1.0, Z_HOVER)
+/// The pointer hover ring: thinner and smaller than the focus ring, 1 px of
+/// ink inside a 1 px edge, 16 px square at `anchor` (see [`ring_item`]).
+fn hover_item(theme: &Theme, anchor: Point, outline: Option<(Rect, Rect)>) -> (Item, Rect) {
+    ring_item(theme, anchor, outline, 16.0, 1.0, Z_HOVER)
 }
 
 /// An axis as it was before the view moved.
@@ -1567,14 +1594,22 @@ impl Plot {
         }
         self.overlay = None;
         let brush_px = self.marquee.or_else(|| self.brush_rect());
+        // A box-shaped mark is outlined (its rectangle, and the plot rect
+        // it is clipped to) rather than ringed at its anchor.
+        let outline = match self.hover {
+            Some((row, _, _)) if self.hover_from_keys || self.hover_highlight => self
+                .pick_extent(row)
+                .zip(self.cache.as_ref().map(|(_, r)| r.layout.plot)),
+            _ => None,
+        };
         let ring = self
             .hover
             .filter(|_| self.hover_from_keys)
-            .map(|(_, anchor, _)| focus_item(&self.theme, anchor));
+            .map(|(_, anchor, _)| focus_item(&self.theme, anchor, outline));
         let hover_ring = self
             .hover
             .filter(|_| self.hover_highlight && !self.hover_from_keys)
-            .map(|(_, anchor, _)| hover_item(&self.theme, anchor));
+            .map(|(_, anchor, _)| hover_item(&self.theme, anchor, outline));
         let tooltip = self.hover.and_then(|(row, anchor, _)| {
             let text = self.layers.get(row.layer)?.tooltip_text(row.row)?;
             Some((text, anchor))
@@ -2582,6 +2617,14 @@ impl Plot {
     pub fn pick_anchor(&mut self, row: RowId) -> Option<Point> {
         self.pick_index()?;
         self.pick.as_ref()?.1.anchor(row)
+    }
+
+    /// The rectangle of a box-shaped mark (a bar, bin, cell or box), in
+    /// logical pixels; `None` for any other shape.
+    #[doc(hidden)]
+    pub fn pick_extent(&mut self, row: RowId) -> Option<Rect> {
+        self.pick_index()?;
+        self.pick.as_ref()?.1.extent(row)
     }
 
     /// How many items the CPU pick index holds for the current resolve.

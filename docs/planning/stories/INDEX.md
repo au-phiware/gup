@@ -241,7 +241,7 @@ cell labels, error bars, pie charts and facets.
   gets a thin ring at its pick anchor (default on, `hover_highlight(bool)`
   opt-out), distinct from the GUP-619 focus ring; `Layout::hover`, browser step.
   Edits `plot.rs`. Deps: GUP-619 ✅, GUP-625 ✅.
-- [GUP-684](GUP-684_Focus_And_Hover_Outline_The_Mark.md) 📋 Ready — Focus and
+- [GUP-684](GUP-684_Focus_And_Hover_Outline_The_Mark.md) ✅ Complete — Focus and
   hover outline a bar, bin, heatmap cell or box plot box with its own rectangle
   (from the pick index) instead of a small square at its top edge; marks without
   a rectangle keep the ring. Edits `plot.rs`, `pick.rs`. Deps: GUP-676 ✅,
