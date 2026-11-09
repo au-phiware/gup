@@ -668,6 +668,16 @@ impl PickIndex {
         out
     }
 
+    /// The rectangle of `row`, if it is a box.
+    pub(crate) fn extent(&self, row: RowId) -> Option<Rect> {
+        self.items.iter().find_map(|item| match item.shape {
+            Shape::Box { lo, hi } if item.row == row => {
+                Some(Rect::from_edges(lo[0], lo[1], hi[0], hi[1]))
+            }
+            _ => None,
+        })
+    }
+
     /// Where a tooltip for `row` attaches, if it is drawn.
     pub(crate) fn anchor(&self, row: RowId) -> Option<Point> {
         self.items.iter().find_map(|item| {
