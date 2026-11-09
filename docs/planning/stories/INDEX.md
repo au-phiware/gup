@@ -257,10 +257,10 @@ cell labels, error bars, pie charts and facets.
   `OKABE_ITO_DISTINCT`, `Input`, `Key`, `Button`, `Modifiers`, `Response` and
   `RowId` join the prelude; the tour uses the palette entries; `Response` stays
   `#[must_use]`. Edits `lib.rs`. Deps: GUP-658 ✅, GUP-669 ✅.
-- [GUP-687](GUP-687_Visual_Regression_Notices_Thin_Overlays.md) 📋 Ready — The
-  golden comparison also fails on more than a few strongly different pixels (a 1
-  px, 16 px ring now passes the 0.25% rule), with thresholds taken from Windows
-  and macOS CI measurements. Deps: GUP-388 ✅, GUP-676 ✅.
+- [GUP-687](GUP-687_Visual_Regression_Notices_Thin_Overlays.md) 🚧 In Progress —
+  The golden comparison also fails on more than a few strongly different pixels
+  (a 1 px, 16 px ring now passes the 0.25% rule), with thresholds taken from
+  Windows and macOS CI measurements. Deps: GUP-388 ✅, GUP-676 ✅.
 - [GUP-543](GUP-543_Horizontal_Bars_And_Group_Padding.md) ✅ — `gup::barh`
   (`BarChart<T, Horizontal>`, categories top to bottom) and
   `BarChart::group_padding`. Deps: GUP-537 📋.
