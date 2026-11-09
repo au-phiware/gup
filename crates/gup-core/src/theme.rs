@@ -271,15 +271,8 @@ mod tests {
 
     /// WCAG 2 relative luminance of an sRGB colour.
     fn luminance(c: Color) -> f64 {
-        let lin = |v: f32| {
-            let v = f64::from(v);
-            if v <= 0.040_45 {
-                v / 12.92
-            } else {
-                ((v + 0.055) / 1.055).powf(2.4)
-            }
-        };
-        0.2126 * lin(c.r) + 0.7152 * lin(c.g) + 0.0722 * lin(c.b)
+        let [r, g, b, _] = c.to_linear();
+        0.2126 * f64::from(r) + 0.7152 * f64::from(g) + 0.0722 * f64::from(b)
     }
 
     /// WCAG 2 contrast ratio.

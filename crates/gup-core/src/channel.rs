@@ -140,6 +140,22 @@ impl Visual for Unit {
 /// An sRGB-encoded colour with straight (non-premultiplied) alpha, each
 /// component in `0.0..=1.0`. Gup blends in sRGB space (RFC-001 §7).
 ///
+/// A host that keeps colours in linear light converts at its boundary with
+/// [`Color::from_linear`] and [`Color::to_linear`]. For example, a linear clear
+/// colour becomes a theme background with
+/// `Theme { background: Color::from_linear(0.2, 0.2, 0.2), ..Theme::default() }`,
+/// and a `Color` reads back as linear with `theme.background.to_linear()`:
+///
+/// ```
+/// use gup_core::prelude::*;
+///
+/// let grey = Color::from_linear(0.5, 0.5, 0.5);
+/// let linear = grey.to_linear();
+/// assert!((linear[0] - 0.5).abs() < 1e-5);
+/// let back = Color::from_linear(linear[0], linear[1], linear[2]);
+/// assert!((back.r - grey.r).abs() < 1e-5);
+/// ```
+///
 /// In a uniform it is a WGSL `vec4<f32>` (`[r, g, b, a]`), so a shader
 /// function's `Params` may hold colours.
 #[repr(C)]
@@ -193,9 +209,60 @@ impl Color {
             .map(|c| (c.clamp(0.0, 1.0) * 255.0).round() as u8)
     }
 
+    /// An opaque colour from linear-light components (clamped to `0.0..=1.0`).
+    pub fn from_linear(r: f32, g: f32, b: f32) -> Self {
+        Self::from_linear_rgba(r, g, b, 1.0)
+    }
+
+    /// Like [`Color::from_linear`], with straight alpha `a`, which is not
+    /// transferred.
+    pub fn from_linear_rgba(r: f32, g: f32, b: f32, a: f32) -> Self {
+        // `linear_to_srgb(1.0)` is 0.99999994 in f32; one must map to one exactly.
+        let encode = |c: f32| {
+            let c = c.clamp(0.0, 1.0);
+            if c == 1.0 { 1.0 } else { linear_to_srgb(c) }
+        };
+        Self {
+            r: encode(r),
+            g: encode(g),
+            b: encode(b),
+            a,
+        }
+    }
+
+    /// The colour as linear-light `[r, g, b, a]`; alpha is unchanged.
+    pub fn to_linear(self) -> [f32; 4] {
+        [
+            srgb_to_linear(self.r),
+            srgb_to_linear(self.g),
+            srgb_to_linear(self.b),
+            self.a,
+        ]
+    }
+
     /// Premultiplied `[r·a, g·a, b·a, a]`, as GPU targets store it.
     pub(crate) fn premultiplied(self) -> [f32; 4] {
         [self.r * self.a, self.g * self.a, self.b * self.a, self.a]
+    }
+}
+
+/// Decode one sRGB-encoded component to linear light (the standard piecewise
+/// transfer function).
+pub(crate) fn srgb_to_linear(c: f32) -> f32 {
+    if c <= 0.04045 {
+        c / 12.92
+    } else {
+        ((c + 0.055) / 1.055).powf(2.4)
+    }
+}
+
+/// Encode one linear-light component as sRGB (the standard piecewise transfer
+/// function).
+pub(crate) fn linear_to_srgb(c: f32) -> f32 {
+    if c <= 0.003_130_8 {
+        c * 12.92
+    } else {
+        1.055 * c.powf(1.0 / 2.4) - 0.055
     }
 }
 
@@ -431,3 +498,88 @@ impl From<[f32; 4]> for Color {
 }
 
 encase::impl_vector!(4, Color, f32; using AsRef AsMut From);
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn close(a: f32, b: f32, tol: f32) -> bool {
+        (a - b).abs() <= tol
+    }
+
+    #[test]
+    fn linear_endpoints_are_exact() {
+        assert_eq!(Color::from_linear(0.0, 0.0, 0.0), Color::BLACK);
+        assert_eq!(Color::from_linear(1.0, 1.0, 1.0), Color::WHITE);
+    }
+
+    #[test]
+    fn linear_half_is_known_srgb() {
+        let c = Color::from_linear(0.5, 0.5, 0.5);
+        assert!(close(c.r, 0.735_357, 1e-5), "{c:?}");
+        assert!(close(c.g, 0.735_357, 1e-5), "{c:?}");
+        assert!(close(c.b, 0.735_357, 1e-5), "{c:?}");
+    }
+
+    #[test]
+    fn linear_segment_is_known_srgb() {
+        let c = Color::from_linear(0.001, 0.001, 0.001);
+        assert!(close(c.r, 0.01292, 1e-6), "{c:?}");
+        assert!(close(c.g, 0.01292, 1e-6), "{c:?}");
+        assert!(close(c.b, 0.01292, 1e-6), "{c:?}");
+    }
+
+    #[test]
+    fn to_linear_of_srgb_grey_is_known_linear() {
+        let lin = Color::rgb(0.5, 0.5, 0.5).to_linear();
+        for v in &lin[..3] {
+            assert!(close(*v, 0.214_041, 1e-5), "{lin:?}");
+        }
+        assert_eq!(lin[3], 1.0);
+    }
+
+    #[test]
+    fn round_trip_is_exact_for_every_8_bit_grey() {
+        for v in 0..=255u8 {
+            let x = f32::from(v) / 255.0;
+            let c = Color::rgb(x, x, x);
+            let [r, g, b, a] = c.to_linear();
+            let back = Color::from_linear_rgba(r, g, b, a);
+            assert!(close(back.r, c.r, 1e-5), "{v}: {back:?} vs {c:?}");
+            assert!(close(back.g, c.g, 1e-5), "{v}: {back:?} vs {c:?}");
+            assert!(close(back.b, c.b, 1e-5), "{v}: {back:?} vs {c:?}");
+            assert_eq!(back.to_rgba8(), c.to_rgba8(), "{v}");
+        }
+    }
+
+    #[test]
+    fn alpha_is_not_transferred() {
+        assert_eq!(Color::from_linear_rgba(0.2, 0.3, 0.4, 0.25).a, 0.25);
+        assert_eq!(Color::rgb(0.2, 0.3, 0.4).to_linear()[3], 1.0);
+        let translucent = Color {
+            a: 0.25,
+            ..Color::rgb(0.5, 0.5, 0.5)
+        };
+        assert_eq!(translucent.to_linear()[3], 0.25);
+        assert_eq!(Color::from_linear(0.5, 0.5, 0.5).a, 1.0);
+    }
+
+    #[test]
+    fn from_linear_clamps_out_of_range() {
+        let c = Color::from_linear(-0.5, 2.0, 0.5);
+        assert_eq!(c.r, 0.0);
+        assert_eq!(c.g, 1.0);
+        assert!(close(c.b, 0.735_357, 1e-5));
+    }
+
+    #[test]
+    fn to_linear_does_not_clamp() {
+        let hdr = Color::rgb(1.0, 0.0, 0.0).to_linear();
+        assert_eq!(hdr[0], 1.0);
+        let over = Color {
+            r: 2.0,
+            ..Color::BLACK
+        };
+        assert!(over.to_linear()[0] > 1.0);
+    }
+}

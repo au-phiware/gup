@@ -138,16 +138,8 @@ fn the_setter_is_on_the_builders() {
 }
 
 fn luminance(c: Color) -> f64 {
-    let [r, g, b, _] = c.to_rgba8();
-    let lin = |v: u8| {
-        let v = f64::from(v) / 255.0;
-        if v <= 0.04045 {
-            v / 12.92
-        } else {
-            ((v + 0.055) / 1.055).powf(2.4)
-        }
-    };
-    0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b)
+    let [r, g, b, _] = c.to_linear();
+    0.2126 * f64::from(r) + 0.7152 * f64::from(g) + 0.0722 * f64::from(b)
 }
 
 fn contrast(a: Color, b: Color) -> f64 {

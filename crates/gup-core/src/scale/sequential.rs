@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 use super::legend::{ColorScale, Legend, Ramp};
-use crate::channel::Color;
+use crate::channel::{Color, linear_to_srgb, srgb_to_linear};
 use crate::column::ColumnFormat;
 use crate::encoding::{CpuMirror, Resource, ShaderFn};
 use crate::error::{Error, Result};
@@ -175,22 +175,6 @@ pub(crate) fn sample_lut(lut: &[[u8; 4]], t: f64) -> Color {
         g: c(1),
         b: c(2),
         a: c(3),
-    }
-}
-
-pub(crate) fn srgb_to_linear(c: f32) -> f32 {
-    if c <= 0.04045 {
-        c / 12.92
-    } else {
-        ((c + 0.055) / 1.055).powf(2.4)
-    }
-}
-
-fn linear_to_srgb(c: f32) -> f32 {
-    if c <= 0.003_130_8 {
-        c * 12.92
-    } else {
-        1.055 * c.powf(1.0 / 2.4) - 0.055
     }
 }
 
