@@ -357,7 +357,7 @@ fn the_value_under_the_pointer_holds_across_label_width_changes() {
         let (mut widened, mut narrowed, mut moved) = (false, false, false);
         for lines in [1.0f32; 6].into_iter().chain([-1.0f32; 6]) {
             let (w0, _) = y_labels(&f.plot);
-            let v = f.plot.invert(ANCHOR).unwrap();
+            let v = f.plot.value(ANCHOR).unwrap();
             wheel(&mut f, lines);
             if control {
                 assert_eq!(f.plot.handle(Input::PointerLeft), Response { redraw: true });
@@ -374,7 +374,7 @@ fn the_value_under_the_pointer_holds_across_label_width_changes() {
                 continue;
             }
             assert_eq!(bits(rect), bits(first), "the rect moved");
-            let u = f.plot.invert(ANCHOR).unwrap();
+            let u = f.plot.value(ANCHOR).unwrap();
             let (dx, dy) = (
                 f.x.read().current_domain().unwrap(),
                 f.y.read().current_domain().unwrap(),
@@ -451,16 +451,16 @@ fn zoom_called_directly_does_not_hold() {
 }
 
 #[test]
-fn invert_is_none_before_resolve_and_outside_the_plot() {
+fn value_is_none_before_resolve() {
     let cx = cx();
     let mut f = held_fixture();
-    assert_eq!(f.plot.invert(ANCHOR), None);
+    assert_eq!(f.plot.value(ANCHOR), None);
     let r = resolve_at(&mut f, &cx, SIZE);
-    assert!(f.plot.invert(ANCHOR).is_some());
-    assert!(f.plot.invert(Point::new(r.left(), r.top())).is_some());
-    assert!(f.plot.invert(Point::new(r.right(), r.bottom())).is_some());
-    assert_eq!(f.plot.invert(Point::new(r.left() - 1.0, ANCHOR.y)), None);
-    assert_eq!(f.plot.invert(Point::new(ANCHOR.x, r.bottom() + 1.0)), None);
+    assert!(f.plot.value(ANCHOR).is_some());
+    assert!(f.plot.value(Point::new(r.left(), r.top())).is_some());
+    assert!(f.plot.value(Point::new(r.right(), r.bottom())).is_some());
+    // Outside the plot rect it extrapolates rather than giving `None`.
+    assert!(f.plot.value(Point::new(r.left() - 1.0, ANCHOR.y)).is_some());
 }
 
 // ---- GUP-453: drag pan, view axes and reset ----
@@ -565,7 +565,7 @@ fn drag_holds_the_value(
     let _ = move_to(f, p);
     assert_eq!(f.plot.hovered(), Some(RowId { layer: 0, row: 3 }));
     take(events);
-    let v = f.plot.invert(p).unwrap();
+    let v = f.plot.value(p).unwrap();
     let before = (f.x.read().current_domain(), y_domain());
     assert_eq!(press(f, p), Response::default());
     // Within the slop: nothing moves, the row stays hovered.

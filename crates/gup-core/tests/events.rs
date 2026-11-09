@@ -616,7 +616,7 @@ fn drag_zoom_sets_the_domains_to_the_rectangle_and_reset_view_undoes_it() {
         Pt::new(r.left() + 60.0, r.top() + 40.0),
         Pt::new(r.left() + 200.0, r.top() + 150.0),
     );
-    let (va, vb) = (plot.invert(a).unwrap(), plot.invert(b).unwrap());
+    let (va, vb) = (plot.value(a).unwrap(), plot.value(b).unwrap());
     drag(&mut plot, a, b);
     assert!(plot.brush().is_none());
     plot.resolve(&cx, W, H).unwrap();

@@ -250,6 +250,9 @@ cell labels, error bars, pie charts and facets.
   `Chart::pixel(x, y)` and `Chart::value(point)` (and `Plot::pixel_right`) map
   data to pixels and back for every scale; the tour and tutorial 4 drop their
   tick-interpolating helper. Edits `chart.rs`, `plot.rs`. Deps: GUP-669 ✅.
+- [GUP-692](GUP-692_One_Way_From_Pixel_To_Data.md) ✅ Complete — `Plot::invert`
+  is removed; `value` is the one way from a pixel to data; tutorial 4 migrates.
+  Edits `plot.rs`. Deps: GUP-685 ✅.
 - [GUP-686](GUP-686_Prelude_Palette_And_Input_Names.md) ✅ Complete —
   `OKABE_ITO_DISTINCT`, `Input`, `Key`, `Button`, `Modifiers`, `Response` and
   `RowId` join the prelude; the tour uses the palette entries; `Response` stays
