@@ -129,7 +129,7 @@ GUP-701 together touch `lib.rs`, the tour and the tutorials, so one after the
 other (GUP-700 first); GUP-699 edits `plot.rs` and `chart.rs`, so not beside
 either; GUP-702 last, so its code can use the new names.
 
-- [GUP-699](GUP-699_Live_Charts_Keep_Data_Off_The_Axis.md) 📋 —
+- [GUP-699](GUP-699_Live_Charts_Keep_Data_Off_The_Axis.md) 🚧 —
   `Linear::include_zero`, and `Chart::x_view`, `y_view` and `view_is_home` so a
   host reads the view and whether the user moved it; tests pin the refit while
   home and the hold while moved, and a golden of a settled live line. Edits
