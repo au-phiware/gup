@@ -240,8 +240,11 @@ macro_rules! boxes {
 fn hovered(cx: &Context, plot: &mut Plot, row: RowId) -> (Rect, Rect, Rect) {
     plot.resolve(cx, W, H).unwrap();
     let extent = plot.pick_extent(row).expect("a box-shaped mark");
-    let a = plot.pick_anchor(row).unwrap();
-    let _ = plot.handle(Input::pointer_moved(a));
+    let inside = (
+        extent.left() + extent.width / 4.0,
+        extent.top() + extent.height / 5.0,
+    );
+    let _ = plot.handle(Input::pointer_moved(inside));
     assert_eq!(plot.hovered(), Some(row));
     let layout = plot.resolve(cx, W, H).unwrap().layout.clone();
     let outline = layout.hover.expect("an outline");
@@ -365,8 +368,12 @@ fn hover_outline_boxplot_golden() {
     let mut chart = boxes!();
     let plot = chart.plot_mut();
     plot.resolve(&cx, W, H).unwrap();
-    let a = plot.pick_anchor(row(0)).unwrap();
-    let _ = plot.handle(Input::pointer_moved(a));
+    let e = plot.pick_extent(row(0)).unwrap();
+    let _ = plot.handle(Input::pointer_moved((
+        e.left() + e.width / 4.0,
+        e.top() + e.height / 5.0,
+    )));
+    assert_eq!(plot.hovered(), Some(row(0)));
     golden("gup_core/hover_outline_boxplot", &cx, plot);
 }
 
