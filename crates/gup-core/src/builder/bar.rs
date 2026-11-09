@@ -1039,6 +1039,15 @@ impl<T: Send + Sync + 'static, O: Orientation> Chart for BarChart<T, O> {
     fn value(&self, at: Point) -> Option<(f64, f64)> {
         Chart::value(&self.plot, at)
     }
+    fn x_view(&self) -> Option<(f64, f64)> {
+        Chart::x_view(&self.plot)
+    }
+    fn y_view(&self) -> Option<(f64, f64)> {
+        Chart::y_view(&self.plot)
+    }
+    fn view_is_home(&self) -> bool {
+        Chart::view_is_home(&self.plot)
+    }
     fn as_any(&self) -> &dyn Any {
         self
     }

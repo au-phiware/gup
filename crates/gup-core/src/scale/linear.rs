@@ -23,6 +23,8 @@ pub struct Linear {
     /// Every value fitted in the last pass is a whole number
     /// ([`ShaderFn::fit_integral`]): ticks step by at least 1.
     integral: bool,
+    /// An automatic domain grows to contain 0.
+    zero: bool,
 }
 
 impl Default for Linear {
@@ -40,7 +42,31 @@ impl Linear {
             range: (0.0, 1.0),
             tick_unit: None,
             integral: false,
+            zero: false,
         }
+    }
+
+    /// Grow an automatic domain to contain 0 before it is made nice. An
+    /// explicit domain wins, in either call order. The flag survives zoom and
+    /// reset.
+    ///
+    /// ```
+    /// use gup_core::prelude::*;
+    ///
+    /// struct Row { x: f64, y: f64 }
+    /// let rows: Vec<Row> = (0..10).map(|i| Row { x: i as f64, y: 500.0 + 50.0 * i as f64 }).collect();
+    /// let mut chart = gup_core::line(rows)
+    ///     .x(|r| r.x)
+    ///     .y(|r| r.y)
+    ///     .y_scale(Linear::new().include_zero());
+    /// let cx = Context::new_blocking().unwrap();
+    /// chart.resolve(&cx, 400.0, 300.0).unwrap();
+    /// let ticks = &chart.layout().unwrap().y_ticks;
+    /// assert_eq!(ticks[0].0, 0.0);
+    /// ```
+    pub fn include_zero(mut self) -> Self {
+        self.zero = true;
+        self
     }
 
     /// Use a fixed domain instead of fitting the data.
@@ -132,7 +158,11 @@ impl ShaderFn for Linear {
             ));
         }
         if !self.explicit {
-            self.domain = Some(extent);
+            self.domain = Some(if self.zero {
+                (extent.0.min(0.0), extent.1.max(0.0))
+            } else {
+                extent
+            });
         }
         Ok(())
     }
