@@ -161,6 +161,9 @@ To open a window instead, pass the chart to `gup::show(chart)`. Continue with
 [Tutorial 1, Getting Started](./docs/tutorials/01_getting_started.md), or see
 all [tutorials](./docs/tutorials/README.md).
 
+To draw a chart inside your own wgpu app, read the
+[embedding guide](./docs/EMBEDDING.md).
+
 ## Architecture Highlights
 
 See [`TECHNICAL_APPROACH.md`](./docs/TECHNICAL_APPROACH.md).

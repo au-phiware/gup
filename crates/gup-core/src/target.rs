@@ -518,8 +518,19 @@ impl TextureTarget {
         let format = texture.format().remove_srgb_suffix();
         options.validate(cx, format)?;
         let (width, height) = (texture.width(), texture.height());
+        // A texture made `*Srgb` without its non-sRGB twin in `view_formats`
+        // fails the view below; say what to change.
+        let what = if texture.format().is_srgb() {
+            format!(
+                "texture target ({format:?} view of the host's {:?} texture; its \
+                 `view_formats` must list {format:?}, or the view cannot be made)",
+                texture.format()
+            )
+        } else {
+            format!("texture target ({format:?} view of the host's texture)")
+        };
         cx.scoped(
-            || format!("texture target ({:?} view of the host's texture)", format),
+            || what,
             || {
                 let view = texture.create_view(&wgpu::TextureViewDescriptor {
                     label: Some("gup texture target"),

@@ -33,6 +33,9 @@ with **Tutorial 1** and work through them in order. Experienced Rust developers
 may want to jump directly to the topic that interests them — each tutorial is
 self-contained.
 
+To draw a chart inside your own wgpu app (its device, its texture or render
+pass), read the [embedding guide](../EMBEDDING.md) after Tutorial 1.
+
 ```text
 Tutorial 1 ─── Getting Started
      │

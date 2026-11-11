@@ -63,6 +63,11 @@ and sampled directly by egui.
 `gup-bevy`: embed a Gup chart in a Bevy app as a sprite texture, updated as your
 data changes.
 
+### [Embedding in your own wgpu app](./EMBEDDING.md)
+
+A chart in a texture or a render pass of your own renderer: the device, the sRGB
+and unorm recipes, resize, input and the `Renderer::prepare` path.
+
 ## Performance
 
 ### [📈 Performance Guide](./PERFORMANCE_GUIDE.md)

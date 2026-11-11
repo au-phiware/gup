@@ -37,4 +37,4 @@ checks that each page shows exactly the code that was drawn.
 12. [Under the builders](12_under_the_builders.md): your own colour ramp and
     mark in WGSL.
 13. [Everywhere it runs](13_everywhere.md): the window, files, egui, Bevy and
-    the browser.
+    the browser. Your own wgpu app: the [embedding guide](../EMBEDDING.md).

@@ -26,6 +26,8 @@ Quick access to all documents in `docs/`. For stories and planning, see
   (`gup-egui`)
 - [BEVY_INTEGRATION.md](BEVY_INTEGRATION.md) — Gup charts in Bevy apps
   (`gup-bevy`)
+- [EMBEDDING.md](EMBEDDING.md) — Gup charts in your own wgpu app: a texture or
+  your own render pass, resize and input
 
 ---
 
