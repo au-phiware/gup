@@ -131,3 +131,35 @@ gate (`zoom_window.cpu.median_ms` at most 4.0) moved here.
 - [ ] `mask perf-budget` table pasted
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
+
+## Profile (2026-11-12, AC1)
+
+`perf`, `valgrind` and `samply` are not installed and ptrace attach is refused
+(`yama` scope 1), so the profile is from timing spans (`Instant`, temporary,
+reverted) around every stage of `Plot::resolve_full`. Release,
+`--bubbles --chunk-rows 25000 --points 100000 --present mailbox --uncapped`,
+load average about 4.7, median of 660 frames (stage times are cumulative from
+the start of `resolve_full`):
+
+| stage                                               | time         |
+| --------------------------------------------------- | ------------ |
+| `resolve_full` total                                | 11.80 ms     |
+| steps 1 to 5 up to the start of step 6              | 11.58 ms     |
+| of which `Layer::edge_marks` (the edge-inset solve) | 11.44 ms     |
+| `Layer::prepare` (uniforms, columns)                | 0.08 ms      |
+| `fit_domains`, `visible_entries`, `visible_spans`   | 0.002 ms     |
+| steps 6 and 7 (the scene)                           | about 0.2 ms |
+
+The same run without `--bubbles`: `edge_marks` 0.017 ms, `resolve_full` 0.40 ms.
+
+So 97% of the cost is `Selection::edge_marks` (`selection.rs`, called from
+`resolve_full` step 5 for explicit-domain axes), not the `rank` / `row_of` loops
+the story suspected (those are in the pick-index build, which runs once per
+epoch). It runs every frame in which a scale changes (a zoom changes the
+provisional range and so the candidates). With a size column the GUP-567
+shortcut (sorted values plus binary search, which needs every row to reach the
+same `fixed` extent) does not apply, so every chunk the statistics cannot rule
+out (up to the 65,536-row `EDGE_ROW_BUDGET`) is decoded (`chunk_values`) and
+scanned row by row with two dynamic `cpu_eval` calls per row. Any layer with a
+size column pays it, ordered or not; the order is incidental (a plain scatter
+has no size column). The fix is within `selection.rs`.
