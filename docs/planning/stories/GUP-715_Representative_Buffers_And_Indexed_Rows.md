@@ -199,3 +199,57 @@ GUP-716.
 - [ ] WASM size: `mask wasm-size` scatter gz bytes reported
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
+
+## Blocked (2026-11-12)
+
+**Question**: the escalation trigger "the gather needs the CPU bytes of a
+released non-shared chunk" fires by construction. Should LOD be limited to
+stores whose chunks stay readable (A), or should the tiers and the
+representative buffers of a LOD-eligible layer be built before its chunks are
+released (B, or C)?
+
+**Evidence**
+
+- `Retain::AUTO_MAX_ROWS = 10_000_000` (`selection.rs:120`): an `Auto` layer
+  over 10M rows, LOD's target range (10M-80M in GUP-631), drops every full
+  chunk's CPU copy after its first successful prepare (`plot.rs:3349`
+  `layer.release()`, `column.rs:1034` `Chunk::release`); `GpuOnly` and `Rows` do
+  at any size. `ColumnStore::cells` then returns `None`: no CPU source exists
+  for the gather.
+- The store keeps no copy only when **every** input is a shared column
+  (`selection.rs:352` `fill`: a columnar layer with column inputs only). A
+  `Selection<T>` over rows, or a columnar layer with one closure channel, is
+  owned and released.
+- `Tiers::build` (GUP-714) has the same input problem: it reads x and y on the
+  CPU. So the gather is not the binding constraint; the tier build is, and
+  whatever builds the tiers before release can gather in the same pass. A GPU
+  gather (compute over the chunk buffer, which has `STORAGE` usage) would not
+  help on its own, since the tiers still need the CPU values.
+- In this story's force seam the tier is set before the first prepare, so the
+  build and gather run before that prepare's release; AC1-AC3 are unaffected.
+- The other trigger, `max_vertex_buffers`, does not fire for LOD-eligible marks:
+  `Circle` has 7 channels (7 columns + `lod_row` = 8 slots, the default limit);
+  a constant-extent `Rect` has at most 6 column channels (7 slots).
+
+**Options**
+
+- **A. Limit LOD to readable stores** (shared columns, or CPU copies kept): an
+  owned layer above 10M rows under `Auto` draws in full. Simplest; but those are
+  the layers LOD exists for, unless users move to `Plot::add_columns`.
+- **B. Build before release** (GUP-716): in the prepare whose `release()` would
+  drop a LOD-eligible layer's chunks (quad mark, no size order, layer over the
+  200,000-row threshold, `Lod::Auto`), build the tiers and `LodGpu` of every
+  full chunk first, not lazily per visible chunk. About 50 ns a row for the
+  tiers (0.5 s per 10M on the first frame), tens of ms per 10M for the gather,
+  at most 6 B a data row of GPU memory. Lazy per-chunk builds stay for readable
+  stores.
+- **C. Release waits for LOD**: `Chunk::release` keeps a LOD-eligible chunk's
+  CPU copy until its tiers and `LodGpu` are built, so builds stay lazy (off the
+  frame path); CPU memory stays at `Retain::Columns` levels until then, and a
+  chunk never panned into view is never released.
+
+**Recommendation**: B, decided in GUP-716 (where the per-frame choice and the
+build scheduling live). This story is unchanged by any of A-C: `LodGpu` is
+gathered from the chunk's CPU bytes or its shared columns and returns an error
+naming the chunk when neither is available. If you agree, I continue as briefed
+with that error path.
