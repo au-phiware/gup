@@ -40,6 +40,14 @@
 //!                                      culling has something to skip
 //!   --no-cull                          draw and pick every chunk
 //!                                      (`Plot::chunk_culling(false)`)
+//!   --bubbles                          draw --points circles sized by a column
+//!                                      of 16 levels (1.5^i, i in 0..16) drawn
+//!                                      at random by a fixed seed, instead of
+//!                                      the scatter (GUP-492)
+//!   --window N                         with --bubbles: `RowWindow::LastRows(N)`;
+//!                                      the rows are fed in 1,000-row appends,
+//!                                      each resolved, before the measured
+//!                                      frames
 //!   --metric-prefix NAME               prefix of every `metric` line
 //!                                      (default `zoom`)
 //!   --size WxH                         windowed at this physical size
@@ -87,6 +95,8 @@ struct Options {
     encode: bool,
     sorted: bool,
     cull: bool,
+    bubbles: bool,
+    window: Option<usize>,
     prefix: String,
 }
 
@@ -107,6 +117,8 @@ fn options() -> Options {
         encode: true,
         sorted: false,
         cull: true,
+        bubbles: false,
+        window: None,
         prefix: "zoom".to_owned(),
     };
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -143,6 +155,8 @@ fn options() -> Options {
             "--no-encode" => o.encode = false,
             "--sorted" => o.sorted = true,
             "--no-cull" => o.cull = false,
+            "--bubbles" => o.bubbles = true,
+            "--window" => o.window = Some(value().parse().expect("--window N")),
             "--metric-prefix" => o.prefix = value().clone(),
             "--size" => {
                 let (w, h) = value().split_once('x').expect("--size WxH");
@@ -199,6 +213,9 @@ struct Bench {
     pick_index: Option<(Duration, usize)>,
     error: Option<String>,
     finished: bool,
+    /// `--bubbles --window`: rows still to append, in 1,000-row batches,
+    /// before the first measured frame.
+    feed: Vec<(f64, f64, f64)>,
 }
 
 impl Bench {
@@ -295,6 +312,17 @@ impl Bench {
         let gpu = self.gpu.as_mut().unwrap();
         let (w, h) = gpu.target.size();
         let dpr = gpu.target.dpr();
+        // A windowed run keeps its rows as appended: feed them a batch at
+        // a time, resolving after each, as a live chart would.
+        let feed = std::mem::take(&mut self.feed);
+        for batch in feed.chunks(1_000) {
+            let layer = self
+                .plot
+                .layer_mut::<(f64, f64, f64), Circle>()
+                .expect("the bubble layer");
+            layer.append(batch.iter().copied())?;
+            self.plot.resolve(&gpu.cx, w as f32 / dpr, h as f32 / dpr)?;
+        }
         let resolved = self.plot.resolve(&gpu.cx, w as f32 / dpr, h as f32 / dpr)?;
         if self.full.is_none() {
             self.full = Some((
@@ -657,7 +685,12 @@ fn main() {
     if o.sorted {
         rows.sort_by(|a, b| a.gdp_per_capita.total_cmp(&b.gdp_per_capita));
     }
-    let (mut plot, x, y) = if let Some(curve) = o.line {
+    let mut feed = Vec::new();
+    let (mut plot, x, y) = if o.bubbles {
+        let (plot, x, y, rest) = bubble_plot(o.points, o.window, o.chunk_rows);
+        feed = rest;
+        (plot, XScale::Linear(x), y)
+    } else if let Some(curve) = o.line {
         let (plot, x, y) = line_plot(o.points, curve, o.translucent, o.chunk_rows);
         (plot, XScale::Linear(x), y)
     } else if o.time {
@@ -701,6 +734,7 @@ fn main() {
         pick_index: None,
         error: None,
         finished: false,
+        feed,
     };
     let event_loop = EventLoop::new().expect("event loop");
     event_loop.run_app(&mut bench).expect("run");
@@ -804,4 +838,53 @@ fn line_plot(
         layer.max_chunk_rows(rows);
     }
     (plot, x, y)
+}
+
+/// `--bubbles`: `n` circles, x the row index, y in 1..=1000 on the log
+/// scale, sized by one of 16 levels (`1.5^i`) drawn at random by a fixed
+/// seed. With a `window`, the layer starts empty and the rows come back
+/// to be appended in batches.
+#[allow(clippy::type_complexity)]
+fn bubble_plot(
+    n: usize,
+    window: Option<usize>,
+    max_chunk_rows: Option<u32>,
+) -> (Plot, ScaleRef<Linear>, ScaleRef<Log>, Vec<(f64, f64, f64)>) {
+    // xorshift64: the same sizes every run.
+    let mut seed = 0x9e37_79b9_7f4a_7c15_u64;
+    let rows: Vec<(f64, f64, f64)> = (0..n)
+        .map(|i| {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            (
+                i as f64,
+                1.0 + ((i * 7919) % 1000) as f64,
+                1.5f64.powi((seed % 16) as i32),
+            )
+        })
+        .collect();
+    let mut plot = Plot::new();
+    let (x, y) = (plot.x(Linear::new()), plot.y(Log::new()));
+    let size = ScaleRef::new(Pow::sqrt().range(Px(1.5), Px(14.0)));
+    let (initial, rest) = if window.is_some() {
+        (Vec::new(), rows)
+    } else {
+        (rows, Vec::new())
+    };
+    let layer = plot
+        .title("Bubbles")
+        .add(Selection::<(f64, f64, f64), Circle>::new(initial));
+    layer
+        .attr(Circle::X, x.encode(|r: &(f64, f64, f64)| r.0))
+        .attr(Circle::Y, y.encode(|r: &(f64, f64, f64)| r.1))
+        .radius(size.encode(|r: &(f64, f64, f64)| r.2))
+        .fill(Color::hex(0xd62728));
+    if let Some(n) = window {
+        layer.window(RowWindow::LastRows(n));
+    }
+    if let Some(rows) = max_chunk_rows {
+        layer.max_chunk_rows(rows);
+    }
+    (plot, x, y, rest)
 }

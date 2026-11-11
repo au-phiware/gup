@@ -267,3 +267,55 @@ none of that: they only change the sort key.
       records them)
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
+
+## Blocked (2026-11-11)
+
+**Question**: AC3's decision rule fired (`zoom_window.cpu.median_ms` is 12.0 ms
+with `BUCKET_BITS = 3` and 12.1 ms with `BUCKET_BITS = 2`, limit 4.0), but the
+cost is not the draw order's. How should the 4.0 ms limit be met or reframed?
+
+**Done and committed** (commit "GUP-492: quantised size keys..." and the
+`zoom_bench` flags): `DrawOrder::new(column, reversed, bucketed)`,
+`BUCKET_BITS = 3`, the 5% / 30% unit test, the AC1 / AC2 tests in
+`tests/window.rs` (`Retain::Auto` bounded, `Retain::GpuOnly` ≤ 16 a run, images
+equal a fresh plot: 0 of 120,000 pixels differ),
+`zoom_bench --bubbles --window N`.
+
+**Evidence** (release, 1000x700, mailbox, machine load ~3-5):
+
+| run                                                  | cpu median | draws | gpu pass |
+| ---------------------------------------------------- | ---------- | ----- | -------- |
+| `--points 300000` (plain scatter, one chunk)         | 0.86 ms    | 4     | 4.3 ms   |
+| `--bubbles --points 100000` (one chunk)              | 0.62 ms    | 4     | 1.5 ms   |
+| `--bubbles --window 1000000 --points 100000` (1 chk) | 0.55 ms    | 115   | 1.5 ms   |
+| `--chunk-rows 25000 --points 100000` (plain)         | 1.08 ms    | 7     | -        |
+| `--bubbles --chunk-rows 25000 --points 100000`       | 12.5 ms    | 7     | 2.0 ms   |
+| `--bubbles --window 100000 --points 100000`          | 11.6 ms    | 19    | 1.0 ms   |
+| `--bubbles --window 100000 --points 300000`, before  | 12.6 ms    | 19    | 0.95 ms  |
+| same, after (BUCKET_BITS 3)                          | 12.0 ms    | 19    | 0.96 ms  |
+| same, after (BUCKET_BITS 2)                          | 12.1 ms    | 19    | 0.96 ms  |
+
+So a size-ordered layer with more than one chunk costs about 12 ms in
+`Plot::resolve` every frame, windowed or not, bucketed or not (resolve median 25
+ms on a loaded run, prepare 0.08 ms). It is not the number of draws. The
+suspects are the per-frame O(rows) work for a size order in `selection.rs`
+(about lines 2765-2910: `rank` over every stored row, `row_of` binary searches
+per row), run for each zoom frame.
+
+**Draws, 16 levels**: the exact order already draws at most 178 times in AC1's
+run (a repeated hash of 16 distinct sizes merges into 16 ranges a run), so the
+story's "more than 50,000 before" does not hold for 16 levels; with continuous
+sizes (about 70 buckets) the same run draws 124,002 before and 702 after
+(`a_windowed_continuous_size_order_draws_a_few_per_chunk`).
+
+**Options**: (1) fix the per-frame cost first in a new story (find which
+function: needs a profile), then finish this one; (2) accept 12 ms and set the
+row's limit from the measurement (a budget decision, the orchestrator's); (3)
+split: land the bucketing now (done), and move AC3's CPU gate to the story that
+removes the per-frame cost. **Recommendation**: 3, with a story for the resolve
+cost (it also hits GUP-721).
+
+Also fixed, outside the letter of the story: `Selection::window` changed after
+the first resolve left `bucketed` stale only when the chunk size was unchanged;
+`evaluate` now treats a mismatch as stale (the trigger's check passed otherwise:
+a window change normally changes the chunk cap and re-evaluates).
