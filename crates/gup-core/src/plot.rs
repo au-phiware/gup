@@ -2978,14 +2978,19 @@ impl Plot {
         // makes its own room, so they do not count there.
         let right_id = right.map(|r| r.identity());
         let (mut size, mut ext_x, mut ext_y, mut ext_r) = (0.0f32, 0.0f32, 0.0f32, 0.0f32);
+        // Per value axis (left y, right y): which ends a line or area keeps
+        // clear of the axis line (GUP-705).
+        let mut clear = [[false; 2]; 2];
         for layer in &self.layers {
             let o = layer.overhang();
             size = size.max(o.size);
             ext_x = ext_x.max(o.x);
             if right_id.is_some() && layer.y_axis_id() == right_id {
                 ext_r = ext_r.max(o.y);
+                clear[1] = std::array::from_fn(|k| clear[1][k] || o.clear_y[k]);
             } else {
                 ext_y = ext_y.max(o.y);
+                clear[0] = std::array::from_fn(|k| clear[0][k] || o.clear_y[k]);
             }
         }
         let over = |s: &dyn DynPositionScale, ext: f32| {
@@ -3077,7 +3082,33 @@ impl Plot {
         };
         // Marks that overhang keep `plot_padding` of background between
         // their edge and the axis line; a baseline (no overhang) stays on it.
-        let padded = |o: f32| if o > 0.0 { o + th.plot_padding.0 } else { 0.0 };
+        let padded = |o: f32, clear: bool| {
+            if o > 0.0 {
+                o + th.plot_padding.0
+            } else if clear {
+                th.plot_padding.0
+            } else {
+                0.0
+            }
+        };
+        // A line's value axis clears its lowest and highest rows, except
+        // at a zero the scale was asked to include: a baseline sits there
+        // (GUP-705).
+        let clears = |s: Option<&dyn DynPositionScale>, c: [bool; 2]| {
+            let Some(s) = s.filter(|s| s.is_auto() && !s.reads_keys()) else {
+                return [false; 2];
+            };
+            let zero = |v: f64| s.anchors_zero() && v == 0.0;
+            match s.current_domain() {
+                Some((lo, hi)) => [c[0] && !zero(lo), c[1] && !zero(hi)],
+                None => c,
+            }
+        };
+        let clear = [
+            [false; 2],
+            clears(Some(&**y), clear[0]),
+            clears(right.map(|r| &**r), clear[1]),
+        ];
         // An automatic axis with labels widens each end by what the labels
         // there need, solved on the first plot rect with doubled padding
         // (widening pads both ends) and the smaller span (GUP-555).
@@ -3123,21 +3154,21 @@ impl Plot {
             x.widen(
                 lay.plot.left(),
                 lay.plot.right(),
-                padded(mark_over[0].max(label_room[0].0)),
-                padded(mark_over[0].max(label_room[0].1)),
+                padded(mark_over[0].max(label_room[0].0), clear[0][0]),
+                padded(mark_over[0].max(label_room[0].1), clear[0][1]),
             ) || kept(0, &**x),
             y.widen(
                 lay.plot.bottom(),
                 lay.plot.top(),
-                padded(mark_over[1].max(label_room[1].0)),
-                padded(mark_over[1].max(label_room[1].1)),
+                padded(mark_over[1].max(label_room[1].0), clear[1][0]),
+                padded(mark_over[1].max(label_room[1].1), clear[1][1]),
             ) || kept(1, &**y),
             right.is_some_and(|r| {
                 r.widen(
                     lay.plot.bottom(),
                     lay.plot.top(),
-                    padded(mark_over[2].max(label_room[2].0)),
-                    padded(mark_over[2].max(label_room[2].1)),
+                    padded(mark_over[2].max(label_room[2].0), clear[2][0]),
+                    padded(mark_over[2].max(label_room[2].1), clear[2][1]),
                 ) || kept(2, &**r)
             }),
         ];

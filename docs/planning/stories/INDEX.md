@@ -153,7 +153,7 @@ either; GUP-702 last, so its code can use the new names.
   (Rust 1.93, wgpu 27, GPU, features, a pinned git or path dependency), tutorial
   1 corrected from "Rust 1.85", and a test that keeps the versions from
   drifting.
-- [GUP-705](GUP-705_Line_Axes_Clear_Their_Rows.md) 📋 — A line's or area's
+- [GUP-705](GUP-705_Line_Axes_Clear_Their_Rows.md) ✅ — A line's or area's
   automatic y axis leaves the gap rule's padding above and below its rows, so a
   round-number minimum never sits on the axis line. Deps: GUP-699 ✅.
 

@@ -184,6 +184,10 @@ impl PositionScale for Linear {
         self.domain
     }
 
+    fn anchors_zero(&self) -> bool {
+        self.zero
+    }
+
     fn is_auto(&self) -> bool {
         !self.explicit
     }
@@ -536,6 +540,12 @@ mod tests {
         let p = s.params();
         let px = p.range_start + (v + ShaderFn::chunk_base(&s, origin) as f32) * p.k;
         assert!((f64::from(px) - s.eval(origin + 0.5)).abs() < 1e-3);
+    }
+
+    #[test]
+    fn only_include_zero_anchors_zero() {
+        assert!(!Linear::new().anchors_zero());
+        assert!(Linear::new().include_zero().anchors_zero());
     }
 
     #[test]
