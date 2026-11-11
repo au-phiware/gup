@@ -295,3 +295,42 @@ the code by compiling:
 - [ ] WASM size: unchanged: no library code change
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
+
+## Blocked (2026-11-11)
+
+**Question**: AC3 says to stop if `TextureTarget::new` rejects an sRGB texture
+without `view_formats` with an error that does not name `view_formats`. It
+rejects it (no panic, no wrong colours), but the message does not name it. May I
+add a check to `TextureTarget::new` (a library change, about 10 lines)?
+
+**Evidence**: the sRGB recipe itself is proven: an `Rgba8UnormSrgb` texture with
+`view_formats: &[Rgba8Unorm]` read back raw equals `ImageTarget`'s image with 0
+differing pixels (test
+`srgb_texture_with_unorm_view_format_matches_image_target`, passing). The
+refusal case returns:
+
+```text
+GPU error in texture target (Rgba8Unorm view of the host's texture): Validation Error
+  In Texture::create_view, label = 'gup texture target'
+    Unable to view texture Rgba8UnormSrgb as Rgba8Unorm
+```
+
+**Options**:
+
+1. Add a pre-check in `TextureTarget::new`: if the texture's format is sRGB and
+   `view_formats` (via `texture.format()` and the descriptor's list, which wgpu
+   27 does not expose on `Texture`, so the check would have to attempt the view
+   and map the error) lacks the twin, return
+   `Error::config("texture target", "... list Rgba8Unorm in view_formats")`.
+   Cheapest form: on the `create_view` failure, when
+   `texture.format().is_srgb()`, rewrite the message to name `view_formats`.
+   Better UX for the first outside user.
+2. Change AC3 to assert the `Err` and that it names the format pair
+   (`Unable to view texture Rgba8UnormSrgb as Rgba8Unorm`), and let the guide
+   quote that. No library change.
+
+**Recommendation**: option 1 (the rewrite on failure), because the guide's
+reader hits exactly this error. The gated test
+`srgb_texture_without_view_formats_is_refused_by_name` is committed under
+`#[cfg(any())]` and becomes live with option 1. Everything else (the guide,
+links, CHANGELOG) is unstarted and independent of the answer.

@@ -10,7 +10,8 @@ mod common;
 
 use common::scatter::{self, HEIGHT, WIDTH};
 use gup_core::{
-    Context, ImageTarget, RenderTarget, Renderer, Scene, TargetDesc, TargetOptions, TextureTarget,
+    ChartExt, Context, ImageTarget, RenderTarget, Renderer, Scene, TargetDesc, TargetOptions,
+    TextureTarget,
 };
 
 /// What a host does to look at its own texture: copy it to a buffer,
@@ -54,6 +55,17 @@ fn read_texture(cx: &Context, texture: &wgpu::Texture) -> image::RgbaImage {
 }
 
 fn host_texture(cx: &Context, samples: u32, label: &str) -> wgpu::Texture {
+    host_texture_in(cx, samples, label, wgpu::TextureFormat::Rgba8Unorm, &[])
+}
+
+/// A host texture of `format`, which may list `view_formats`.
+fn host_texture_in(
+    cx: &Context,
+    samples: u32,
+    label: &str,
+    format: wgpu::TextureFormat,
+    view_formats: &[wgpu::TextureFormat],
+) -> wgpu::Texture {
     cx.device().create_texture(&wgpu::TextureDescriptor {
         label: Some(label),
         size: wgpu::Extent3d {
@@ -64,14 +76,14 @@ fn host_texture(cx: &Context, samples: u32, label: &str) -> wgpu::Texture {
         mip_level_count: 1,
         sample_count: samples,
         dimension: wgpu::TextureDimension::D2,
-        format: wgpu::TextureFormat::Rgba8Unorm,
+        format,
         usage: wgpu::TextureUsages::RENDER_ATTACHMENT
             | if samples == 1 {
                 wgpu::TextureUsages::COPY_SRC | wgpu::TextureUsages::TEXTURE_BINDING
             } else {
                 wgpu::TextureUsages::empty()
             },
-        view_formats: &[],
+        view_formats,
     })
 }
 
@@ -177,6 +189,61 @@ fn image_texture_and_draw_in_pass_agree() {
             "{samples}×: draw-in-pass differs from ImageTarget"
         );
     }
+}
+
+/// The embedding guide's sRGB-surface recipe (`docs/EMBEDDING.md`, GUP-702):
+/// an `Rgba8UnormSrgb` texture that lists `Rgba8Unorm` in `view_formats`
+/// holds the same raw bytes as `ImageTarget`'s image, and one that does not
+/// is refused by name instead of drawing wrong colours.
+#[test]
+fn srgb_texture_with_unorm_view_format_matches_image_target() {
+    let cx = Context::new_blocking().unwrap();
+    let mut chart = scatter::plot();
+    let image = chart.render(&cx, WIDTH, HEIGHT).unwrap();
+    let drawn = image.pixels().filter(|p| p.0 != [255; 4]).count();
+    assert!(drawn > 2_000, "only {drawn} pixels drawn");
+
+    let texture = host_texture_in(
+        &cx,
+        1,
+        "host sRGB texture",
+        wgpu::TextureFormat::Rgba8UnormSrgb,
+        &[wgpu::TextureFormat::Rgba8Unorm],
+    );
+    let mut target = TextureTarget::new(&cx, texture, TargetOptions::default()).unwrap();
+    assert_eq!(target.desc().format, wgpu::TextureFormat::Rgba8Unorm);
+    let resolved = chart.resolve(&cx, WIDTH as f32, HEIGHT as f32).unwrap();
+    Renderer::new()
+        .render(&cx, &resolved.scene, &mut target)
+        .unwrap();
+    // The raw bytes: a copy does not encode or decode.
+    let raw = read_texture(&cx, target.texture());
+    assert_eq!(
+        differing(&image, &raw),
+        0,
+        "the sRGB texture's bytes differ from ImageTarget's"
+    );
+}
+
+/// WIP (GUP-702 AC3, blocked): the refusal is an `Err` today, but its text
+/// is wgpu's "Unable to view texture Rgba8UnormSrgb as Rgba8Unorm" and does
+/// not name `view_formats`. Gated until the story's question is answered.
+#[cfg(any())]
+#[test]
+fn srgb_texture_without_view_formats_is_refused_by_name() {
+    let cx = Context::new_blocking().unwrap();
+    let refused = host_texture_in(
+        &cx,
+        1,
+        "host sRGB texture without view_formats",
+        wgpu::TextureFormat::Rgba8UnormSrgb,
+        &[],
+    );
+    let err = TextureTarget::new(&cx, refused, TargetOptions::default()).unwrap_err();
+    assert!(
+        err.to_string().contains("view_formats"),
+        "the error does not name view_formats: {err}"
+    );
 }
 
 /// The sample count is part of every pipeline's key (RFC-001 §6–7): the
