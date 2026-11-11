@@ -14,6 +14,14 @@
 //! draws of a layer in data order; an append of `m` rows adds at most
 //! `2m` segments and uploads only its own rows. No ordering data goes to
 //! the GPU: a draw's `first_instance` picks its rows.
+//!
+//! A windowed layer sorts each chunk on its own, and sizes that do not
+//! follow data order would leave about a draw per row. Its keys are
+//! therefore quantised (GUP-492): the order is exact between buckets of
+//! 12.5% relative size and in data order within one, so a full
+//! evaluation gives at most one segment per chunk and bucket, and
+//! compaction holds the draws to that. Unwindowed layers keep the exact
+//! order.
 
 use std::ops::Range;
 
@@ -25,6 +33,11 @@ use crate::render::Span;
 /// re-sorted: [`DrawOrder::needs_compaction`].
 const COMPACT_SEGMENTS: usize = 64;
 
+/// Mantissa bits of a windowed layer's size keys that tell buckets apart
+/// (GUP-492): sizes within `2^-BUCKET_BITS` (12.5%) of each other share a
+/// bucket, so a chunk's run holds at most one range per bucket.
+const BUCKET_BITS: u32 = 3;
+
 /// The draw order of a layer whose size channel is a column.
 #[derive(Clone, Debug)]
 pub(crate) struct DrawOrder {
@@ -32,6 +45,10 @@ pub(crate) struct DrawOrder {
     column: usize,
     /// Whether a larger value draws a smaller mark (a decreasing scale).
     reversed: bool,
+    /// Whether sort keys are quantised to buckets of 12.5% relative size
+    /// ([`BUCKET_BITS`]), so a windowed layer's draws stay bounded: sizes
+    /// in one bucket draw in data order.
+    bucketed: bool,
     /// Each stored row's sort key: its size value (negated when
     /// `reversed`) as `f32`, which rounds monotonically; nulls are -∞.
     keys: Vec<f32>,
@@ -48,11 +65,13 @@ pub(crate) struct DrawOrder {
 }
 
 impl DrawOrder {
-    /// An empty order over size column `column`.
-    pub(crate) fn new(column: usize, reversed: bool) -> Self {
+    /// An empty order over size column `column`; `bucketed` quantises the
+    /// keys (see the module docs).
+    pub(crate) fn new(column: usize, reversed: bool, bucketed: bool) -> Self {
         Self {
             column,
             reversed,
+            bucketed,
             keys: Vec::new(),
             batches: Vec::new(),
             local: Vec::new(),
@@ -157,10 +176,22 @@ impl DrawOrder {
         self.segments = out;
     }
 
+    /// Whether the keys are quantised to size buckets.
+    pub(crate) fn bucketed(&self) -> bool {
+        self.bucketed
+    }
+
     fn key(&self, v: f64) -> f32 {
         if v.is_finite() {
             // `+ 0.0` makes -0 equal to 0 under `total_cmp`.
-            (if self.reversed { -v } else { v }) as f32 + 0.0
+            let k = (if self.reversed { -v } else { v }) as f32 + 0.0;
+            if self.bucketed {
+                // Clearing low mantissa bits is monotone for either sign
+                // and leaves zero alone.
+                f32::from_bits(k.to_bits() & !((1 << (23 - BUCKET_BITS)) - 1))
+            } else {
+                k
+            }
         } else {
             f32::NEG_INFINITY
         }
@@ -418,7 +449,7 @@ mod tests {
     #[test]
     fn runs_and_eviction_keep_the_fresh_order() {
         let sizes: Vec<f64> = (0..40).map(|i| f64::from((i * 7) % 11)).collect();
-        let mut order = DrawOrder::new(0, false);
+        let mut order = DrawOrder::new(0, false, false);
         // Chunks of 8: batches of 5, 20 and 15 rows, split at chunk edges.
         let batches: [(Range<usize>, &[usize]); 3] =
             [(0..5, &[5]), (5..25, &[3, 8, 8, 1]), (25..40, &[7, 8])];
@@ -460,7 +491,7 @@ mod tests {
 
     #[test]
     fn a_batch_is_stored_largest_first_with_every_column_alike() {
-        let mut order = DrawOrder::new(1, false);
+        let mut order = DrawOrder::new(1, false, false);
         let mut columns = vec![
             ColumnData::Values(vec![0.0, 1.0, 2.0, 3.0]),
             ColumnData::Values(vec![1.0, 4.0, f64::NAN, 4.0]),
@@ -482,7 +513,7 @@ mod tests {
 
     #[test]
     fn a_reversed_scale_stores_the_smallest_value_first() {
-        let mut order = DrawOrder::new(0, true);
+        let mut order = DrawOrder::new(0, true, false);
         let mut columns = vec![ColumnData::Values(vec![1.0, 3.0, 2.0])];
         order.push_batch(&mut columns);
         assert_eq!(columns[0], ColumnData::Values(vec![1.0, 2.0, 3.0]));
@@ -490,7 +521,7 @@ mod tests {
 
     #[test]
     fn appended_batches_merge_into_one_descending_order() {
-        let mut order = DrawOrder::new(0, false);
+        let mut order = DrawOrder::new(0, false, false);
         order.push_batch(&mut [ColumnData::Values(vec![1.0, 5.0, 3.0, 7.0])]);
         // Larger, between and smaller, and equal to a stored row.
         order.push_batch(&mut [ColumnData::Values(vec![0.0, 8.0, 4.0, 5.0])]);
@@ -517,7 +548,7 @@ mod tests {
                 .wrapping_add(1);
             (state >> 33) as f64 / f64::from(1u32 << 31)
         };
-        let mut order = DrawOrder::new(0, false);
+        let mut order = DrawOrder::new(0, false, false);
         let mut all = Vec::new();
         for batch in [100, 1, 7, 0, 30, 3] {
             let v: Vec<f64> = (0..batch).map(|_| (next() * 20.0).floor()).collect();
@@ -542,9 +573,43 @@ mod tests {
         }
     }
 
+    /// GUP-492: sizes 5% apart share a bucket and draw in data order;
+    /// sizes 30% apart do not. Negated (reversed) keys bucket alike.
+    #[test]
+    fn bucketed_keys_group_sizes_within_an_eighth() {
+        for reversed in [false, true] {
+            let mut order = DrawOrder::new(0, reversed, true);
+            // Data order: 64, 67.2 (5% up: the same bucket), 83.2 (30% up), 64.
+            let mut columns = vec![ColumnData::Values(vec![64.0, 67.2, 83.2, 64.0])];
+            order.push_batch(&mut columns);
+            let keys = &order.keys;
+            let by_size = |s: f64| {
+                let k = |v: f64| order.key(v);
+                (k(s), k(s * 1.05) == k(s), k(s * 1.3) == k(s))
+            };
+            assert!(by_size(64.0).1, "5% apart: one bucket");
+            assert!(!by_size(64.0).2, "30% apart: two buckets");
+            assert_eq!(keys.len(), 4);
+            // Rows of the 64 and 67.2 bucket come in data order (0, 1, 3);
+            // the larger 83.2 draws first (or last, reversed).
+            let rows = data_rows(&order);
+            let want = if reversed {
+                vec![0, 1, 3, 2]
+            } else {
+                vec![2, 0, 1, 3]
+            };
+            assert_eq!(rows, want, "reversed: {reversed}");
+        }
+        // Zero, nulls and negatives keep their order.
+        let order = DrawOrder::new(0, false, true);
+        assert_eq!(order.key(0.0), 0.0);
+        assert_eq!(order.key(f64::NAN), f32::NEG_INFINITY);
+        assert!(order.key(-3.0) < order.key(-2.0) && order.key(-2.0) < order.key(0.0));
+    }
+
     #[test]
     fn fragmented_runs_ask_for_compaction() {
-        let mut order = DrawOrder::new(0, false);
+        let mut order = DrawOrder::new(0, false, false);
         order.push_batch(&mut [ColumnData::Values((0..200).map(f64::from).collect())]);
         assert!(!order.needs_compaction());
         // Each value lands between two stored rows: two segments each.
