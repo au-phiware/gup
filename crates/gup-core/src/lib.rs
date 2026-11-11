@@ -20,7 +20,7 @@
 //! - typed [channels](channel): `Circle::RADIUS: Channel<Circle, Px>`, so
 //!   wrong value types, unknown channels and wrong marks don't compile;
 //! - [scale]s: [`Linear`], [`Pow`], [`Log`], [`Symlog`] and [`Time`] for
-//!   numbers; [`Band`] and [`Point`] for keys; [`Sequential`], [`Diverging`]
+//!   numbers; [`Band`] and [`PointScale`] for keys; [`Sequential`], [`Diverging`]
 //!   and [`Categorical`] for colour. Each is a [`ShaderFn`] with an f64
 //!   [`CpuMirror`] — zooming changes uniforms only — and has a [`Legend`];
 //! - marks [`Circle`], [`Rect`], [`Segment`], [`Line`] and [`Area`], and your own with
@@ -203,6 +203,7 @@ pub use encoding::{
     Then,
 };
 pub use error::{Error, Result};
+pub use geom::Point;
 pub use gpu_pick::{GpuPick, PickTicket};
 pub use gup_text::Font;
 pub use input::{Axes, Brush, Button, Drag, Event, EventInfo, Input, Key, Modifiers, Response};
@@ -216,8 +217,8 @@ pub use render::{PipelineStats, Prepared, Renderer, TargetDesc};
 pub use scale::HIGH_CONTRAST;
 pub use scale::{
     Band, CATEGORICAL_COLORS, Categorical, ColorScale, ColorValueScale, Diverging, Legend, Linear,
-    Log, MAX_PALETTE, NULL_COLOR, OKABE_ITO, Offset, Point, PositionScale, Pow, Ramp, RampTick,
-    ScaleRef, Sequential, Swatch, Symlog, Ticks, Time,
+    Log, MAX_PALETTE, NULL_COLOR, OKABE_ITO, Offset, PointScale, PositionScale, Pow, Ramp,
+    RampTick, ScaleRef, Sequential, Swatch, Symlog, Ticks, Time,
 };
 pub use scale::{OKABE_ITO_DARK, OKABE_ITO_DISTINCT, OKABE_ITO_DISTINCT_DARK};
 pub use scene::Scene;
@@ -387,7 +388,8 @@ pub use gup_core_macros::Mark;
 ///
 /// So are the palette and the input vocabulary: [`OKABE_ITO_DISTINCT`] (the
 /// default categorical colours), [`Input`], [`Key`], [`Button`], [`Modifiers`],
-/// [`Response`] and [`RowId`].
+/// [`Response`], [`RowId`] and [`Point`] (the logical-pixel position every
+/// input and pick method takes).
 ///
 /// ```
 /// use gup_core::prelude::*;
@@ -398,9 +400,11 @@ pub use gup_core_macros::Mark;
 ///     .fill(OKABE_ITO_DISTINCT[1]);
 /// let cx = Context::new_blocking()?;
 /// chart.resolve(&cx, 320.0, 200.0)?;
-/// let _: Response = chart.handle(Input::pointer_moved((160.0, 100.0)));
+/// let _: Response = chart.handle(Input::pointer_moved(Point::new(160.0, 100.0)));
 /// let _ = chart.handle(Input::key_with(Key::Left, Modifiers::SHIFT));
 /// let _ = (Button::Primary, RowId { layer: 0, row: 0 });
+/// // `Point` is the geometry type; the scale that spaces keys is `PointScale`.
+/// let _ = PointScale::new().padding(0.5);
 /// # Ok(())
 /// # }
 /// ```
@@ -410,9 +414,9 @@ pub mod prelude {
         Area, AreaAttrs, Axes, Band, Bins, Button, Categorical, Chart, ChartExt, Circle,
         CircleAttrs, Color, ColorScale, Columns, Context, CpuMirror, Curve, DataTable, Derived,
         Description, Diverging, Drag, EncodeFn, Event, Input, Key, Line, LineAttrs, Linear, Log,
-        Mark, Modifiers, OKABE_ITO_DISTINCT, Offset, Plot, Point, PositionScale, Pow, Px, Rect,
-        RectAttrs, Response, Retain, RowId, ScaleRef, Segment, SegmentAttrs, Selection, Sequential,
-        ShaderFn, Symlog, Theme, Time, Unbrushed, Unit, Window, wgsl_function,
+        Mark, Modifiers, OKABE_ITO_DISTINCT, Offset, Plot, Point, PointScale, PositionScale, Pow,
+        Px, Rect, RectAttrs, Response, Retain, RowId, ScaleRef, Segment, SegmentAttrs, Selection,
+        Sequential, ShaderFn, Symlog, Theme, Time, Unbrushed, Unit, Window, wgsl_function,
     };
     pub use crate::{
         AreaChart, BarChart, BoxPlotChart, HeatmapChart, HistogramChart, LineChart, ScatterChart,

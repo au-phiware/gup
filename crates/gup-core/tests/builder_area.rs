@@ -9,7 +9,6 @@
 mod common;
 
 use common::vr::{harness, layout_metadata};
-use gup_core::geom::Point;
 use gup_core::prelude::*;
 use gup_core::scene::{ItemKind, Z_TOOLTIP};
 use gup_core::{Input, Layout, OKABE_ITO_DISTINCT};

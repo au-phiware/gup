@@ -103,7 +103,7 @@ drawn by one instanced draw.
   drawn; a null colour is `NULL_COLOR`. Shaders never test for NaN.
 - **Dictionaries.** String, integer and enum keys are dictionary-encoded
   (`encode_key`). The store holds `u32` codes and each channel holds its keys.
-  Scales over codes (`Band`, `Point`, `Categorical`) take their domain from
+  Scales over codes (`Band`, `PointScale`, `Categorical`) take their domain from
   them.
 - **Retention.** `Retain` says what CPU data to keep after upload: `Auto` (keep
   everything up to ten million rows), `Rows`, `Columns` or `GpuOnly`. Picking,
@@ -183,12 +183,12 @@ Findings: [S3][rfc-s3]; GUP-431 (draw order); S9a (hit shapes).
 
 One family; each member is a `ShaderFn` with a `CpuMirror`.
 
-| Kind     | Scales                                                     |
-| -------- | ---------------------------------------------------------- |
-| Position | `Linear`, `Pow` (and `Pow::sqrt`), `Log`, `Symlog`, `Time` |
-| Key      | `Band` (bars, groups), `Point` (categorical positions)     |
-| Colour   | `Sequential`, `Diverging` (palette tables), `Categorical`  |
-| Helper   | `Offset` (a pixel shift read at each resolve), for chains  |
+| Kind     | Scales                                                      |
+| -------- | ----------------------------------------------------------- |
+| Position | `Linear`, `Pow` (and `Pow::sqrt`), `Log`, `Symlog`, `Time`  |
+| Key      | `Band` (bars, groups), `PointScale` (categorical positions) |
+| Colour   | `Sequential`, `Diverging` (palette tables), `Categorical`   |
+| Helper   | `Offset` (a pixel shift read at each resolve), for chains   |
 
 A plot's `x()` and `y()` (and `y_right()`) return a `ScaleRef`, a shared handle
 that layers encode through and that you can read, so the plot's domain is the
@@ -330,7 +330,6 @@ pixels from the chart's top-left) to `Chart::handle`, which returns a
 
 ```rust
 use gup::prelude::*;
-use gup::geom::Point;
 use gup::{Input, Response};
 
 let cx = Context::shared()?;

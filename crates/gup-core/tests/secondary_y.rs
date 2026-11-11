@@ -8,7 +8,6 @@ mod common;
 
 use common::svg_marks;
 use common::vr::{harness, layout_metadata, rgba8};
-use gup_core::geom::Point;
 use gup_core::prelude::*;
 use gup_core::scene::TextRole;
 use gup_core::{Button, ImageTarget, Input, RowId};

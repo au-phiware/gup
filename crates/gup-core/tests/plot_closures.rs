@@ -7,7 +7,6 @@
 mod common;
 
 use common::vr::rgba8;
-use gup_core::geom::Point;
 use gup_core::prelude::*;
 use gup_core::{ImageTarget, Layout};
 

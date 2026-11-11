@@ -6,7 +6,7 @@
 //!
 //! - **Position** ([`PositionScale`]): [`Linear`], [`Pow`] (and
 //!   [`Pow::sqrt`]), [`Log`], [`Symlog`] and [`Time`] over numbers;
-//!   [`Band`] and [`Point`] over dictionary codes (categorical axes).
+//!   [`Band`] and [`PointScale`] over dictionary codes (categorical axes).
 //! - **Colour** ([`ColorScale`], each with a [`Legend`]): [`Sequential`]
 //!   and [`Diverging`] over numbers (palette LUTs); [`Categorical`] over
 //!   dictionary codes.
@@ -30,7 +30,7 @@ mod time;
 #[cfg(test)]
 pub(crate) mod conformance;
 
-pub use band::{Band, BandParams, Point};
+pub use band::{Band, BandParams, PointScale};
 pub use categorical::HIGH_CONTRAST;
 pub use categorical::{
     CATEGORICAL_COLORS, Categorical, CategoricalParams, MAX_PALETTE, NULL_COLOR, OKABE_ITO,
@@ -113,7 +113,7 @@ impl Ticks {
 
 /// A scale from a domain to a pixel range: a numeric domain (`In = f32`:
 /// [`Linear`], [`Log`], …), or dictionary codes (`In = u32`: [`Band`],
-/// [`Point`]), whose domain values are the codes `0..len` and whose ticks
+/// [`PointScale`]), whose domain values are the codes `0..len` and whose ticks
 /// are labelled by the keys.
 pub trait PositionScale: ShaderFn<Out = Px> + EncodeFn<Output = Px> + CpuMirror {
     /// The domain, if set or fitted.
@@ -124,7 +124,7 @@ pub trait PositionScale: ShaderFn<Out = Px> + EncodeFn<Output = Px> + CpuMirror 
     /// from the domain change; no column bytes are re-uploaded.
     fn set_domain(&mut self, d0: f64, d1: f64) -> Result<()>;
     /// Make the domain data-driven again ([`is_auto`](Self::is_auto) is
-    /// true); the next resolve refits it. No-op for [`Band`] and [`Point`],
+    /// true); the next resolve refits it. No-op for [`Band`] and [`PointScale`],
     /// which are always automatic.
     fn clear_domain(&mut self);
     /// Set the pixel range the domain maps onto.
@@ -144,7 +144,7 @@ pub trait PositionScale: ShaderFn<Out = Px> + EncodeFn<Output = Px> + CpuMirror 
     /// About `count` ticks inside the domain.
     fn ticks(&self, count: usize) -> Ticks;
     /// The code of the key labelled `key` in an ordinal scale's domain
-    /// ([`Band`], [`Point`]); `None` for an unknown key and for every
+    /// ([`Band`], [`PointScale`]); `None` for an unknown key and for every
     /// numeric scale (the default). How a text layer places a label by key.
     #[doc(hidden)]
     fn key_code(&self, key: &str) -> Option<f64> {
@@ -219,7 +219,7 @@ impl std::fmt::Debug for TickFormat {
 
 /// The position scales whose tick labels a user may format
 /// ([`ScaleRef::tick_format`]): those labelled from numbers. [`Band`] and
-/// [`Point`] are labelled from keys.
+/// [`PointScale`] are labelled from keys.
 pub trait NumericTicks: PositionScale {}
 impl NumericTicks for Linear {}
 impl NumericTicks for Pow {}
@@ -426,7 +426,7 @@ pub(crate) trait DynPositionScale: Send + Sync {
     /// A clone of the scale as an encoding function; it shares state with
     /// the plot's scale (GUP-447).
     fn dyn_encode(&self) -> Box<dyn crate::encoding::DynEncodeFn>;
-    /// Whether the scale reads dictionary keys (`Band`, `Point`).
+    /// Whether the scale reads dictionary keys (`Band`, `PointScale`).
     fn reads_keys(&self) -> bool;
     /// The pixel centre of `key`'s band (or point), for a scale that
     /// [`reads_keys`](Self::reads_keys); `None` for a numeric scale or a
@@ -733,7 +733,7 @@ mod tests {
     use super::*;
 
     /// GUP-453: `clear_domain` makes every position scale automatic again
-    /// (`Band` and `Point` always are).
+    /// (`Band` and `PointScale` always are).
     #[test]
     fn clear_domain_makes_the_scale_automatic() {
         fn check<S: PositionScale>(mut s: S, d: (f64, f64)) {
@@ -749,7 +749,7 @@ mod tests {
         check(Symlog::new(), (-3.0, 5.0));
         check(Time::new(), (0.0, 1e9));
         check(Band::new(), (0.0, 3.0));
-        check(Point::new(), (0.0, 3.0));
+        check(PointScale::new(), (0.0, 3.0));
     }
 
     /// GUP-542: `key_position` is the centre of a key's band or point, by
@@ -765,7 +765,7 @@ mod tests {
         assert_eq!(band.key_position("Wed"), Some(262.5));
         assert_eq!(band.key_position("Thu"), None);
 
-        let mut point = Point::new().range(Px(0.0), Px(300.0));
+        let mut point = PointScale::new().range(Px(0.0), Px(300.0));
         ShaderFn::fit_keys(&mut point, &keys).unwrap();
         let point = ScaleRef::new(point);
         assert_eq!(point.key_position("Mon"), Some(50.0));

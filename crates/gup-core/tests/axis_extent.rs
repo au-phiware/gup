@@ -5,7 +5,6 @@
 //! at the next round number, while an explicit domain still wins and a
 //! single distinct x still gets a domain.
 
-use gup_core::geom::Point;
 use gup_core::prelude::*;
 
 const W: f32 = 640.0;

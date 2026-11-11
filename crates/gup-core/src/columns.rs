@@ -46,7 +46,7 @@ pub enum Column {
     /// 32-bit floats.
     F32(Arc<[f32]>),
     /// Categories: dictionary codes and their labels (a [`KeyColumn`]),
-    /// for a Band or Point axis or a `Categorical` colour.
+    /// for a Band or PointScale axis or a `Categorical` colour.
     Keys(KeyColumn),
 }
 
