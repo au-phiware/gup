@@ -231,7 +231,7 @@ impl<T: Send + Sync + 'static> ScatterChart<T> {
         self
     }
 
-    /// How many rows to keep as rows are appended (default [`Window::All`]):
+    /// How many rows to keep as rows are appended (default [`RowWindow::All`]):
     /// see [`Selection::window`].
     ///
     /// ```
@@ -241,7 +241,7 @@ impl<T: Send + Sync + 'static> ScatterChart<T> {
     /// let mut chart = gup_core::scatter(Vec::<(f64, f64)>::new())
     ///     .x(|p| p.0)
     ///     .y(|p| p.1)
-    ///     .window(Window::LastRows(5_000));
+    ///     .window(RowWindow::LastRows(5_000));
     /// let feed = chart.appender();
     /// for k in 0..20 {
     ///     feed.extend((0..1_000).map(|i| (f64::from(k * 1_000 + i), 0.0))).unwrap();
@@ -252,7 +252,7 @@ impl<T: Send + Sync + 'static> ScatterChart<T> {
     /// # Ok(())
     /// # }
     /// ```
-    pub fn window(self, window: Window) -> Self {
+    pub fn window(self, window: RowWindow) -> Self {
         self.op(move |s| {
             s.window(window);
         })

@@ -222,7 +222,7 @@ pub use scale::{
 };
 pub use scale::{OKABE_ITO_DARK, OKABE_ITO_DISTINCT, OKABE_ITO_DISTINCT_DARK};
 pub use scene::Scene;
-pub use selection::{Retain, Selection, Window};
+pub use selection::{Retain, RowWindow, Selection};
 pub use shader::WgslModule;
 pub use svg::{SvgOptions, SvgTarget, VectorTarget};
 pub use target::{DEFAULT_SAMPLES, Frame, ImageTarget, RenderTarget, TargetOptions, TextureTarget};
@@ -408,6 +408,26 @@ pub use gup_core_macros::Mark;
 /// # Ok(())
 /// # }
 /// ```
+///
+/// A host that draws into a winit window imports both `Window`s without an
+/// alias: the row window is [`RowWindow`], winit's is its own.
+///
+/// ```
+/// # #[cfg(feature = "window")]
+/// # {
+/// use gup_core::prelude::*;
+/// use winit::window::Window;
+///
+/// fn size_of_os_window(window: &Window) -> winit::dpi::PhysicalSize<u32> {
+///     window.inner_size()
+/// }
+/// # let _ = size_of_os_window;
+/// let _chart = gup_core::line(vec![(0.0, 0.0)])
+///     .x(|p| p.0)
+///     .y(|p| p.1)
+///     .window(RowWindow::LastRows(2_000));
+/// # }
+/// ```
 pub mod prelude {
     pub use crate::scene::Anchor;
     pub use crate::{
@@ -415,8 +435,8 @@ pub mod prelude {
         CircleAttrs, Color, ColorScale, Columns, Context, CpuMirror, Curve, DataTable, Derived,
         Description, Diverging, Drag, EncodeFn, Event, Input, Key, Line, LineAttrs, Linear, Log,
         Mark, Modifiers, OKABE_ITO_DISTINCT, Offset, Plot, Point, PointScale, PositionScale, Pow,
-        Px, Rect, RectAttrs, Response, Retain, RowId, ScaleRef, Segment, SegmentAttrs, Selection,
-        Sequential, ShaderFn, Symlog, Theme, Time, Unbrushed, Unit, Window, wgsl_function,
+        Px, Rect, RectAttrs, Response, Retain, RowId, RowWindow, ScaleRef, Segment, SegmentAttrs,
+        Selection, Sequential, ShaderFn, Symlog, Theme, Time, Unbrushed, Unit, wgsl_function,
     };
     pub use crate::{
         AreaChart, BarChart, BoxPlotChart, HeatmapChart, HistogramChart, LineChart, ScatterChart,

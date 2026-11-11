@@ -78,17 +78,17 @@ assert_eq!(plot.title_text(), Some("Wealth and health"));
 
 RFC-001 steps S0 to S14 (GUP-395 to GUP-489) are implemented. In one paragraph:
 one cloneable `Context`; a chunked GPU column store with relative origins,
-validity bits, dictionaries, `Retain`, append and `Window`; typed channels and
-`#[derive(Mark)]` with the built-in `Circle`, `Rect`, `Segment` and `Line`; one
-scale family in which each scale is a `ShaderFn` with an exact f64 `CpuMirror`;
-build-time shader composition and `#[wgsl_function]`; a resolved `Scene` drawn
-by image, window, texture and canvas targets and written as SVG; the `Chart`
-trait with `Plot` as the universal container; layout, guides, legends, themes,
-CPU and GPU picking, tooltips, pan, zoom, brush and culling; the `scatter`,
-`line` and `bar` builders; and the egui and Bevy integrations. S14 made `gup` a
-facade over `gup-core` and deleted the old render path (208,932 lines in the
-flip). Each step's decisions and measurements are in RFC-001's findings
-sections: see
+validity bits, dictionaries, `Retain`, append and `RowWindow`; typed channels
+and `#[derive(Mark)]` with the built-in `Circle`, `Rect`, `Segment` and `Line`;
+one scale family in which each scale is a `ShaderFn` with an exact f64
+`CpuMirror`; build-time shader composition and `#[wgsl_function]`; a resolved
+`Scene` drawn by image, window, texture and canvas targets and written as SVG;
+the `Chart` trait with `Plot` as the universal container; layout, guides,
+legends, themes, CPU and GPU picking, tooltips, pan, zoom, brush and culling;
+the `scatter`, `line` and `bar` builders; and the egui and Bevy integrations.
+S14 made `gup` a facade over `gup-core` and deleted the old render path (208,932
+lines in the flip). Each step's decisions and measurements are in RFC-001's
+findings sections: see
 [S14](./planning/rfcs/RFC-001_Core_Architecture.md#s14-findings-gup-485488) for
 what the flip deleted and kept.
 

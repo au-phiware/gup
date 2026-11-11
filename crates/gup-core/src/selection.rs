@@ -154,7 +154,7 @@ impl Retain {
 /// plot.circles(Vec::<(f64, f64)>::new())
 ///     .x(|p: &(f64, f64)| p.0)
 ///     .y(|p: &(f64, f64)| p.1)
-///     .window(Window::LastRows(2_000));
+///     .window(RowWindow::LastRows(2_000));
 /// for k in 0..10 {
 ///     let layer = plot.layer_mut::<(f64, f64), Circle>().unwrap();
 ///     layer.append((0..1_000).map(|i| (f64::from(k * 1_000 + i), 1.0)))?;
@@ -167,7 +167,7 @@ impl Retain {
 /// # }
 /// ```
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash)]
-pub enum Window {
+pub enum RowWindow {
     /// Keep every row (the default).
     #[default]
     All,
@@ -178,7 +178,7 @@ pub enum Window {
     LastRows(usize),
 }
 
-impl Window {
+impl RowWindow {
     /// The fewest rows per chunk a window allows (RFC-001 S12c).
     const MIN_CHUNK_ROWS: u32 = 1024;
 
@@ -186,8 +186,8 @@ impl Window {
     /// chunks (millions of rows) would never evict a small window.
     fn chunk_cap(self) -> u32 {
         match self {
-            Window::All => u32::MAX,
-            Window::LastRows(n) => {
+            RowWindow::All => u32::MAX,
+            RowWindow::LastRows(n) => {
                 u32::try_from(n.div_ceil(4)).map_or(u32::MAX, |c| c.max(Self::MIN_CHUNK_ROWS))
             }
         }
@@ -211,9 +211,9 @@ pub struct Selection<T, M: Mark> {
     /// The rows not yet released: rows `released..` of the selection.
     rows: Vec<T>,
     /// How many leading rows are not in `rows`: dropped after upload
-    /// ([`Retain`]) or evicted ([`Window`]). At least `evicted`.
+    /// ([`Retain`]) or evicted ([`RowWindow`]). At least `evicted`.
     released: usize,
-    /// How many leading rows the [`Window`] evicted. Row ids count from
+    /// How many leading rows the [`RowWindow`] evicted. Row ids count from
     /// the selection's first row ever, so an id stays valid until its row
     /// leaves; the column store numbers the kept rows from 0.
     evicted: u64,
@@ -226,7 +226,7 @@ pub struct Selection<T, M: Mark> {
     /// Whether the brushed-row bits must be written whole at the next
     /// prepare (the stored rows were renumbered).
     bits_stale: bool,
-    window: Window,
+    window: RowWindow,
     retain: Retain,
     /// Draw order among the plot's items (default 0).
     z: i32,
@@ -487,7 +487,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             epoch: 0,
             edge_cache: Mutex::new(EdgeCache::default()),
             bits_stale: false,
-            window: Window::All,
+            window: RowWindow::All,
             retain: Retain::Auto,
             z: 0,
             encodings: M::CHANNELS.iter().map(|_| None).collect(),
@@ -636,7 +636,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         Ok(())
     }
 
-    /// Keep at least the newest `n` rows (default [`Window::All`]): after
+    /// Keep at least the newest `n` rows (default [`RowWindow::All`]): after
     /// each append, whole chunks whose rows are all older than the newest
     /// `n` leave the front. Kept rows keep their [`RowId`](crate::RowId)s
     /// (counted from the first row ever); an evicted row's id picks and
@@ -644,8 +644,8 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
     /// columns are evaluated again at the next resolve: set it before the
     /// first resolve, or keep the rows (see [`Retain`]).
     ///
-    /// See [`Window`] for an example.
-    pub fn window(&mut self, window: Window) -> &mut Self {
+    /// See [`RowWindow`] for an example.
+    pub fn window(&mut self, window: RowWindow) -> &mut Self {
         self.window = window;
         self
     }
@@ -679,12 +679,12 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         self.released as u64 == self.evicted
     }
 
-    /// Evict the whole chunks the [`Window`] lets go, from the front, and
+    /// Evict the whole chunks the [`RowWindow`] lets go, from the front, and
     /// renumber what stays (RFC-001 S12c): chunk row bases, the draw order
     /// and, at the next prepare, the brushed-row bits. Writes no column
     /// bytes.
     fn evict(&mut self) {
-        let (Window::LastRows(n), Some(store)) = (self.window, &mut self.columns) else {
+        let (RowWindow::LastRows(n), Some(store)) = (self.window, &mut self.columns) else {
             return;
         };
         let chunks = store.evictable(n as u64);
@@ -734,7 +734,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
     }
 
     /// Number of rows, including any dropped after upload but not those
-    /// the [`Window`] evicted.
+    /// the [`RowWindow`] evicted.
     pub fn len(&self) -> usize {
         self.released + self.rows.len() - self.evicted as usize
     }
@@ -1421,11 +1421,11 @@ pub(crate) struct Overhang {
 }
 
 /// The runs a batch of `rows` rows appended to `store` is sorted in (see
-/// [`DrawOrder::push_runs`]): one under [`Window::All`]; under a window,
+/// [`DrawOrder::push_runs`]): one under [`RowWindow::All`]; under a window,
 /// one per chunk the batch fills, so each chunk holds a contiguous run of
 /// data rows and whole chunks leave in data order.
-fn runs(window: Window, store: &ColumnStore, rows: usize) -> Vec<usize> {
-    if window == Window::All {
+fn runs(window: RowWindow, store: &ColumnStore, rows: usize) -> Vec<usize> {
+    if window == RowWindow::All {
         return vec![rows];
     }
     // Every chunk but the last is full, and the first starts at row 0.
@@ -3339,7 +3339,7 @@ mod tests {
             ScaleRef::new(Linear::new()).encode(|r: &Row| r.y),
         )
         .attr(Circle::RADIUS, Px(1.0))
-        .window(Window::LastRows(N));
+        .window(RowWindow::LastRows(N));
         sel.fit_domains(&cx).unwrap();
         let theme = Theme::default();
         let chunk_rows = sel.columns.as_ref().unwrap().chunk_rows();
@@ -4308,7 +4308,7 @@ mod edge_cache_tests {
 
     fn edge_plot(
         rows: Vec<(f64, f64)>,
-        window: Window,
+        window: RowWindow,
     ) -> (Plot, ScaleRef<Linear>, ScaleRef<Linear>) {
         let mut plot = Plot::new();
         let x = plot.x(Linear::new().domain(0.0, 10.0));
@@ -4373,7 +4373,7 @@ mod edge_cache_tests {
 
     #[test]
     fn an_append_to_the_last_chunk_misses() {
-        let (plot, x, y) = edge_plot(rows(0..10), Window::All);
+        let (plot, x, y) = edge_plot(rows(0..10), RowWindow::All);
         check(plot, x, y, |s| {
             // The last chunk holds two rows; the new nearest rows join it.
             s.append([(0.05, 5.0), (9.99, 5.0)]).unwrap();
@@ -4382,7 +4382,7 @@ mod edge_cache_tests {
 
     #[test]
     fn an_eviction_renumbers_the_chunks() {
-        let (plot, x, y) = edge_plot(rows(0..8), Window::LastRows(8));
+        let (plot, x, y) = edge_plot(rows(0..8), RowWindow::LastRows(8));
         check(plot, x, y, |s| {
             // Chunk 0 is a different chunk, of the same size, afterwards.
             s.append((0..8).map(|i| match i % 4 {
@@ -4396,7 +4396,7 @@ mod edge_cache_tests {
 
     #[test]
     fn evaluating_the_columns_again_misses() {
-        let (plot, x, y) = edge_plot(rows(0..8), Window::All);
+        let (plot, x, y) = edge_plot(rows(0..8), RowWindow::All);
         let again = x.clone();
         check(plot, x, y, move |s| {
             // Same rows and chunks, other values.

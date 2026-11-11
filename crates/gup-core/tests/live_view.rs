@@ -37,7 +37,7 @@ fn live(zero: bool) -> (LineChart<Row>, Appender<Row>) {
     let mut chart = line(Vec::<Row>::new())
         .x(|r: &Row| r.0)
         .y(|r: &Row| r.1)
-        .window(Window::LastRows(N))
+        .window(RowWindow::LastRows(N))
         .title("Population");
     if zero {
         chart = chart.y_scale(Linear::new().include_zero());

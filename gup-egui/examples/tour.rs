@@ -397,7 +397,7 @@ fn live_window(running: Arc<AtomicBool>) -> gup::Result<Boxed> {
         .title("A window on the newest readings")
         .x_title("Time (s)")
         .y_title("Level")
-        .window(Window::LastRows(2_000));
+        .window(RowWindow::LastRows(2_000));
     chart.layers_mut()[0].retain(Retain::GpuOnly);
     let feed = chart.appender();
     feed.extend((0..2_000).map(s10::reading))
