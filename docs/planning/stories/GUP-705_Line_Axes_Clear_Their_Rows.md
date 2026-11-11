@@ -18,7 +18,7 @@ touches:
 ## Story Overview
 
 **Initiative**: Strategic Review 2026-11 (first outside user, before 0.1)
-**Status**: ✅ Complete (2026-11-09) **Created**: 2026-11-09
+**Status**: ✅ Complete (2026-11-11) **Created**: 2026-11-09
 
 ## Context
 
@@ -44,20 +44,20 @@ A line drawn on top of the axis line is hard to see and reads as "no data".
 
 ## Acceptance Criteria
 
-- [ ] An automatic (fitted, not explicit, not `include_zero`-anchored at the
+- [x] An automatic (fitted, not explicit, not `include_zero`-anchored at the
       data edge) value axis of a line or area layer leaves at least the plot
       padding (in pixels, the same constant the gap rule uses) between its
       lowest and highest rows and the plot rect's edges. The x extent rule for
       line/area (rows end at the plot edges, GUP-594) is unchanged.
-- [ ] `include_zero()` with all-positive data still puts zero exactly on the
+- [x] `include_zero()` with all-positive data still puts zero exactly on the
       axis (a baseline is meant to sit there); an explicit `domain(a, b)` is
       unchanged.
-- [ ] A test reproduces the user's case (a line whose minimum is a round number
+- [x] A test reproduces the user's case (a line whose minimum is a round number
       that Nice rounding would keep as the domain minimum) and asserts the gap ≥
       the padding; GUP-699's `|gap| < 1` assertion is updated.
-- [ ] Changed goldens are counted before re-blessing (STOP and report if more
+- [x] Changed goldens are counted before re-blessing (STOP and report if more
       than ~25), re-blessed and read by eye; each is listed with what changed.
-- [ ] CHANGELOG `[0.1.0]` Changed line.
+- [x] CHANGELOG `[0.1.0]` Changed line.
 
 ## Decisions
 
@@ -75,28 +75,70 @@ A line drawn on top of the axis line is hard to see and reads as "no data".
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] `mask merge-check`, `mask all-check`,
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] `mask merge-check`, `mask all-check`,
       `cargo test -p gup -- --test-threads=1`
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
 
-## Blocked (2026-11-09)
+## Implementation Summary
 
-**Question**: the rule (implemented, all non-golden tests pass) changes 29
-goldens, above the ~25 stop limit. Re-bless all 29?
+- `Overhang.clear_y` (selection.rs): a Line clears both ends of its value axis,
+  an Area only its top edge (its baseline stays on the axis).
+- plot.rs: the widen step pads a no-overhang end by `plot_padding` when the
+  layer clears it; an end that is exactly 0 on an `include_zero` scale is
+  skipped (`PositionScale::anchors_zero`, default false, Linear overrides,
+  unit-tested). Explicit domains and x extents are untouched.
+- The user's case: gap 0 px -> 4 px (the padding). The live_view assertion is
+  now `gap >= padding - 0.5`.
+- 24 goldens re-blessed (the first report said 29 by miscounting source files),
+  all read: gallery area_stacked, dark_multiline, line_monotone; gup_core
+  builder_area, builder_line, line_series, line_steps, line_translucent,
+  secondary_y, subtitle, subtitle_dark; tour 02_line, 04_dual_axis,
+  04_time_axis, 05_dark, 05_high_contrast, 05_palette, 06_curves, 10_append,
+  10_window; tutorials 05_appended, 07_area, 07_dark, 07_line. In each the line
+  sits one padding clear of the axis, area baselines still sit on the axis at 0,
+  dark and high-contrast match their light twins, both y axes of dual_axis and
+  secondary_y clear (secondary_y measured 8 degC at 396 px against a plot bottom
+  of 400 px).
+- WASM scatter gzip: 378,922 B at the start commit, 379,222 B on the branch
+  (+300 B).
 
-Rule as implemented: `Overhang.clear_y` (Line: near and far; Area: far only, its
-baseline stays on the axis); the plot's widen step pads an end with
-`plot_padding` when the mark has no overhang but clears; an end that is 0 on a
-scale with `include_zero` is not cleared (new `PositionScale::anchors_zero`).
-User's case: gap 0 px -> 4 px (the padding). Goldens (blessed in the WIP commit,
-not yet reviewed one by one): gallery area_stacked, dark_multiline,
-line_monotone; gup_core builder_area, builder_line, line_series, line_steps,
-line_translucent, secondary_y, subtitle, subtitle_dark; tour 02_line,
-04_dual_axis, 04_time_axis, 05_dark, 05_high_contrast, 05_palette, 06_curves,
-10_append, 10_window; tutorials 05_appended, 07_area, 07_dark, 07_line. Read so
-far: tutorials 07_line (line clear of axis, ticks 8..26 sensible) and 07_area
-(baseline on the axis at 0, top clear).
+## Retrospective
+
+**Completed**: 2026-11-11
+
+### Key Technical Learnings
+
+#### Reusing the widen step
+
+- **Challenge**: a line has no overhang, so the gap rule gave it nothing.
+- **Solution**: a per-layer "clear" flag per end, fed into the existing
+  `padded()` helper; no new constant or Nice change, so ticks barely moved.
+- **Pattern**: extend the existing fit hook rather than adding a second pass.
+
+### Architectural Decisions
+
+#### Area clears its top only
+
+- **Decision**: Area keeps its baseline on the axis and clears the top edge.
+- **Reasoning**: the escalation trigger forbids losing a zero baseline.
+- **Trade-off**: an area whose baseline is a data column is not cleared at its
+  bottom.
+
+#### `anchors_zero` on `PositionScale`
+
+- **Decision**: a defaulted public method.
+- **Trade-off**: a public trait addition for one flag.
+
+### Development Workflow Insights
+
+- A rendered image can mislead on gaps (a line at 8 looked on the axis);
+  printing the pixel settled it.
+- Count golden PNGs (`git status --short | grep -c png`), not changed files.
+
+### Follow-up Stories
+
+None.
