@@ -50,7 +50,7 @@ GUP-715 and GUP-716.
 
 ### AC1: Tiers nest, representatives are lowest-index
 
-- [ ] `lod::Tiers::build(xs: impl Fn(u32) -> f64, ys: impl Fn(u32) -> f64, rows: u32) -> Tiers`
+- [ ] `lod::Tiers::build(rows: u32, xy: impl Fn(u32) -> (f64, f64)) -> Tiers`
       (signature in Decisions) over a seeded random-walk chunk of 100,000 rows
       returns `counts` that are non-decreasing and a `order` of `counts[stored]`
       distinct chunk-local rows.
@@ -64,9 +64,14 @@ GUP-715 and GUP-716.
 ### AC2: Storage rule
 
 - [ ] Tiers are stored while `counts[t] <= rows / 2`; `stored` is the finest
-      such tier and `order.len() == counts[stored]`. A chunk of 1,000 rows on a
-      grid where every row has its own cell at tier 4 stores tiers 0-3 only
-      (test). A chunk whose rows all coincide stores tier 0 only.
+      such tier and `order.len() == counts[stored]`. A chunk of 256 rows, one
+      per cell of a 16 × 16 grid (its own cell at tier 4), stores tiers 0-3 only
+      (test), and 1,000 rows on a 32 × 32 grid tiers 0-4. A chunk whose rows all
+      coincide has one representative at every tier, so it stores all 17
+      (`stored == 16`, `order == [0]`): a frame draws one row at any zoom.
+      _Corrected 2026-11-11: the story first said 1,000 rows at tier 4 (which
+      has only 256 cells) and "tier 0 only" for coincident rows (which
+      contradicts the rule)._
 
 ### AC3: The grid depends on the chunk alone
 
@@ -122,14 +127,27 @@ GUP-715 and GUP-716.
 
 - **Sort**: stable LSD radix sort of `(key: u32, row: u32)` pairs, three passes
   of 11 bits (32 key bits, 2,048 buckets). Stability keeps equal keys in row
-  order, so a run's first element is its lowest row (no index in the key, unlike
-  the prototype's `key << 20 | index`). Then the progressive order by a counting
-  sort over `first_tier` (at most 17 values), stable, so each tier block is in
-  row order (what the spike measured). GUP-720 reorders blocks; do not.
-- **Tier meaning** (as the spike): tier `t` has `2^t` by `2^t` cells over the
-  chunk's 65,536-cell span; `first_tier = 16 - floor(h / 2)` for the highest
-  differing bit `h` of consecutive keys, `0` for the first key, and "never" for
-  a repeated key (a later row of the finest cell).
+  order, so the first row of a run of equal tier-16 keys is its lowest (no index
+  in the key, unlike the prototype's `key << 20 | index`). Then the progressive
+  order by a counting sort over `first_tier` (at most 17 values), stable, so
+  each tier block is in row order (what the spike measured). GUP-720 reorders
+  blocks; do not.
+- **Tier meaning**: tier `t` has `2^t` by `2^t` cells over the chunk's
+  65,536-cell span, and a cell's representative is its **lowest row** (AC1).
+  Only the first row of a run of equal tier-16 keys (a "head") can represent
+  anything; a head's `first_tier` is the larger of `16 - floor(h / 2)` over its
+  nearest lower-row heads on the left and on the right in key order (`h` the
+  highest differing key bit; 0 for a missing neighbour), found in one pass with
+  a stack. _Revised 2026-11-11 (orchestrator)_: the story first took the spike's
+  rule, `16 - floor(h / 2)` against the _consecutive_ key, but that gives each
+  cell's Morton-first row, not its lowest: the sort orders a coarse cell's rows
+  by full key, and stability orders only rows of one tier-16 cell (walk, tier 0:
+  row 25,532 against the brute force's row 0). That rule built in 405 ms per 10M
+  against 484 for the stack (same session, load 3.4; the spike 684) with
+  identical `counts`; it lost because the representative it picks depends on the
+  sort's internals, while the lowest row is what the RFC states and generalises
+  to GUP-721's "largest size, then lowest index" (any per-row priority in place
+  of the row).
 - **Non-finite rows** are skipped, not clamped: a NaN position draws nothing
   today.
 - **Time-boxed to the CPU**: the build is a plain function over closures; the
@@ -207,57 +225,3 @@ GUP-715 and GUP-716.
       the module is unused until GUP-716, so it is dropped)
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
-
-## Blocked (2026-11-11)
-
-**Question**: the Decisions' `first_tier` rule (from consecutive sorted keys)
-does not give AC1's lowest-index representatives. Which semantics ship?
-
-**Evidence**. Sorting by `(key, row)` puts a tier-`t` cell's rows in a run in
-_full-key_ order, so the run's first row is the one with the smallest tier-16
-key, not the lowest row: stability orders only rows of one tier-16 cell. With
-the rule as written, AC1's brute force fails at tier 0 on every dataset (walk:
-tier 0's representative is row 25,532, brute force row 0). The spike has the
-same property (`key << 20 | index`, its "lowest index" claim holds at tier 16
-only); the cell counts, and so `counts`, `stored` and draw sizes, are identical
-either way (3,540,939 representatives at 10M, both).
-
-**Options**.
-
-- **A. The Decisions' rule** (the spike's): a cell's representative is its
-  Morton-first row. Change AC1's brute force to "the row with the smallest
-  `(key, row)` of each cell". Build 400 / 405 / 421 ms per 10M rows (median
-  405).
-- **B. Lowest row, as AC1 says** (committed in `91689376`): the same radix sort,
-  then one pass with a stack of tier-16 heads in increasing row order. A head is
-  the lowest row of its tier-`t` cell unless its nearest lower-row head on
-  either side shares the cell, so its first tier is the larger of its two split
-  tiers (`16 - floor(h / 2)` with each neighbour). The stack lives in the
-  already-read part of the sorted pairs, so the peak stays 16 B a row. Build 481
-  / 484 / 513 ms per 10M (median 484), +80 ms over A. All six unit tests pass
-  against the brute force.
-- Same session, alternating A / B / spike, sorted walk, release, one thread,
-  load 3.3-3.5 (other agents): the spike's comparison-sort build 646 / 684 / 826
-  (median 684). Both options meet AC4's 650 under that load. Peak extra memory
-  during a chunk's build: 16.00 B a row (counting allocator), both.
-
-**Recommendation**: B. It is what AC1 and the RFC say ("its cell's
-representative (lowest index)"), and its neighbour scan generalises to GUP-721's
-"largest size, then lowest index" (any per-row priority in place of the row),
-which the consecutive-key rule cannot express.
-
-Two smaller AC slips, resolved in the tests as below unless you say otherwise:
-
-- AC2 "1,000 rows ... own cell at tier 4 stores tiers 0-3": tier 4 has 256
-  cells, so 1,000 rows cannot each own one. Tested as 256 rows on a 16 × 16 grid
-  (tiers 0-3, counts `[1, 4, 16, 64]`) and 1,000 rows on a 32 × 32 grid (tiers
-  0-4).
-- AC2 "rows all coincide stores tier 0 only" contradicts its own rule: every
-  tier holds one representative (at most half the rows), so all 17 are stored
-  (`stored == 16`, `order == [0]`), and a frame draws one row at any zoom
-  instead of every row past tier 0. Tested that way. A degenerate axis (one
-  value) has no smallest `ex`; it takes the other axis's exponent (0 if both are
-  degenerate).
-
-Also measured: `mask wasm-size` scatter 379,234 B gz on main's `lib.rs` and on
-the branch (+0; the module is unused and dropped).
