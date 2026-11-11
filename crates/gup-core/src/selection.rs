@@ -229,7 +229,7 @@ pub struct Selection<T, M: Mark> {
     /// The level-of-detail tier every chunk draws, if it stores one
     /// (GUP-715's seam, [`force_lod_tier`](Self::force_lod_tier)); `None`
     /// draws every row.
-    lod_tier: Option<u32>,
+    lod: Option<ForcedTier>,
     window: RowWindow,
     retain: Retain,
     /// Draw order among the plot's items (default 0).
@@ -491,7 +491,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             epoch: 0,
             edge_cache: Mutex::new(EdgeCache::default()),
             bits_stale: false,
-            lod_tier: None,
+            lod: None,
             window: RowWindow::All,
             retain: Retain::Auto,
             z: 0,
@@ -826,18 +826,21 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         !self.all_rows_held()
     }
 
-    /// The evaluated column store, for tests.
     /// Draw each chunk's tier-`t` representatives (the prefix of its
     /// [`Tiers`](crate::lod::Tiers)) through the indexed-rows glue, or, for
     /// a chunk that stores no tier `t`, every row; `None` draws every row
-    /// (GUP-715's test seam; GUP-716 chooses tiers per frame). Prepare
-    /// fails for a polyline or a layer drawn by size.
-    #[cfg(test)]
+    /// (GUP-715's seam for tests and `lod_spike`; GUP-716 chooses tiers per
+    /// frame). Prepare fails for a polyline or a layer drawn by size.
     pub(crate) fn force_lod_tier(&mut self, t: Option<u32>) -> &mut Self {
-        self.lod_tier = t;
+        self.lod = t.map(|tier| ForcedTier {
+            tier,
+            build: build_tier,
+            program: Context::indexed_program,
+        });
         self
     }
 
+    /// The evaluated column store, for tests.
     #[cfg(test)]
     pub(crate) fn store(&self) -> Option<&ColumnStore> {
         self.columns.as_ref()
@@ -917,14 +920,14 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
     /// uploaded to `cx` on first use (GUP-715).
     fn lod_entries(&mut self, cx: &Context) -> Result<Vec<DrawEntry>> {
         let xy = self.position_columns();
-        if self.lod_tier.is_some() {
+        if self.lod.is_some() {
             Self::check_indexed()?;
         }
         let store = self.columns.as_mut().ok_or_else(|| {
             Error::config("layer", "prepare called before the columns were evaluated")
         })?;
         let mut entries = draw_entries(M::GEOMETRY, store.chunks());
-        let Some(t) = self.lod_tier else {
+        let Some(lod) = self.lod else {
             return Ok(entries);
         };
         if self.order.is_some() {
@@ -938,8 +941,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             ));
         }
         for e in &mut entries {
-            if let Some(n) = store.lod_tiers(e.this, xy)?.prefix(t) {
-                store.upload_lod(cx, e.this)?;
+            if let Some(n) = (lod.build)(store, cx, e.this, xy, lod.tier)? {
                 e.instances = n;
                 e.lod = Some(n);
             }
@@ -1674,6 +1676,41 @@ pub(crate) trait Layer: wgpu::WasmNotSendSync {
     /// The generated glue (for tests and diagnostics).
     fn glue_source(&self) -> Glue;
     fn as_any_mut(&mut self) -> &mut dyn Any;
+}
+
+/// [`build_tier`]'s type.
+type BuildTier =
+    fn(&mut ColumnStore, &Context, usize, [Option<usize>; 2], u32) -> Result<Option<u32>>;
+
+/// A forced level-of-detail tier (GUP-715's seam): the tier, and the
+/// functions that build and draw it, held as pointers that only
+/// [`Selection::force_lod_tier`] names, so a binary that never forces a
+/// tier links none of the build (`mask wasm-size`).
+#[derive(Clone, Copy, Debug)]
+struct ForcedTier {
+    tier: u32,
+    /// [`build_tier`].
+    build: BuildTier,
+    /// [`Context::indexed_program`].
+    program:
+        fn(&Context, &crate::render::GlueProgram, &Glue) -> Result<Arc<crate::render::GlueProgram>>,
+}
+
+/// Chunk `k`'s representatives of tier `t` (over store columns `xy`),
+/// built and uploaded to `cx` on first use: the prefix to draw, or `None`
+/// when the chunk stores no tier `t` (it draws every row).
+fn build_tier(
+    store: &mut ColumnStore,
+    cx: &Context,
+    k: usize,
+    xy: [Option<usize>; 2],
+    t: u32,
+) -> Result<Option<u32>> {
+    let Some(n) = store.lod_tiers(k, xy)?.prefix(t) else {
+        return Ok(None);
+    };
+    store.upload_lod(cx, k)?;
+    Ok(Some(n))
 }
 
 /// The plot scale a closure-encoded channel reads through, or the error that
@@ -2633,7 +2670,8 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
                     ),
                 ));
             }
-            Some(cx.indexed_program(&program, &self.indexed_glue()?)?)
+            let lod = self.lod.expect("only a forced tier draws representatives");
+            Some((lod.program)(cx, &program, &self.indexed_glue()?)?)
         } else {
             None
         };

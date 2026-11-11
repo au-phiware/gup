@@ -457,6 +457,15 @@ pub mod __private {
         (0..).map_while(|t| tiers.prefix(t)).collect()
     }
 
+    /// Draw each chunk of `layer` at level-of-detail tier `t` (GUP-715's
+    /// seam, `None`: every row), for `lod_spike --candidates indexed`.
+    pub fn force_lod_tier<T: Send + Sync + 'static, M: crate::Mark>(
+        layer: &mut crate::Selection<T, M>,
+        t: Option<u32>,
+    ) {
+        layer.force_lod_tier(t);
+    }
+
     /// The library's flattened modules (`VIEW`, `SCALE_LINEAR`, …), which a
     /// user module imports.
     pub mod wgsl {
