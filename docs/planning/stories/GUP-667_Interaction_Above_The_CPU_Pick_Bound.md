@@ -37,6 +37,20 @@ So above the bound, `pick_row` returns `None`, the marquee brush selects nothing
 and the arrow keys skip the layer. GUP-632 (100M rows with zoom, pan and keys)
 needs them.
 
+**Scope after GUP-631 (2026-11-11).** Level of detail
+([GUP-718](GUP-718_LOD_In_Pick_Hover_Tooltips_And_SVG.md)) gives a scatter drawn
+under `Lod::Auto` a CPU pick index of its drawn representatives (34,000-92,000
+items at any row count), so `pick_row`, hover and tooltips work for those layers
+above `Retain::AUTO_MAX_ROWS` without this story. This story is **kept, not
+folded into GUP-718**, and covers what LOD does not: the marquee brush's exact
+row set (the brush stays exact over data rows, which representatives are not),
+keyboard focus over data rows, layers under `Lod::Off`, and marks LOD does not
+take (lines, areas, segments, text, size-ordered layers before GUP-721). Its
+design question (GPU pick fallback against a streaming read, no `Context` in
+`pick_row`) is unchanged, which is why it stays 💡. When GUP-718 lands, re-read
+the ACs: the first two apply only to marks and layers outside LOD, and the
+anchor of a GPU-picked row is already done there for LOD layers.
+
 ## User Story
 
 > "As a developer showing 100M points, I want `pick_row`, the brush and the
@@ -72,6 +86,8 @@ needs them.
 ### Prerequisite Stories
 
 - GUP-664: Shared Columns as the CPU Copy ✅
+- GUP-718: LOD in CPU Pick, Hover, Tooltips and SVG 📋 — sequencing only: it
+  covers LOD scatters; read it before starting.
 
 ### Enables Stories
 

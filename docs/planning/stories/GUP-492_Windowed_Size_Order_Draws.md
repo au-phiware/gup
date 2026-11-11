@@ -221,7 +221,7 @@ none of that: they only change the sort key.
 
 ### Enables Stories
 
-- None scheduled.
+- GUP-721: LOD for Size-Ordered Layers 📋 — reads this story's bucket keys.
 
 ## Testing Strategy
 

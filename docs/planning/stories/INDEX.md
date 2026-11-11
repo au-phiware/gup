@@ -585,7 +585,9 @@ GUP-628 and GUP-631 (shared `selection.rs`).
   `Retain::AUTO_MAX_ROWS`. Opus. Deps: GUP-628 ✅; before GUP-632.
 - [GUP-667](GUP-667_Interaction_Above_The_CPU_Pick_Bound.md) 💡 — `pick_row`,
   the marquee brush and keyboard focus for layers with more than
-  `Retain::AUTO_MAX_ROWS` visible rows, without a CPU pick index of every row.
+  `Retain::AUTO_MAX_ROWS` visible rows, without a CPU pick index of every row;
+  narrowed by GUP-718 (LOD scatters pick through their representatives), it
+  keeps the exact brush set, focus, `Lod::Off` and marks LOD does not take.
   Deps: GUP-664 ✅; before GUP-632's keys and brush at 100M.
 - [GUP-674](GUP-674_Shareable_Key_Codes.md) 💡 — a keyed columnar layer keeps
   the no-copy path: key codes beside shared numeric columns in one store
@@ -613,11 +615,41 @@ GUP-628 and GUP-631 (shared `selection.rs`).
   `hundred_million` example from `Columns` with zoom, pan and keys, measured at
   10M, 30M and 100M rows, proposed budget rows, and README wording by a stated
   rule ("interactive" only under 16.7 ms; no "billion"). Deps: GUP-628 ✅,
-  GUP-629 📋, GUP-631 📋 and its follow-ups (soft).
+  GUP-629 📋, GUP-631 ✅ and its follow-ups GUP-714-721 (soft).
 - [GUP-492](GUP-492_Windowed_Size_Order_Draws.md) 📋 — bounded draw calls for a
   windowed layer sized by a column, through 12.5% size buckets in the sort key
   (about one draw per row today), with a `zoom_bench` row. Deps: GUP-482 ✅,
   GUP-628 ✅ and GUP-631 📋 (sequencing only: shared `selection.rs`).
+- [GUP-714](GUP-714_LOD_Tiers_In_The_Column_Store.md) 📋 — `lod::Tiers` per
+  chunk: a data-anchored Morton grid, one radix sort, every tier a prefix of one
+  representative list, stored while at most half the chunk; at most 650 ms per
+  10M rows. Opus. Deps: GUP-631 ✅, GUP-664 ✅.
+- [GUP-715](GUP-715_Representative_Buffers_And_Indexed_Rows.md) 📋 — Gathered
+  representative buffers plus a `u32` row column, and the indexed-rows glue so
+  brush, validity and pick read the data row; proven with a forced tier. Opus.
+  Deps: GUP-714 📋.
+- [GUP-716](GUP-716_Selection_Lod_And_Tier_Draws.md) 📋 — `Lod::{Auto, Off}`,
+  `Selection::lod`, `ScatterChart::lod`, the 200,000-row threshold, per-chunk
+  tier per frame (one tier finer than the spike), lazy builds. Opus. Deps:
+  GUP-714 📋, GUP-715 📋.
+- [GUP-717](GUP-717_LOD_Golden_Fidelity_And_Budgets.md) 📋 — A 1M-row LOD
+  golden, a ΔE00 share against `Lod::Off` (1.0% full, 2.0% zoom of the plot
+  rect) and `zoom_bench --lod` with proposed `lod.*` budget rows. Deps: GUP-716
+  📋.
+- [GUP-718](GUP-718_LOD_In_Pick_Hover_Tooltips_And_SVG.md) 📋 — The CPU pick
+  index, hover outline, tooltips and SVG over the drawn representatives (a LOD
+  scatter stays pickable above `Retain::AUTO_MAX_ROWS`); GUP-667 is kept,
+  narrowed. Deps: GUP-716 📋, GUP-684 ✅.
+- [GUP-719](GUP-719_LOD_With_Appends_And_Windows.md) 📋 — The tail chunk draws
+  in full below 65,536 rows then rebuilds at doublings; eviction drops tiers; a
+  rebuild bumps the pick epoch. Deps: GUP-716 📋, GUP-482 ✅.
+- [GUP-720](GUP-720_Spatial_Runs_For_Unsorted_Layers.md) 📋 — Tier blocks in
+  Morton order split into 4,096-representative runs with boxes, culled per
+  frame: shuffled 10M zoom from 65.4 ms to under 16.7 ms. Opus. Deps: GUP-716
+  📋, GUP-719 📋 (sequencing).
+- [GUP-721](GUP-721_LOD_For_Size_Ordered_Layers.md) 📋 — Largest-first tier
+  blocks and the largest mark as a cell's representative for size-ordered
+  layers. Deps: GUP-492 📋, GUP-716 📋, GUP-720 📋 (sequencing).
 
 ## Polish after 0.1
 

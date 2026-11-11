@@ -254,6 +254,23 @@ In order; the orchestrator's scribe writes them. Each at most three hours.
    ordered by GUP-492's size buckets, largest first; a cell's representative is
    its largest mark, then lowest index. Tests: largest-first order under LOD.
 
+Written 2026-11-11 as GUP-714 to GUP-721 (item 3 split in two, as it exceeded
+three hours):
+
+- 1 -> [GUP-714](GUP-714_LOD_Tiers_In_The_Column_Store.md) (opus).
+- 2 -> [GUP-715](GUP-715_Representative_Buffers_And_Indexed_Rows.md) (opus).
+- 3 -> [GUP-716](GUP-716_Selection_Lod_And_Tier_Draws.md) (opus: `Lod`, tier
+  choice, tier offset decided: one finer) and
+  [GUP-717](GUP-717_LOD_Golden_Fidelity_And_Budgets.md) (sonnet: golden, ΔE00
+  check, `zoom_bench --lod`, budget rows).
+- 4 -> [GUP-718](GUP-718_LOD_In_Pick_Hover_Tooltips_And_SVG.md) (sonnet).
+  GUP-667 is kept, narrowed: it keeps the exact brush set, keyboard focus,
+  `Lod::Off` and the marks LOD does not take.
+- 5 -> [GUP-719](GUP-719_LOD_With_Appends_And_Windows.md) (sonnet).
+- 6 -> [GUP-720](GUP-720_Spatial_Runs_For_Unsorted_Layers.md) (opus).
+- 7 -> [GUP-721](GUP-721_LOD_For_Size_Ordered_Layers.md) (sonnet, after
+  GUP-492).
+
 Not proposed: a density or heatmap view (A or C) as a chart of its own; both are
 a different look, and C met the budget everywhere if one is wanted.
 
@@ -351,4 +368,4 @@ a different look, and C met the budget everywhere if one is wanted.
 
 ### Follow-up Stories
 
-See "Follow-up Stories" above (seven, in order; titles only, no IDs).
+See "Follow-up Stories" above (seven, GUP-714 to GUP-721).
