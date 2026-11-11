@@ -548,7 +548,7 @@ fn bubbles(rows: Vec<R>, window: RowWindow, retain: Retain) -> Plot {
     let mut chart = gup_core::scatter(rows)
         .x(|r| r.x)
         .y(|r| r.y)
-        .fill(Color::hex(0xd62728))
+        .color_value(|r| r.s)
         .size(|r| r.s)
         .size_scale(Pow::sqrt().range(Px(1.5), Px(14.0)))
         .window(window);

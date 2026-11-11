@@ -4546,3 +4546,65 @@ draws more than today.
   route if that is not enough.
 - **GUP-632** (100M demonstration): measure B at 100M on a machine with 20 GB
   free; by the 10M-80M trend (2.0-4.1 ms, 2.8-5.9 B a row) it fits the budget.
+
+## GUP-492 findings (2026-11-11)
+
+**Design: quantised sort keys for windowed layers.** `DrawOrder` takes
+`bucketed` (`Selection::size_order` passes `window != RowWindow::All`); `key()`
+clears the low `23 - BUCKET_BITS` mantissa bits of the `f32` key
+(`BUCKET_BITS = 3`). That is monotone for either sign, leaves zero and the null
+key (-∞) alone, and gives equal keys to sizes in one bucket of at most 12.5%.
+Equal keys sort by data index and merge stored-first, so a bucket draws in data
+order. A chunk's run then holds at most one range per bucket, so a full
+evaluation gives at most `chunks × buckets_used` segments, which is the `floor`
+that compaction's `2 × floor` rule works from. Unwindowed layers keep the exact
+order.
+
+**Fidelity rule**: a windowed size order is exact between buckets and in data
+order within one. Buckets are the top three mantissa bits of the `f32`, so they
+are 12.5% of a binade wide (not a relative window around each value: 64 and 67.2
+share one, 100 and 105 do not).
+
+**Measured** (a 100,000-row `Circle` window, 1,000-row appends to 300,000 rows,
+`tests/window.rs`, draws counted by `Prepared::draw_calls` after every append):
+
+| sizes                                 | before  | after |
+| ------------------------------------- | ------- | ----- |
+| 16 levels (`1.5^i`), `Retain::Auto`   | 178     | 178   |
+| 16 levels, `Retain::GpuOnly`          | -       | 1,986 |
+| continuous (about 70 buckets), `Auto` | 124,002 | 702   |
+
+The plan's premise that the 16-level run drew more than 50,000 before does not
+hold: the exact order already merges 16 distinct sizes into 16 ranges a run, and
+compaction holds it. The change matters for continuous sizes. Images equal a
+fresh unwindowed plot of the held rows (0 of 120,000 pixels differ) for both
+policies, with the layer coloured by size so that the order shows: the smallest
+discs lie on top and the larger show only at the rim. Under `Retain::Auto` the
+draws stay within `max(64 + held / 1024, 2 × chunks × buckets)` plus the guide
+draws; the floor comes from the last full evaluation, so after an eviction count
+the chunks it held.
+
+**`Retain::GpuOnly` limit**: rows cannot be evaluated again, so there is no
+compaction and draws grow with the runs held (at most 16 a run here: 1,986 draws
+for 125 runs). Documented, not fixed.
+
+**A stale `bucketed`**: `Selection::window` after the first resolve normally
+changes the chunk cap and so re-evaluates and rebuilds the order; when the cap
+is unchanged it did not, so `evaluate` now treats a `bucketed` mismatch as
+stale.
+
+**Alternatives rejected** (code reasons): an index buffer in draw order needs
+vertex pulling with every chunk bound at once (GUP-431 alternative 3) and
+rewrites `O(rows)` index bytes at each eviction; a GPU sort needs the same plus
+a compute pipeline (alternative 4); an exact merge across chunks is impossible
+with per-chunk buffers and random sizes in fewer draws than rows.
+
+**Frame cost**: `BUCKET_BITS` does not move the CPU time. A size-ordered layer
+with more than one chunk spends about 12 ms a frame in `Plot::resolve`
+(`--bubbles --window 100000 --points 300000`: 12.6 ms before, 12.0 after, 12.1
+with `BUCKET_BITS = 2`; a plain scatter with the same chunking 1.1 ms; one chunk
+0.6 ms), windowed or not. AC3's 4.0 ms gate moved to GUP-724. GPU pass 0.96 ms,
+19 draws. **For GUP-721**: the bucket key is `DrawOrder::key`; the tier blocks
+should sort by it, and a size-ordered frame pays GUP-724's resolve cost until
+that lands. WASM: `wasm.scatter.gz_bytes` 379,250 on the base, 379,339 here (+89
+B).

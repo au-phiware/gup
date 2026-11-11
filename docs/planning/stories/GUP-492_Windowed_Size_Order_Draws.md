@@ -18,8 +18,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Track N5: Performance at Scale **Status**: 🚧 In Progress
-**Created**: 2026-10-23 **Revised**: 2026-11-07
+**Initiative**: Track N5: Performance at Scale **Status**: ✅ Complete
+(2026-11-11) **Created**: 2026-10-23 **Revised**: 2026-11-07
 
 ## Context
 
@@ -268,7 +268,10 @@ none of that: they only change the sort key.
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
 
-## Blocked (2026-11-11)
+## Blocked (2026-11-11), resolved
+
+The orchestrator chose option 3: bucketing lands here; AC3's CPU gate (and the
+resolve cost) moved to [GUP-724](GUP-724_Size_Ordered_Resolve_Cost.md).
 
 **Question**: AC3's decision rule fired (`zoom_window.cpu.median_ms` is 12.0 ms
 with `BUCKET_BITS = 3` and 12.1 ms with `BUCKET_BITS = 2`, limit 4.0), but the
@@ -319,3 +322,101 @@ Also fixed, outside the letter of the story: `Selection::window` changed after
 the first resolve left `bucketed` stale only when the chunk size was unchanged;
 `evaluate` now treats a mismatch as stale (the trigger's check passed otherwise:
 a window change normally changes the chunk cap and re-evaluates).
+
+## Implementation Summary
+
+- `DrawOrder::new(column, reversed, bucketed)`, `BUCKET_BITS = 3`, quantised
+  `key()`, module doc; `Selection::size_order` passes `window != All`;
+  `Selection::window` doc states the fidelity rule; `evaluate` rebuilds when
+  `bucketed` no longer matches the window.
+- Tests: `bucketed_keys_group_sizes_within_an_eighth` (`order.rs`);
+  `a_windowed_size_order_draws_in_bounded_calls`,
+  `a_windowed_continuous_size_order_draws_a_few_per_chunk` and
+  `a_gpu_only_windowed_size_order_draws_at_most_16_a_run` (`tests/window.rs`).
+  The GUP-482 window tests and the existing `DrawOrder` tests pass unchanged.
+- `zoom_bench --bubbles --window N`; RFC-001 "GUP-492 findings".
+
+### Acceptance criteria
+
+- AC1: met with a guide-draw allowance of 16 (the story's bound fails by 2 at
+  17,000 rows because the count includes axes and text): at most 178 draws under
+  `Auto`, 1,986 under `GpuOnly` (bound 16 a run). **The "more than 50,000
+  before" premise holds only for continuous sizes**: 16 levels draw 178 before
+  and after; continuous sizes draw 124,002 before and 702 after. Unwindowed
+  layers unchanged.
+- AC2: met. Images equal a fresh plot (0 of 120,000 pixels differ; the layer is
+  coloured by size so the order shows: smallest on top, larger at the rim);
+  column bytes tests unchanged; the 5% / 30% unit test passes.
+- AC3: flags added; draws 19 and GPU pass 0.96 ms measured; the CPU gate (12.0
+  ms, 12.1 ms with `BUCKET_BITS = 2`) is not the draw order's cost and moved to
+  GUP-724.
+- AC4: RFC section and docs written.
+
+### Proposed `PERF_BUDGETS.md` rows (draws and GPU pass only)
+
+`--bubbles --window 100000 --points 300000 --metric-prefix zoom_window`:
+`zoom_window.draws.median` 19 (limit 24); `zoom_window.gpu_pass.median_ms` 0.96
+(machine-dependent, loaded; record on the budget machine). No CPU row until
+GUP-724.
+
+### Evidence
+
+- WASM `wasm.scatter.gz_bytes`: base 379,250, branch 379,339 (+89 B).
+
+## Retrospective
+
+**Completed**: 2026-11-11
+
+### Key Technical Learnings
+
+#### The premise was measured only for continuous sizes
+
+- **Challenge**: The story said the 16-level run draws over 50,000 before.
+- **Solution**: Measuring first showed 178 (exact order merges equal sizes into
+  16 ranges a run); the 124,002 to 702 change shows only with continuous sizes.
+  An extra test covers it.
+- **Pattern**: Measure the "before" with the real data shape before writing the
+  bound; the bound can then be asserted on the shape that is actually bad.
+
+#### Buckets are binade slices, not neighbourhoods
+
+- **Challenge**: "Sizes 5% apart share a bucket" is false for 100 and 105.
+- **Solution**: Bucket edges are fixed (top three mantissa bits). The unit test
+  uses 64 and 67.2.
+- **Pattern**: State fidelity as "at most 12.5% within a bucket", not "within
+  12.5% of each other".
+
+#### A flat fill hides the order
+
+- **Challenge**: The first image test used one fill colour and was a solid red
+  square, so equality proved nothing.
+- **Solution**: Colour by size; then the interior is the smallest (dark) discs
+  and the larger show at the rim, and a reversed order would be visibly wrong.
+
+### Architectural Decisions
+
+#### The CPU gate left this story
+
+- **Decision**: `BUCKET_BITS` stays 3; the 4.0 ms gate moved to GUP-724.
+- **Reasoning**: 12 ms a frame is `Plot::resolve` on any multi-chunk
+  size-ordered layer (unwindowed too); `BUCKET_BITS = 2` changed nothing.
+- **Trade-off**: AC3's CPU row is unrecorded until GUP-724.
+
+### For GUP-721
+
+- Reuse `DrawOrder::key` for the tier-block bucket; note that the windowed
+  buckets are the only ones: an unwindowed order is exact (`bucketed = false`).
+- Chunk-boundary runs: the floor (`mark_evaluated`) records the segments of the
+  last full evaluation, before eviction.
+- Expect GUP-724's resolve cost on any size-ordered frame.
+
+### Development Workflow Insights
+
+- Worktree agents cannot run compound shell commands (heredocs, `sed` with
+  escapes, `&&` with git); use the Edit tool and plain commands.
+- `zoom_bench` needs `--present mailbox` here (Immediate is unsupported).
+- Load was 3 to 5 during the benchmarks; the CPU medians vary by about 10%.
+
+### Follow-up Stories
+
+1. **GUP-724: Size-Ordered Resolve Cost** (written; carries the CPU gate).
