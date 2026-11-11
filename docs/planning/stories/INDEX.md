@@ -650,7 +650,7 @@ GUP-628 and GUP-631 (shared `selection.rs`).
 - [GUP-721](GUP-721_LOD_For_Size_Ordered_Layers.md) 📋 — Largest-first tier
   blocks and the largest mark as a cell's representative for size-ordered
   layers. Deps: GUP-492 ✅, GUP-716 📋, GUP-720 📋 (sequencing), GUP-724 📋.
-- [GUP-724](GUP-724_Size_Ordered_Resolve_Cost.md) 🚧 — A multi-chunk
+- [GUP-724](GUP-724_Size_Ordered_Resolve_Cost.md) ✅ — A multi-chunk
   size-ordered layer's resolve costs about 12 ms a frame against 1.1 ms for a
   plain scatter: profile, then cache per epoch. Carries GUP-492's 4.0 ms CPU
   gate. Deps: GUP-492 ✅.
