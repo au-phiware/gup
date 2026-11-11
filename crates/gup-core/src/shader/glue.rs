@@ -83,7 +83,19 @@ pub(crate) struct GlueSpec<'a> {
     /// `vertex_controls(m, controls, vertex_index, row, view, <value>u,
     /// rows)` with the two results as `controls`. Needs a variant.
     pub controls: Option<usize>,
+    /// The indexed-rows variant (GUP-715): one more `u32` instance column,
+    /// [`LOD_ROW`], after the channels' (and control) columns holds each
+    /// instance's chunk-local data row, and the vertex entry reads
+    /// `let row = col.lod_row;` and uses `row` where it otherwise uses
+    /// `instance_index`: the brushed bit, the validity group and bit, and
+    /// the row it passes to the mark (so a pick's id is
+    /// `chunk.row_base + row`). The encodings still read the (gathered)
+    /// columns at the instance. Quads only: a polyline reads the next row.
+    pub indexed: bool,
 }
+
+/// The indexed-rows variant's instance column (see [`GlueSpec::indexed`]).
+pub(crate) const LOD_ROW: &str = "lod_row";
 
 /// The names of a polyline's two control columns (see
 /// [`GlueSpec::controls`]), after the channel's name: the control value
@@ -153,6 +165,9 @@ pub(crate) struct Glue {
     /// Whether the last two of `columns` are control columns (see
     /// [`GlueSpec::controls`]), bound like the channels' columns.
     pub controls: bool,
+    /// Whether one more `u32` vertex column, [`LOD_ROW`], follows every
+    /// other (see [`GlueSpec::indexed`]).
+    pub indexed: bool,
     /// Whether the glue is a polyline's (see [`GlueSpec::polyline`]).
     /// With validity, group 2 binds the next row's validity bits at
     /// binding 2 and the `Chunk` uniform holds `valid_offset` and
@@ -336,6 +351,7 @@ const RESERVED: &[&str] = &[
     "next_bit",
     "out",
     "controls",
+    "row",
 ];
 
 /// Import aliases: the last path segment, de-duplicated.
@@ -375,6 +391,18 @@ fn const_size(wgsl_type: &str) -> u64 {
 
 /// Generate the glue module for `spec`.
 pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
+    debug_assert!(
+        !(spec.indexed && spec.polyline),
+        "{}: the indexed-rows glue is for quads only",
+        spec.mark_name
+    );
+    // The data row of the instance: its own index, or (indexed) the row
+    // its `lod_row` column holds.
+    let row = if spec.indexed {
+        "row"
+    } else {
+        "instance_index"
+    };
     let mut aliases = Aliases(Vec::new());
     let mark_alias = aliases.get(spec.mark_module);
 
@@ -597,6 +625,9 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
         Some(BrushStyle::Grey) => signature.push_str(" brushed grey"),
         None => {}
     }
+    if spec.indexed {
+        signature.push_str(" indexed");
+    }
 
     // Print the module.
     let mut s = String::new();
@@ -698,7 +729,7 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
         }
     }
 
-    let col_param = if columns.is_empty() {
+    let col_param = if columns.is_empty() && !spec.indexed {
         ""
     } else {
         let _ = writeln!(w, "\nstruct Columns {{");
@@ -715,6 +746,10 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
                 format.wgsl_type()
             );
         }
+        if spec.indexed {
+            let loc = columns.len() + successors.len();
+            let _ = writeln!(w, "    @location({loc}) {LOD_ROW}: u32,");
+        }
         let _ = writeln!(w, "}}");
         ", col: Columns"
     };
@@ -726,6 +761,9 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
          @builtin(instance_index) instance_index: u32{col_param}) -> {mark_alias}::Varyings {{"
     );
     let body_start = w.len();
+    if spec.indexed {
+        let _ = writeln!(w, "    let row = col.{LOD_ROW};");
+    }
     if validity && spec.polyline {
         // A polyline reads this row's bits and the next row's, each at an
         // offset from the draw's first instance (a bridge between chunks
@@ -743,8 +781,8 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
         // This row's bits: its 32-row group of `planes` words, then its bit.
         let _ = writeln!(
             w,
-            "    let valid_group = (instance_index / 32u) * {planes}u;\n    \
-             let valid_bit = instance_index % 32u;"
+            "    let valid_group = ({row} / 32u) * {planes}u;\n    \
+             let valid_bit = {row} % 32u;"
         );
     }
     let _ = writeln!(w, "    var m: {mark_alias}::{}In;", spec.mark_name);
@@ -764,7 +802,7 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
         // never reads colour.
         let _ = writeln!(
             w,
-            "    let brush_row = chunk.row_base + instance_index;\n    \
+            "    let brush_row = chunk.row_base + {row};\n    \
              let brush_in = ((brush_bits[brush_row / 32u] >> (brush_row % 32u)) & 1u) == 1u;\n    \
              let brush_k = select(enc.brush_dim, 1.0, brush_in);"
         );
@@ -785,15 +823,13 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
         }
     }
     let vertex = match spec.variant {
-        None => format!(
-            "{mark_alias}::vertex(m, vertex_index, chunk.row_base + instance_index, u_view)"
-        ),
+        None => format!("{mark_alias}::vertex(m, vertex_index, chunk.row_base + {row}, u_view)"),
         Some((value, _)) if spec.controls.is_some() => format!(
             "{mark_alias}::vertex_controls(m, controls, vertex_index, chunk.row_base + \
-             instance_index, u_view, {value}u, enc.{ROW_COUNT_FIELD})"
+             {row}, u_view, {value}u, enc.{ROW_COUNT_FIELD})"
         ),
         Some((value, _)) => format!(
-            "{mark_alias}::vertex_variant(m, vertex_index, chunk.row_base + instance_index, \
+            "{mark_alias}::vertex_variant(m, vertex_index, chunk.row_base + {row}, \
              u_view, {value}u, enc.{ROW_COUNT_FIELD})"
         ),
     };
@@ -867,6 +903,7 @@ pub(crate) fn emit(spec: &GlueSpec<'_>) -> Glue {
         columns,
         successors,
         controls: spec.controls.is_some(),
+        indexed: spec.indexed,
         polyline: spec.polyline,
         validity,
         relative,

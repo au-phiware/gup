@@ -226,6 +226,10 @@ pub struct Selection<T, M: Mark> {
     /// Whether the brushed-row bits must be written whole at the next
     /// prepare (the stored rows were renumbered).
     bits_stale: bool,
+    /// The level-of-detail tier every chunk draws, if it stores one
+    /// (GUP-715's seam, [`force_lod_tier`](Self::force_lod_tier)); `None`
+    /// draws every row.
+    lod_tier: Option<u32>,
     window: RowWindow,
     retain: Retain,
     /// Draw order among the plot's items (default 0).
@@ -487,6 +491,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             epoch: 0,
             edge_cache: Mutex::new(EdgeCache::default()),
             bits_stale: false,
+            lod_tier: None,
             window: RowWindow::All,
             retain: Retain::Auto,
             z: 0,
@@ -822,6 +827,17 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
     }
 
     /// The evaluated column store, for tests.
+    /// Draw each chunk's tier-`t` representatives (the prefix of its
+    /// [`Tiers`](crate::lod::Tiers)) through the indexed-rows glue, or, for
+    /// a chunk that stores no tier `t`, every row; `None` draws every row
+    /// (GUP-715's test seam; GUP-716 chooses tiers per frame). Prepare
+    /// fails for a polyline or a layer drawn by size.
+    #[cfg(test)]
+    pub(crate) fn force_lod_tier(&mut self, t: Option<u32>) -> &mut Self {
+        self.lod_tier = t;
+        self
+    }
+
     #[cfg(test)]
     pub(crate) fn store(&self) -> Option<&ColumnStore> {
         self.columns.as_ref()
@@ -878,6 +894,57 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
     ) -> &mut Self {
         self.legend_titles[usize::from(channel.slot())] = Some(title.into());
         self
+    }
+
+    /// The store columns of the first x and y column channels (`None`: a
+    /// constant axis), which a chunk's tiers are built over.
+    fn position_columns(&self) -> [Option<usize>; 2] {
+        let mut out = [None; 2];
+        for (col, (i, _)) in self.column_encodings().enumerate() {
+            let axis = match M::CHANNELS[i].role {
+                Some(Role::X) => 0,
+                Some(Role::Y) => 1,
+                _ => continue,
+            };
+            out[axis].get_or_insert(col);
+        }
+        out
+    }
+
+    /// The layer's draw entries ([`draw_entries`]), each chunk that stores
+    /// the forced tier ([`force_lod_tier`](Self::force_lod_tier)) drawing
+    /// that tier's prefix of its representatives, which are built and
+    /// uploaded to `cx` on first use (GUP-715).
+    fn lod_entries(&mut self, cx: &Context) -> Result<Vec<DrawEntry>> {
+        let xy = self.position_columns();
+        if self.lod_tier.is_some() {
+            Self::check_indexed()?;
+        }
+        let store = self.columns.as_mut().ok_or_else(|| {
+            Error::config("layer", "prepare called before the columns were evaluated")
+        })?;
+        let mut entries = draw_entries(M::GEOMETRY, store.chunks());
+        let Some(t) = self.lod_tier else {
+            return Ok(entries);
+        };
+        if self.order.is_some() {
+            return Err(Error::config(
+                "lod",
+                format!(
+                    "{}: a layer drawn by size has no level of detail yet (its representatives \
+                     must draw largest first)",
+                    M::NAME
+                ),
+            ));
+        }
+        for e in &mut entries {
+            if let Some(n) = store.lod_tiers(e.this, xy)?.prefix(t) {
+                store.upload_lod(cx, e.this)?;
+                e.instances = n;
+                e.lod = Some(n);
+            }
+        }
+        Ok(entries)
     }
 
     fn column_encodings(&self) -> impl Iterator<Item = (usize, &dyn crate::DynColumnEncoding<T>)> {
@@ -1300,6 +1367,33 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
     }
 
     fn glue(&self) -> Glue {
+        self.emit_glue(false)
+    }
+
+    /// The indexed-rows variant of [`glue`](Self::glue) (GUP-715), which
+    /// draws a chunk's gathered representatives: an error for a polyline,
+    /// whose vertex stage reads the next row (LOD is for quads only).
+    fn indexed_glue(&self) -> Result<Glue> {
+        Self::check_indexed()?;
+        Ok(self.emit_glue(true))
+    }
+
+    /// Whether the mark can draw representatives: an error for a polyline.
+    fn check_indexed() -> Result<()> {
+        if M::GEOMETRY == Geometry::Polyline {
+            return Err(Error::config(
+                "lod",
+                format!(
+                    "{}: a polyline reads each row's successor, so it has no level of detail \
+                     (only quad marks draw representatives)",
+                    M::NAME
+                ),
+            ));
+        }
+        Ok(())
+    }
+
+    fn emit_glue(&self, indexed: bool) -> Glue {
         let channels = M::CHANNELS
             .iter()
             .zip(&self.encodings)
@@ -1331,6 +1425,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
                     .position(|d| d.name == "y")
                     .expect("a mark with control values has y")
             }),
+            indexed,
         })
     }
 
@@ -2523,6 +2618,25 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         }
         let store = self.columns.as_mut().expect("checked above");
         store.upload(cx)?;
+        let entries = self.lod_entries(cx)?;
+        // The indexed-rows program, when a chunk draws representatives: one
+        // more vertex column (GUP-715).
+        let indexed = if entries.iter().any(|e| e.lod.is_some()) {
+            if slots >= limits.max_vertex_buffers as usize {
+                return Err(Error::config(
+                    "layer",
+                    format!(
+                        "{}: {slots} vertex columns and the level of detail's row column, and \
+                         this device has {} vertex buffer slots; make some channels constants",
+                        M::NAME,
+                        limits.max_vertex_buffers
+                    ),
+                ));
+            }
+            Some(cx.indexed_program(&program, &self.indexed_glue()?)?)
+        } else {
+            None
+        };
         let store = self.columns.as_ref().expect("checked above");
         // Validity buffers exist (and are bound) only when the glue reads
         // them, which is exactly when the store has a null.
@@ -2532,16 +2646,15 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         let brush_words = glue
             .brush_binding
             .map(|_| crate::render::brush_words(store.rows()));
-        let entries = draw_entries(M::GEOMETRY, stored);
-        let vector = self.vector_slot(theme, &entries);
+        // The vector targets write every row (GUP-718 writes tiers).
+        let vector = match indexed {
+            Some(_) => self.vector_slot(theme, &draw_entries(M::GEOMETRY, stored)),
+            None => self.vector_slot(theme, &entries),
+        };
         let uploaded = || {
             entries.iter().map(|d| {
                 let c = &stored[d.this];
-                (
-                    c.buffer(cx).expect("uploaded above"),
-                    validity(c),
-                    d.instances,
-                )
+                (entry_buffer(cx, c, d), validity(c), d.instances)
             })
         };
         // A polyline in data order, bridges between its chunks; else
@@ -2549,6 +2662,15 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         // upload order.
         let spans = match &self.order {
             _ if glue.polyline => polyline_spans(stored),
+            // Each chunk's tier prefix, or its rows (GUP-715).
+            _ if indexed.is_some() => entries
+                .iter()
+                .enumerate()
+                .map(|(e, d)| crate::render::Span {
+                    chunk: e as u32,
+                    rows: 0..d.instances,
+                })
+                .collect(),
             Some(order) => order.spans(stored),
             None => chunk_spans(stored),
         };
@@ -2561,7 +2683,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         };
 
         if let Some((gpu, held)) = &self.gpu
-            && gpu.reusable(cx, &program)
+            && gpu.reusable(cx, &program, indexed.as_ref())
             && *held == luts
         {
             // Zoom, pan and resize land here every frame: write the new
@@ -2606,6 +2728,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         let gpu = Arc::new(
             LayerUniforms {
                 program,
+                indexed,
                 encodings,
                 chunks,
                 luts: luts.iter().map(Vec::as_slice).collect(),
@@ -3026,11 +3149,29 @@ fn chunk_draw(
         let start = range.start + u64::from(first) * store.formats()[i].stride();
         (buffer(c), start..range.end)
     };
+    // A tier draws the chunk's gathered representatives and their rows
+    // (GUP-715), with the chunk's uniform entry and validity bits.
+    if d.lod.is_some() {
+        let lod = this.lod_gpu(cx).expect("uploaded by lod_entries");
+        let slots = (0..=store.formats().len())
+            .map(|i| (lod.buffer().clone(), lod.range(i)))
+            .collect();
+        return ChunkDraw {
+            columns: lod.buffer().clone(),
+            slots,
+            instances: d.instances,
+            dynamic_offset: chunk_uniform_offset(e) as u32,
+            validity: chunk_validity(reads_validity, this, cx).cloned(),
+            next_validity: None,
+            indexed: true,
+        };
+    }
     let mut slots: Vec<_> = (0..store.formats().len())
         .map(|i| slot(this, i, d.first))
         .collect();
     slots.extend(glue.successors.iter().map(|&i| slot(next, i, d.next_first)));
     ChunkDraw {
+        indexed: false,
         columns: buffer(this),
         slots,
         instances: d.instances,
@@ -3039,6 +3180,15 @@ fn chunk_draw(
         next_validity: (glue.polyline && reads_validity)
             .then(|| chunk_validity(true, next, cx).cloned())
             .flatten(),
+    }
+}
+
+/// The buffer entry `d` draws from: chunk `c`'s, or its representatives'
+/// for a tier (GUP-715).
+fn entry_buffer<'c>(cx: &Context, c: &'c crate::column::Chunk, d: &DrawEntry) -> &'c wgpu::Buffer {
+    match d.lod {
+        Some(_) => c.lod_gpu(cx).expect("uploaded by lod_entries").buffer(),
+        None => c.buffer(cx).expect("uploaded above"),
     }
 }
 
@@ -4048,6 +4198,86 @@ mod tests {
         let batch = sel.prepare(&cx, &Theme::default(), false).unwrap();
         assert_eq!(batch.instances(), 40);
         assert!(batch.gpu.chunks.iter().all(|c| c.validity.is_some()));
+    }
+
+    /// GUP-715 AC2: the indexed-rows variant reads each instance's data row
+    /// from its `lod_row` column for the validity bits, the brushed bit and
+    /// the mark's row (so the pick's id), and links (colour and pick) with
+    /// the same uniform layouts as the plain glue, whose source it leaves
+    /// unchanged.
+    #[test]
+    fn indexed_glue_reads_the_row_column() {
+        let cx = Context::new_blocking().unwrap();
+        let mut sel = places(true);
+        sel.fit_domains(&cx).unwrap();
+        sel.brushable = true;
+        let plain = sel.glue();
+        let glue = sel.indexed_glue().unwrap();
+        assert!(glue.indexed && !plain.indexed);
+        assert_eq!(glue.signature, format!("{} indexed", plain.signature));
+        assert_eq!(glue.columns, plain.columns);
+        assert_eq!(glue.encodings, plain.encodings);
+        assert_eq!(glue.chunk, plain.chunk);
+        assert_eq!(glue.brush_binding, plain.brush_binding);
+        check_fixture("nulls_glue_indexed.wgsl", &glue.source);
+        let src = &glue.source;
+        for want in [
+            "@location(3) lod_row: u32,",
+            "let row = col.lod_row;",
+            "let valid_group = (row / 32u) * 2u;",
+            "let valid_bit = row % 32u;",
+            "let brush_row = chunk.row_base + row;",
+            "::vertex(m, vertex_index, chunk.row_base + row, u_view)",
+        ] {
+            assert!(src.contains(want), "{want}:\n{src}");
+        }
+        // `instance_index` is only declared (`@builtin(instance_index)
+        // instance_index`): no row is read from it.
+        assert_eq!(src.matches("instance_index").count(), 2, "{src}");
+        let pick = glue.pick.as_ref().expect("Circle has a GPU pick");
+        assert!(pick.contains("let row = col.lod_row;"), "{pick}");
+        assert!(pick.contains("chunk.row_base + row, u_view)"), "{pick}");
+        assert_eq!(pick.matches("instance_index").count(), 2, "{pick}");
+        let linked = parse(
+            &glue.signature,
+            &link(&glue.signature, &glue.source, &glue.modules).unwrap(),
+        );
+        assert_eq!(
+            Some(glue.encodings.clone()),
+            struct_layout(&linked, "Encodings")
+        );
+        assert_eq!(Some(glue.chunk.clone()), struct_layout(&linked, "Chunk"));
+        parse(
+            &glue.signature,
+            &link(&glue.signature, pick, &glue.modules).unwrap(),
+        );
+    }
+
+    /// GUP-715 AC2: a polyline has no indexed variant (it reads the next
+    /// row), and prepare with a forced tier says so.
+    #[test]
+    fn a_polyline_has_no_indexed_glue() {
+        let cx = Context::new_blocking().unwrap();
+        let mut sel = Selection::<Row, crate::marks::Line>::new(
+            (0..10)
+                .map(|i| Row {
+                    x: f64::from(i),
+                    y: f64::from(i * i),
+                    v: 0.0,
+                })
+                .collect::<Vec<_>>(),
+        );
+        sel.attr(crate::marks::Line::X, Linear::new().encode(|r: &Row| r.x))
+            .attr(crate::marks::Line::Y, Linear::new().encode(|r: &Row| r.y));
+        let err = sel.indexed_glue().unwrap_err().to_string();
+        assert!(err.contains("Line: a polyline"), "{err}");
+        sel.fit_domains(&cx).unwrap();
+        sel.force_lod_tier(Some(2));
+        let err = sel
+            .prepare(&cx, &Theme::default(), false)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("Line: a polyline"), "{err}");
     }
 
     /// S4b: a null in a numeric colour column draws in the null colour

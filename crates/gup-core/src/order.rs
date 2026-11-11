@@ -303,6 +303,11 @@ pub(crate) struct DrawEntry {
     pub next_first: u32,
     /// Instances the entry can draw.
     pub instances: u32,
+    /// The representatives drawn from the chunk's
+    /// [`LodGpu`](crate::column::LodGpu) (a level-of-detail tier's prefix,
+    /// GUP-715), or `None` to draw the chunk's own rows. Equal to
+    /// `instances` when set. [`draw_entries`] gives `None`.
+    pub lod: Option<u32>,
 }
 
 /// A layer's draw entries: one per chunk, its rows from the first; for a
@@ -322,6 +327,7 @@ pub(crate) fn draw_entries(geometry: Geometry, chunks: &[Chunk]) -> Vec<DrawEntr
             Geometry::Quad => c.rows(),
             Geometry::Polyline => c.rows().saturating_sub(1),
         },
+        lod: None,
     });
     match geometry {
         Geometry::Quad => own.collect(),
@@ -332,6 +338,7 @@ pub(crate) fn draw_entries(geometry: Geometry, chunks: &[Chunk]) -> Vec<DrawEntr
                 next: k + 1,
                 next_first: 0,
                 instances: 1,
+                lod: None,
             }))
             .collect(),
     }

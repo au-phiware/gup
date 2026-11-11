@@ -51,6 +51,7 @@
 
 use crate::context::{Context, ContextId, Upload};
 use crate::error::{Error, Result};
+use crate::lod::Tiers;
 use std::borrow::{Borrow, Cow};
 use std::collections::HashMap;
 use std::fmt::Display;
@@ -704,6 +705,61 @@ struct ChunkGpu {
     validity: Option<ValidityGpu>,
 }
 
+/// A chunk's level-of-detail tiers (GUP-714), built for its rows at the
+/// time, and its gathered representatives on one context (GUP-715).
+/// Dropped when the chunk's rows change (an append or a rewrite).
+#[derive(Debug)]
+struct ChunkLod {
+    /// The store columns of x and y the tiers were built from (`None`:
+    /// that axis was a constant).
+    xy: [Option<usize>; 2],
+    tiers: Tiers,
+    gpu: Option<LodGpu>,
+}
+
+/// A chunk's representatives on one context (GUP-715): rows
+/// `order[..counts[stored]]` of its [`Tiers`], each column gathered in
+/// the chunk's format against the chunk's origin, so the pipelines that
+/// read the chunk read these with the chunk's `Chunk` uniform entry; then
+/// a `u32` column of each representative's chunk-local row
+/// ([`LOD_ROW`](crate::shader::glue::LOD_ROW)). Columns are packed (4-byte
+/// aligned for vertex fetch; nothing binds them as storage), so the buffer
+/// is exactly `reps × (strides + 4)` bytes. Validity bits are not
+/// gathered: the indexed glue reads the chunk's own by data row.
+#[derive(Debug)]
+pub(crate) struct LodGpu {
+    context: ContextId,
+    buffer: wgpu::Buffer,
+    /// Byte range of each column, then of the row column.
+    ranges: Vec<std::ops::Range<u64>>,
+}
+
+impl LodGpu {
+    /// The gathered columns and rows.
+    pub(crate) fn buffer(&self) -> &wgpu::Buffer {
+        &self.buffer
+    }
+
+    /// The byte range of store column `index` (`formats().len()`: the
+    /// chunk-local rows).
+    pub(crate) fn range(&self, index: usize) -> std::ops::Range<u64> {
+        self.ranges[index].clone()
+    }
+
+    /// The representatives held: `counts[stored]` of the chunk's tiers.
+    #[cfg(test)]
+    pub(crate) fn reps(&self) -> u32 {
+        let rows = self.ranges.last().expect("the row column");
+        ((rows.end - rows.start) / 4) as u32
+    }
+
+    /// The buffer's size in bytes.
+    #[cfg(test)]
+    pub(crate) fn size(&self) -> u64 {
+        self.buffer.size()
+    }
+}
+
 /// Up to [`ColumnStore::chunk_rows`] rows: one GPU buffer, one instanced
 /// draw, and per column an f64 origin and stats.
 #[derive(Debug)]
@@ -722,6 +778,9 @@ pub struct Chunk {
     /// [`ColumnStore::append_shared`]).
     shared: bool,
     gpu: Option<ChunkGpu>,
+    /// Tiers and representatives, once a level-of-detail draw asked for
+    /// them (GUP-715).
+    lod: Option<Box<ChunkLod>>,
 }
 
 impl Chunk {
@@ -755,6 +814,7 @@ impl Chunk {
             }),
             shared,
             gpu: None,
+            lod: None,
         }
     }
 
@@ -814,6 +874,22 @@ impl Chunk {
             .map(|g| &g.buffer)
     }
 
+    /// The chunk's tiers, if [`ColumnStore::lod_tiers`] built them for
+    /// its current rows.
+    #[cfg(test)]
+    pub(crate) fn tiers(&self) -> Option<&Tiers> {
+        self.lod.as_ref().map(|l| &l.tiers)
+    }
+
+    /// The chunk's representatives on `cx`, if
+    /// [`ColumnStore::upload_lod`] put them there for its current tiers.
+    pub(crate) fn lod_gpu(&self, cx: &Context) -> Option<&LodGpu> {
+        self.lod
+            .as_ref()
+            .and_then(|l| l.gpu.as_ref())
+            .filter(|g| g.context == cx.id())
+    }
+
     /// The chunk's validity buffer on `cx`, if [`ColumnStore::upload`] put
     /// it there (only once the store has a null).
     pub(crate) fn validity_buffer(&self, cx: &Context) -> Option<&wgpu::Buffer> {
@@ -853,6 +929,8 @@ impl Chunk {
     /// shared columns, only their origins and stats.
     fn write(&mut self, columns: &[ColumnSlice<'_>], range: std::ops::Range<usize>, planes: usize) {
         let at = self.len;
+        // New rows: the tiers would leave them out (GUP-719 rebuilds).
+        self.lod = None;
         let mut cpu = (!self.shared)
             .then(|| Arc::make_mut(self.cpu.as_mut().expect("only full chunks are released")));
         let mut plane = 0;
@@ -1121,6 +1199,26 @@ impl Cells<'_> {
                             + f64::from(f32::from_le_bytes(word(at + 4)))
                     }
                 }
+            }
+        }
+    }
+
+    /// Row `r`'s cell of the chunk's column `col` as the chunk buffer holds
+    /// it, written to `dst` (`col`'s stride): the CPU copy's bytes, or a
+    /// shared value encoded as an upload encodes it.
+    fn cell(&self, col: &ChunkColumn, r: usize, dst: &mut [u8]) {
+        match *self {
+            Cells::Bytes { cpu, .. } => {
+                let at = col.offset as usize + r * dst.len();
+                dst.copy_from_slice(&cpu.bytes[at..at + dst.len()]);
+            }
+            Cells::Shared(rows) => {
+                let v = match rows {
+                    ColumnSlice::F64(v) => v[r],
+                    ColumnSlice::F32(v) => f64::from(v[r]),
+                    ColumnSlice::Codes(_) => unreachable!("shared columns are numbers"),
+                };
+                encode_cells(dst, col.format, col.origin(), &[v]);
             }
         }
     }
@@ -1491,6 +1589,9 @@ impl ColumnStore {
             return;
         }
         let local = (row - chunk.row_base) as u32;
+        // A moved row may represent another cell, and its gathered bytes
+        // are stale.
+        chunk.lod = None;
         let col = &mut chunk.columns[column];
         debug_assert!(col.format.has_validity(), "a numeric column");
         let (cell, stride) = col.encode_one(value);
@@ -1685,6 +1786,107 @@ impl ColumnStore {
             }),
             (None, None) => None,
         }
+    }
+
+    /// Chunk `k`'s level-of-detail tiers (GUP-714) over its rows at x
+    /// (store column `xy[0]`) and y (`xy[1]`; `None`: a constant axis),
+    /// built on first use and kept until the chunk's rows change. The
+    /// values are read as the GPU sees them. An error when the chunk's CPU
+    /// copy was released and its columns are not shared (GUP-716 builds
+    /// before release).
+    pub(crate) fn lod_tiers(&mut self, k: usize, xy: [Option<usize>; 2]) -> Result<&Tiers> {
+        let fresh = self.chunks[k].lod.as_ref().is_some_and(|l| l.xy == xy);
+        if !fresh {
+            let read = |c: Option<usize>| -> Result<Option<(Cells<'_>, &ChunkColumn)>> {
+                let Some(c) = c else { return Ok(None) };
+                let cells = self.cells(k, c).ok_or_else(|| self.released(k, "tiers"))?;
+                Ok(Some((cells, &self.chunks[k].columns[c])))
+            };
+            let (x, y) = (read(xy[0])?, read(xy[1])?);
+            let at = |a: &Option<(Cells<'_>, &ChunkColumn)>, r: u32| {
+                a.as_ref()
+                    .map_or(0.0, |(cells, col)| cells.get(col, r as usize))
+            };
+            let tiers = Tiers::build(self.chunks[k].len, |r| (at(&x, r), at(&y, r)));
+            self.chunks[k].lod = Some(Box::new(ChunkLod {
+                xy,
+                tiers,
+                gpu: None,
+            }));
+        }
+        Ok(&self.chunks[k].lod.as_ref().expect("built above").tiers)
+    }
+
+    /// Gather chunk `k`'s representatives (every stored tier's,
+    /// `order[..counts[stored]]`) into a [`LodGpu`] on `cx`, once per
+    /// context and tiers: one strided copy per column from the chunk's CPU
+    /// bytes or its shared columns, then the rows, uploaded as
+    /// [`Upload::Column`]. Needs [`lod_tiers`](Self::lod_tiers) first; an
+    /// error when the chunk's CPU copy was released and its columns are not
+    /// shared.
+    pub(crate) fn upload_lod(&mut self, cx: &Context, k: usize) -> Result<()> {
+        let lod = self.chunks[k]
+            .lod
+            .as_ref()
+            .expect("lod_tiers builds the tiers first");
+        if lod.gpu.as_ref().is_some_and(|g| g.context == cx.id()) {
+            return Ok(());
+        }
+        let order = &lod.tiers.order;
+        let reps = order.len();
+        let chunk = &self.chunks[k];
+        let mut ranges = Vec::with_capacity(self.formats.len() + 1);
+        let mut size = 0;
+        for f in &self.formats {
+            let end = size + reps as u64 * f.stride();
+            ranges.push(size..end);
+            size = end;
+        }
+        ranges.push(size..size + 4 * reps as u64);
+        let mut bytes = vec![0u8; ranges.last().map_or(0, |r| r.end) as usize];
+        for (c, range) in ranges.iter().take(self.formats.len()).enumerate() {
+            let cells = self
+                .cells(k, c)
+                .ok_or_else(|| self.released(k, "representatives"))?;
+            let col = &chunk.columns[c];
+            let dst = &mut bytes[range.start as usize..range.end as usize];
+            for (cell, &r) in dst
+                .chunks_exact_mut(col.format.stride() as usize)
+                .zip(order)
+            {
+                cells.cell(col, r as usize, cell);
+            }
+        }
+        let rows = ranges.last().expect("the row column").clone();
+        bytes[rows.start as usize..].copy_from_slice(bytemuck::cast_slice(order));
+        let buffer = cx.buffer_with_data(
+            Upload::Column,
+            "gup lod representatives",
+            wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_SRC,
+            &bytes,
+        );
+        self.chunks[k].lod.as_mut().expect("checked above").gpu = Some(LodGpu {
+            context: cx.id(),
+            buffer,
+            ranges,
+        });
+        Ok(())
+    }
+
+    /// The error for a level-of-detail `what` of chunk `k` that has no CPU
+    /// source.
+    fn released(&self, k: usize, what: &str) -> Error {
+        let c = &self.chunks[k];
+        Error::config(
+            "column store",
+            format!(
+                "chunk {k} (rows {}..{}) released its CPU copy (Retain::GpuOnly or Retain::Rows, \
+                 or Retain::Auto above Retain::AUTO_MAX_ROWS rows), so its level-of-detail {what} \
+                 cannot be built",
+                c.row_base,
+                c.row_base + u64::from(c.len)
+            ),
+        )
     }
 
     /// Whether the store reads shared columns
@@ -2587,5 +2789,153 @@ mod tests {
         b.upload(&other).unwrap();
         a.upload(&other).unwrap();
         same_gpu(&other, &a, &b);
+    }
+
+    /// GUP-715 AC1: a chunk's representatives on the GPU are its rows
+    /// `order[..counts[stored]]`, byte for byte as the chunk holds them, in
+    /// every column (relative x and y, a constant column, dictionary
+    /// codes), then their chunk-local rows; from owned bytes and from
+    /// shared columns alike.
+    #[test]
+    fn representatives_are_the_chunks_rows_in_tier_order() {
+        let cx = Context::new_blocking().unwrap();
+        let n = 5_000usize;
+        let mut next = 0x2545_f491_4f6c_dd1du64;
+        let mut rnd = || {
+            next ^= next << 13;
+            next ^= next >> 7;
+            next ^= next << 17;
+            (next >> 11) as f64 / (1u64 << 53) as f64
+        };
+        let xs: Vec<f64> = (0..n).map(|_| 1.7e9 + rnd() * 1000.0).collect();
+        let ys: Vec<f64> = (0..n).map(|_| rnd() * 10.0 - 5.0).collect();
+        let formats = vec![
+            ColumnFormat::F32Relative,
+            ColumnFormat::F32Relative,
+            ColumnFormat::F32,
+            ColumnFormat::U32,
+        ];
+        let mut owned = ColumnStore::new(formats.clone(), 2048).unwrap();
+        owned
+            .append(
+                n,
+                &[
+                    ColumnData::Values(xs.clone()),
+                    ColumnData::Values(ys.clone()),
+                    ColumnData::Values(vec![2.5; n]),
+                    ColumnData::Codes((0..n as u32).map(|i| i % 7).collect()),
+                ],
+            )
+            .unwrap();
+        let mut shared = ColumnStore::new(formats[..3].to_vec(), 2048).unwrap();
+        shared
+            .append_shared(
+                n,
+                vec![
+                    crate::Column::from(xs),
+                    crate::Column::from(ys),
+                    crate::Column::from(vec![2.5f32; n]),
+                ],
+            )
+            .unwrap();
+        for store in [&mut owned, &mut shared] {
+            store.upload(&cx).unwrap();
+            for k in 0..store.chunks().len() {
+                let tiers = store.lod_tiers(k, [Some(0), Some(1)]).unwrap().clone();
+                assert!(tiers.stored > 2, "chunk {k}: {tiers:?}");
+                store.upload_lod(&cx, k).unwrap();
+                let chunk = &store.chunks()[k];
+                assert_eq!(chunk.tiers(), Some(&tiers));
+                let lod = chunk.lod_gpu(&cx).unwrap();
+                let reps = tiers.order.len();
+                assert_eq!(lod.reps() as usize, reps);
+                let gpu = read_buffer(&cx, lod.buffer());
+                let own = read_buffer(&cx, chunk.buffer(&cx).unwrap());
+                for (c, col) in chunk.columns().iter().enumerate() {
+                    let stride = col.format().stride() as usize;
+                    let range = lod.range(c);
+                    assert_eq!((range.end - range.start) as usize, reps * stride);
+                    for (i, &r) in tiers.order.iter().enumerate() {
+                        let at = range.start as usize + i * stride;
+                        let from = col.offset as usize + r as usize * stride;
+                        assert_eq!(
+                            gpu[at..at + stride],
+                            own[from..from + stride],
+                            "chunk {k}, column {c}, representative {i} (row {r})"
+                        );
+                    }
+                }
+                let rows = lod.range(chunk.columns().len());
+                let rows: &[u32] =
+                    bytemuck::cast_slice(&gpu[rows.start as usize..rows.end as usize]);
+                assert_eq!(rows, tiers.order);
+            }
+        }
+        // Built once per context and tiers.
+        let before = cx.upload_stats();
+        owned.upload_lod(&cx, 0).unwrap();
+        assert_eq!(cx.upload_stats(), before);
+    }
+
+    /// GUP-715: a released chunk of owned columns has no source for its
+    /// tiers; the error names the chunk.
+    #[test]
+    fn a_released_chunk_cannot_build_tiers() {
+        let cx = Context::new_blocking().unwrap();
+        let mut store = ColumnStore::from_columns(
+            vec![
+                (ColumnFormat::F32Relative, vec![1.0, 2.0, 3.0, 4.0]),
+                (ColumnFormat::F32Relative, vec![4.0, 3.0, 2.0, 1.0]),
+            ],
+            2,
+        )
+        .unwrap();
+        store.upload(&cx).unwrap();
+        assert_eq!(store.release(), 2);
+        let err = store
+            .lod_tiers(1, [Some(0), Some(1)])
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("chunk 1 (rows 2..4)"), "{err}");
+    }
+
+    /// GUP-715 AC1: an x/y chunk's representatives take at most 12 B each
+    /// on the GPU (8 B of columns, 4 B of row), and at most 6 B a data row.
+    #[test]
+    fn representatives_take_twelve_bytes_each() {
+        let cx = Context::new_blocking().unwrap();
+        let n = 100_000u32;
+        // A walk: x sorted, y a random walk (the spike's data).
+        let mut next = 0x9e37_79b9_7f4a_7c15u64;
+        let mut y = 0.0;
+        let ys: Vec<f64> = (0..n)
+            .map(|_| {
+                next ^= next << 13;
+                next ^= next >> 7;
+                next ^= next << 17;
+                y += (next >> 11) as f64 / (1u64 << 53) as f64 - 0.5;
+                y
+            })
+            .collect();
+        let xs: Vec<f64> = (0..n).map(|i| f64::from(i) * 0.01).collect();
+        let mut store = ColumnStore::from_columns(
+            vec![
+                (ColumnFormat::F32Relative, xs),
+                (ColumnFormat::F32Relative, ys),
+            ],
+            ALL,
+        )
+        .unwrap();
+        store.upload(&cx).unwrap();
+        let reps = store.lod_tiers(0, [Some(0), Some(1)]).unwrap().order.len() as u64;
+        store.upload_lod(&cx, 0).unwrap();
+        let size = store.chunks()[0].lod_gpu(&cx).unwrap().size();
+        println!(
+            "{reps} representatives of {n} rows: {size} B, {:.2} B a representative, {:.2} B a row",
+            size as f64 / reps as f64,
+            size as f64 / f64::from(n)
+        );
+        assert!(size <= 12 * reps, "{size} B for {reps} representatives");
+        assert!(2 * reps <= u64::from(n), "the half-chunk cap");
     }
 }
