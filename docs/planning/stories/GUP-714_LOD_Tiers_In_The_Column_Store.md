@@ -207,3 +207,57 @@ GUP-715 and GUP-716.
       the module is unused until GUP-716, so it is dropped)
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
+
+## Blocked (2026-11-11)
+
+**Question**: the Decisions' `first_tier` rule (from consecutive sorted keys)
+does not give AC1's lowest-index representatives. Which semantics ship?
+
+**Evidence**. Sorting by `(key, row)` puts a tier-`t` cell's rows in a run in
+_full-key_ order, so the run's first row is the one with the smallest tier-16
+key, not the lowest row: stability orders only rows of one tier-16 cell. With
+the rule as written, AC1's brute force fails at tier 0 on every dataset (walk:
+tier 0's representative is row 25,532, brute force row 0). The spike has the
+same property (`key << 20 | index`, its "lowest index" claim holds at tier 16
+only); the cell counts, and so `counts`, `stored` and draw sizes, are identical
+either way (3,540,939 representatives at 10M, both).
+
+**Options**.
+
+- **A. The Decisions' rule** (the spike's): a cell's representative is its
+  Morton-first row. Change AC1's brute force to "the row with the smallest
+  `(key, row)` of each cell". Build 400 / 405 / 421 ms per 10M rows (median
+  405).
+- **B. Lowest row, as AC1 says** (committed in `91689376`): the same radix sort,
+  then one pass with a stack of tier-16 heads in increasing row order. A head is
+  the lowest row of its tier-`t` cell unless its nearest lower-row head on
+  either side shares the cell, so its first tier is the larger of its two split
+  tiers (`16 - floor(h / 2)` with each neighbour). The stack lives in the
+  already-read part of the sorted pairs, so the peak stays 16 B a row. Build 481
+  / 484 / 513 ms per 10M (median 484), +80 ms over A. All six unit tests pass
+  against the brute force.
+- Same session, alternating A / B / spike, sorted walk, release, one thread,
+  load 3.3-3.5 (other agents): the spike's comparison-sort build 646 / 684 / 826
+  (median 684). Both options meet AC4's 650 under that load. Peak extra memory
+  during a chunk's build: 16.00 B a row (counting allocator), both.
+
+**Recommendation**: B. It is what AC1 and the RFC say ("its cell's
+representative (lowest index)"), and its neighbour scan generalises to GUP-721's
+"largest size, then lowest index" (any per-row priority in place of the row),
+which the consecutive-key rule cannot express.
+
+Two smaller AC slips, resolved in the tests as below unless you say otherwise:
+
+- AC2 "1,000 rows ... own cell at tier 4 stores tiers 0-3": tier 4 has 256
+  cells, so 1,000 rows cannot each own one. Tested as 256 rows on a 16 × 16 grid
+  (tiers 0-3, counts `[1, 4, 16, 64]`) and 1,000 rows on a 32 × 32 grid (tiers
+  0-4).
+- AC2 "rows all coincide stores tier 0 only" contradicts its own rule: every
+  tier holds one representative (at most half the rows), so all 17 are stored
+  (`stored == 16`, `order == [0]`), and a frame draws one row at any zoom
+  instead of every row past tier 0. Tested that way. A degenerate axis (one
+  value) has no smallest `ex`; it takes the other axis's exponent (0 if both are
+  degenerate).
+
+Also measured: `mask wasm-size` scatter 379,234 B gz on main's `lib.rs` and on
+the branch (+0; the module is unused and dropped).
