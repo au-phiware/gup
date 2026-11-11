@@ -35,6 +35,10 @@ what each release contains and what its version number promises.
   builder, and `Plot::y_right_view`: the values at the plot rect's edges as of
   the last resolve, and whether the user has moved the view (an automatic axis
   refits only while it is home).
+- `Color::from_linear`, `Color::from_linear_rgba` and `Color::to_linear` convert
+  between linear-light components and gup's sRGB-encoded `Color` (the standard
+  transfer function; `from_linear` clamps to `0.0..=1.0`), so a host that keeps
+  colours in linear light needs no transfer function of its own.
 - `Columns::from_arrow` and `TryFrom<&RecordBatch> for Columns` (feature
   `arrow`, off by default; `arrow-array` and `arrow-schema` 60): floats,
   integers, dates and timestamps become numeric columns (nulls are NaN),
