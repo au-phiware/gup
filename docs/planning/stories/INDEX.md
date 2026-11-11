@@ -624,7 +624,7 @@ GUP-628 and GUP-631 (shared `selection.rs`).
   chunk: a data-anchored Morton grid, one radix sort, every tier a prefix of one
   representative list, stored while at most half the chunk; at most 650 ms per
   10M rows. Opus. Deps: GUP-631 ✅, GUP-664 ✅.
-- [GUP-715](GUP-715_Representative_Buffers_And_Indexed_Rows.md) 🚧 — Gathered
+- [GUP-715](GUP-715_Representative_Buffers_And_Indexed_Rows.md) ✅ — Gathered
   representative buffers plus a `u32` row column, and the indexed-rows glue so
   brush, validity and pick read the data row; proven with a forced tier. Opus.
   Deps: GUP-714 ✅.
