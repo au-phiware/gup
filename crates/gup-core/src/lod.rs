@@ -360,6 +360,9 @@ fn first_tiers(sorted: &mut [u64], first: &mut [u8]) {
 }
 
 #[cfg(test)]
+mod draw_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use std::collections::HashMap;

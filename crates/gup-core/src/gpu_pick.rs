@@ -289,7 +289,7 @@ impl Plot {
         let mut draws = Vec::with_capacity(order.len());
         for &i in &order {
             let gpu = &self.drawn[i].1;
-            if let Some(pipeline) = cx.pick_pipeline(&gpu.program)? {
+            if let Some(pipeline) = crate::render::LayerPipelines::pick(cx, gpu)? {
                 draws.push((i, pipeline, Arc::clone(gpu), Arc::clone(&self.drawn[i].2)));
             }
         }
@@ -348,14 +348,13 @@ impl Plot {
                 occlusion_query_set: None,
             });
             for (layer, pipeline, gpu, spans) in &draws {
-                pass.set_pipeline(pipeline);
                 pass.set_bind_group(0, &picker.view_bind_group, &[]);
                 pass.set_bind_group(
                     3,
                     &picker.pick_bind_group,
                     &[(DYNAMIC_ALIGN as usize * layer) as u32],
                 );
-                gpu.record(&mut pass, spans);
+                gpu.record(&mut pass, spans, pipeline);
             }
         }
         let buffer = &picker.slots[slot].buffer;

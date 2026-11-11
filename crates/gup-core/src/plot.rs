@@ -1253,6 +1253,20 @@ impl Plot {
             .filter_map(|l| l.as_any_mut().downcast_mut())
     }
 
+    /// Brush exactly `rows`, with a rectangle outside every domain (so no
+    /// overlay): a seam for tests that brush rows the CPU pick does not
+    /// choose (GUP-715).
+    #[cfg(test)]
+    pub(crate) fn set_brush_rows(&mut self, rows: Vec<RowId>) {
+        self.brush = Some(Brush {
+            x: (f64::MIN, f64::MIN),
+            y: (f64::MIN, f64::MIN),
+            rows,
+        });
+        self.brush_gen += 1;
+        self.overlay = None;
+    }
+
     /// The layer at `index`, as a test reaches it (counts as a change).
     #[cfg(test)]
     fn layer_at_mut<T: Send + Sync + 'static, M: Mark>(

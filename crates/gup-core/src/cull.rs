@@ -141,6 +141,7 @@ mod tests {
                 next: k,
                 next_first: 1,
                 instances: 10,
+                lod: None,
             })
             .collect()
     }
@@ -188,6 +189,7 @@ mod tests {
             next,
             next_first: 0,
             instances: 1,
+            lod: None,
         };
         let entries = [
             entry(0, 0),

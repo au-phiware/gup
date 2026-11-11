@@ -24,6 +24,7 @@
 //!                       one-point-per-pixel tier (default 0)
 //!   --fidelity          compare every candidate's image with the base
 //!                       image of the same view (needs base in the list)
+//!   --lod-tier T        the tier `indexed` and `gathered` draw (default 6)
 //! ```
 //!
 //! Candidates:
@@ -39,6 +40,13 @@
 //!   index; a tier is a prefix of that order. Each frame draws, per
 //!   visible chunk, the prefix of the finest tier whose cells are at least
 //!   one pixel in area, through the library's circle pipeline.
+//! - `indexed` (GUP-715): the library's own tiers (a data-anchored grid
+//!   per chunk, GUP-714), every visible chunk forced to tier
+//!   `--lod-tier` and drawn from its gathered representatives through the
+//!   indexed-rows glue (a `u32` row column per instance).
+//! - `gathered` (GUP-715's control): the same representatives of the
+//!   visible chunks gathered into a plain columnar layer, as (B) draws: the
+//!   same instances without the row column.
 //! - `tiles` (C): per chunk, count histograms of the same grid at tiers 8,
 //!   10, 12 and 14; each frame merges the visible chunks' cells of the
 //!   finest stored tier with cells of at least one pixel and draws them as
@@ -76,6 +84,8 @@ enum Cand {
     Density,
     Pyramid,
     Tiles,
+    Indexed,
+    Gathered,
 }
 
 impl Cand {
@@ -85,6 +95,8 @@ impl Cand {
             Cand::Density => "density",
             Cand::Pyramid => "pyramid",
             Cand::Tiles => "tiles",
+            Cand::Indexed => "indexed",
+            Cand::Gathered => "gathered",
         }
     }
 }
@@ -119,6 +131,8 @@ struct Options {
     seed: u64,
     /// Tiers finer than the one-point-per-pixel tier that (B) draws.
     bias: u32,
+    /// The library tier `indexed` and `gathered` draw.
+    lod_tier: u32,
 }
 
 fn parse() -> Options {
@@ -136,6 +150,7 @@ fn parse() -> Options {
         fidelity: false,
         seed: 1,
         bias: 0,
+        lod_tier: 6,
     };
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -150,6 +165,8 @@ fn parse() -> Options {
                         "density" => Cand::Density,
                         "pyramid" => Cand::Pyramid,
                         "tiles" => Cand::Tiles,
+                        "indexed" => Cand::Indexed,
+                        "gathered" => Cand::Gathered,
                         _ => panic!("unknown candidate {c}"),
                     })
                     .collect()
@@ -178,6 +195,7 @@ fn parse() -> Options {
             "--fidelity" => o.fidelity = true,
             "--seed" => o.seed = value().parse().expect("--seed N"),
             "--pyramid-bias" => o.bias = value().parse().expect("--pyramid-bias N"),
+            "--lod-tier" => o.lod_tier = value().parse().expect("--lod-tier T"),
             _ => panic!("unknown option {arg}"),
         }
     }
@@ -1645,6 +1663,73 @@ fn main() -> gup_core::Result<()> {
                     rows.push(Row { cand, view: *v, m });
                 }
             }
+            Cand::Indexed => {
+                let mut lib =
+                    LibPlot::circles(Arc::clone(&data.xs), Arc::clone(&data.ys), o.radius);
+                let layer = lib.plot.layer_mut::<(), Circle>().expect("the circles");
+                gup_core::__private::force_lod_tier(layer, Some(o.lod_tier));
+                let reps = library_reps(&data, o.lod_tier);
+                for (v, view) in &views {
+                    let t = Instant::now();
+                    // The first frame builds and uploads the tiers.
+                    lib.set(view.dom, 0.0)?;
+                    lib.plot
+                        .resolve(&gpu.cx, o.size.0 as f32, o.size.1 as f32)?;
+                    let setup = ms(t.elapsed());
+                    let mut m = measure_lib(&mut gpu, &o, &mut lib, view.dom, || {})?;
+                    m.drawn = visible_reps(&data, &reps, view, margin);
+                    m.setup_ms = setup;
+                    report_view(&o, cand, *v, &m);
+                    rows.push(Row { cand, view: *v, m });
+                }
+                // Every stored representative is on the GPU: x and y (8 B)
+                // and its row (4 B).
+                let stored: u64 = data
+                    .chunks
+                    .iter()
+                    .map(|c| {
+                        let (xs, ys) = (&data.xs[c.rows.clone()], &data.ys[c.rows.clone()]);
+                        let at =
+                            |v: &[f64], r: u32| v[0] + f64::from((v[r as usize] - v[0]) as f32);
+                        let counts =
+                            gup_core::__private::lod_tier_counts(c.rows.len() as u32, |r| {
+                                (at(xs, r), at(ys, r))
+                            });
+                        u64::from(counts.last().copied().unwrap_or(0))
+                    })
+                    .sum();
+                metric(cand, None, "stored_reps", stored);
+                metric(cand, None, "extra_gpu_bytes", stored * 12);
+                metric(
+                    cand,
+                    None,
+                    "extra_gpu_bytes_per_row",
+                    format!("{:.2}", (stored * 12) as f64 / o.rows as f64),
+                );
+            }
+            Cand::Gathered => {
+                let reps = library_reps(&data, o.lod_tier);
+                for (v, view) in &views {
+                    let t = Instant::now();
+                    let (mut xs, mut ys) = (Vec::new(), Vec::new());
+                    for (c, chunk) in data.chunks.iter().enumerate() {
+                        if view.sees(chunk, margin) {
+                            for &r in &reps[c] {
+                                xs.push(data.xs[chunk.rows.start + r as usize]);
+                                ys.push(data.ys[chunk.rows.start + r as usize]);
+                            }
+                        }
+                    }
+                    let drawn = xs.len() as u64;
+                    let mut lib = LibPlot::circles(xs, ys, o.radius);
+                    let setup = ms(t.elapsed());
+                    let mut m = measure_lib(&mut gpu, &o, &mut lib, view.dom, || {})?;
+                    m.drawn = drawn;
+                    m.setup_ms = setup;
+                    report_view(&o, cand, *v, &m);
+                    rows.push(Row { cand, view: *v, m });
+                }
+            }
             Cand::Tiles => {
                 let t = Instant::now();
                 let tiles = Tiles::build(&data);
@@ -1752,6 +1837,34 @@ fn main() -> gup_core::Result<()> {
         }
     }
     Ok(())
+}
+
+/// Each chunk's tier-`t` representatives as the library builds them
+/// (GUP-714): chunk-local rows, from the values as the GPU sees them
+/// (`F32Relative` against the chunk's first value).
+fn library_reps(data: &Data, t: u32) -> Vec<Vec<u32>> {
+    data.chunks
+        .iter()
+        .map(|c| {
+            let (xs, ys) = (&data.xs[c.rows.clone()], &data.ys[c.rows.clone()]);
+            let stored = |v: &[f64], r: u32| v[0] + f64::from((v[r as usize] - v[0]) as f32);
+            gup_core::__private::lod_tier_rows(
+                c.rows.len() as u32,
+                |r| (stored(xs, r), stored(ys, r)),
+                t,
+            )
+        })
+        .collect()
+}
+
+/// The representatives of the chunks `view` sees.
+fn visible_reps(data: &Data, reps: &[Vec<u32>], view: &View, margin: f64) -> u64 {
+    data.chunks
+        .iter()
+        .zip(reps)
+        .filter(|(c, _)| view.sees(c, margin))
+        .map(|(_, r)| r.len() as u64)
+        .sum()
 }
 
 /// (C)'s cells as a `Rect` layer coloured by log count, then the rows of

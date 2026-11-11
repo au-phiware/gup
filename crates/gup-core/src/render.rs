@@ -93,6 +93,11 @@ pub(crate) struct ChunkDraw {
     /// A polyline's next-row validity bits (the next chunk's for a
     /// bridge), if the program reads them.
     pub next_validity: Option<wgpu::Buffer>,
+    /// Whether the entry draws the chunk's gathered representatives (a
+    /// level-of-detail tier, GUP-715) through the layer's indexed program:
+    /// `columns` is then the chunk's [`LodGpu`](crate::column::LodGpu)
+    /// buffer and the last slot its `lod_row` column.
+    pub indexed: bool,
 }
 
 /// One instanced draw: rows `rows` of chunk `chunk`. A layer draws its
@@ -205,6 +210,9 @@ impl EncodingsGpu {
 pub(crate) struct LayerGpu {
     pub context: ContextId,
     pub program: Arc<GlueProgram>,
+    /// The indexed-rows variant of `program` (GUP-715), when a chunk draw
+    /// is [`indexed`](ChunkDraw::indexed): the same bind group layouts.
+    pub indexed: Option<Arc<GlueProgram>>,
     encodings: Arc<EncodingsGpu>,
     /// One `Chunk` entry per chunk, [`DYNAMIC_ALIGN`] apart.
     chunk_buffer: wgpu::Buffer,
@@ -453,6 +461,59 @@ impl Context {
                     enc_bgl,
                     chunk_bgl,
                     layout,
+                });
+                let mut cache = self.pipelines();
+                cache.stats.programs_linked += 1;
+                cache.stats.last_link = link_time;
+                cache
+                    .programs
+                    .insert(glue.signature.clone(), Arc::clone(&program));
+                Ok(program)
+            },
+        )
+    }
+
+    /// The indexed-rows variant `glue` of `base` (GUP-715), linking it on
+    /// first use. It shares `base`'s bind group layouts and pipeline
+    /// layout (the variant adds a vertex column, not a binding), so one
+    /// layer's bind groups serve both and a pass switches between their
+    /// pipelines without binding again.
+    pub(crate) fn indexed_program(
+        &self,
+        base: &GlueProgram,
+        glue: &Glue,
+    ) -> Result<Arc<GlueProgram>> {
+        debug_assert!(glue.indexed, "{}: not an indexed glue", glue.signature);
+        debug_assert_eq!(
+            (&glue.encodings, &glue.chunk, &glue.luts, glue.brush_binding),
+            (
+                &base.encodings,
+                &base.chunk,
+                &base.glue.luts,
+                base.glue.brush_binding
+            ),
+            "the indexed variant binds what its base binds"
+        );
+        if let Some(p) = self.pipelines().programs.get(&glue.signature) {
+            return Ok(Arc::clone(p));
+        }
+        self.scoped(
+            || format!("glue program `{}`", glue.signature),
+            || {
+                if let Some(p) = self.pipelines().programs.get(&glue.signature) {
+                    return Ok(Arc::clone(p));
+                }
+                let start = Instant::now();
+                let wgsl = link(&glue.signature, &glue.source, &glue.modules)?;
+                let link_time = start.elapsed();
+                let program = Arc::new(GlueProgram {
+                    glue: glue.clone(),
+                    wgsl,
+                    encodings: glue.encodings.clone(),
+                    chunk: glue.chunk.clone(),
+                    enc_bgl: base.enc_bgl.clone(),
+                    chunk_bgl: base.chunk_bgl.clone(),
+                    layout: base.layout.clone(),
                 });
                 let mut cache = self.pipelines();
                 cache.stats.programs_linked += 1;
@@ -804,12 +865,18 @@ impl PipelineCache {
 /// A mark's vertex attributes: its columns, then a polyline's next-row
 /// columns, one buffer slot each.
 fn vertex_attributes(glue: &Glue) -> Vec<wgpu::VertexAttribute> {
-    glue.columns
+    let formats = glue
+        .columns
         .iter()
         .chain(glue.successors.iter().map(|&c| &glue.columns[c]))
+        .map(|(_, f)| f.vertex_format());
+    // The indexed-rows variant's `lod_row` column comes last (GUP-715).
+    let lod_row = glue.indexed.then_some(wgpu::VertexFormat::Uint32);
+    formats
+        .chain(lod_row)
         .enumerate()
-        .map(|(loc, (_, f))| wgpu::VertexAttribute {
-            format: f.vertex_format(),
+        .map(|(loc, format)| wgpu::VertexAttribute {
+            format,
             offset: 0,
             shader_location: loc as u32,
         })
@@ -894,6 +961,9 @@ fn create_pipeline(
 /// The program, uniform buffers and bind groups for one data layer.
 pub(crate) struct LayerUniforms<'a> {
     pub program: Arc<GlueProgram>,
+    /// The indexed-rows variant of `program`, if a chunk draws its
+    /// representatives (GUP-715).
+    pub indexed: Option<Arc<GlueProgram>>,
     /// Bytes of the `Encodings` struct.
     pub encodings: Vec<u8>,
     /// One `Chunk` struct per chunk, [`DYNAMIC_ALIGN`] apart (see
@@ -973,7 +1043,7 @@ impl LayerUniforms<'_> {
         });
         LayerGpu::new(
             cx,
-            self.program,
+            (self.program, self.indexed),
             encodings,
             &self.chunks,
             draws,
@@ -1028,7 +1098,7 @@ impl LayerGpu {
     /// with `chunk_bytes`), its bind group and the chunk draws.
     fn new(
         cx: &Context,
-        program: Arc<GlueProgram>,
+        (program, indexed): (Arc<GlueProgram>, Option<Arc<GlueProgram>>),
         encodings: Arc<EncodingsGpu>,
         chunk_bytes: &[u8],
         Draws { chunks, spans }: Draws,
@@ -1071,6 +1141,7 @@ impl LayerGpu {
         Self {
             context: cx.id(),
             program,
+            indexed,
             encodings,
             chunk_buffer,
             chunk_bind_groups,
@@ -1091,9 +1162,21 @@ impl LayerGpu {
     }
 
     /// Whether this GPU state's `Encodings` half can take new uniform
-    /// values from `program`: same context and program.
-    pub(crate) fn reusable(&self, cx: &Context, program: &Arc<GlueProgram>) -> bool {
-        self.context == cx.id() && Arc::ptr_eq(&self.program, program)
+    /// values from `program` (and its `indexed` variant): same context and
+    /// programs.
+    pub(crate) fn reusable(
+        &self,
+        cx: &Context,
+        program: &Arc<GlueProgram>,
+        indexed: Option<&Arc<GlueProgram>>,
+    ) -> bool {
+        self.context == cx.id()
+            && Arc::ptr_eq(&self.program, program)
+            && match (&self.indexed, indexed) {
+                (None, None) => true,
+                (Some(a), Some(b)) => Arc::ptr_eq(a, b),
+                _ => false,
+            }
     }
 
     /// Whether the chunk draws are exactly `chunks` (same column and
@@ -1115,19 +1198,32 @@ impl LayerGpu {
                 })
     }
 
-    /// Group 2 for chunk `index`: its own when the program reads validity
-    /// bits, the shared one otherwise.
-    /// Bind groups 1 and 2 and record the layer's draws into `pass`, whose
-    /// pipeline and group 0 (and a pick's group 3) are set: one instanced
-    /// draw per span of a chunk's rows, with the chunk's `Chunk` entry
-    /// (row base, relative bases) and columns bound when the chunk changes.
-    pub(crate) fn record(&self, pass: &mut wgpu::RenderPass<'_>, spans: &[Span]) {
+    /// Set the pipeline, bind groups 1 and 2 and record the layer's draws
+    /// into `pass`, whose group 0 (and a pick's group 3) are set: one
+    /// instanced draw per span of a chunk's rows, with the chunk's `Chunk`
+    /// entry (row base, relative bases) and columns bound when the chunk
+    /// changes, and `pipelines`' indexed pipeline for a chunk that draws
+    /// its representatives.
+    pub(crate) fn record(
+        &self,
+        pass: &mut wgpu::RenderPass<'_>,
+        spans: &[Span],
+        pipelines: &LayerPipelines,
+    ) {
         pass.set_bind_group(1, self.enc_bind_group(), &[]);
         let mut bound = None;
+        let mut indexed = None;
         for span in spans {
             let k = span.chunk as usize;
             if bound != Some(k) {
                 let chunk = &self.chunks[k];
+                // The pipeline changes only between a chunk's own rows and
+                // its representatives (GUP-715); the layouts are shared, so
+                // the bound groups stay valid.
+                if indexed != Some(chunk.indexed) {
+                    pass.set_pipeline(pipelines.get(chunk.indexed));
+                    indexed = Some(chunk.indexed);
+                }
                 pass.set_bind_group(2, self.chunk_bind_group(k), &[chunk.dynamic_offset]);
                 for (slot, (buffer, range)) in chunk.slots.iter().enumerate() {
                     pass.set_vertex_buffer(slot as u32, buffer.slice(range.clone()));
@@ -1180,7 +1276,7 @@ impl LayerGpu {
                 };
                 Ok(Self::new(
                     cx,
-                    Arc::clone(&self.program),
+                    (Arc::clone(&self.program), self.indexed.clone()),
                     encodings,
                     chunk_bytes,
                     draws,
@@ -1270,10 +1366,66 @@ pub(crate) struct ViewUniform {
     pub pick_margin: f32,
 }
 
+/// A layer's pipelines on one target: its program's, and its indexed
+/// program's when it has one (GUP-715).
+#[derive(Clone, Debug)]
+pub(crate) struct LayerPipelines {
+    rows: wgpu::RenderPipeline,
+    indexed: Option<wgpu::RenderPipeline>,
+}
+
+impl LayerPipelines {
+    /// `make`'s pipeline of `gpu`'s program, and of its indexed program
+    /// (a function pointer and not inlined, so each call site is a call).
+    #[inline(never)]
+    pub(crate) fn of(
+        gpu: &LayerGpu,
+        cx: &Context,
+        desc: &TargetDesc,
+        make: fn(&Context, &GlueProgram, &TargetDesc) -> Result<wgpu::RenderPipeline>,
+    ) -> Result<Self> {
+        let rows = make(cx, &gpu.program, desc)?;
+        let indexed = match &gpu.indexed {
+            Some(program) => Some(make(cx, program, desc)?),
+            None => None,
+        };
+        Ok(Self { rows, indexed })
+    }
+
+    /// The pick pipelines of `gpu` ([`Context::pick_pipeline`]), or
+    /// `None` when its mark does not draw in picks.
+    pub(crate) fn pick(cx: &Context, gpu: &LayerGpu) -> Result<Option<Self>> {
+        // Both programs are one mark's: both have a pick variant, or none.
+        let mut out = [None, None];
+        for (slot, program) in out
+            .iter_mut()
+            .zip([Some(&gpu.program), gpu.indexed.as_ref()])
+        {
+            if let Some(program) = program {
+                *slot = cx.pick_pipeline(program)?;
+            }
+        }
+        Ok(match out {
+            [Some(rows), indexed] => Some(Self { rows, indexed }),
+            [None, _] => None,
+        })
+    }
+
+    fn get(&self, indexed: bool) -> &wgpu::RenderPipeline {
+        match (&self.indexed, indexed) {
+            (Some(p), true) => p,
+            (None, true) => {
+                unreachable!("an indexed chunk draw in a layer without an indexed program")
+            }
+            (_, false) => &self.rows,
+        }
+    }
+}
+
 /// One recorded draw.
 enum Draw {
     Marks {
-        pipeline: wgpu::RenderPipeline,
+        pipeline: LayerPipelines,
         layer: Arc<LayerGpu>,
         /// The layer's spans that can be seen (`MarkBatch::visible`).
         spans: Arc<[Span]>,
@@ -1305,7 +1457,7 @@ enum Draw {
 
 /// A translucent line layer drawn directly into the scene pass.
 struct DirectLine {
-    pipeline: wgpu::RenderPipeline,
+    pipeline: LayerPipelines,
     layer: Arc<LayerGpu>,
     spans: Arc<[Span]>,
 }
@@ -1313,7 +1465,7 @@ struct DirectLine {
 /// A translucent line layer's draw into its offscreen target (GUP-439),
 /// recorded in a pass of its own before the scene pass.
 struct CoverageDraw {
-    pipeline: wgpu::RenderPipeline,
+    pipeline: LayerPipelines,
     layer: Arc<LayerGpu>,
     spans: Arc<[Span]>,
     view: wgpu::TextureView,
@@ -1546,7 +1698,12 @@ impl Renderer {
                     if batch.translucent {
                         let (view, target) = gpu.coverage_target(cx, coverage.len(), desc);
                         coverage.push(CoverageDraw {
-                            pipeline: cx.coverage_pipeline(&batch.gpu.program, desc)?,
+                            pipeline: LayerPipelines::of(
+                                &batch.gpu,
+                                cx,
+                                desc,
+                                Context::coverage_pipeline,
+                            )?,
                             layer: Arc::clone(&batch.gpu),
                             spans: Arc::clone(&batch.visible),
                             view,
@@ -1556,13 +1713,19 @@ impl Renderer {
                             pipeline: cx.composite_pipeline(desc)?,
                             target,
                             direct: DirectLine {
-                                pipeline: cx.mark_pipeline(&batch.gpu.program, desc)?,
+                                pipeline: LayerPipelines::of(
+                                    &batch.gpu,
+                                    cx,
+                                    desc,
+                                    Context::mark_pipeline,
+                                )?,
                                 layer: Arc::clone(&batch.gpu),
                                 spans: Arc::clone(&batch.visible),
                             },
                         })
                     } else {
-                        let pipeline = cx.mark_pipeline(&batch.gpu.program, desc)?;
+                        let pipeline =
+                            LayerPipelines::of(&batch.gpu, cx, desc, Context::mark_pipeline)?;
                         Some(Draw::Marks {
                             pipeline,
                             layer: Arc::clone(&batch.gpu),
@@ -1980,9 +2143,8 @@ impl Prepared {
             });
             let [x, y, w, h] = c.scissor;
             pass.set_scissor_rect(x, y, w, h);
-            pass.set_pipeline(&c.pipeline);
             pass.set_bind_group(0, &self.view_bind_group, &[]);
-            c.layer.record(&mut pass, &c.spans);
+            c.layer.record(&mut pass, &c.spans, &c.pipeline);
         }
         written
     }
@@ -2017,9 +2179,8 @@ impl Prepared {
                     layer,
                     spans,
                 } => {
-                    pass.set_pipeline(pipeline);
                     pass.set_bind_group(0, &self.view_bind_group, &[]);
-                    layer.record(pass, spans);
+                    layer.record(pass, spans, pipeline);
                 }
                 Draw::Instanced {
                     pipeline,
@@ -2049,9 +2210,8 @@ impl Prepared {
                         pass.set_bind_group(0, target, &[]);
                         pass.draw(0..3, 0..1);
                     } else {
-                        pass.set_pipeline(&direct.pipeline);
                         pass.set_bind_group(0, &self.view_bind_group, &[]);
-                        direct.layer.record(pass, &direct.spans);
+                        direct.layer.record(pass, &direct.spans, &direct.pipeline);
                     }
                 }
             }
@@ -2090,6 +2250,7 @@ impl LayerGpu {
         Self {
             context: self.context,
             program,
+            indexed: self.indexed.clone(),
             encodings: Arc::clone(&self.encodings),
             chunk_buffer: self.chunk_buffer.clone(),
             chunk_bind_groups: self.chunk_bind_groups.clone(),
