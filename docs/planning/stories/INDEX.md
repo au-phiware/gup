@@ -620,7 +620,7 @@ GUP-628 and GUP-631 (shared `selection.rs`).
   windowed layer sized by a column, through 12.5% size buckets in the sort key
   (about one draw per row today), with a `zoom_bench` row. Deps: GUP-482 ✅,
   GUP-628 ✅ and GUP-631 📋 (sequencing only: shared `selection.rs`).
-- [GUP-714](GUP-714_LOD_Tiers_In_The_Column_Store.md) 📋 — `lod::Tiers` per
+- [GUP-714](GUP-714_LOD_Tiers_In_The_Column_Store.md) 🚧 — `lod::Tiers` per
   chunk: a data-anchored Morton grid, one radix sort, every tier a prefix of one
   representative list, stored while at most half the chunk; at most 650 ms per
   10M rows. Opus. Deps: GUP-631 ✅, GUP-664 ✅.
