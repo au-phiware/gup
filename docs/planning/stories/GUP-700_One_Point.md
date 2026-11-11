@@ -222,3 +222,45 @@ Checked against `main` (2026-11-09):
 - [ ] WASM size: unchanged: no library code change beyond names
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
+
+## Implementation Summary
+
+The point scale is `PointScale`; `Point` at the root and in the prelude is
+`geom::Point`. Prelude doctest and `tests/one_point.rs` cover both. Tour chapter
+3, `TECHNICAL_APPROACH.md`, `PERF_BUDGETS.md` and the CHANGELOG are swept.
+Prelude workaround imports were removed from 15 core tests and examples, the
+tour snippet, the tutorials test and the technical approach. The `compile_fail`
+snapshot `borrowing_accessor.stderr` was re-blessed with `TRYBUILD=overwrite`
+(only `Point` to `PointScale` in a note). No goldens changed.
+
+## Retrospective
+
+**Completed**: 2026-11-11
+
+### Key Technical Learnings
+
+#### Explicit imports hide a rename
+
+- **Challenge**: after renaming the scale, the workspace still compiled because
+  every file that used the geometry `Point` imported it explicitly.
+- **Solution**: grep for the stale name and the redundant imports; the compiler
+  flagged only a nested-module case (`svg.rs`, glob in submodules only).
+- **Pattern**: for a name swap, the compiler is not enough; grep prose and
+  messages.
+
+### Architectural Decisions
+
+#### Rename the rarer name
+
+- **Decision**: `PointScale`, no alias.
+- **Reasoning**: nine uses against 57 for the geometry.
+- **Trade-off**: `PointScale` is the odd one beside `Band` and `Linear`.
+
+### Development Workflow Insights
+
+- `mask all-fix` and `mask merge-check` each take over 10 minutes; run them in
+  the background.
+
+### Follow-up Stories
+
+None.
