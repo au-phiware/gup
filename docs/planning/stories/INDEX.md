@@ -628,7 +628,7 @@ GUP-628 and GUP-631 (shared `selection.rs`).
   representative buffers plus a `u32` row column, and the indexed-rows glue so
   brush, validity and pick read the data row; proven with a forced tier. Opus.
   Deps: GUP-714 ✅.
-- [GUP-716](GUP-716_Selection_Lod_And_Tier_Draws.md) 📋 — `Lod::{Auto, Off}`,
+- [GUP-716](GUP-716_Selection_Lod_And_Tier_Draws.md) 🚧 — `Lod::{Auto, Off}`,
   `Selection::lod`, `ScatterChart::lod`, the 200,000-row threshold, per-chunk
   tier per frame (one tier finer than the spike), lazy builds. Opus. Deps:
   GUP-714 ✅, GUP-715 📋.
