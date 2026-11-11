@@ -10,8 +10,8 @@ touches: [crates/gup-core/src/lod.rs, crates/gup-core/src/lib.rs]
 
 ## Story Overview
 
-**Initiative**: Track N5: Performance at Scale **Status**: 🚧 In Progress
-**Created**: 2026-11-11
+**Initiative**: Track N5: Performance at Scale **Status**: ✅ Complete
+2026-11-11 **Created**: 2026-11-11
 
 ## Context
 
@@ -50,20 +50,20 @@ GUP-715 and GUP-716.
 
 ### AC1: Tiers nest, representatives are lowest-index
 
-- [ ] `lod::Tiers::build(rows: u32, xy: impl Fn(u32) -> (f64, f64)) -> Tiers`
+- [x] `lod::Tiers::build(rows: u32, xy: impl Fn(u32) -> (f64, f64)) -> Tiers`
       (signature in Decisions) over a seeded random-walk chunk of 100,000 rows
       returns `counts` that are non-decreasing and a `order` of `counts[stored]`
       distinct chunk-local rows.
-- [ ] For every tier `t <= stored`, the set `order[..counts[t]]` equals the
+- [x] For every tier `t <= stored`, the set `order[..counts[t]]` equals the
       brute-force set: the lowest-index row of each occupied cell of the tier's
       grid (checked by a `HashMap` over `(cx >> (16 - t), cy >> (16 - t))`).
       Tiers nest: `order[..counts[t]]` is a prefix of `order[..counts[t + 1]]`.
-- [ ] `counts[0] == 1` for a non-empty chunk, and rows with a non-finite x or y
+- [x] `counts[0] == 1` for a non-empty chunk, and rows with a non-finite x or y
       are never representatives (they are skipped in the build).
 
 ### AC2: Storage rule
 
-- [ ] Tiers are stored while `counts[t] <= rows / 2`; `stored` is the finest
+- [x] Tiers are stored while `counts[t] <= rows / 2`; `stored` is the finest
       such tier and `order.len() == counts[stored]`. A chunk of 256 rows, one
       per cell of a 16 × 16 grid (its own cell at tier 4), stores tiers 0-3 only
       (test), and 1,000 rows on a 32 × 32 grid tiers 0-4. A chunk whose rows all
@@ -75,26 +75,26 @@ GUP-715 and GUP-716.
 
 ### AC3: The grid depends on the chunk alone
 
-- [ ] The tier-16 grid has cells of `2^ex` by `2^ey` data units (integers `ex`,
+- [x] The tier-16 grid has cells of `2^ex` by `2^ey` data units (integers `ex`,
       `ey`, possibly negative), anchored at multiples of those sizes: the key of
       a row is
       `part1by1(floor(x / 2^ex) - ox) | part1by1(floor(y / 2^ey) - oy) << 1`
       with `(ox, oy)` the chunk's own minimum cell. `ex`, `ey` are the smallest
       integers with `floor(max / 2^ex) - floor(min / 2^ex) < 65_536` over the
       chunk's finite rows.
-- [ ] `build` over a chunk's rows gives the same `Tiers` however many rows the
+- [x] `build` over a chunk's rows gives the same `Tiers` however many rows the
       layer holds around it: a test builds chunk 0 of a 3-chunk layer and of a
       layer of chunk 0 alone and asserts equal `ex`, `ey`, `order`, `counts`
       (appends that grow the layer's extent leave built chunks valid).
 
 ### AC4: Build cost
 
-- [ ] `scale_bench` gains a `lod_build` phase (a `--lod` flag) printing build ms
+- [x] `scale_bench` gains a `lod_build` phase (a `--lod` flag) printing build ms
       per 10M rows for a sorted random walk (the spike's data) in release, one
       thread. On the development machine with load under 2 it prints at most 650
       (the spike's comparison sort: 562-826). Peak extra memory during a chunk's
       build is at most 16 B a row of that chunk (reported).
-- [ ] `lod.build_ms_per_10m` is proposed as a `PERF_BUDGETS.md` row in the
+- [x] `lod.build_ms_per_10m` is proposed as a `PERF_BUDGETS.md` row in the
       retrospective (the orchestrator records it).
 
 ## Decisions
@@ -173,11 +173,11 @@ GUP-715 and GUP-716.
 
 ## Technical Tasks
 
-- [ ] `lod.rs`: key computation (`ex`, `ey`, origin), radix sort, `first_tier`,
+- [x] `lod.rs`: key computation (`ex`, `ey`, origin), radix sort, `first_tier`,
       counting sort, storage rule, `prefix`.
-- [ ] Unit tests for AC1-AC3 (brute-force cells; growing-layer invariance).
-- [ ] `scale_bench --lod`: the `lod_build` phase and its output line.
-- [ ] Doc comments on every item; `mask all-fix`.
+- [x] Unit tests for AC1-AC3 (brute-force cells; growing-layer invariance).
+- [x] `scale_bench --lod`: the `lod_build` phase and its output line.
+- [x] Doc comments on every item; `mask all-fix`.
 
 ## Dependencies
 
@@ -199,7 +199,7 @@ GUP-715 and GUP-716.
 
 ## Success Metrics
 
-- [ ] Build at most 650 ms per 10M rows (spike: 562-826).
+- [x] Build at most 650 ms per 10M rows (spike: 562-826).
 
 ## Risk Assessment
 
@@ -213,15 +213,173 @@ GUP-715 and GUP-716.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output: not applicable (no drawing)
-- [ ] `mask wasm-browser`: not needed, no layout, input or wasm code changes
-- [ ] WASM size: `mask wasm-size` scatter gz bytes reported (expected unchanged:
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output: not applicable (no drawing)
+- [x] `mask wasm-browser`: not needed, no layout, input or wasm code changes
+- [x] WASM size: `mask wasm-size` scatter gz bytes reported (expected unchanged:
       the module is unused until GUP-716, so it is dropped)
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- `crates/gup-core/src/lod.rs` (new, `pub(crate)`):
+  `Tiers { ex, ey, stored, order, counts }`, `Tiers::build(rows, xy)` and
+  `Tiers::prefix(t)`. The build reads the closure twice (extent, then keys),
+  computes each axis's exponent (`exponent`, exact for subnormals and values
+  near `f64::MAX`: `2^-e` is one or two normal multipliers, and an integer floor
+  replaces libm's when every cell is inside ±2^62), radix-sorts
+  `key << 32 | row` (three 11-bit passes, histograms gathered while the keys are
+  made, a constant digit's pass skipped), finds each row's first tier with the
+  lowest-row stack scan (`first_tiers`, the stack in the already-read pairs),
+  applies the storage rule and writes the progressive order by a stable counting
+  sort over rows.
+- `crates/gup-core/src/lib.rs`: `mod lod;` and a hidden
+  `__private::lod_tier_counts` for the bench (no prelude change).
+- `crates/gup-core/examples/scale_bench.rs`: `--lod` runs the `lod_build` phase
+  only (the walk as `f64` columns, every library-sized chunk built in turn) and
+  prints
+  `scale.lod_build.{ms, ms_per_10m, stored_reps, peak_bytes_per_row, load_average}`;
+  peak bytes come from a counting global allocator switched on for the phase.
+  `walk` moved to module level to share it.
+- Tests: 6 unit tests in `lod.rs` (brute force on walk, uniform and clustered
+  100,000-row chunks; NaN and infinite rows; the storage rule on 16 × 16 and 32
+  × 32 grids, coincident rows, one row and a vertical line; exponents; chunk 0
+  of a 3-chunk layer against chunk 0 alone, and a shift by whole cells; extreme
+  magnitudes including the f64 floor path). `mask merge-check`: every step PASS
+  (gup-core all features: 69 binaries, 988 passed, 0 failed, 8 ignored).
+  `mask all-check`: exit 0. `cargo test -p gup -- --test-threads=1`: 11
+  binaries, 146 passed, 0 failed, 2 ignored.
+
+**Measurements** (release, one thread, Intel i7-7700HQ / HD 630, sorted walk,
+1,048,576-row chunks, 10M rows, same session alternating, load 3.3-3.5 from
+other agents; load under 2 was not available during the story):
+
+| build                             | ms per 10M (3 runs) | median | peak extra B/row |
+| --------------------------------- | ------------------- | ------ | ---------------- |
+| shipped (radix + lowest-row scan) | 481 / 484 / 513     | 484    | 16.00            |
+| radix + consecutive-key rule (A)  | 400 / 405 / 421     | 405    | 16.00            |
+| spike's `PyramidChunk::build` (B) | 646 / 684 / 826     | 684    | not measured     |
+
+3,540,939 representatives stored (finest tier 12-13 per chunk). Shuffled 10M at
+load 5.7-6.1: 514 / 762 / 1,740 ms (too noisy to state a median; 3,506,487
+representatives). `mask wasm-size` scatter: 379,234 B gz with main's `lib.rs`
+and on the branch (+0 B; the module is unused and dropped).
+
+## Retrospective
+
+**Completed**: 2026-11-11
+
+### Key Technical Learnings
+
+#### A sorted run's first row is not its lowest row
+
+- **Challenge**: the story (and the spike) assumed a stable sort makes the first
+  row of every tier's run its lowest row. Stability only orders equal _full_
+  keys; a coarse cell's rows are in Morton order, so the consecutive-key rule
+  picks the Morton-first row (tier 0 of the walk: row 25,532, not 0).
+- **Solution**: keep the sort and the tier meaning, but compute a head's first
+  tier from its nearest lower-row heads on both sides in key order (a monotonic
+  stack, one pass). Any lower row inside a run is at least as far as the nearest
+  one, so the two neighbours decide.
+- **Pattern**: "the representative is the minimum of priority P over the cell"
+  is a nearest-smaller-value problem over the sorted keys, for any P. GUP-721
+  replaces the row by `(size bucket desc, row)` in the comparison and nothing
+  else changes.
+
+#### Peak memory: put the stack in what has been read
+
+- **Challenge**: sorted pairs (8 B) + a stack (up to 8 B) + per-row first tiers
+  (1 B) is 17 B a row, over AC4's 16.
+- **Solution**: the stack never holds more heads than were read, so it lives in
+  `sorted[..top]`, and a head's left split tier waits in `first[row]`. The radix
+  scratch is freed before `first` is allocated; the peak (16.00 B a row,
+  counted) is the radix sort's two buffers.
+
+#### Exact cells without libm
+
+- **Challenge**: `f64::floor` is a libm call on the default x86-64 target (no
+  SSE4.1), twice per row; and `2^-e` is not a normal `f64` for a chunk of
+  subnormals.
+- **Solution**: `2^-e` as one or two normal multipliers (exact by powers of
+  two), and, when every cell of the chunk is within ±2^62, `floor` as truncate
+  and compare in `i64` (exact: past 2^53 every product is an integer). The f64
+  path stays for values a few ulps apart near large magnitudes, and a test pins
+  it. The key pass took 209 ms per 10M before (load 3.6) and 169 ms after (load
+  8): not a controlled A/B, but the right direction under twice the load.
+- **Pattern**: neither escalation case in the story (subnormals, `1e300`)
+  happens: no axis fails to fit 16 bits when the scale is split and the span is
+  halved before its exponent is taken.
+
+### Architectural Decisions
+
+#### Lowest row per cell (orchestrator, 2026-11-11)
+
+- **Decision**: B, the stack scan, over A, the consecutive-key rule.
+- **Reasoning**: matches AC1 and the RFC, does not depend on the sort's
+  internals, and generalises to GUP-721's priority.
+- **Trade-off**: +80 ms per 10M (484 against 405), still under the spike's 684.
+- **Future**: GUP-720's spatial runs reorder tier blocks; the representative set
+  does not change.
+
+#### Degenerate axes and coincident rows
+
+- **Decision**: an axis with one value takes the other axis's exponent (0 if
+  both have one value); coincident rows store all 17 tiers, one representative
+  each.
+- **Reasoning**: the storage rule as written, and one drawn row at any zoom.
+- **Future**: GUP-716 should choose a chunk's tier from the axis that has a span
+  when the other has none (both exponents are then equal by this rule, so the
+  square-cell area test still works, but it is in data units).
+
+### Notes for GUP-715 and GUP-716
+
+- Read rows with `ColumnStore::cells(k, column)` and `Cells::get(col, r)` (O(1),
+  both owned and shared columns); `ColumnStore::value` does a `partition_point`
+  per row, so do not use it in the build closure. The values are then "as the
+  GPU sees them" (F32Relative-rounded for owned columns), which is what should
+  decide the cells.
+- `order` is chunk-local `u32` rows, each tier block in row order; upload
+  `order[..counts[stored]]` once and draw `prefix(t)` instances. `prefix(t)` is
+  `None` past `stored`: draw the chunk in full (never more than today).
+- The build is a pure function of the chunk's rows: build lazily per chunk and
+  cache by chunk; eviction (`RowWindow::LastRows`) drops tiers with the chunk.
+  Appends invalidate only the tail chunk (GUP-719).
+- Tier choice (GUP-716): a tier-`t` cell is `2^(ex + 16 - t)` by
+  `2^(ey + 16 - t)` data units; the spike's "one point per pixel of area" rule
+  becomes the finest `t` whose cell is at least 1 px² under the frame's scales.
+  Per chunk, not per layer: neighbouring chunks may pick different tiers.
+- Build cost is about 50 ns a row on one thread here; at 100M rows that is about
+  5 s total, so GUP-716 should build off the frame path or per visible chunk
+  first.
+
+### Proposed PERF_BUDGETS rows (for the orchestrator)
+
+| metric                   | recorded | check | note                                                            |
+| ------------------------ | -------- | ----- | --------------------------------------------------------------- |
+| `lod.build_ms_per_10m`   | 484      | ≤ 650 | `scale_bench --lod --rows 10000000`, sorted walk, median of 3   |
+| `lod.peak_bytes_per_row` | 16.00    | ≤ 16  | same run, counting allocator; deterministic (exact, not timing) |
+
+The timing row was measured at load 3.3-3.5; re-record at load under 2 when the
+machine is quiet.
+
+### Development Workflow Insights
+
+- A brute-force test over a `HashMap` of cells found the representative bug on
+  the first run; without it the consecutive-key rule would have shipped, as it
+  did in the spike.
+- Same-session A/B: two saved release binaries (and the spike's) run alternately
+  by a small script gave stable comparisons at load 3.4 where single runs at
+  load 8-18 were up to 2× off.
+- The worktree sandbox refuses `scripts/with_cargo_env.sh git commit`; a plain
+  `CARGO_TARGET_DIR=<this checkout's> git commit` runs the hook against the
+  right target directory.
+
+### Follow-up Stories
+
+None: the remaining work is GUP-715-721 as planned.

@@ -620,18 +620,18 @@ GUP-628 and GUP-631 (shared `selection.rs`).
   windowed layer sized by a column, through 12.5% size buckets in the sort key
   (about one draw per row today), with a `zoom_bench` row. Deps: GUP-482 ✅,
   GUP-628 ✅ and GUP-631 📋 (sequencing only: shared `selection.rs`).
-- [GUP-714](GUP-714_LOD_Tiers_In_The_Column_Store.md) 🚧 — `lod::Tiers` per
+- [GUP-714](GUP-714_LOD_Tiers_In_The_Column_Store.md) ✅ — `lod::Tiers` per
   chunk: a data-anchored Morton grid, one radix sort, every tier a prefix of one
   representative list, stored while at most half the chunk; at most 650 ms per
   10M rows. Opus. Deps: GUP-631 ✅, GUP-664 ✅.
 - [GUP-715](GUP-715_Representative_Buffers_And_Indexed_Rows.md) 📋 — Gathered
   representative buffers plus a `u32` row column, and the indexed-rows glue so
   brush, validity and pick read the data row; proven with a forced tier. Opus.
-  Deps: GUP-714 📋.
+  Deps: GUP-714 ✅.
 - [GUP-716](GUP-716_Selection_Lod_And_Tier_Draws.md) 📋 — `Lod::{Auto, Off}`,
   `Selection::lod`, `ScatterChart::lod`, the 200,000-row threshold, per-chunk
   tier per frame (one tier finer than the spike), lazy builds. Opus. Deps:
-  GUP-714 📋, GUP-715 📋.
+  GUP-714 ✅, GUP-715 📋.
 - [GUP-717](GUP-717_LOD_Golden_Fidelity_And_Budgets.md) 📋 — A 1M-row LOD
   golden, a ΔE00 share against `Lod::Off` (1.0% full, 2.0% zoom of the plot
   rect) and `zoom_bench --lod` with proposed `lod.*` budget rows. Deps: GUP-716
