@@ -616,7 +616,7 @@ GUP-628 and GUP-631 (shared `selection.rs`).
   10M, 30M and 100M rows, proposed budget rows, and README wording by a stated
   rule ("interactive" only under 16.7 ms; no "billion"). Deps: GUP-628 ✅,
   GUP-629 📋, GUP-631 ✅ and its follow-ups GUP-714-721 (soft).
-- [GUP-492](GUP-492_Windowed_Size_Order_Draws.md) 📋 — bounded draw calls for a
+- [GUP-492](GUP-492_Windowed_Size_Order_Draws.md) ✅ — bounded draw calls for a
   windowed layer sized by a column, through 12.5% size buckets in the sort key
   (about one draw per row today), with a `zoom_bench` row. Deps: GUP-482 ✅,
   GUP-628 ✅ and GUP-631 📋 (sequencing only: shared `selection.rs`).
@@ -649,7 +649,11 @@ GUP-628 and GUP-631 (shared `selection.rs`).
   📋, GUP-719 📋 (sequencing).
 - [GUP-721](GUP-721_LOD_For_Size_Ordered_Layers.md) 📋 — Largest-first tier
   blocks and the largest mark as a cell's representative for size-ordered
-  layers. Deps: GUP-492 📋, GUP-716 📋, GUP-720 📋 (sequencing).
+  layers. Deps: GUP-492 ✅, GUP-716 📋, GUP-720 📋 (sequencing), GUP-724 📋.
+- [GUP-724](GUP-724_Size_Ordered_Resolve_Cost.md) 📋 — A multi-chunk
+  size-ordered layer's resolve costs about 12 ms a frame against 1.1 ms for a
+  plain scatter: profile, then cache per epoch. Carries GUP-492's 4.0 ms CPU
+  gate. Deps: GUP-492 ✅.
 
 ## Polish after 0.1
 

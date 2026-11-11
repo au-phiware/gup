@@ -644,6 +644,10 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
     /// columns are evaluated again at the next resolve: set it before the
     /// first resolve, or keep the rows (see [`Retain`]).
     ///
+    /// A windowed layer sized by a column draws in a bounded number of
+    /// draws, so its size order is exact between buckets of 12.5%
+    /// relative size and in data order within one bucket (GUP-492).
+    ///
     /// See [`RowWindow`] for an example.
     pub fn window(&mut self, window: RowWindow) -> &mut Self {
         self.window = window;
@@ -987,6 +991,16 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             Some(c) if !c.uploadable_to(cx) => {
                 Some("the columns are on another context and their CPU copy was dropped")
             }
+            // A window set after the first resolve may leave the chunk size
+            // alone, but it changes whether the size order is bucketed.
+            Some(_)
+                if self
+                    .order
+                    .as_ref()
+                    .is_some_and(|o| o.bucketed() != (self.window != RowWindow::All)) =>
+            {
+                Some("the window changed, and a windowed size order is bucketed")
+            }
             Some(_) => None,
         };
         if let Some(reason) = stale {
@@ -1114,7 +1128,11 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
                 };
                 let end = |v: f64| c.image((v, v)).map(|(a, _)| a);
                 let reversed = matches!((end(lo), end(hi)), (Some(a), Some(b)) if a > b);
-                return Some(DrawOrder::new(column, reversed));
+                return Some(DrawOrder::new(
+                    column,
+                    reversed,
+                    self.window != RowWindow::All,
+                ));
             }
             column += 1;
         }

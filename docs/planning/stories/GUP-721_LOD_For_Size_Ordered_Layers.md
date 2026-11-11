@@ -125,6 +125,8 @@ this story reuses.
 
 - GUP-492: Windowed Size-Ordered Draws 📋 — the bucket keys.
 - GUP-716: `Selection::lod` and Per-Frame Tier Draws 📋.
+- GUP-724: Size-Ordered Resolve Cost 📋 (a size-ordered layer's frame costs
+  about 12 ms in resolve today; sequencing).
 - GUP-720: Spatial Runs for Unsorted Layers 📋 — block order and runs
   (sequencing: both edit `lod.rs`).
 

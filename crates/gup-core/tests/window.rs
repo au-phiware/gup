@@ -510,3 +510,152 @@ fn evicted_rows_fire_no_events() {
         "events for evicted rows: {seen:?}"
     );
 }
+
+/// GUP-492: a window of this many rows, fed in `STEP`-row appends to
+/// `BUBBLE_TOTAL` rows, sized by one of 16 levels drawn at random.
+const BUBBLE_WINDOW: usize = 100_000;
+const BUBBLE_TOTAL: usize = 300_000;
+const STEP: usize = 1_000;
+const LEVELS: usize = 16;
+/// Draws that are not marks: axes, ticks and text batches.
+const CHROME: usize = 16;
+
+/// Row `i` of a seeded random sequence: the level is a hash of `i` alone,
+/// so a fresh plot of the held rows sees the same sizes.
+fn bubble(i: usize) -> R {
+    let mut h = (i as u64 + 1).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+    h ^= h >> 29;
+    h = h.wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    h ^= h >> 32;
+    R {
+        x: i as f64,
+        y: ((i * 7919) % 1000) as f64,
+        s: 1.5f64.powi((h % LEVELS as u64) as i32),
+    }
+}
+
+/// Like [`bubble`], but the size is continuous over the same range: about
+/// 70 buckets of 12.5%.
+fn spread(i: usize) -> R {
+    let mut r = bubble(i);
+    let h = (i as u64 + 7).wrapping_mul(0xd6e8_feb8_6659_fd93);
+    let u = ((h >> 40) & 0xf_ffff) as f64 / f64::from(0x10_0000);
+    r.s = 1.5f64.powf(u * (LEVELS - 1) as f64);
+    r
+}
+
+fn bubbles(rows: Vec<R>, window: RowWindow, retain: Retain) -> Plot {
+    let mut chart = gup_core::scatter(rows)
+        .x(|r| r.x)
+        .y(|r| r.y)
+        .color_value(|r| r.s)
+        .size(|r| r.s)
+        .size_scale(Pow::sqrt().range(Px(1.5), Px(14.0)))
+        .window(window);
+    chart.layer_mut().retain(retain);
+    chart.into_plot()
+}
+
+/// The frame's draw calls, as the renderer will record them.
+fn draw_calls(cx: &Context, plot: &mut Plot, target: &mut gup_core::ImageTarget) -> usize {
+    use gup_core::RenderTarget;
+    let resolved = plot.resolve(cx, W as f32, H as f32).unwrap();
+    let desc = target.desc();
+    let mut renderer = gup_core::Renderer::new();
+    renderer
+        .prepare(cx, &resolved.scene, &desc)
+        .unwrap()
+        .draw_calls()
+}
+
+/// Feed the run, asserting after every append that the draws are within
+/// `bound(held rows)`; returns the plot and the largest count.
+fn bubble_run(
+    cx: &Context,
+    retain: Retain,
+    row: fn(usize) -> R,
+    bound: impl Fn(usize) -> usize,
+) -> (Plot, usize) {
+    let mut plot = bubbles(Vec::new(), RowWindow::LastRows(BUBBLE_WINDOW), retain);
+    let feed = plot.layer_mut::<R, Circle>().unwrap().appender();
+    let mut target = gup_core::ImageTarget::new(cx, W, H).unwrap();
+    let mut worst = 0;
+    for from in (0..BUBBLE_TOTAL).step_by(STEP) {
+        feed.clone().extend((from..from + STEP).map(row)).unwrap();
+        let calls = draw_calls(cx, &mut plot, &mut target);
+        let held = plot.layer_mut::<R, Circle>().unwrap().len();
+        assert_eq!(held % STEP, 0, "whole appends are held");
+        let limit = bound(held) + CHROME;
+        assert!(
+            calls <= limit,
+            "{retain:?}: {calls} draws for {held} rows after {} appended (bound {limit})",
+            from + STEP
+        );
+        worst = worst.max(calls);
+    }
+    (plot, worst)
+}
+
+/// The held rows: the plot's window, as a fresh unwindowed plot draws
+/// them.
+fn assert_equals_fresh(cx: &Context, plot: &mut Plot, name: &str) {
+    let held = plot.layer_mut::<R, Circle>().unwrap().len();
+    let rows = (BUBBLE_TOTAL - held..BUBBLE_TOTAL).map(bubble).collect();
+    let image = plot.render(cx, W, H).unwrap();
+    let expected = bubbles(rows, RowWindow::All, Retain::Auto)
+        .render(cx, W, H)
+        .unwrap();
+    let tol = gup_visual_regression::DiffTolerance::default();
+    let stats =
+        gup_visual_regression::diff::perceptual_diff(&vr(&expected), &vr(&image), &tol).unwrap();
+    eprintln!("{name}: vs fresh: {stats}");
+    if std::env::var_os("GUP492_SAVE").is_some() {
+        let dir = std::env::temp_dir();
+        image.save(dir.join(format!("gup492_{name}.png"))).unwrap();
+        expected
+            .save(dir.join(format!("gup492_{name}_fresh.png")))
+            .unwrap();
+    }
+    assert!(
+        stats.within(&tol),
+        "{name}: windowed image differs: {stats}"
+    );
+}
+
+/// AC1, AC2: 16 size levels at random in a 100,000-row window draw in a
+/// bounded number of calls and look like a fresh plot of the held rows.
+#[test]
+fn a_windowed_size_order_draws_in_bounded_calls() {
+    let cx = Context::new_blocking().unwrap();
+    let bound = |held: usize| (64 + held / 1024).max(2 * held.div_ceil(25_000) * LEVELS);
+    let (mut plot, worst) = bubble_run(&cx, Retain::Auto, bubble, bound);
+    eprintln!("Retain::Auto: at most {worst} draw calls");
+    assert_equals_fresh(&cx, &mut plot, "auto");
+}
+
+/// Sizes that fill about 70 buckets: the draws stay near
+/// `chunks × buckets`, where an exact order would draw about one per row.
+#[test]
+fn a_windowed_continuous_size_order_draws_a_few_per_chunk() {
+    let cx = Context::new_blocking().unwrap();
+    // The floor comes from the last full evaluation, which held up to five
+    // 25,000-row chunks before eviction took the oldest.
+    let (_, worst) = bubble_run(&cx, Retain::Auto, spread, |held| {
+        (64 + held / 1024).max(2 * held.div_ceil(25_000).max(5) * 72)
+    });
+    eprintln!("continuous sizes, Retain::Auto: at most {worst} draw calls");
+}
+
+/// Without the rows nothing can be evaluated again, so the draws are
+/// bounded by the runs held: 16 a run.
+#[test]
+fn a_gpu_only_windowed_size_order_draws_at_most_16_a_run() {
+    let cx = Context::new_blocking().unwrap();
+    // Runs are `STEP` rows (chunks are a multiple of `STEP` rows), plus a
+    // few guide and text draws.
+    let (mut plot, worst) = bubble_run(&cx, Retain::GpuOnly, bubble, |held| {
+        LEVELS * (held / STEP) + 16
+    });
+    eprintln!("Retain::GpuOnly: at most {worst} draw calls");
+    assert_equals_fresh(&cx, &mut plot, "gpu_only");
+}
