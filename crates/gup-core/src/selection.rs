@@ -2309,6 +2309,30 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
                         }
                         return Some(());
                     }
+                    if let [(size_col, size_c)] = size_cols[..] {
+                        // One size column: the rows no other row beats on
+                        // position and reach, from the chunk's cached index
+                        // (GUP-724), else the scan below.
+                        let fast = (|| -> Option<()> {
+                            let mut cache = self.edge_cache.lock().ok()?;
+                            for &&(a, col, c) in &live {
+                                let axis = axes[a].as_ref()?;
+                                let key = (k, col, size_col, chunk.rows());
+                                let ix = cache.reach(self.epoch, key, || {
+                                    Some((
+                                        store.chunk_values(k, col)?,
+                                        store.chunk_values(k, size_col)?,
+                                    ))
+                                })?;
+                                reach_edges(ix, axis, c, size_c, fixed[a], &mut tmp[a])?;
+                            }
+                            Some(())
+                        })();
+                        if fast.is_some() {
+                            return Some(());
+                        }
+                        tmp.iter_mut().for_each(Vec::clear);
+                    }
                     let mut decoded: Vec<Option<Vec<f64>>> = vec![None; store.formats().len()];
                     for &&(_, col, _) in &live {
                         decoded[col] = Some(store.chunk_values(k, col)?);
@@ -3079,6 +3103,8 @@ struct EdgeCache {
     epoch: u64,
     /// Oldest first.
     entries: Vec<SortedChunk>,
+    /// Oldest first.
+    reach: Vec<ReachChunk>,
 }
 
 struct SortedChunk {
@@ -3093,6 +3119,48 @@ impl EdgeCache {
     /// The most values kept: two decoded chunks at the edge budget.
     const CAP: usize = 2 * crate::plot::inset::EDGE_ROW_BUDGET;
 
+    /// Drop every entry if the layer's stored rows were renumbered.
+    fn sync(&mut self, epoch: u64) {
+        if self.epoch != epoch {
+            self.epoch = epoch;
+            self.entries.clear();
+            self.reach.clear();
+        }
+    }
+
+    /// The reach index of a chunk, built from `decode`'s position and size
+    /// columns on a miss. `key` is the chunk, the position column, the size
+    /// column and the chunk's rows. `None` if the chunk cannot be indexed
+    /// (a row with a position has no finite size).
+    fn reach(
+        &mut self,
+        epoch: u64,
+        key: (usize, usize, usize, u32),
+        decode: impl FnOnce() -> Option<(Vec<f64>, Vec<f64>)>,
+    ) -> Option<&ReachIndex> {
+        self.sync(epoch);
+        let at = match self.reach.iter().position(|e| e.key == key) {
+            Some(at) => at,
+            None => {
+                let (pos, size) = decode()?;
+                let index = ReachIndex::build(&pos, &size);
+                self.reach
+                    .retain(|e| !(e.key.0 == key.0 && e.key.1 == key.1 && e.key.2 == key.2));
+                let total = index.as_ref().map_or(0, |i| i.pos.len());
+                let mut held: usize = self.reach.iter().map(ReachChunk::len).sum();
+                let mut drop = 0;
+                while drop < self.reach.len() && held + total > Self::CAP {
+                    held -= self.reach[drop].len();
+                    drop += 1;
+                }
+                self.reach.drain(..drop);
+                self.reach.push(ReachChunk { key, index });
+                self.reach.len() - 1
+            }
+        };
+        self.reach[at].index.as_ref()
+    }
+
     /// The sorted finite values of column `column` of chunk `chunk`
     /// (`rows` rows), decoded by `decode` on a miss. The entries are
     /// dropped when the layer's stored rows were renumbered (`epoch`); an
@@ -3105,10 +3173,7 @@ impl EdgeCache {
         rows: u32,
         decode: impl FnOnce() -> Option<Vec<f64>>,
     ) -> Option<&[f64]> {
-        if self.epoch != epoch {
-            self.epoch = epoch;
-            self.entries.clear();
-        }
+        self.sync(epoch);
         let at = match self
             .entries
             .iter()
@@ -3141,6 +3206,199 @@ impl EdgeCache {
         };
         Some(&self.entries[at].values)
     }
+}
+
+/// One chunk's [`ReachIndex`] for a position column and a size column, or
+/// the fact that it has none.
+struct ReachChunk {
+    /// Chunk, position column, size column, rows.
+    key: (usize, usize, usize, u32),
+    index: Option<ReachIndex>,
+}
+
+impl ReachChunk {
+    fn len(&self) -> usize {
+        self.index.as_ref().map_or(0, |i| i.pos.len())
+    }
+}
+
+/// The rows of a chunk with a finite position, ascending by position, with
+/// their sizes and, for each row, the next and previous row in that order
+/// with a greater and with a smaller size (GUP-724).
+///
+/// A mark `(t, h)` (normalized position, reach in px) can only set an inset
+/// if no other mark in the domain lies as near the end and reaches as far
+/// (`edge_insets` takes a maximum of `h - t * span` over the marks, with
+/// `span > 0`). In position order, those marks are the running extremes of
+/// the size from either end of the domain inwards, which the chains list
+/// without a scan: a frame evaluates a handful of rows instead of decoding
+/// the chunk. It stands while the position and size encodings are
+/// monotonic, as the sorted-value search does.
+struct ReachIndex {
+    pos: Vec<f64>,
+    size: Vec<f64>,
+    size_min: f64,
+    size_max: f64,
+    next_gt: Vec<u32>,
+    next_lt: Vec<u32>,
+    prev_gt: Vec<u32>,
+    prev_lt: Vec<u32>,
+}
+
+impl ReachIndex {
+    const NONE: u32 = u32::MAX;
+    /// The most chain links followed in a frame; past it the scan is as cheap.
+    const MAX_LINKS: usize = 4_096;
+
+    /// `None` if a row with a position has no finite size: its reach is the
+    /// mark's fixed reach, which the chains do not model (the scan does).
+    fn build(pos: &[f64], size: &[f64]) -> Option<Self> {
+        if pos.len() != size.len() {
+            return None;
+        }
+        let mut rows: Vec<(f64, f64)> = pos
+            .iter()
+            .zip(size)
+            .filter(|(p, _)| p.is_finite())
+            .map(|(&p, &s)| (p, s))
+            .collect();
+        if rows.iter().any(|r| !r.1.is_finite()) {
+            return None;
+        }
+        rows.sort_unstable_by(|a, b| a.0.total_cmp(&b.0));
+        let (pos, size): (Vec<f64>, Vec<f64>) = rows.into_iter().unzip();
+        let n = pos.len();
+        // Monotonic stacks: a row's neighbour is the row that pops it.
+        let sweep = |forward: bool, pops: &dyn Fn(f64, f64) -> bool| -> Vec<u32> {
+            let mut out = vec![Self::NONE; n];
+            let mut stack: Vec<usize> = Vec::new();
+            for k in 0..n {
+                let i = if forward { k } else { n - 1 - k };
+                while let Some(&top) = stack.last() {
+                    if !pops(size[top], size[i]) {
+                        break;
+                    }
+                    out[top] = i as u32;
+                    stack.pop();
+                }
+                stack.push(i);
+            }
+            out
+        };
+        let (size_min, size_max) = size
+            .iter()
+            .fold((f64::INFINITY, f64::NEG_INFINITY), |(lo, hi), &s| {
+                (lo.min(s), hi.max(s))
+            });
+        Some(Self {
+            next_gt: sweep(true, &|top, i| top < i),
+            next_lt: sweep(true, &|top, i| top > i),
+            prev_gt: sweep(false, &|top, i| top < i),
+            prev_lt: sweep(false, &|top, i| top > i),
+            pos,
+            size,
+            size_min,
+            size_max,
+        })
+    }
+}
+
+/// Push the edge candidates of one chunk: the rows in the domain of `axis`
+/// that no other row in it dominates. The solve takes a maximum over its
+/// candidates, so it is the scan's, from a handful of rows. `pos_c` and
+/// `size_c` map position and size values to pixels; `fixed` is what every
+/// mark reaches along the axis. `None` if the index cannot answer (a
+/// degenerate range, a size image below zero, too long a chain), in which
+/// case the caller scans.
+fn reach_edges<T>(
+    ix: &ReachIndex,
+    axis: &EdgeAxis,
+    pos_c: &dyn crate::encoding::DynColumnEncoding<T>,
+    size_c: &dyn crate::encoding::DynColumnEncoding<T>,
+    fixed: f32,
+    out: &mut Vec<(f32, f32)>,
+) -> Option<()> {
+    // Dominance holds while the span the solver grows from is positive.
+    if axis.span_min <= 0.0 {
+        return None;
+    }
+    let n = ix.pos.len();
+    if n == 0 {
+        return Some(());
+    }
+    let failed = std::cell::Cell::new(false);
+    let t_of = |v: f64| axis.t(pos_c.cpu_eval(v)?);
+    let t_or_flag = |v: f64| {
+        t_of(v).unwrap_or_else(|| {
+            failed.set(true);
+            f32::NAN
+        })
+    };
+    let (t0, t1) = (t_of(ix.pos[0])?, t_of(ix.pos[n - 1])?);
+    if t0 == t1 {
+        return None;
+    }
+    // The rows in the domain, `i..j`, as the sorted-value search finds them.
+    let (i, j) = if t1 > t0 {
+        (
+            ix.pos.partition_point(|&v| t_or_flag(v) < 0.0),
+            ix.pos.partition_point(|&v| t_or_flag(v) <= 1.0),
+        )
+    } else {
+        (
+            ix.pos.partition_point(|&v| t_or_flag(v) > 1.0),
+            ix.pos.partition_point(|&v| t_or_flag(v) >= 0.0),
+        )
+    };
+    if failed.get() {
+        return None;
+    }
+    if i >= j {
+        return Some(());
+    }
+    // A mark's reach is the size's image, which grows with the size (or
+    // shrinks with it) and does not change sign.
+    let reach = |s: f64| size_c.cpu_eval(s);
+    let (lo, hi) = (reach(ix.size_min)?, reach(ix.size_max)?);
+    if !(lo >= 0.0 && hi >= 0.0) {
+        return None;
+    }
+    let (next, prev) = if hi >= lo {
+        (&ix.next_gt, &ix.prev_gt)
+    } else {
+        (&ix.next_lt, &ix.prev_lt)
+    };
+    let mut links = 0;
+    let mut push = |row: usize, out: &mut Vec<(f32, f32)>| -> Option<()> {
+        links += 1;
+        if links > ReachIndex::MAX_LINKS {
+            return None;
+        }
+        let t = t_of(ix.pos[row])?;
+        let h = reach(ix.size[row])?.abs().max(f64::from(fixed)) as f32;
+        axis.push(out, t, h);
+        Some(())
+    };
+    // One end of the domain is the near end and the other the far end,
+    // whichever way the positions run: walk the running maxima of the
+    // reach inwards from both.
+    let mut row = i;
+    loop {
+        push(row, out)?;
+        match next[row] {
+            r if r != ReachIndex::NONE && (r as usize) < j => row = r as usize,
+            _ => break,
+        }
+    }
+    let mut row = j - 1;
+    loop {
+        push(row, out)?;
+        match prev[row] {
+            r if r != ReachIndex::NONE && (r as usize) >= i => row = r as usize,
+            _ => break,
+        }
+    }
+    Some(())
 }
 
 /// [`in_domain_extremes`] on a chunk's sorted finite values: the smallest
@@ -4247,6 +4505,120 @@ mod edge_cache_tests {
         }
     }
 
+    /// GUP-724: the insets from the reach index's candidates are the scan's,
+    /// over every row, for random positions, sizes (with ties, zeros and
+    /// reversed size encodings), scales and views.
+    #[test]
+    fn reach_index_matches_the_scan() {
+        use crate::plot::inset::edge_insets;
+        let mut rng = Rng(0x2545_f491_4f6c_dd1d);
+        let mut answered = 0;
+        for case in 0..1_500 {
+            let n = 1 + (rng.next() * 3_000.0) as usize;
+            let log = case % 2 == 1;
+            let (lo, hi): (f64, f64) = if log { (0.5, 5_000.0) } else { (-50.0, 150.0) };
+            let pos: Vec<f64> = (0..n)
+                .map(|_| {
+                    let u = rng.next();
+                    let u = if rng.next() < 0.2 {
+                        (u * 8.0).floor() / 8.0
+                    } else {
+                        u
+                    };
+                    let v = if log {
+                        lo * (hi / lo).powf(u)
+                    } else {
+                        lo + (hi - lo) * u
+                    };
+                    if rng.next() < 0.02 { f64::NAN } else { v }
+                })
+                .collect();
+            let size: Vec<f64> = (0..n)
+                .map(|_| match rng.next() {
+                    u if u < 0.1 => 0.0,
+                    u if u < 0.3 => (rng.next() * 6.0).floor(),
+                    _ => rng.next() * 100.0,
+                })
+                .collect();
+            let pos_c = if log {
+                column(
+                    Log::new()
+                        .domain(lo, hi)
+                        .range(Px(0.0), Px(1000.0))
+                        .encode(|v: &f64| *v),
+                )
+            } else {
+                column(
+                    Linear::new()
+                        .domain(lo, hi)
+                        .range(Px(0.0), Px(1000.0))
+                        .encode(|v: &f64| *v),
+                )
+            };
+            // Larger values draw larger, or smaller.
+            let (r0, r1) = if case % 3 == 0 {
+                (40.0, 2.0)
+            } else {
+                (2.0, 40.0)
+            };
+            let size_c = column(
+                Linear::new()
+                    .domain(0.0, 100.0)
+                    .range(Px(r0), Px(r1))
+                    .encode(|v: &f64| *v),
+            );
+            let a = -1_500.0 + rng.next() * 4_000.0;
+            let len = (50.0 + rng.next() * 2_500.0) * if rng.next() < 0.5 { 1.0 } else { -1.0 };
+            let axis = EdgeAxis {
+                identity: 0,
+                range: (a as f32, (a + len) as f32),
+                span_min: 100.0,
+            };
+            let fixed = if case % 5 == 0 { 8.0 } else { 0.0 };
+            let Some(ix) = ReachIndex::build(&pos, &size) else {
+                continue;
+            };
+            let mut fast = Vec::new();
+            if reach_edges(
+                &ix,
+                &axis,
+                pos_c.as_ref(),
+                size_c.as_ref(),
+                fixed,
+                &mut fast,
+            )
+            .is_none()
+            {
+                continue;
+            }
+            let mut scan = Vec::new();
+            for (p, s) in pos.iter().zip(&size) {
+                if p.is_nan() {
+                    continue;
+                }
+                let t = axis.t(pos_c.cpu_eval(*p).unwrap()).unwrap();
+                let h = size_c.cpu_eval(*s).unwrap().abs().max(f64::from(fixed)) as f32;
+                axis.push(&mut scan, t, h);
+            }
+            let edges =
+                |v: &[(f32, f32)]| -> Vec<_> { v.iter().map(|&(t, h)| (t, h, h)).collect() };
+            for (len, pad, cap) in [(400.0, 4.0, 50.0), (900.0, 0.0, 30.0), (300.0, 10.0, 100.0)] {
+                let (a, b) = (
+                    edge_insets(&edges(&fast), len, pad, cap),
+                    edge_insets(&edges(&scan), len, pad, cap),
+                );
+                assert_eq!(
+                    (a.0.to_bits(), a.1.to_bits()),
+                    (b.0.to_bits(), b.1.to_bits()),
+                    "case {case}: n {n}, log {log}, range {:?}",
+                    axis.range
+                );
+            }
+            answered += 1;
+        }
+        assert!(answered > 1_000, "the index answered {answered} of 1500");
+    }
+
     #[test]
     fn binary_search_matches_the_scan() {
         let mut rng = Rng(0x9e37_79b9_7f4a_7c15);
@@ -4410,6 +4782,46 @@ mod edge_cache_tests {
             }))
             .unwrap();
         });
+    }
+
+    /// GUP-724: with a size column the solve reads the reach index, and an
+    /// append and an eviction rebuild it.
+    #[test]
+    fn a_size_column_uses_the_reach_index_and_stays_fresh() {
+        let mut plot = Plot::new();
+        let x = plot.x(Linear::new().domain(0.0, 10.0));
+        let y = plot.y(Linear::new().domain(0.0, 10.0));
+        let size = Linear::new().domain(0.0, 10.0).range(Px(1.0), Px(40.0));
+        plot.legends(false);
+        plot.add(Selection::<(f64, f64), Circle>::new(rows(0..16)))
+            .attr(Circle::X, x.encode(|r: &(f64, f64)| r.0))
+            .attr(Circle::Y, y.encode(|r: &(f64, f64)| r.1))
+            .attr(
+                Circle::RADIUS,
+                size.encode(|r: &(f64, f64)| r.0 * r.1 / 5.0),
+            )
+            .max_chunk_rows(8)
+            .window(RowWindow::LastRows(16));
+        let cx = Context::new_blocking().unwrap();
+        let before = ends(&mut plot, &cx, &x, &y);
+        assert!(
+            layer(&mut plot)
+                .edge_cache
+                .lock()
+                .unwrap()
+                .reach
+                .iter()
+                .any(|r| r.index.is_some()),
+            "the first solve built a reach index"
+        );
+        layer(&mut plot)
+            .append((0..8).map(|i| (0.1 + f64::from(i) * 0.05, 9.0 + f64::from(i % 2))))
+            .unwrap();
+        let warm = ends(&mut plot, &cx, &x, &y);
+        *layer(&mut plot).edge_cache.lock().unwrap() = EdgeCache::default();
+        let cold = ends(&mut plot, &cx, &x, &y);
+        assert_eq!(warm, cold, "a stale reach index changed the insets");
+        assert_ne!(before, cold, "the append did not move the insets");
     }
 
     #[test]
