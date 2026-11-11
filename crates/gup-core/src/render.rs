@@ -1375,30 +1375,40 @@ pub(crate) struct LayerPipelines {
 }
 
 impl LayerPipelines {
-    /// `make`'s pipeline of `gpu`'s program, and of its indexed program.
+    /// `make`'s pipeline of `gpu`'s program, and of its indexed program
+    /// (a function pointer and not inlined, so each call site is a call).
+    #[inline(never)]
     pub(crate) fn of(
         gpu: &LayerGpu,
-        mut make: impl FnMut(&GlueProgram) -> Result<wgpu::RenderPipeline>,
+        cx: &Context,
+        desc: &TargetDesc,
+        make: fn(&Context, &GlueProgram, &TargetDesc) -> Result<wgpu::RenderPipeline>,
     ) -> Result<Self> {
-        Ok(Self {
-            rows: make(&gpu.program)?,
-            indexed: gpu.indexed.as_deref().map(&mut make).transpose()?,
-        })
+        let rows = make(cx, &gpu.program, desc)?;
+        let indexed = match &gpu.indexed {
+            Some(program) => Some(make(cx, program, desc)?),
+            None => None,
+        };
+        Ok(Self { rows, indexed })
     }
 
     /// The pick pipelines of `gpu` ([`Context::pick_pipeline`]), or
     /// `None` when its mark does not draw in picks.
     pub(crate) fn pick(cx: &Context, gpu: &LayerGpu) -> Result<Option<Self>> {
-        let Some(rows) = cx.pick_pipeline(&gpu.program)? else {
-            return Ok(None);
-        };
-        let indexed = match gpu.indexed.as_deref() {
-            Some(p) => Some(cx.pick_pipeline(p)?.ok_or_else(|| {
-                Error::config("gpu pick", "an indexed program without a pick variant")
-            })?),
-            None => None,
-        };
-        Ok(Some(Self { rows, indexed }))
+        // Both programs are one mark's: both have a pick variant, or none.
+        let mut out = [None, None];
+        for (slot, program) in out
+            .iter_mut()
+            .zip([Some(&gpu.program), gpu.indexed.as_ref()])
+        {
+            if let Some(program) = program {
+                *slot = cx.pick_pipeline(program)?;
+            }
+        }
+        Ok(match out {
+            [Some(rows), indexed] => Some(Self { rows, indexed }),
+            [None, _] => None,
+        })
     }
 
     fn get(&self, indexed: bool) -> &wgpu::RenderPipeline {
@@ -1688,9 +1698,12 @@ impl Renderer {
                     if batch.translucent {
                         let (view, target) = gpu.coverage_target(cx, coverage.len(), desc);
                         coverage.push(CoverageDraw {
-                            pipeline: LayerPipelines::of(&batch.gpu, |p| {
-                                cx.coverage_pipeline(p, desc)
-                            })?,
+                            pipeline: LayerPipelines::of(
+                                &batch.gpu,
+                                cx,
+                                desc,
+                                Context::coverage_pipeline,
+                            )?,
                             layer: Arc::clone(&batch.gpu),
                             spans: Arc::clone(&batch.visible),
                             view,
@@ -1700,16 +1713,19 @@ impl Renderer {
                             pipeline: cx.composite_pipeline(desc)?,
                             target,
                             direct: DirectLine {
-                                pipeline: LayerPipelines::of(&batch.gpu, |p| {
-                                    cx.mark_pipeline(p, desc)
-                                })?,
+                                pipeline: LayerPipelines::of(
+                                    &batch.gpu,
+                                    cx,
+                                    desc,
+                                    Context::mark_pipeline,
+                                )?,
                                 layer: Arc::clone(&batch.gpu),
                                 spans: Arc::clone(&batch.visible),
                             },
                         })
                     } else {
                         let pipeline =
-                            LayerPipelines::of(&batch.gpu, |p| cx.mark_pipeline(p, desc))?;
+                            LayerPipelines::of(&batch.gpu, cx, desc, Context::mark_pipeline)?;
                         Some(Draw::Marks {
                             pipeline,
                             layer: Arc::clone(&batch.gpu),

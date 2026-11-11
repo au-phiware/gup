@@ -834,7 +834,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
     pub(crate) fn force_lod_tier(&mut self, t: Option<u32>) -> &mut Self {
         self.lod = t.map(|tier| ForcedTier {
             tier,
-            build: build_tier,
+            entries: tier_entries,
             program: Context::indexed_program,
         });
         self
@@ -899,52 +899,36 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         self
     }
 
-    /// The store columns of the first x and y column channels (`None`: a
-    /// constant axis), which a chunk's tiers are built over.
-    fn position_columns(&self) -> [Option<usize>; 2] {
-        let mut out = [None; 2];
-        for (col, (i, _)) in self.column_encodings().enumerate() {
-            let axis = match M::CHANNELS[i].role {
-                Some(Role::X) => 0,
-                Some(Role::Y) => 1,
-                _ => continue,
-            };
-            out[axis].get_or_insert(col);
-        }
-        out
-    }
-
     /// The layer's draw entries ([`draw_entries`]), each chunk that stores
     /// the forced tier ([`force_lod_tier`](Self::force_lod_tier)) drawing
     /// that tier's prefix of its representatives, which are built and
     /// uploaded to `cx` on first use (GUP-715).
     fn lod_entries(&mut self, cx: &Context) -> Result<Vec<DrawEntry>> {
-        let xy = self.position_columns();
-        if self.lod.is_some() {
-            Self::check_indexed()?;
-        }
         let store = self.columns.as_mut().ok_or_else(|| {
             Error::config("layer", "prepare called before the columns were evaluated")
         })?;
         let mut entries = draw_entries(M::GEOMETRY, store.chunks());
-        let Some(lod) = self.lod else {
-            return Ok(entries);
-        };
-        if self.order.is_some() {
-            return Err(Error::config(
-                "lod",
-                format!(
-                    "{}: a layer drawn by size has no level of detail yet (its representatives \
-                     must draw largest first)",
-                    M::NAME
-                ),
-            ));
-        }
-        for e in &mut entries {
-            if let Some(n) = (lod.build)(store, cx, e.this, xy, lod.tier)? {
-                e.instances = n;
-                e.lod = Some(n);
+        if let Some(lod) = self.lod {
+            // The store columns of the first x and y column channels.
+            let (mut xy, mut col) = ([None; 2], 0);
+            for (i, e) in self.encodings.iter().enumerate() {
+                if let Some(Encoding::Column(_)) = e {
+                    match M::CHANNELS[i].role {
+                        Some(Role::X) if xy[0].is_none() => xy[0] = Some(col),
+                        Some(Role::Y) if xy[1].is_none() => xy[1] = Some(col),
+                        _ => {}
+                    }
+                    col += 1;
+                }
             }
+            let ask = TierAsk {
+                tier: lod.tier,
+                xy,
+                mark: M::NAME,
+                polyline: M::GEOMETRY == Geometry::Polyline,
+                sized: self.order.is_some(),
+            };
+            (lod.entries)(store, cx, &ask, &mut entries)?;
         }
         Ok(entries)
     }
@@ -1376,23 +1360,10 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
     /// draws a chunk's gathered representatives: an error for a polyline,
     /// whose vertex stage reads the next row (LOD is for quads only).
     fn indexed_glue(&self) -> Result<Glue> {
-        Self::check_indexed()?;
-        Ok(self.emit_glue(true))
-    }
-
-    /// Whether the mark can draw representatives: an error for a polyline.
-    fn check_indexed() -> Result<()> {
         if M::GEOMETRY == Geometry::Polyline {
-            return Err(Error::config(
-                "lod",
-                format!(
-                    "{}: a polyline reads each row's successor, so it has no level of detail \
-                     (only quad marks draw representatives)",
-                    M::NAME
-                ),
-            ));
+            return Err(no_lod(M::NAME));
         }
-        Ok(())
+        Ok(self.emit_glue(true))
     }
 
     fn emit_glue(&self, indexed: bool) -> Glue {
@@ -1678,9 +1649,20 @@ pub(crate) trait Layer: wgpu::WasmNotSendSync {
     fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
-/// [`build_tier`]'s type.
-type BuildTier =
-    fn(&mut ColumnStore, &Context, usize, [Option<usize>; 2], u32) -> Result<Option<u32>>;
+/// [`tier_entries`]'s type.
+type TierEntries = fn(&mut ColumnStore, &Context, &TierAsk, &mut [DrawEntry]) -> Result<()>;
+
+/// What [`tier_entries`] needs of a layer.
+struct TierAsk {
+    tier: u32,
+    /// The store columns of the first x and y column channels (`None`: a
+    /// constant axis), which a chunk's tiers are built over.
+    xy: [Option<usize>; 2],
+    mark: &'static str,
+    polyline: bool,
+    /// Whether the layer draws by size.
+    sized: bool,
+}
 
 /// A forced level-of-detail tier (GUP-715's seam): the tier, and the
 /// functions that build and draw it, held as pointers that only
@@ -1689,28 +1671,55 @@ type BuildTier =
 #[derive(Clone, Copy, Debug)]
 struct ForcedTier {
     tier: u32,
-    /// [`build_tier`].
-    build: BuildTier,
+    /// [`tier_entries`].
+    entries: TierEntries,
     /// [`Context::indexed_program`].
     program:
         fn(&Context, &crate::render::GlueProgram, &Glue) -> Result<Arc<crate::render::GlueProgram>>,
 }
 
-/// Chunk `k`'s representatives of tier `t` (over store columns `xy`),
-/// built and uploaded to `cx` on first use: the prefix to draw, or `None`
-/// when the chunk stores no tier `t` (it draws every row).
-fn build_tier(
+/// Point each of a layer's `entries` whose chunk stores tier `ask.tier` at
+/// that tier's prefix of its representatives, built and uploaded to `cx`
+/// on first use; a chunk that stores no such tier draws every row. An
+/// error for a polyline or a layer drawn by size.
+fn tier_entries(
     store: &mut ColumnStore,
     cx: &Context,
-    k: usize,
-    xy: [Option<usize>; 2],
-    t: u32,
-) -> Result<Option<u32>> {
-    let Some(n) = store.lod_tiers(k, xy)?.prefix(t) else {
-        return Ok(None);
-    };
-    store.upload_lod(cx, k)?;
-    Ok(Some(n))
+    ask: &TierAsk,
+    entries: &mut [DrawEntry],
+) -> Result<()> {
+    if ask.polyline {
+        return Err(no_lod(ask.mark));
+    }
+    if ask.sized {
+        return Err(Error::config(
+            "lod",
+            format!(
+                "{}: a layer drawn by size has no level of detail yet (its representatives \
+                 must draw largest first)",
+                ask.mark
+            ),
+        ));
+    }
+    for e in entries {
+        if let Some(n) = store.lod_tiers(e.this, ask.xy)?.prefix(ask.tier) {
+            store.upload_lod(cx, e.this)?;
+            e.instances = n;
+            e.lod = Some(n);
+        }
+    }
+    Ok(())
+}
+
+/// A polyline's level-of-detail error: it reads each row's successor.
+fn no_lod(mark: &str) -> Error {
+    Error::config(
+        "lod",
+        format!(
+            "{mark}: a polyline reads each row's successor, so it has no level of detail \
+             (only quad marks draw representatives)"
+        ),
+    )
 }
 
 /// The plot scale a closure-encoded channel reads through, or the error that
@@ -2627,15 +2636,18 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
                 ),
             ));
         }
-        // Every column (and a polyline's next-row column) is a vertex
-        // buffer (RFC-001 §12 risk 7).
-        let slots = glue.columns.len() + glue.successors.len();
+        // Under a forced tier, each chunk's representatives (GUP-715).
+        let entries = self.lod_entries(cx)?;
+        let lod_rows = entries.iter().any(|e| e.lod.is_some());
+        // Every column (and a polyline's next-row column, and a tier's row
+        // column) is a vertex buffer (RFC-001 §12 risk 7).
+        let slots = glue.columns.len() + glue.successors.len() + usize::from(lod_rows);
         if slots > limits.max_vertex_buffers as usize {
             let controls = if glue.controls { 2 } else { 0 };
             return Err(Error::config(
                 "layer",
                 format!(
-                    "{}: {slots} vertex columns ({} channels read from columns{}{}), and this \
+                    "{}: {slots} vertex columns ({} channels read from columns{}{}{}), and this \
                      device has {} vertex buffer slots; make some channels constants",
                     M::NAME,
                     glue.columns.len() - controls,
@@ -2649,31 +2661,21 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
                     } else {
                         ""
                     },
+                    if lod_rows {
+                        ", the level of detail's row column"
+                    } else {
+                        ""
+                    },
                     limits.max_vertex_buffers
                 ),
             ));
         }
         let store = self.columns.as_mut().expect("checked above");
         store.upload(cx)?;
-        let entries = self.lod_entries(cx)?;
-        // The indexed-rows program, when a chunk draws representatives: one
-        // more vertex column (GUP-715).
-        let indexed = if entries.iter().any(|e| e.lod.is_some()) {
-            if slots >= limits.max_vertex_buffers as usize {
-                return Err(Error::config(
-                    "layer",
-                    format!(
-                        "{}: {slots} vertex columns and the level of detail's row column, and \
-                         this device has {} vertex buffer slots; make some channels constants",
-                        M::NAME,
-                        limits.max_vertex_buffers
-                    ),
-                ));
-            }
-            let lod = self.lod.expect("only a forced tier draws representatives");
-            Some((lod.program)(cx, &program, &self.indexed_glue()?)?)
-        } else {
-            None
+        // The indexed-rows program, when a chunk draws representatives.
+        let indexed = match self.lod {
+            Some(lod) if lod_rows => Some((lod.program)(cx, &program, &self.indexed_glue()?)?),
+            _ => None,
         };
         let store = self.columns.as_ref().expect("checked above");
         // Validity buffers exist (and are bound) only when the glue reads
@@ -2685,10 +2687,16 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             .brush_binding
             .map(|_| crate::render::brush_words(store.rows()));
         // The vector targets write every row (GUP-718 writes tiers).
-        let vector = match indexed {
-            Some(_) => self.vector_slot(theme, &draw_entries(M::GEOMETRY, stored)),
-            None => self.vector_slot(theme, &entries),
-        };
+        let every_row;
+        let vector = self.vector_slot(
+            theme,
+            if lod_rows {
+                every_row = draw_entries(M::GEOMETRY, stored);
+                &every_row
+            } else {
+                &entries
+            },
+        );
         let uploaded = || {
             entries.iter().map(|d| {
                 let c = &stored[d.this];
@@ -2698,20 +2706,18 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         // A polyline in data order, bridges between its chunks; else
         // largest first when the size is a column, or each chunk in
         // upload order.
-        let spans = match &self.order {
+        let mut spans = match &self.order {
             _ if glue.polyline => polyline_spans(stored),
-            // Each chunk's tier prefix, or its rows (GUP-715).
-            _ if indexed.is_some() => entries
-                .iter()
-                .enumerate()
-                .map(|(e, d)| crate::render::Span {
-                    chunk: e as u32,
-                    rows: 0..d.instances,
-                })
-                .collect(),
             Some(order) => order.spans(stored),
             None => chunk_spans(stored),
         };
+        if lod_rows {
+            // Each chunk's tier prefix, or its rows (GUP-715): a quad
+            // layer in upload order, one span per entry.
+            for span in &mut spans {
+                span.rows.end = entries[span.chunk as usize].instances;
+            }
+        }
         let chunk_draws = || -> Vec<ChunkDraw> {
             entries
                 .iter()
