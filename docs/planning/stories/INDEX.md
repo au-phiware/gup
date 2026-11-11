@@ -137,7 +137,7 @@ either; GUP-702 last, so its code can use the new names.
 - [GUP-700](GUP-700_One_Point.md) ✅ — The point scale becomes `PointScale` and
   `Point` in the prelude and at the root is the geometry type that `Input`
   takes; tour, tutorials and docs swept. Edits `lib.rs`. Deps: GUP-686 ✅.
-- [GUP-701](GUP-701_Row_Window_Type_Name.md) 🚧 — `Window` (the streaming row
+- [GUP-701](GUP-701_Row_Window_Type_Name.md) ✅ — `Window` (the streaming row
   window) becomes `RowWindow`, so a winit host imports both without a clash;
   tour, tutorials and docs swept. Edits `selection.rs`, `lib.rs`. Deps: GUP-686
   ✅.

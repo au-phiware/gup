@@ -410,7 +410,7 @@ pub use gup_core_macros::Mark;
 /// ```
 ///
 /// A host that draws into a winit window imports both `Window`s without an
-/// alias: the row window is [`RowWindow`](crate::RowWindow), winit's is its own.
+/// alias: the row window is [`RowWindow`], winit's is its own.
 ///
 /// ```
 /// # #[cfg(feature = "window")]
