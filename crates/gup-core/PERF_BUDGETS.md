@@ -80,8 +80,8 @@ X) or `info` (printed, never fails).
 | `pipeline.link_create.cold_ms`     | 1.04      | <= 10     | `pipeline_timings`, its first run                                             |
 | `pipeline.link_create.max_ms`      | 1.06      | info      | `pipeline_timings`                                                            |
 | `wasm.wgpu.gz_bytes`               | 32,360    | info      | `scripts/wasm_size.sh`, bare wgpu                                             |
-| `wasm.scatter.gz_bytes`            | 376,445   | +2%       | `scripts/wasm_size.sh`, the reference scatter                                 |
-| `wasm.over_wgpu.gz_bytes`          | 344,085   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10                                   |
+| `wasm.scatter.gz_bytes`            | 384,562   | +2%       | `scripts/wasm_size.sh`, the reference scatter                                 |
+| `wasm.over_wgpu.gz_bytes`          | 352,202   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10                                   |
 | `wasm.per_row_type.gz_bytes`       | 1,730     | <= 2600   | `scripts/wasm_size.sh`, one more Selection row type                           |
 | `wasm.svg_export.gz_bytes`         | 4,057     | info      | `scripts/wasm_size.sh`, the scatter with `svg-export` minus without (GUP-557) |
 
@@ -564,3 +564,13 @@ seeded violation (GUP-417 retrospective).
   the +2% tolerance but 1 KB from it. Re-recorded so the tolerance measures the
   next stories, not these. Over bare wgpu 344,085 (56 KB of headroom under the
   400,000 cap).
+- **GUP-715 merged (2026-11-12, orchestrator)**: since the GUP-664 recording,
+  GUP-629 (key columns, +1,229), GUP-684 (mark outlines, +246), GUP-685 (pixel
+  and value, +132), GUP-676 (hover ring, +417), GUP-699 (view read-back, +268),
+  GUP-705 (axis clearance, +300), GUP-492 (size buckets, +89), GUP-724 (the
+  sized edge solve's reach index, +3,802, which cut a sized layer's per-frame
+  CPU from 11.6 to 0.9 ms) and GUP-715 (LOD representative buffers and the
+  indexed draw path, +2,460; the tier build itself is not linked until a tier is
+  forced) take the scatter from 376,445 to 384,562 B gz. Re-recorded. Over bare
+  wgpu 352,202 (48 KB of headroom under the 400,000 cap). GUP-716's `Lod::Auto`
+  default will link the tier build.
