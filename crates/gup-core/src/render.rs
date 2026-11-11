@@ -1477,7 +1477,8 @@ impl Renderer {
                 format!(
                     "format {:?} is sRGB, which blends translucent marks in linear light and \
                      draws them lighter than Gup's own targets; draw through a non-sRGB view \
-                     of the texture (see Prepared::draw)",
+                     of the texture: make it with its non-sRGB format in `view_formats` and \
+                     create the pass's view with that format (see Prepared::draw)",
                     desc.format
                 ),
             ));

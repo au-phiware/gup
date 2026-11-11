@@ -225,10 +225,8 @@ fn srgb_texture_with_unorm_view_format_matches_image_target() {
     );
 }
 
-/// WIP (GUP-702 AC3, blocked): the refusal is an `Err` today, but its text
-/// is wgpu's "Unable to view texture Rgba8UnormSrgb as Rgba8Unorm" and does
-/// not name `view_formats`. Gated until the story's question is answered.
-#[cfg(any())]
+/// An sRGB texture without its unorm twin in `view_formats` is refused with
+/// an error that names `view_formats` (and keeps wgpu's own message).
 #[test]
 fn srgb_texture_without_view_formats_is_refused_by_name() {
     let cx = Context::new_blocking().unwrap();
