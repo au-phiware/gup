@@ -26,6 +26,9 @@
 //!   --key-closure str|string  the rows path's key closure: `str` returns a
 //!                         `&'static str` (`encode_key`, default), `string`
 //!                         a fresh `String` per row (`encode_owned_key`)
+//!   --lod                 only the `lod_build` phase (GUP-714): build the
+//!                         level-of-detail tiers of every chunk of the rows
+//!                         as `f64` columns, on one thread
 //! ```
 //!
 //! Phases: `build` (generate the rows; not a cost of Gup), `accessor` (the
@@ -35,12 +38,49 @@
 //! internally), `first_frame` (render and readback) and `zoom` (CPU time of
 //! `Plot::zoom` + `resolve`). Each prints `metric scale.<name> <value>`.
 //! Peak RSS is `VmHWM` after each phase (Linux only).
+//!
+//! `lod_build` prints the tiers' build time per 10M rows and the peak
+//! memory a chunk's build allocates per row of the chunk (counted by the
+//! bench's allocator while the phase runs).
 
 use gup_core::column::{ColumnData, ColumnFormat, ColumnStore};
 use gup_core::prelude::*;
 use gup_core::{Column, ImageTarget, KeyColumn, Retain};
+use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Instant;
+
+/// The system allocator, counting live bytes and their peak while
+/// [`COUNTING`] is set (the `lod_build` phase).
+struct Counting;
+
+static COUNTING: AtomicBool = AtomicBool::new(false);
+static LIVE: AtomicUsize = AtomicUsize::new(0);
+static PEAK: AtomicUsize = AtomicUsize::new(0);
+
+// SAFETY: every call is forwarded to `System` unchanged.
+unsafe impl GlobalAlloc for Counting {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        if COUNTING.load(Ordering::Relaxed) {
+            let live = LIVE.fetch_add(layout.size(), Ordering::Relaxed) + layout.size();
+            PEAK.fetch_max(live, Ordering::Relaxed);
+        }
+        // SAFETY: the caller's contract is `System`'s.
+        unsafe { System.alloc(layout) }
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        if COUNTING.load(Ordering::Relaxed) {
+            LIVE.fetch_sub(layout.size(), Ordering::Relaxed);
+        }
+        // SAFETY: as above.
+        unsafe { System.dealloc(ptr, layout) }
+    }
+}
+
+#[global_allocator]
+static ALLOCATOR: Counting = Counting;
 
 struct Options {
     rows: usize,
@@ -57,6 +97,8 @@ struct Options {
     keys: Option<usize>,
     /// The rows path's key closure returns a `String`.
     key_string: bool,
+    /// Only the `lod_build` phase.
+    lod: bool,
 }
 
 fn parse() -> Options {
@@ -72,6 +114,7 @@ fn parse() -> Options {
         columns: None,
         keys: None,
         key_string: false,
+        lod: false,
     };
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -111,6 +154,7 @@ fn parse() -> Options {
                 }
             }
             "--seed" => o.seed = value().parse().expect("--seed N"),
+            "--lod" => o.lod = true,
             other => panic!("unknown option {other}"),
         }
     }
@@ -194,6 +238,11 @@ fn main() -> gup_core::Result<()> {
     let cx = Context::new_blocking()?;
     if let Some(info) = cx.adapter_info() {
         println!("adapter: {} ({:?})", info.name, info.backend);
+    }
+
+    if o.lod {
+        lod_run(&o, &cx);
+        return Ok(());
     }
 
     // 1. build
@@ -287,35 +336,36 @@ fn keyed_rows_run(
     })
 }
 
+/// Collected straight into `Arc<[F]>` (one allocation each, from a
+/// `TrustedLen` iterator): a `Vec` would be copied into its `Arc`.
+fn walk<F>(o: &Options, narrow: impl Fn(f64) -> F) -> (Arc<[F]>, Arc<[F]>) {
+    let n = o.rows;
+    let mut rng = Lcg(o.seed);
+    let step = 1000.0 / n.max(1) as f64;
+    let mut y = 0.0f64;
+    let mut xs: Arc<[F]> = (0..n).map(|i| narrow(i as f64 * step)).collect();
+    let mut ys: Arc<[F]> = (0..n)
+        .map(|_| {
+            y += rng.unit() - 0.5;
+            narrow(y)
+        })
+        .collect();
+    if o.shuffle {
+        let xm = Arc::get_mut(&mut xs).expect("unique");
+        let ym = Arc::get_mut(&mut ys).expect("unique");
+        for i in (1..n).rev() {
+            let j = (rng.next() % (i as u64 + 1)) as usize;
+            xm.swap(i, j);
+            ym.swap(i, j);
+        }
+    }
+    (xs, ys)
+}
+
 /// The rows of phase 1 as two columns (`f64`, or narrowed to `f32`),
 /// built directly so no row vector raises the peak RSS, then phases 4 to
 /// 6 on a columnar layer (GUP-628).
 fn columns_run(o: &Options, cx: &Context, wide: bool) -> gup_core::Result<()> {
-    /// Collected straight into `Arc<[F]>` (one allocation each, from a
-    /// `TrustedLen` iterator): a `Vec` would be copied into its `Arc`.
-    fn walk<F>(o: &Options, narrow: impl Fn(f64) -> F) -> (Arc<[F]>, Arc<[F]>) {
-        let n = o.rows;
-        let mut rng = Lcg(o.seed);
-        let step = 1000.0 / n.max(1) as f64;
-        let mut y = 0.0f64;
-        let mut xs: Arc<[F]> = (0..n).map(|i| narrow(i as f64 * step)).collect();
-        let mut ys: Arc<[F]> = (0..n)
-            .map(|_| {
-                y += rng.unit() - 0.5;
-                narrow(y)
-            })
-            .collect();
-        if o.shuffle {
-            let xm = Arc::get_mut(&mut xs).expect("unique");
-            let ym = Arc::get_mut(&mut ys).expect("unique");
-            for i in (1..n).rev() {
-                let j = (rng.next() % (i as u64 + 1)) as usize;
-                xm.swap(i, j);
-                ym.swap(i, j);
-            }
-        }
-        (xs, ys)
-    }
     let t = Instant::now();
     let cols = if wide {
         let (xs, ys) = walk(o, |v| v);
@@ -365,6 +415,45 @@ fn columns_run(o: &Options, cx: &Context, wide: bool) -> gup_core::Result<()> {
         drop(std::hint::black_box(widened));
     }
     Ok(())
+}
+
+/// The `lod_build` phase (GUP-714): the walk as `f64` columns, then each
+/// library-sized chunk's tiers, one after the other.
+fn lod_run(o: &Options, cx: &Context) {
+    let (xs, ys) = walk(o, |v| v);
+    let formats = [ColumnFormat::F32Relative, ColumnFormat::F32Relative];
+    let chunk = ColumnStore::chunk_rows_for(&cx.caps().limits, &formats) as usize;
+    let (mut total, mut reps, mut peak_per_row) = (0.0, 0u64, 0.0f64);
+    let mut stored = Vec::new();
+    for start in (0..o.rows).step_by(chunk.max(1)) {
+        let rows = chunk.min(o.rows - start);
+        let (cx, cy) = (&xs[start..start + rows], &ys[start..start + rows]);
+        PEAK.store(0, Ordering::Relaxed);
+        LIVE.store(0, Ordering::Relaxed);
+        COUNTING.store(true, Ordering::Relaxed);
+        let t = Instant::now();
+        let counts =
+            gup_core::__private::lod_tier_counts(rows as u32, |r| (cx[r as usize], cy[r as usize]));
+        total += ms(t);
+        COUNTING.store(false, Ordering::Relaxed);
+        peak_per_row = peak_per_row.max(PEAK.load(Ordering::Relaxed) as f64 / rows as f64);
+        reps += u64::from(*counts.last().expect("tier 0"));
+        stored.push(counts.len() - 1);
+    }
+    println!(
+        "lod_build: {} chunks of {chunk} rows, finest stored tier {:?}..={:?}",
+        stored.len(),
+        stored.iter().min(),
+        stored.iter().max()
+    );
+    metric("lod_build.ms", format!("{total:.1}"));
+    metric(
+        "lod_build.ms_per_10m",
+        format!("{:.1}", total * 1e7 / o.rows.max(1) as f64),
+    );
+    metric("lod_build.stored_reps", reps);
+    metric("lod_build.peak_bytes_per_row", format!("{peak_per_row:.2}"));
+    metric("lod_build.load_average", load_average());
 }
 
 /// Phases 2 and 3, apart from the library: the closures over every row,

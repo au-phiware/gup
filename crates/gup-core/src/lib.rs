@@ -153,6 +153,7 @@ pub mod geom;
 mod gpu_pick;
 mod guide;
 mod input;
+mod lod;
 pub mod marks;
 mod monotone;
 mod order;
@@ -448,6 +449,13 @@ pub mod prelude {
 pub mod __private {
     pub use crate::encoding::DictionarySlot;
     pub use encase;
+
+    /// Build one chunk's level-of-detail tiers (GUP-714) and return the
+    /// representatives of each stored tier, for `scale_bench --lod`.
+    pub fn lod_tier_counts(rows: u32, xy: impl Fn(u32) -> (f64, f64)) -> Vec<u32> {
+        let tiers = crate::lod::Tiers::build(rows, xy);
+        (0..).map_while(|t| tiers.prefix(t)).collect()
+    }
 
     /// The library's flattened modules (`VIEW`, `SCALE_LINEAR`, …), which a
     /// user module imports.
