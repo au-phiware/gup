@@ -18,8 +18,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Track N5: Performance at Scale **Status**: 📋 Ready **Created**:
-2026-10-23 **Revised**: 2026-11-07
+**Initiative**: Track N5: Performance at Scale **Status**: 🚧 In Progress
+**Created**: 2026-10-23 **Revised**: 2026-11-07
 
 ## Context
 
