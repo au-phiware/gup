@@ -342,3 +342,11 @@ mod accessibility_docs {
     #[doc = include_str!("../docs/ACCESSIBILITY.md")]
     struct Accessibility;
 }
+
+/// The embedding guide's snippets, compiled as doctests (GUP-702).
+#[cfg(doctest)]
+mod embedding_docs {
+    /// "Embedding Gup In Your Own wgpu App".
+    #[doc = include_str!("../docs/EMBEDDING.md")]
+    struct Embedding;
+}

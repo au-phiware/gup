@@ -28,6 +28,11 @@ what each release contains and what its version number promises.
 
 ### Added
 
+- The embedding guide, `docs/EMBEDDING.md`: drawing a chart into your own wgpu
+  app's texture (unorm or sRGB) or render pass, resizing it and forwarding
+  input, with every code block compiled as a doctest. `TextureTarget::new` and
+  `Renderer::prepare` now name the `view_formats` recipe in the error for an
+  sRGB texture or format they cannot draw through.
 - `Linear::include_zero`: an automatic domain grows to contain 0 before it is
   made nice (an explicit domain wins), so a live line that settles away from
   zero no longer sits on the axis.

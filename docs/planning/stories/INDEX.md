@@ -141,7 +141,7 @@ either; GUP-702 last, so its code can use the new names.
   window) becomes `RowWindow`, so a winit host imports both without a clash;
   tour, tutorials and docs swept. Edits `selection.rs`, `lib.rs`. Deps: GUP-686
   ✅.
-- [GUP-702](GUP-702_Guide_Embedding_Gup_In_Your_Own_Wgpu_App.md) 📋 —
+- [GUP-702](GUP-702_Guide_Embedding_Gup_In_Your_Own_Wgpu_App.md) ✅ —
   `docs/EMBEDDING.md`, compiled as doctests: `Context::from_wgpu`, a
   `TextureTarget` loop for unorm and sRGB textures, resize, input, and the
   `Renderer::prepare` and `Prepared::draw` path, with a test of the sRGB recipe.
