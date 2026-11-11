@@ -128,6 +128,23 @@ of the image and failed it on the plot rect (1.076%); one tier finer scored
   culling inside a chunk (GUP-720).
 - **A chunk whose tiers are not built draws in full** (RFC-001) - so the first
   frame at 10M is today's frame, and the build is spread over frames.
+- **Decision handed to GUP-716 (from GUP-715, 2026-11-12, orchestrator): build
+  before release.** An owned store (a `Selection<T>`, or a columnar layer with
+  any closure channel) drops the CPU copy of its full chunks after its first
+  prepare under `Retain::Auto` above 10M rows (and at any size under `GpuOnly`
+  or `Rows`); afterwards neither `Tiers::build` nor the `LodGpu` gather has a
+  CPU source. So in the prepare whose `release()` would drop a LOD-eligible
+  layer's CPU copy (quad mark, no size order, over the threshold, `Lod::Auto`),
+  build the tiers and `LodGpu` of every full chunk first; readable stores
+  (shared columns, or CPU copies kept) stay lazy per chunk. Not A (limit LOD to
+  readable stores): owned layers over 10M rows are the layers LOD is for. Not C
+  (release waits for the build): it keeps `Retain::Columns`-level CPU memory
+  until every chunk has been built, and a chunk never panned into view is never
+  released. Cost: about 0.5 s per 10M rows for the tiers (GUP-714: 484 ms) plus
+  tens of ms for the gather, on top of today's first frame of about 1 s at 10M;
+  GPU memory at most 12 B a representative, at most 6 B a data row (the
+  half-chunk cap). This qualifies "a chunk whose tiers are not built draws in
+  full" for released stores: their tiers are always built before release.
 - **Where**: `Lod` in `selection.rs` beside `Retain`; per-frame choice in the
   prepare path that makes `DrawEntry`s; `lod.rs` holds the formula.
 
