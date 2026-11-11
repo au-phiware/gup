@@ -457,6 +457,17 @@ pub mod __private {
         (0..).map_while(|t| tiers.prefix(t)).collect()
     }
 
+    /// One chunk's tier-`t` representatives (GUP-714), chunk-local rows in
+    /// draw order (every row past the stored tiers), for `lod_spike`'s
+    /// gathered twin of the indexed draw.
+    pub fn lod_tier_rows(rows: u32, xy: impl Fn(u32) -> (f64, f64), t: u32) -> Vec<u32> {
+        let tiers = crate::lod::Tiers::build(rows, xy);
+        match tiers.prefix(t) {
+            Some(n) => tiers.order[..n as usize].to_vec(),
+            None => (0..rows).collect(),
+        }
+    }
+
     /// Draw each chunk of `layer` at level-of-detail tier `t` (GUP-715's
     /// seam, `None`: every row), for `lod_spike --candidates indexed`.
     pub fn force_lod_tier<T: Send + Sync + 'static, M: crate::Mark>(
