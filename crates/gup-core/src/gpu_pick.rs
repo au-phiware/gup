@@ -403,7 +403,7 @@ impl Plot {
     /// it is when polled; compare [`GpuPick::generation`] with
     /// [`resolve_generation`](Self::resolve_generation) to discard picks
     /// drawn before the last resolve. A pick whose readback failed (a lost
-    /// device), or whose layer evicted rows ([`Window`](crate::Window)) or
+    /// device), or whose layer evicted rows ([`RowWindow`](crate::RowWindow)) or
     /// evaluated its columns again since the pick was drawn, reports no row:
     /// its stored rows were renumbered, so it is dropped rather than mapped
     /// to another row.

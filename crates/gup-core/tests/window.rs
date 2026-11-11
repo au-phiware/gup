@@ -1,7 +1,7 @@
 // Copyright (C) 2024 Corin Lawson
 // SPDX-License-Identifier: GPL-3.0-or-later
 
-//! RFC-001 S12c (GUP-482): `Window::LastRows` eviction keeps draw order,
+//! RFC-001 S12c (GUP-482): `RowWindow::LastRows` eviction keeps draw order,
 //! line bridges, picks, brush bits, culling and `Retain` consistent. Each
 //! windowed run is compared with a plot built directly from the rows the
 //! layer still holds.
@@ -62,7 +62,7 @@ fn data(kind: Kind) -> fn(usize) -> R {
 }
 
 /// A plot of `rows` drawn as `kind`, in 64-row chunks.
-fn plot_of(kind: Kind, rows: Vec<R>, window: Window, retain: Retain) -> Plot {
+fn plot_of(kind: Kind, rows: Vec<R>, window: RowWindow, retain: Retain) -> Plot {
     let scatter = || gup_core::scatter(rows.clone()).x(|r| r.x).y(|r| r.y);
     let mut plot = match kind {
         Kind::Plain | Kind::Sized | Kind::Grid => {
@@ -128,7 +128,7 @@ struct Run {
 
 impl Run {
     fn new(cx: &Context, kind: Kind, retain: Retain) -> Self {
-        let mut plot = plot_of(kind, vec![data(kind)(0)], Window::LastRows(N), retain);
+        let mut plot = plot_of(kind, vec![data(kind)(0)], RowWindow::LastRows(N), retain);
         let feed = appender(&mut plot, kind);
         let start = cx.upload_stats();
         plot.resolve(cx, W as f32, H as f32).unwrap();
@@ -184,7 +184,7 @@ impl Run {
     fn fresh(&mut self) -> Plot {
         let first = self.first();
         let rows = (first..self.total).map(data(self.kind)).collect();
-        plot_of(self.kind, rows, Window::All, Retain::Auto)
+        plot_of(self.kind, rows, RowWindow::All, Retain::Auto)
     }
 }
 

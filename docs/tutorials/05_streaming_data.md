@@ -11,7 +11,7 @@
 
 - How to get an `Appender` from a chart and push rows into it from any thread
 - When pushed rows are drawn
-- How `Window::LastRows(n)` bounds the rows a layer holds
+- How `RowWindow::LastRows(n)` bounds the rows a layer holds
 - What `Retain` does for a very large layer
 - How a line chart gains a line for each new key
 - What happens to an appender when its chart goes away
@@ -144,7 +144,7 @@ fn main() -> gup::Result<()> {
     let mut chart = gup::line([(0.0, 0.0)])
         .x(|p| p.0)
         .y(|p| p.1)
-        .window(Window::LastRows(2_000));
+        .window(RowWindow::LastRows(2_000));
     let feed = chart.appender();
 
     std::thread::spawn(move || {
@@ -164,8 +164,9 @@ fn main() -> gup::Result<()> {
 
 ## Step 3: Bounding Memory With a Window
 
-A chart that runs for days cannot keep every row. `window(Window::LastRows(n))`
-keeps the newest `n` rows and lets older ones go. `Window::All` is the default.
+A chart that runs for days cannot keep every row.
+`window(RowWindow::LastRows(n))` keeps the newest `n` rows and lets older ones
+go. `RowWindow::All` is the default.
 
 Rows leave a whole chunk at a time (a chunk is the unit of the GPU buffers), so
 a layer holds between `n` and about `1.25 × n` rows, not exactly `n` (a chunk
@@ -181,7 +182,7 @@ fn main() -> gup::Result<()> {
     let mut chart = gup::line(Vec::<(f64, f64)>::new())
         .x(|p| p.0)
         .y(|p| p.1)
-        .window(Window::LastRows(8_000));
+        .window(RowWindow::LastRows(8_000));
     let feed = chart.appender();
 
     for batch in 0..10 {
@@ -220,7 +221,7 @@ fn main() -> gup::Result<()> {
     let mut chart = gup::line(Vec::<(f64, f64)>::new())
         .x(|p| p.0)
         .y(|p| p.1)
-        .window(Window::LastRows(1_024))
+        .window(RowWindow::LastRows(1_024))
         .y_scale(Linear::new().include_zero());
     let feed = chart.appender();
 

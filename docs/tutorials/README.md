@@ -22,7 +22,7 @@ Before you begin, make sure you have:
 | 2   | [Plots and Selections](02_data_binding.md)               | What a builder is made of: layers of marks on shared scales, colour scales with legends, a second y axis.    |
 | 3   | [Custom Shader Functions](03_custom_shader_functions.md) | Chain scales with `.then(..)`, write your own in WGSL with `#[wgsl_function]` and give it a CPU mirror.      |
 | 4   | [Interactions](04_interactions.md)                       | Tooltips, hover and click on rows, wheel zoom, drag pan, brushing, and testing it all by sending `Input`.    |
-| 5   | [Streaming Data](05_streaming_data.md)                   | Push rows from another thread with an `Appender`, bound memory with `Window::LastRows`, grow keyed lines.    |
+| 5   | [Streaming Data](05_streaming_data.md)                   | Push rows from another thread with an `Appender`, bound memory with `RowWindow::LastRows`, grow keyed lines. |
 | 6   | [Custom Marks](06_custom_marks.md)                       | Write a new mark with `#[derive(Mark)]` and WGSL: channel roles, setters, CPU and GPU picking.               |
 | 7   | [A Tour of Chart Types](07_chart_types.md)               | Every chart Gup draws, when to choose it and the few lines that make it: copy the closest one.               |
 

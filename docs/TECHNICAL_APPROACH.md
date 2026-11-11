@@ -112,7 +112,7 @@ drawn by one instanced draw.
 - **Appending.** `Selection::append`, or an `Appender` handle from any thread,
   evaluates only the new rows and uploads only their bytes. The handle wakes the
   host through `Chart::set_waker`.
-- **Windows.** `Window::LastRows(n)` keeps at least the newest `n` rows,
+- **Windows.** `RowWindow::LastRows(n)` keeps at least the newest `n` rows,
   dropping whole chunks from the front (chunks are capped at `max(1024, n / 4)`
   rows).
 - **Counting.** Every buffer and texture write goes through `Context` and is
@@ -129,7 +129,7 @@ let tick = |i: u32| Tick { t: f64::from(i), price: 100.0 + f64::from(i % 17) };
 let mut chart = gup::line(Vec::<Tick>::new())
     .x(|t| t.t)
     .y(|t| t.price)
-    .window(Window::LastRows(10_000));
+    .window(RowWindow::LastRows(10_000));
 let feed = chart.appender();
 std::thread::spawn(move || feed.extend((0..25_000).map(tick)).unwrap())
     .join()
@@ -140,7 +140,7 @@ assert_eq!(image.dimensions(), (640, 360));
 # Ok::<(), gup::Error>(())
 ```
 
-Findings: [S0a][rfc-s0a]; S4b (nulls); [S12][rfc-s12] (append, `Window`).
+Findings: [S0a][rfc-s0a]; S4b (nulls); [S12][rfc-s12] (append, `RowWindow`).
 
 ## Marks and typed channels
 

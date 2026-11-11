@@ -61,7 +61,7 @@ pub fn window() -> gup::Result<impl Chart> {
         .title("A window on the newest readings")
         .x_title("Time (s)")
         .y_title("Level")
-        .window(Window::LastRows(2_000));
+        .window(RowWindow::LastRows(2_000));
     chart.layers_mut()[0].retain(Retain::GpuOnly);
     let feed = chart.appender();
 

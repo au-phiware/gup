@@ -57,7 +57,7 @@ window, `gup::show` redraws when rows arrive. This is the producer from
 
 ## A window on the newest rows
 
-A chart that runs for days cannot keep every row. `Window::LastRows(n)` keeps
+A chart that runs for days cannot keep every row. `RowWindow::LastRows(n)` keeps
 the newest `n` and lets older rows go. `Retain::GpuOnly` also drops the CPU copy
 of each row after it is uploaded, so the rows live on the GPU alone.
 
@@ -72,7 +72,7 @@ let mut chart = gup::line(Vec::<Sample>::new())
     .title("A window on the newest readings")
     .x_title("Time (s)")
     .y_title("Level")
-    .window(Window::LastRows(2_000));
+    .window(RowWindow::LastRows(2_000));
 chart.layers_mut()[0].retain(Retain::GpuOnly);
 let feed = chart.appender();
 
@@ -103,7 +103,7 @@ on a second device.
 
 **Go deeper**: [Tutorial 5](../tutorials/05_streaming_data.md), "Step 1" for the
 appender, "Step 3" for windows and "Step 4" for `Retain`. API: `Appender`,
-`Window`, `Retain`, `Selection::append`.
+`RowWindow`, `Retain`, `Selection::append`.
 
 **Not in 0.1**: `Appender` does not feed a columnar layer (chapter 11): a layer
 made from `Columns` cannot be appended to.

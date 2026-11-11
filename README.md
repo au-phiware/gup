@@ -168,7 +168,7 @@ See [`TECHNICAL_APPROACH.md`](./docs/TECHNICAL_APPROACH.md).
 - **Shader functions with CPU mirrors**: `ShaderFn`, `then` and
   `#[wgsl_function]`, composed at build time.
 - **GPU column store**: chunked, relative origins, validity bits, dictionaries,
-  `Retain`, `append` and `Window`.
+  `Retain`, `append` and `RowWindow`.
 - **Typed channels and marks**: `#[derive(Mark)]`, compile-time errors.
 - **One scale family**: linear, pow, log, symlog, time, band, point and colour
   scales, with ticks and legends from the mirrors.

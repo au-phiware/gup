@@ -125,7 +125,7 @@ what each release contains and what its version number promises.
 - Interaction: picking, tooltips, wheel zoom, drag pan and brushing. Zooming and
   panning write no column data to the GPU.
 - Streaming: `append` and `Appender` to add rows while a chart is showing, and
-  `Window` to bound how many rows are kept.
+  `RowWindow` to bound how many rows are kept.
 - Columnar layers: `Plot::add_columns` draws `Columns` of `f64` or `f32`
   directly, with `x_column`, `y_column` and `encode_column`, without a row type
   or a closure per row. Gup keeps no copy of the columns: a 10M-point scatter
@@ -171,6 +171,10 @@ what each release contains and what its version number promises.
 
 ### Changed
 
+- The row window `Window` is now `RowWindow` (`RowWindow::All`,
+  `RowWindow::LastRows(n)`), so a winit host imports its own `Window` and
+  `gup::prelude::*` together without an alias. The `.window(..)` methods keep
+  their names.
 - The point scale `Point` is now `PointScale`, and `Point` at the root and in
   the prelude is the geometry type (`geom::Point`) that `Input`, `Chart::pixel`
   and the pick methods take, so `use gup::prelude::*;` is enough to write
