@@ -78,21 +78,16 @@ mask tasks that measure them.
 
 ## Tutorials
 
-> The tutorials below are out of date: they were written for the API before the
-> RFC-001 flip and do not compile against `gup` today. They are rewritten as
-> tested Markdown in track N1 of the strategic review. Where they disagree with
-> [Technical Approach](./TECHNICAL_APPROACH.md), it wins.
-
 ### [📖 Tutorial Series](./tutorials/README.md)
 
-Six step-by-step tutorials that take you from your first chart to advanced
-topics. Start with [Getting Started](./tutorials/01_getting_started.md) if you
-are new to Gup.
+Seven step-by-step tutorials that take you from your first chart to advanced
+topics. Every code block is a doctest. Start with
+[Getting Started](./tutorials/01_getting_started.md) if you are new to Gup.
 
 1. [Getting Started](./tutorials/01_getting_started.md) — create your first
    scatter chart
-2. [Data Binding](./tutorials/02_data_binding.md) — bind custom structs with
-   `Selection<T, M>`
+2. [Plots and Selections](./tutorials/02_data_binding.md) — layers of marks on
+   shared scales
 3. [Custom Shader Functions](./tutorials/03_custom_shader_functions.md) — GPU
    transforms with `#[wgsl_function]`
 4. [Interactions](./tutorials/04_interactions.md) — hover, click, brush,
@@ -100,6 +95,8 @@ are new to Gup.
 5. [Streaming Data](./tutorials/05_streaming_data.md) — live data with
    `Appender`
 6. [Custom Marks](./tutorials/06_custom_marks.md) — implement new mark types
+7. [A Tour of Chart Types](./tutorials/07_chart_types.md) — every chart Gup
+   draws, and the few lines that make it
 
 ## Archive
 

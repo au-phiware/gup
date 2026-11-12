@@ -116,9 +116,10 @@ has been resolved.
 (`End` the last). The focused row is hovered exactly as if the pointer were on
 it: its `Enter` and `Leave` handlers run and its tooltip shows. A ring is drawn
 around it in the theme's title colour with a contrasting edge, so it reads on
-the light, dark and high-contrast themes. Moving the pointer onto another row
-ends keyboard focus. A key zoom or pan keeps focus while the row stays inside
-the plot and ends it once the row has left.
+the light, dark and high-contrast themes. A bar, histogram bin, heatmap cell or
+box plot box is outlined whole instead. Moving the pointer onto another row ends
+keyboard focus. A key zoom or pan keeps focus while the row stays inside the
+plot and ends it once the row has left.
 
 ```rust
 use gup::prelude::*;
