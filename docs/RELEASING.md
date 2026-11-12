@@ -20,9 +20,12 @@ All seven crates (`gup`, `gup-core`, `gup-core-macros`, `gup-wgsl`, `gup-text`,
      run of every workflow on `origin/main` and every job of it, including the
      Platforms workflow's Windows and macOS (Metal) jobs (GUP-591), and is
      `SKIP` without an authenticated `gh`: then read the runs yourself
-     (`gh run list --commit <sha>`, `gh run view <id> --json jobs`). If the
-     macOS job is red, neither `CHANGELOG.md` nor `README.md` may claim macOS
-     support.
+     (`gh run list --commit <sha>`, `gh run view <id> --json jobs`). With
+     `scripts/release_check.sh --only ci --ci-ref <ref>` (GUP-606) the row reads
+     the runs of `<ref>`'s commit instead, for example a branch you have pushed
+     before merging it; it is `SKIP` when that commit was never pushed (no
+     remote-tracking ref contains it). If the macOS job is red, neither
+     `CHANGELOG.md` nor `README.md` may claim macOS support.
 - [ ] 2. **Owner**: `cargo login` with a crates.io API token scoped to
      `publish-new` and `publish-update`.
 - [ ] 3. **Owner**: confirm the seven names are still free

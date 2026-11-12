@@ -285,6 +285,45 @@ new_ci ci_noauth
 run_ci ci_noauth FAKE_GH_NOAUTH=1
 if ! { ((rc == 0)) && grep -q 'SKIP' <<<"$out"; }; then fail "ci_noauth: ci should SKIP when gh is not authenticated: rc=$rc $out"; fi
 
+# run_ci_ref NAME REF: the ci check with --ci-ref REF and the fake gh first on PATH.
+run_ci_ref() {
+  local d=$tmp/$1
+  : >"$d/gh/calls"
+  out=$(PATH="$tmp/bin:$PATH" FAKE_GH_DIR="$d/gh" RELEASE_CHECK_ROOT="$d" CARGO_TARGET_DIR="$tmp/logs" \
+    "$script" --only ci --ci-ref "$2" 2>&1)
+  rc=$?
+}
+
+# --ci-ref (GUP-606): a pushed branch's commit is read, not origin/main's.
+new_ci ci_ref_pushed
+base=$(git -C "$tmp/ci_ref_pushed" rev-parse HEAD)
+git -C "$tmp/ci_ref_pushed" commit -q --allow-empty -m topic
+topic=$(git -C "$tmp/ci_ref_pushed" rev-parse HEAD)
+git -C "$tmp/ci_ref_pushed" update-ref refs/remotes/origin/topic HEAD
+run_ci_ref ci_ref_pushed origin/topic
+((rc == 0)) || fail "ci_ref_pushed: ci should pass for a pushed branch: $out"
+grep -q "run list --commit $topic " "$tmp/ci_ref_pushed/gh/calls" || fail "ci_ref_pushed: runs of $topic were not read: $(cat "$tmp/ci_ref_pushed/gh/calls")"
+if grep -q "run list --commit $base " "$tmp/ci_ref_pushed/gh/calls"; then
+  fail "ci_ref_pushed: origin/main's runs were read instead of the branch's"
+fi
+
+# --ci-ref HEAD on a commit no remote-tracking ref contains: SKIP, no gh run list.
+new_ci ci_ref_unpushed
+git -C "$tmp/ci_ref_unpushed" commit -q --allow-empty -m local
+run_ci_ref ci_ref_unpushed HEAD
+((rc == 0)) || fail "ci_ref_unpushed: ci should not fail for an unpushed commit: rc=$rc $out"
+grep -q 'SKIP' <<<"$out" || fail "ci_ref_unpushed: ci should SKIP for an unpushed commit: $out"
+grep -q 'was not pushed' "$tmp/logs/release-check/ci.log" || fail "ci_ref_unpushed: no reason in the log: $(cat "$tmp/logs/release-check/ci.log")"
+if grep -q '^run list' "$tmp/ci_ref_unpushed/gh/calls"; then
+  fail "ci_ref_unpushed: gh run list was asked for an unpushed commit"
+fi
+
+# A ref that is not a commit is a failure, not a SKIP.
+new_ci ci_ref_unknown
+run_ci_ref ci_ref_unknown no-such-ref
+((rc != 0)) || fail "ci_ref_unknown: ci should fail for an unknown ref: $out"
+grep -q 'no commit no-such-ref' "$tmp/logs/release-check/ci.log" || fail "ci_ref_unknown: wrong reason: $(cat "$tmp/logs/release-check/ci.log")"
+
 # The script never changes a workflow run.
 if grep -nE 'gh (run (rerun|cancel|watch|delete)|workflow|api)' "$script" | grep -v '^[0-9]*:#'; then
   fail "release_check.sh must only read workflow runs"

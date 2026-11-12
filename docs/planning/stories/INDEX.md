@@ -470,7 +470,7 @@ and WASM harness after it.
   reads the latest workflow job conclusions. Deps: GUP-598 ✅.
 - [GUP-605](GUP-605_Reproduce_Publish_Check_Shared_Dir_Failure.md) 💡 — find the
   cause of the shared-directory publish-check failure. Deps: GUP-603 ✅.
-- [GUP-606](GUP-606_Release_Check_Branch_Workflow_Runs.md) 💡 — `release-check`
+- [GUP-606](GUP-606_Release_Check_Branch_Workflow_Runs.md) ✅ — `release-check`
   `--ci-ref` to read a branch's runs. Deps: GUP-604 ✅.
 
 Owner steps (not worker stories), in GUP-598's `docs/RELEASING.md`: a crates.io
