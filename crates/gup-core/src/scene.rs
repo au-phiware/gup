@@ -217,6 +217,16 @@ impl MarkBatch {
         self.visible.len()
     }
 
+    /// Instances of the spans that can be seen: the rows the batch draws,
+    /// or under a level of detail its representatives
+    /// (`__private::visible_instances`, for tests and benches).
+    pub(crate) fn visible_instances(&self) -> u64 {
+        self.visible
+            .iter()
+            .map(|s| u64::from(s.rows.end - s.rows.start))
+            .sum()
+    }
+
     /// Number of column chunks. Each is one instanced draw, unless the
     /// layer draws its rows largest first and appended rows interleave
     /// with the stored ones (see [`Prepared::draw_calls`](crate::Prepared::draw_calls)).

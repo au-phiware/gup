@@ -486,10 +486,10 @@ pub mod __private {
         layer.lod_tier_builds()
     }
 
-    /// Instances the data layers of `prepared` draw (rows, or
+    /// Instances `batch` draws in its visible spans (rows, or
     /// representatives under a level of detail), for tests and benches.
-    pub fn drawn_instances(prepared: &crate::Prepared) -> u64 {
-        prepared.mark_instances()
+    pub fn visible_instances(batch: &crate::scene::MarkBatch) -> u64 {
+        batch.visible_instances()
     }
 
     /// The library's flattened modules (`VIEW`, `SCALE_LINEAR`, …), which a

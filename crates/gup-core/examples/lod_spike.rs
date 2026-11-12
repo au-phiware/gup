@@ -8,8 +8,8 @@
 //! ```text
 //! cargo run -p gup-core --release --example lod_spike -- [options]
 //!   --rows N            rows (default 10000000); x sorted, y a random walk
-//!   --candidates LIST   comma list of base,density,pyramid,tiles
-//!                       (default all four)
+//!   --candidates LIST   comma list of base,density,pyramid,tiles,
+//!                       indexed,gathered,auto (default the first four)
 //!   --views LIST        comma list of full,zoom (default both); zoom is 10x
 //!                       on x and y about the middle row
 //!   --frames N          measured frames per view (default 30)
@@ -47,6 +47,9 @@
 //! - `gathered` (GUP-715's control): the same representatives of the
 //!   visible chunks gathered into a plain columnar layer, as (B) draws: the
 //!   same instances without the row column.
+//! - `auto` (GUP-716): the library's `Lod::Auto`, each visible chunk's
+//!   tier chosen per frame (one tier finer than one point per pixel of
+//!   area); its tiers build in the first, unmeasured frame (`setup_ms`).
 //! - `tiles` (C): per chunk, count histograms of the same grid at tiers 8,
 //!   10, 12 and 14; each frame merges the visible chunks' cells of the
 //!   finest stored tier with cells of at least one pixel and draws them as
@@ -86,6 +89,7 @@ enum Cand {
     Tiles,
     Indexed,
     Gathered,
+    Auto,
 }
 
 impl Cand {
@@ -97,6 +101,7 @@ impl Cand {
             Cand::Tiles => "tiles",
             Cand::Indexed => "indexed",
             Cand::Gathered => "gathered",
+            Cand::Auto => "auto",
         }
     }
 }
@@ -167,6 +172,7 @@ fn parse() -> Options {
                         "tiles" => Cand::Tiles,
                         "indexed" => Cand::Indexed,
                         "gathered" => Cand::Gathered,
+                        "auto" => Cand::Auto,
                         _ => panic!("unknown candidate {c}"),
                     })
                     .collect()
@@ -827,7 +833,13 @@ impl LibPlot {
         Self { plot, x, y }
     }
 
+    /// Every row a circle (`Lod::Off`: the prototypes draw exactly what
+    /// they select).
     fn circles(xs: impl Into<Column>, ys: impl Into<Column>, radius: f32) -> Self {
+        Self::circles_lod(xs, ys, radius, Lod::Off)
+    }
+
+    fn circles_lod(xs: impl Into<Column>, ys: impl Into<Column>, radius: f32, lod: Lod) -> Self {
         let mut p = Self::new();
         let cols = Columns::new()
             .with("x", xs)
@@ -837,7 +849,8 @@ impl LibPlot {
             .add_columns::<Circle>(&cols)
             .x_column(&cols["x"])
             .y_column(&cols["y"])
-            .attr(Circle::RADIUS, Px(radius));
+            .attr(Circle::RADIUS, Px(radius))
+            .lod(lod);
         p
     }
 
@@ -856,6 +869,8 @@ struct Measured {
     cpu: Vec<f64>,
     clock: Vec<f64>,
     drawn: u64,
+    /// The data layer's visible instances in the last frame.
+    visible: u64,
     draws: usize,
     image: Option<image::RgbaImage>,
     /// Per-view preparation the prototype does once (a gather) and the
@@ -888,6 +903,17 @@ fn measure_lib(
         lib.set(dom, if last { 0.0 } else { jitter(frame) })?;
         extra();
         let resolved = lib.plot.resolve(&gpu.cx, w as f32, h as f32)?;
+        m.visible = resolved
+            .scene
+            .items
+            .iter()
+            .filter_map(|i| match &i.kind {
+                gup_core::scene::ItemKind::Marks(b) => {
+                    Some(gup_core::__private::visible_instances(b))
+                }
+                _ => None,
+            })
+            .sum();
         let prepared = gpu.renderer.prepare(&gpu.cx, &resolved.scene, &gpu.desc)?;
         m.draws = prepared.draw_calls();
         let mut encoder = gpu.cx.device().create_command_encoder(&Default::default());
@@ -1705,6 +1731,35 @@ fn main() -> gup_core::Result<()> {
                     None,
                     "extra_gpu_bytes_per_row",
                     format!("{:.2}", (stored * 12) as f64 / o.rows as f64),
+                );
+            }
+            Cand::Auto => {
+                let mut lib = LibPlot::circles_lod(
+                    Arc::clone(&data.xs),
+                    Arc::clone(&data.ys),
+                    o.radius,
+                    Lod::Auto,
+                );
+                for (v, view) in &views {
+                    let t = Instant::now();
+                    // The first frame of the first view builds and uploads
+                    // every visible chunk's tiers (headless: all at once).
+                    lib.set(view.dom, 0.0)?;
+                    lib.plot
+                        .resolve(&gpu.cx, o.size.0 as f32, o.size.1 as f32)?;
+                    let setup = ms(t.elapsed());
+                    let mut m = measure_lib(&mut gpu, &o, &mut lib, view.dom, || {})?;
+                    m.drawn = m.visible;
+                    m.setup_ms = setup;
+                    report_view(&o, cand, *v, &m);
+                    rows.push(Row { cand, view: *v, m });
+                }
+                let layer = lib.plot.layer_mut::<(), Circle>().expect("the circles");
+                metric(
+                    cand,
+                    None,
+                    "chunks_built",
+                    gup_core::__private::lod_tier_builds(layer),
                 );
             }
             Cand::Gathered => {

@@ -989,7 +989,9 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
     /// it (GUP-715).
     fn lod_entries(&mut self, cx: &Context, frame: &lod::Frame<'_>) -> Result<Vec<DrawEntry>> {
         let rows = self.len() as u64;
-        let eligible = self.lod_mark();
+        // A layer drawn largest first keeps every row until GUP-721 orders
+        // its representatives by size.
+        let eligible = self.lod_mark() && self.order.is_none();
         let release = !self.retain.keeps_columns(rows);
         let appended = self.appended > 0;
         let store = self.columns.as_ref().ok_or_else(|| {
