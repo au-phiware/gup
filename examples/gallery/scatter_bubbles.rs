@@ -43,6 +43,7 @@ pub fn chart() -> ScatterChart<Country> {
         .y(|c| c.life)
         .color(|c| c.region)
         .size(|c| c.people)
+        .size_scale(Pow::sqrt().range(Px(4.0), Px(16.0)))
         .x_scale(Log::new())
         .x_tick_format(dollars)
         .title("Wealth and health of nations")

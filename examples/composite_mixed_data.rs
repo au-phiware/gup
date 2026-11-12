@@ -25,11 +25,17 @@ fn main() -> gup::Result<()> {
     let fit = [(0.0, 5.0), (10.0, 25.0)];
 
     let mut plot = Plot::new();
-    plot.title("Observations and fit");
+    plot.title("Observations and fit")
+        .x_title("Dose")
+        .y_title("Response");
     plot.circles(observations)
         .x(|o| o.x)
         .y(|o| o.y)
         .radius(Px(3.0));
-    plot.line(fit).x(|f| f.0).y(|f| f.1).width(Px(2.0));
+    plot.line(fit)
+        .x(|f| f.0)
+        .y(|f| f.1)
+        .color(OKABE_ITO_DISTINCT[1])
+        .width(Px(2.0));
     gup::show(plot)
 }
