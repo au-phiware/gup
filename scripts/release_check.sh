@@ -8,7 +8,7 @@
 # publishes, tags or pushes: the only publish it runs is the dry run inside
 # `mask publish-check`. `mask release-check` runs this script.
 #
-#   scripts/release_check.sh [--only CHECK[,CHECK...]] [-h]
+#   scripts/release_check.sh [--only CHECK[,CHECK...]] [--ci-ref REF] [-h]
 #
 # Checks, in order:
 #   all-check    mask all-check
@@ -23,7 +23,9 @@
 #   clean-tree   no uncommitted paths, and HEAD is on or above origin/main
 #   ci           the latest run of every workflow on origin/main succeeded, and
 #                so did its jobs, including Windows and macOS (SKIP without an
-#                authenticated gh or the network; read-only, GUP-604)
+#                authenticated gh or the network; read-only, GUP-604). With
+#                --ci-ref REF, the runs of REF's commit instead (GUP-606), and
+#                SKIP when that commit was never pushed
 #
 # Expected time: about 45 minutes (EXPECTED_MINUTES below; re-record it after
 # a release-day run). It is meant for release day, not for every commit. Needs
@@ -45,14 +47,18 @@ root=${RELEASE_CHECK_ROOT:-$here}
 published=(gup gup-core gup-core-macros gup-wgsl gup-text gup-egui gup-bevy)
 all_checks=(all-check tests merge-check publish docs-rs one-version seven categories clean-tree ci)
 EXPECTED_MINUTES=45
+# The commit whose workflow runs the ci check reads (GUP-606).
+ci_ref=origin/main
 
 usage() {
   cat <<'EOF'
-usage: scripts/release_check.sh [--only CHECK[,CHECK...]] [-h]
+usage: scripts/release_check.sh [--only CHECK[,CHECK...]] [--ci-ref REF] [-h]
 
-  --only  run just these checks (all-check, tests, merge-check, publish,
-          docs-rs, one-version, seven, categories, clean-tree, ci)
-  -h      print this usage
+  --only    run just these checks (all-check, tests, merge-check, publish,
+            docs-rs, one-version, seven, categories, clean-tree, ci)
+  --ci-ref  the commit whose workflow runs the ci check reads (default
+            origin/main); SKIP when that commit was never pushed
+  -h        print this usage
 EOF
 }
 
@@ -65,6 +71,14 @@ while (($#)); do
       exit 2
     }
     IFS=, read -r -a only <<<"$2"
+    shift 2
+    ;;
+  --ci-ref)
+    [[ $# -ge 2 && -n $2 ]] || {
+      usage >&2
+      exit 2
+    }
+    ci_ref=$2
     shift 2
     ;;
   -h | --help)
@@ -224,8 +238,10 @@ required_jobs=(
   'Platforms|macOS render smoke'
 )
 
-# The latest run of every workflow on origin/main, and its jobs (GUP-604).
-# Exit 2 (SKIP) when `gh` is missing, not logged in or cannot reach GitHub.
+# The latest run of every workflow on the ci_ref commit (origin/main by
+# default), and its jobs (GUP-604, GUP-606). Exit 2 (SKIP) when `gh` is
+# missing, not logged in or cannot reach GitHub, or when the commit was never
+# pushed (no remote-tracking ref contains it, so it has no runs).
 # Read-only: only `gh auth status`, `gh run list` and `gh run view`.
 check_ci() {
   local sha runs wf run id status conclusion jobs line job state other bad=0
@@ -237,15 +253,19 @@ check_ci() {
     echo "skipped: gh is not authenticated (gh auth login)"
     return 2
   fi
-  sha=$(git -C "$root" rev-parse --verify -q origin/main) || {
-    echo "no origin/main to read the workflow runs of"
+  sha=$(git -C "$root" rev-parse --verify -q "$ci_ref^{commit}") || {
+    echo "no commit $ci_ref to read the workflow runs of"
     return 1
   }
+  if [[ -z $(git -C "$root" for-each-ref --count=1 --contains "$sha" --format='%(refname)' refs/remotes/) ]]; then
+    echo "skipped: $ci_ref ($(git -C "$root" rev-parse --short "$sha")) was not pushed (no remote-tracking ref has it)"
+    return 2
+  fi
   runs=$(gh run list --commit "$sha" --limit 200 --json databaseId,workflowName,status,conclusion,createdAt) || {
     echo "skipped: gh run list failed (no network?)"
     return 2
   }
-  echo "origin/main: $sha"
+  echo "$ci_ref: $sha"
   while IFS= read -r wf; do
     run=$(jq -c --arg w "$wf" '[.[] | select(.workflowName == $w)] | sort_by(.createdAt, .databaseId) | last // empty' <<<"$runs")
     if [[ -z $run ]]; then
