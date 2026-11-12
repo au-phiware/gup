@@ -28,6 +28,11 @@ fn main() {
     rows.sort_by(|a, b| a.gdp_per_capita.total_cmp(&b.gdp_per_capita));
     let (mut plot, x, y) = scatter::plot_rows_chunked(rows, Px(3.0), Some(CHUNK_ROWS));
     plot.chunk_culling(true);
+    // Recorded drawing every row: tier builds and choices would join the
+    // resolves timed here (GUP-716).
+    plot.layer_mut::<scatter::Country, Circle>()
+        .expect("the scatter")
+        .lod(Lod::Off);
     let cx = Context::new_blocking().expect("a GPU context");
 
     let mut full = None;

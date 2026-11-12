@@ -29,6 +29,10 @@
 //!   --lod                 only the `lod_build` phase (GUP-714): build the
 //!                         level-of-detail tiers of every chunk of the rows
 //!                         as `f64` columns, on one thread
+//!   --lod-draw auto|off   the layer's `Lod` (default off, every row drawn,
+//!                         as the phases were first recorded); `auto` adds
+//!                         the tier build of every visible chunk to
+//!                         `first_resolve` (GUP-716)
 //! ```
 //!
 //! Phases: `build` (generate the rows; not a cost of Gup), `accessor` (the
@@ -99,6 +103,8 @@ struct Options {
     key_string: bool,
     /// Only the `lod_build` phase.
     lod: bool,
+    /// The layer's level of detail.
+    lod_draw: Lod,
 }
 
 fn parse() -> Options {
@@ -115,6 +121,7 @@ fn parse() -> Options {
         keys: None,
         key_string: false,
         lod: false,
+        lod_draw: Lod::Off,
     };
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -133,6 +140,13 @@ fn parse() -> Options {
                 o.retain_name = v;
             }
             "--shuffle" => o.shuffle = true,
+            "--lod-draw" => {
+                o.lod_draw = match value().as_str() {
+                    "auto" => Lod::Auto,
+                    "off" => Lod::Off,
+                    _ => panic!("--lod-draw auto|off"),
+                }
+            }
             "--size" => {
                 let v = value();
                 let (w, h) = v.split_once('x').expect("--size WxH");
@@ -280,7 +294,8 @@ fn main() -> gup_core::Result<()> {
             .x(fx)
             .y(fy)
             .attr(Circle::RADIUS, Px(1.5))
-            .retain(o.retain);
+            .retain(o.retain)
+            .lod(o.lod_draw);
     })
 }
 
@@ -321,7 +336,8 @@ fn keyed_rows_run(
             .x(|r: &(f64, f64, u32)| r.0)
             .y(|r: &(f64, f64, u32)| r.1)
             .attr(Circle::RADIUS, Px(1.5))
-            .retain(o.retain);
+            .retain(o.retain)
+            .lod(o.lod_draw);
         if o.key_string {
             layer.attr(
                 Circle::FILL,
@@ -392,7 +408,8 @@ fn columns_run(o: &Options, cx: &Context, wide: bool) -> gup_core::Result<()> {
             .x_column(&cols["x"])
             .y_column(&cols["y"])
             .attr(Circle::RADIUS, Px(1.5))
-            .retain(o.retain);
+            .retain(o.retain)
+            .lod(o.lod_draw);
         if let Some(keys) = &key_column {
             layer.attr(
                 Circle::FILL,

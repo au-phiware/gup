@@ -701,6 +701,11 @@ fn main() {
         (plot, XScale::Linear(x), y)
     };
     plot.chunk_culling(o.cull);
+    // The budgets in PERF_BUDGETS.md were recorded drawing every row; the
+    // level of detail has its own measurements (GUP-717).
+    if let Some(layer) = plot.layer_mut::<scatter::Country, Circle>() {
+        layer.lod(Lod::Off);
+    }
     println!(
         "generated {} rows in {:.1} ms",
         o.points,
