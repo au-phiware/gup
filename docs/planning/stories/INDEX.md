@@ -118,7 +118,7 @@ Backlog triage for later tracks (notes only; their stories are not written):
 - [GUP-659](GUP-659_Tick_Format_Below_One_Thousand.md) ✅ — The scatter_bubbles
   gallery axis writes "$500" instead of "$0.5k" (a named `dollars` function in
   the example), two goldens re-blessed. Deps: GUP-594 ✅.
-- [GUP-733](GUP-733_Gallery_And_Example_Polish.md) 🚧 — The composite fit line
+- [GUP-733](GUP-733_Gallery_And_Example_Polish.md) ✅ — The composite fit line
   takes a distinct palette colour and the example gets axis titles; the
   scatter_bubbles smallest bubbles get a larger minimum radius, goldens
   re-blessed. Deps: GUP-658 ✅, GUP-659 ✅.
