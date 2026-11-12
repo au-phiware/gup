@@ -179,12 +179,16 @@ const LOD_TIER_BIAS: u32 = 1;
 /// t = floor(16 + (ex + ey) / 2 - 0.5 * log2(A)) + LOD_TIER_BIAS
 /// ```
 ///
-/// with `A = 1 / (kx * ky)` the data area of one pixel, clamped to
-/// `0..=16`. A chunk with no span on one axis is a line of cells: the
-/// finest tier whose cells are at least one pixel long on the other axis
-/// (`floor(16 + e + log2(k))`), with the same bias. With no span on either
-/// axis every row is at one place and one representative is drawn (tier
-/// 0). `None` (draw every row) for a scale that is not finite.
+/// with `A = 1 / (kx * ky)` the data area of one pixel, at least 0. Past
+/// tier 16 the finest cells are coarser than the view needs, so `None`:
+/// the chunk draws every row (as the GUP-631 spike did past its finest
+/// tier; a chunk spanning a million seconds seen through a 1 ms window
+/// must not draw one row per 16 s). A chunk with no span on one axis is a
+/// line of cells: the finest tier whose cells are at least one pixel long
+/// on the other axis (`floor(16 + e + log2(k))`), with the same bias. With
+/// no span on either axis every row is at one place and one representative
+/// is drawn (tier 0). `None` (draw every row) for a scale that is not
+/// finite.
 pub(crate) fn tier(ex: i32, ey: i32, kx: f64, ky: f64) -> Option<u32> {
     if !(kx.is_finite() && ky.is_finite() && kx >= 0.0 && ky >= 0.0) {
         return None;
@@ -196,7 +200,7 @@ pub(crate) fn tier(ex: i32, ey: i32, kx: f64, ky: f64) -> Option<u32> {
         (false, false) => 0.0,
     };
     let t = t.floor() + f64::from(LOD_TIER_BIAS);
-    Some(t.clamp(0.0, f64::from(TMAX)) as u32)
+    (t <= f64::from(TMAX)).then(|| t.max(0.0) as u32)
 }
 
 /// What one prepare's level of detail may do: the plot's side of it.
@@ -757,8 +761,9 @@ mod tests {
                 };
                 let dom = [pad(ext[0]), pad(ext[1])];
                 let spike = spike_tier(ext, dom, w, h);
-                let ours = tier(ex, ey, k(dom[0], w), k(dom[1], h)).unwrap();
-                assert_eq!(ours, (spike + LOD_TIER_BIAS).min(TMAX), "{ex} {ey} {zoom}");
+                let ours = tier(ex, ey, k(dom[0], w), k(dom[1], h));
+                let want = Some(spike + LOD_TIER_BIAS).filter(|&t| t <= TMAX);
+                assert_eq!(ours, want, "{ex} {ey} {zoom}");
             }
         }
     }
@@ -802,8 +807,8 @@ mod tests {
         assert_eq!(tier(-6, -6, 0.0, 0.0), Some(LOD_TIER_BIAS));
         assert_eq!(tier(-6, -6, f64::INFINITY, 1.0), None);
         assert_eq!(tier(-6, -6, f64::NAN, 1.0), None);
-        // Zoomed far in or out, clamped.
-        assert_eq!(tier(0, 0, 1e9, 1e9), Some(TMAX));
+        // Zoomed in past the finest tier: every row; out: tier 0.
+        assert_eq!(tier(0, 0, 1e9, 1e9), None);
         assert_eq!(tier(0, 0, 1e-12, 1e-12), Some(0));
     }
 }
