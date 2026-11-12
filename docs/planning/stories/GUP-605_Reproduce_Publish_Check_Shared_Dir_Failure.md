@@ -8,8 +8,8 @@ touches: [scripts/]
 
 ## Story Overview
 
-**Initiative**: Strategic Review 2026-11 (N3 Release 0.1) **Status**: 💡 New
-**Created**: 2026-11-04
+**Initiative**: Strategic Review 2026-11 (N3 Release 0.1) **Status**: 🚧 In
+Progress **Created**: 2026-11-04
 
 ## Context
 
