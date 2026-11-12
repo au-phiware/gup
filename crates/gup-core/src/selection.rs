@@ -15,6 +15,7 @@ use crate::encoding::{AxisEncoding, AxisSource, Encoding, IntoEncoding, Resource
 use crate::error::{Error, Result};
 use crate::geom::Rect;
 use crate::input::{Event, EventInfo};
+use crate::lod;
 use crate::marks::{Curve, Line};
 use crate::order::{DrawEntry, DrawOrder, chunk_spans, draw_entries, polyline_spans};
 use crate::pick::PICK_TOLERANCE;
@@ -139,6 +140,59 @@ impl Retain {
     }
 }
 
+/// Whether a [`Selection`] draws a bounded number of representatives of
+/// its rows instead of every row (level of detail, RFC-001 "GUP-631
+/// findings").
+///
+/// Under [`Auto`](Lod::Auto) (the default), a layer whose visible chunks
+/// hold more than [`Lod::AUTO_MIN_ROWS`] rows draws, per visible chunk, the
+/// lowest row of each occupied cell of a grid of about a quarter pixel
+/// (at most four marks per pixel of area): its rows grouped by position,
+/// built once per chunk on the first frame that needs them. A scatter of
+/// tens of millions of rows then draws tens of thousands of marks per
+/// frame. The picture is the full draw with edges up to about a pixel
+/// narrower; marks keep their data rows' colours, brush and GPU pick ids.
+/// At or under the threshold every row draws, exactly as with
+/// [`Off`](Lod::Off).
+///
+/// Only [`Circle`](crate::Circle) layers and [`Rect`](crate::Rect)
+/// layers with constant `width` and `height` take a level of detail.
+/// Lines, areas, segments, rects with per-row extents and layers drawn
+/// largest first (a size channel read from a column) draw every row
+/// whatever the setting, and so does the newest chunk of a layer that
+/// has been appended to.
+///
+/// Not yet under the level of detail (they read every row): CPU picks,
+/// hover outlines and tooltips over a layer with CPU data, and vector
+/// (SVG) output. For the exact picture, or SVG parity, use
+/// [`Off`](Lod::Off).
+///
+/// ```
+/// use gup_core::prelude::*;
+///
+/// let mut sel = Selection::<(f64, f64), Circle>::new(vec![(0.0, 1.0)]);
+/// sel.lod(Lod::Off);
+/// assert_eq!(Lod::default(), Lod::Auto);
+/// assert_eq!(Lod::AUTO_MIN_ROWS, 200_000);
+/// ```
+#[non_exhaustive]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub enum Lod {
+    /// Draw representatives above [`Lod::AUTO_MIN_ROWS`] visible rows.
+    #[default]
+    Auto,
+    /// Draw every row (the exact output).
+    Off,
+}
+
+impl Lod {
+    /// The visible rows (summed over the chunks the view can see) above
+    /// which [`Lod::Auto`] draws representatives: GUP-631 measured a full
+    /// draw of 200,000 rows within 8 ms on an integrated GPU, and of
+    /// 400,000 not.
+    pub const AUTO_MIN_ROWS: u64 = 200_000;
+}
+
 /// How many rows a selection keeps as rows are appended (RFC-001 §3).
 ///
 /// A windowed layer caps its chunks at `max(1024, n / 4)` rows (or the
@@ -226,10 +280,19 @@ pub struct Selection<T, M: Mark> {
     /// Whether the brushed-row bits must be written whole at the next
     /// prepare (the stored rows were renumbered).
     bits_stale: bool,
-    /// The level-of-detail tier every chunk draws, if it stores one
-    /// (GUP-715's seam, [`force_lod_tier`](Self::force_lod_tier)); `None`
-    /// draws every row.
-    lod: Option<ForcedTier>,
+    /// The level of detail ([`Lod`], GUP-716).
+    lod: Lod,
+    /// The level-of-detail tier every chunk draws, if it stores one, in
+    /// place of the per-frame choice (GUP-715's seam,
+    /// [`force_lod_tier`](Self::force_lod_tier)).
+    forced_tier: Option<u32>,
+    /// Chunk tiers built for this layer so far (a test seam: the
+    /// threshold and the lazy build are asserted through it).
+    lod_builds: u64,
+    /// Whether the last prepare left a visible chunk drawing every row
+    /// because its tiers were not built yet (one chunk builds a frame):
+    /// the plot draws again.
+    lod_pending: bool,
     window: RowWindow,
     retain: Retain,
     /// Draw order among the plot's items (default 0).
@@ -491,7 +554,10 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             epoch: 0,
             edge_cache: Mutex::new(EdgeCache::default()),
             bits_stale: false,
-            lod: None,
+            lod: Lod::Auto,
+            forced_tier: None,
+            lod_builds: 0,
+            lod_pending: false,
             window: RowWindow::All,
             retain: Retain::Auto,
             z: 0,
@@ -830,17 +896,29 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         !self.all_rows_held()
     }
 
+    /// Set the layer's level of detail (default [`Lod::Auto`]): above
+    /// [`Lod::AUTO_MIN_ROWS`] visible rows, draw a bounded number of
+    /// representatives per chunk instead of every row; [`Lod::Off`]
+    /// always draws every row (the exact output). See [`Lod`] for which
+    /// layers take it and what it does not cover yet.
+    pub fn lod(&mut self, lod: Lod) -> &mut Self {
+        self.lod = lod;
+        self
+    }
+
+    /// Chunk tiers built for this layer so far (a test seam).
+    pub(crate) fn lod_tier_builds(&self) -> u64 {
+        self.lod_builds
+    }
+
     /// Draw each chunk's tier-`t` representatives (the prefix of its
     /// [`Tiers`](crate::lod::Tiers)) through the indexed-rows glue, or, for
-    /// a chunk that stores no tier `t`, every row; `None` draws every row
-    /// (GUP-715's seam for tests and `lod_spike`; GUP-716 chooses tiers per
-    /// frame). Prepare fails for a polyline or a layer drawn by size.
+    /// a chunk that stores no tier `t`, every row, in place of the
+    /// per-frame choice of [`Lod::Auto`]; `None` returns to the layer's
+    /// [`Lod`] (GUP-715's seam for tests and `lod_spike`). Prepare fails
+    /// for a polyline or a layer drawn by size.
     pub(crate) fn force_lod_tier(&mut self, t: Option<u32>) -> &mut Self {
-        self.lod = t.map(|tier| ForcedTier {
-            tier,
-            entries: tier_entries,
-            program: Context::indexed_program,
-        });
+        self.forced_tier = t;
         self
     }
 
@@ -903,38 +981,98 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         self
     }
 
-    /// The layer's draw entries ([`draw_entries`]), each chunk that stores
-    /// the forced tier ([`force_lod_tier`](Self::force_lod_tier)) drawing
-    /// that tier's prefix of its representatives, which are built and
-    /// uploaded to `cx` on first use (GUP-715).
-    fn lod_entries(&mut self, cx: &Context) -> Result<Vec<DrawEntry>> {
-        let store = self.columns.as_mut().ok_or_else(|| {
+    /// The layer's draw entries ([`draw_entries`]) under its level of
+    /// detail (GUP-716): each visible chunk whose tiers are built drawing
+    /// its tier's prefix of its representatives (uploaded to `cx` on first
+    /// use), or, under the forced tier
+    /// ([`force_lod_tier`](Self::force_lod_tier)), each chunk that stores
+    /// it (GUP-715).
+    fn lod_entries(&mut self, cx: &Context, frame: &lod::Frame<'_>) -> Result<Vec<DrawEntry>> {
+        let rows = self.len() as u64;
+        let eligible = self.lod_mark();
+        let release = !self.retain.keeps_columns(rows);
+        let appended = self.appended > 0;
+        let store = self.columns.as_ref().ok_or_else(|| {
             Error::config("layer", "prepare called before the columns were evaluated")
         })?;
         let mut entries = draw_entries(M::GEOMETRY, store.chunks());
-        if let Some(lod) = self.lod {
-            // The store columns of the first x and y column channels.
-            let (mut xy, mut col) = ([None; 2], 0);
-            for (i, e) in self.encodings.iter().enumerate() {
-                if let Some(Encoding::Column(_)) = e {
-                    match M::CHANNELS[i].role {
-                        Some(Role::X) if xy[0].is_none() => xy[0] = Some(col),
-                        Some(Role::Y) if xy[1].is_none() => xy[1] = Some(col),
-                        _ => {}
-                    }
-                    col += 1;
+        self.lod_pending = false;
+        // The store columns of the first x and y column channels, and their
+        // encodings.
+        let (mut xy, mut enc, mut col) = ([None; 2], [None; 2], 0);
+        for (i, e) in self.encodings.iter().enumerate() {
+            if let Some(Encoding::Column(c)) = e {
+                let axis = match M::CHANNELS[i].role {
+                    Some(Role::X) => 0,
+                    Some(Role::Y) => 1,
+                    _ => 2,
+                };
+                if axis < 2 && xy[axis].is_none() {
+                    xy[axis] = Some(col);
+                    enc[axis] = Some(c.as_ref());
                 }
+                col += 1;
             }
-            let ask = TierAsk {
-                tier: lod.tier,
-                xy,
-                mark: M::NAME,
-                polyline: M::GEOMETRY == Geometry::Polyline,
-                sized: self.order.is_some(),
-            };
-            (lod.entries)(store, cx, &ask, &mut entries)?;
         }
+        let choice = match self.forced_tier {
+            Some(t) => lod::Choice::Forced(t),
+            None if self.lod == Lod::Auto && eligible && rows > Lod::AUTO_MIN_ROWS => {
+                // Pixels per data unit of each chunk along x and y, from its
+                // extent and that extent's image (0: no span; `None`: not
+                // known, so the chunk draws every row).
+                let scale = store
+                    .chunks()
+                    .iter()
+                    .map(|c| {
+                        let k = |a: usize| -> Option<f64> {
+                            let (Some(i), Some(e)) = (xy[a], enc[a]) else {
+                                return Some(0.0);
+                            };
+                            let (lo, hi) = c.columns()[i].stats()?.extent();
+                            let (p, q) = e.image((lo, hi))?;
+                            Some(if hi > lo {
+                                (q - p).abs() / (hi - lo)
+                            } else {
+                                0.0
+                            })
+                        };
+                        Some([k(0)?, k(1)?])
+                    })
+                    .collect::<Vec<_>>();
+                lod::Choice::Auto(lod::Auto {
+                    visible: frame.visible.to_vec(),
+                    scale,
+                    builds: if frame.spread { 1 } else { usize::MAX },
+                    release,
+                    appended,
+                })
+            }
+            None => return Ok(entries),
+        };
+        let ask = TierAsk {
+            choice,
+            xy,
+            mark: M::NAME,
+            polyline: M::GEOMETRY == Geometry::Polyline,
+            sized: self.order.is_some(),
+        };
+        let store = self.columns.as_mut().expect("checked above");
+        let done = tier_entries(store, cx, &ask, &mut entries)?;
+        self.lod_builds += done.builds;
+        self.lod_pending = done.pending;
         Ok(entries)
+    }
+
+    /// Whether the mark takes a level of detail: a quad with one position
+    /// per row, a [`Circle`](crate::Circle)'s disc or a box of constant
+    /// extents (RFC-001 "GUP-631 findings", "Proposed API").
+    fn lod_mark(&self) -> bool {
+        M::GEOMETRY == Geometry::Quad
+            && match M::HIT {
+                HitShape::Disc => true,
+                HitShape::AlignedBox => self.ignored_end("x_end") && self.ignored_end("y_end"),
+                _ => false,
+            }
     }
 
     fn column_encodings(&self) -> impl Iterator<Item = (usize, &dyn crate::DynColumnEncoding<T>)> {
@@ -1592,8 +1730,20 @@ pub(crate) trait Layer: wgpu::WasmNotSendSync {
     /// Generate the glue, link it (cached), write uniforms and upload.
     ///
     /// `brushable`: the glue dims rows outside the plot's brush
-    /// ([`write_brush`](Self::write_brush) says which).
-    fn prepare(&mut self, cx: &Context, theme: &Theme, brushable: bool) -> Result<MarkBatch>;
+    /// ([`write_brush`](Self::write_brush) says which). `frame`: which draw
+    /// entries the plot shows and how many tiers may build, for the level
+    /// of detail ([`Lod`]).
+    fn prepare(
+        &mut self,
+        cx: &Context,
+        theme: &Theme,
+        brushable: bool,
+        frame: &lod::Frame<'_>,
+    ) -> Result<MarkBatch>;
+    /// Whether the last [`prepare`](Self::prepare) drew a visible chunk in
+    /// full only because its level-of-detail tiers were not built yet: the
+    /// plot draws again to build the next.
+    fn lod_pending(&self) -> bool;
     /// Set the layer's brushed data rows (`None`: no brush) and write them,
     /// as one bit per stored row, into the prepared GPU state. A layer
     /// whose glue does not dim writes nothing; its next `prepare` writes
@@ -1667,12 +1817,9 @@ pub(crate) trait Layer: wgpu::WasmNotSendSync {
     fn as_any_mut(&mut self) -> &mut dyn Any;
 }
 
-/// [`tier_entries`]'s type.
-type TierEntries = fn(&mut ColumnStore, &Context, &TierAsk, &mut [DrawEntry]) -> Result<()>;
-
 /// What [`tier_entries`] needs of a layer.
 struct TierAsk {
-    tier: u32,
+    choice: lod::Choice,
     /// The store columns of the first x and y column channels (`None`: a
     /// constant axis), which a chunk's tiers are built over.
     xy: [Option<usize>; 2],
@@ -1682,51 +1829,126 @@ struct TierAsk {
     sized: bool,
 }
 
-/// A forced level-of-detail tier (GUP-715's seam): the tier, and the
-/// functions that build and draw it, held as pointers that only
-/// [`Selection::force_lod_tier`] names, so a binary that never forces a
-/// tier links none of the build (`mask wasm-size`).
-#[derive(Clone, Copy, Debug)]
-struct ForcedTier {
-    tier: u32,
-    /// [`tier_entries`].
-    entries: TierEntries,
-    /// [`Context::indexed_program`].
-    program:
-        fn(&Context, &crate::render::GlueProgram, &Glue) -> Result<Arc<crate::render::GlueProgram>>,
+/// What [`tier_entries`] did.
+#[derive(Debug, Default)]
+struct TierDone {
+    /// Chunk tiers built.
+    builds: u64,
+    /// Whether a visible chunk drew every row for want of its tiers.
+    pending: bool,
 }
 
-/// Point each of a layer's `entries` whose chunk stores tier `ask.tier` at
-/// that tier's prefix of its representatives, built and uploaded to `cx`
-/// on first use; a chunk that stores no such tier draws every row. An
-/// error for a polyline or a layer drawn by size.
+/// Chunk `k`'s tiers' cell exponents, built on first use (counted in
+/// `done`).
+fn chunk_tiers(
+    store: &mut ColumnStore,
+    k: usize,
+    xy: [Option<usize>; 2],
+    done: &mut TierDone,
+) -> Result<(i32, i32)> {
+    if !store.has_tiers(k, xy) {
+        done.builds += 1;
+    }
+    store.lod_tiers(k, xy).map(|t| (t.ex, t.ey))
+}
+
+/// Point a layer's `entries` at their chunks' representatives as
+/// `ask.choice` says (GUP-716), building tiers and uploading their
+/// representatives to `cx` on first use:
+///
+/// - **Forced** tier `t` (GUP-715's seam): every chunk that stores `t`
+///   draws its prefix, any other every row. An error for a polyline or a
+///   layer drawn by size.
+/// - **Auto**: first, when the prepare's release drops CPU copies, the
+///   tiers of every chunk it drops (nothing could build them later; RFC-001
+///   "GUP-631 findings", GUP-716 Decisions). Then, when the visible chunks
+///   hold more than [`Lod::AUTO_MIN_ROWS`] rows, each visible chunk draws
+///   the prefix of [`lod::tier`] at its scale; a chunk past its stored
+///   tiers, or whose tiers are not built and over the prepare's build
+///   budget (`pending`), draws every row.
+///
+/// Not generic: one copy serves every row type.
 fn tier_entries(
     store: &mut ColumnStore,
     cx: &Context,
     ask: &TierAsk,
     entries: &mut [DrawEntry],
-) -> Result<()> {
-    if ask.polyline {
-        return Err(no_lod(ask.mark));
+) -> Result<TierDone> {
+    let mut done = TierDone::default();
+    let auto = match &ask.choice {
+        lod::Choice::Forced(t) => {
+            if ask.polyline {
+                return Err(no_lod(ask.mark));
+            }
+            if ask.sized {
+                return Err(Error::config(
+                    "lod",
+                    format!(
+                        "{}: a layer drawn by size has no level of detail yet (its \
+                         representatives must draw largest first)",
+                        ask.mark
+                    ),
+                ));
+            }
+            for e in entries {
+                chunk_tiers(store, e.this, ask.xy, &mut done)?;
+                if let Some(n) = store.lod_tiers(e.this, ask.xy)?.prefix(*t) {
+                    store.upload_lod(cx, e.this)?;
+                    e.instances = n;
+                    e.lod = Some(n);
+                }
+            }
+            return Ok(done);
+        }
+        lod::Choice::Auto(auto) => auto,
+    };
+    if auto.release {
+        for k in 0..store.chunks().len() {
+            if store.releasable(k) {
+                chunk_tiers(store, k, ask.xy, &mut done)?;
+                store.upload_lod(cx, k)?;
+            }
+        }
     }
-    if ask.sized {
-        return Err(Error::config(
-            "lod",
-            format!(
-                "{}: a layer drawn by size has no level of detail yet (its representatives \
-                 must draw largest first)",
-                ask.mark
-            ),
-        ));
+    let shown = |i: usize| auto.visible.get(i).copied().unwrap_or(true);
+    let visible_rows: u64 = entries
+        .iter()
+        .enumerate()
+        .filter(|&(i, _)| shown(i))
+        .map(|(_, e)| u64::from(store.chunks()[e.this].rows()))
+        .sum();
+    if visible_rows <= Lod::AUTO_MIN_ROWS {
+        return Ok(done);
     }
-    for e in entries {
-        if let Some(n) = store.lod_tiers(e.this, ask.xy)?.prefix(ask.tier) {
+    let last = store.chunks().len().saturating_sub(1);
+    let mut budget = auto.builds;
+    for (i, e) in entries.iter_mut().enumerate() {
+        // The newest chunk of an appended layer changes with every append
+        // (GUP-719 rebuilds its tiers at doubling sizes).
+        if !shown(i) || (auto.appended && e.this == last && !store.chunk_full(last)) {
+            continue;
+        }
+        let Some([kx, ky]) = auto.scale[e.this] else {
+            continue;
+        };
+        if !store.has_tiers(e.this, ask.xy) {
+            if budget == 0 {
+                done.pending = true;
+                continue;
+            }
+            budget -= 1;
+        }
+        let (ex, ey) = chunk_tiers(store, e.this, ask.xy, &mut done)?;
+        let Some(t) = lod::tier(ex, ey, kx, ky) else {
+            continue;
+        };
+        if let Some(n) = store.lod_tiers(e.this, ask.xy)?.prefix(t) {
             store.upload_lod(cx, e.this)?;
             e.instances = n;
             e.lod = Some(n);
         }
     }
-    Ok(())
+    Ok(done)
 }
 
 /// A polyline's level-of-detail error: it reads each row's successor.
@@ -2558,7 +2780,13 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         }
     }
 
-    fn prepare(&mut self, cx: &Context, theme: &Theme, brushable: bool) -> Result<MarkBatch> {
+    fn prepare(
+        &mut self,
+        cx: &Context,
+        theme: &Theme,
+        brushable: bool,
+        frame: &lod::Frame<'_>,
+    ) -> Result<MarkBatch> {
         self.check_module_paths()?;
         self.brushable = brushable;
         self.unbrushed = theme.unbrushed;
@@ -2678,8 +2906,8 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
                 ),
             ));
         }
-        // Under a forced tier, each chunk's representatives (GUP-715).
-        let entries = self.lod_entries(cx)?;
+        // Under the level of detail, chunks' representatives (GUP-716).
+        let entries = self.lod_entries(cx, frame)?;
         let lod_rows = entries.iter().any(|e| e.lod.is_some());
         // Every column (and a polyline's next-row column, and a tier's row
         // column) is a vertex buffer (RFC-001 §12 risk 7).
@@ -2715,9 +2943,10 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         let store = self.columns.as_mut().expect("checked above");
         store.upload(cx)?;
         // The indexed-rows program, when a chunk draws representatives.
-        let indexed = match self.lod {
-            Some(lod) if lod_rows => Some((lod.program)(cx, &program, &self.indexed_glue()?)?),
-            _ => None,
+        let indexed = if lod_rows {
+            Some(cx.indexed_program(&program, &self.indexed_glue()?)?)
+        } else {
+            None
         };
         let store = self.columns.as_ref().expect("checked above");
         // Validity buffers exist (and are bound) only when the glue reads
@@ -2864,6 +3093,10 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             gpu.write_brush_dim(cx, self.brush_dim());
         }
         Ok(())
+    }
+
+    fn lod_pending(&self) -> bool {
+        self.lod_pending
     }
 
     fn release(&mut self) {
@@ -3828,7 +4061,8 @@ mod tests {
             let t = std::time::Instant::now();
             sel.append(rows).unwrap();
             sel.fit_domains(&cx).unwrap();
-            sel.prepare(&cx, &theme, false).unwrap();
+            sel.prepare(&cx, &theme, false, &crate::lod::Frame::default())
+                .unwrap();
             sel.release();
             if b >= 100 {
                 steady += t.elapsed();
@@ -3907,7 +4141,9 @@ mod tests {
         }
         assert!(bases[0] < bases[1] && bases[1] < bases[2], "{bases:?}");
 
-        let batch = sel.prepare(&cx, &Theme::default(), false).unwrap();
+        let batch = sel
+            .prepare(&cx, &Theme::default(), false, &crate::lod::Frame::default())
+            .unwrap();
         let offsets: Vec<_> = batch.gpu.chunks.iter().map(|c| c.dynamic_offset).collect();
         assert_eq!(offsets, [0, 256, 512]);
         assert_eq!(batch.instances(), 20);
@@ -4000,7 +4236,9 @@ mod tests {
         assert_eq!(u(4, "row_base"), 15);
         assert_eq!(f(4, "x_next_base"), f(2, "x_base"));
 
-        let batch = sel.prepare(&cx, &Theme::default(), false).unwrap();
+        let batch = sel
+            .prepare(&cx, &Theme::default(), false, &crate::lod::Frame::default())
+            .unwrap();
         let gpu = &batch.gpu;
         let span = |chunk, n| Span { chunk, rows: 0..n };
         assert_eq!(
@@ -4029,7 +4267,9 @@ mod tests {
         let mut sel = reference();
         sel.max_chunk_rows(16);
         sel.fit_domains(&cx).unwrap();
-        let first = sel.prepare(&cx, &Theme::default(), false).unwrap();
+        let first = sel
+            .prepare(&cx, &Theme::default(), false, &crate::lod::Frame::default())
+            .unwrap();
         let start = cx.upload_stats();
         sel.append((21..=40).map(|i| {
             let i = f64::from(i);
@@ -4041,7 +4281,9 @@ mod tests {
         }))
         .unwrap();
         sel.fit_domains(&cx).unwrap();
-        let grown = sel.prepare(&cx, &Theme::default(), false).unwrap();
+        let grown = sel
+            .prepare(&cx, &Theme::default(), false, &crate::lod::Frame::default())
+            .unwrap();
         let written = cx.upload_stats() - start;
         // Three columns of 20 rows.
         assert_eq!(written.columns.bytes, 20 * 3 * 4, "{written:?}");
@@ -4054,7 +4296,9 @@ mod tests {
         assert!(Arc::ptr_eq(first.gpu.encodings(), grown.gpu.encodings()));
 
         let start = cx.upload_stats();
-        let again = sel.prepare(&cx, &Theme::default(), false).unwrap();
+        let again = sel
+            .prepare(&cx, &Theme::default(), false, &crate::lod::Frame::default())
+            .unwrap();
         let written = cx.upload_stats() - start;
         assert!(Arc::ptr_eq(&grown.gpu, &again.gpu));
         assert_eq!(written.columns, Default::default());
@@ -4399,7 +4643,9 @@ mod tests {
         // The radius chain ends in `Sqrt` onto 2..12 px: marks overhang
         // their positions by up to 12 px.
         assert!((sel.overhang().size - 12.0).abs() < 1e-4);
-        let batch = sel.prepare(&cx, &Theme::default(), false).unwrap();
+        let batch = sel
+            .prepare(&cx, &Theme::default(), false, &crate::lod::Frame::default())
+            .unwrap();
         assert_eq!(batch.instances(), 20);
     }
 
@@ -4515,7 +4761,9 @@ mod tests {
         assert_eq!(Some(glue.chunk.clone()), struct_layout(&linked, "Chunk"));
         // Two planes (x, y); the dictionary column has none.
         assert!(glue.source.contains("(instance_index / 32u) * 2u"));
-        let batch = sel.prepare(&cx, &Theme::default(), false).unwrap();
+        let batch = sel
+            .prepare(&cx, &Theme::default(), false, &crate::lod::Frame::default())
+            .unwrap();
         assert_eq!(batch.instances(), 40);
         assert!(batch.gpu.chunks.iter().all(|c| c.validity.is_some()));
     }
@@ -4594,7 +4842,7 @@ mod tests {
         sel.fit_domains(&cx).unwrap();
         sel.force_lod_tier(Some(2));
         let err = sel
-            .prepare(&cx, &Theme::default(), false)
+            .prepare(&cx, &Theme::default(), false, &crate::lod::Frame::default())
             .unwrap_err()
             .to_string();
         assert!(err.contains("Line: a polyline"), "{err}");
@@ -4619,7 +4867,8 @@ mod tests {
             &glue.signature,
             &link(&glue.signature, &glue.source, &glue.modules).unwrap(),
         );
-        sel.prepare(&cx, &Theme::default(), false).unwrap();
+        sel.prepare(&cx, &Theme::default(), false, &crate::lod::Frame::default())
+            .unwrap();
     }
 
     /// The categorical null colour and key count land at naga's offsets,

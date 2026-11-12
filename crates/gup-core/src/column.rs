@@ -1788,6 +1788,25 @@ impl ColumnStore {
         }
     }
 
+    /// Whether chunk `k` has [`lod_tiers`](Self::lod_tiers) over `xy` for
+    /// its current rows.
+    pub(crate) fn has_tiers(&self, k: usize, xy: [Option<usize>; 2]) -> bool {
+        self.chunks[k].lod.as_ref().is_some_and(|l| l.xy == xy)
+    }
+
+    /// Whether chunk `k` holds as many rows as a chunk can: appends no
+    /// longer change it.
+    pub(crate) fn chunk_full(&self, k: usize) -> bool {
+        self.chunks[k].len == self.chunk_rows
+    }
+
+    /// Whether [`release`](Self::release) drops chunk `k`'s CPU copy (it
+    /// holds one and is full), after which neither its tiers nor its
+    /// representatives can be built.
+    pub(crate) fn releasable(&self, k: usize) -> bool {
+        self.chunks[k].cpu.is_some() && self.chunk_full(k)
+    }
+
     /// Chunk `k`'s level-of-detail tiers (GUP-714) over its rows at x
     /// (store column `xy[0]`) and y (`xy[1]`; `None`: a constant axis),
     /// built on first use and kept until the chunk's rows change. The
@@ -1795,7 +1814,7 @@ impl ColumnStore {
     /// copy was released and its columns are not shared (GUP-716 builds
     /// before release).
     pub(crate) fn lod_tiers(&mut self, k: usize, xy: [Option<usize>; 2]) -> Result<&Tiers> {
-        let fresh = self.chunks[k].lod.as_ref().is_some_and(|l| l.xy == xy);
+        let fresh = self.has_tiers(k, xy);
         if !fresh {
             let read = |c: Option<usize>| -> Result<Option<(Cells<'_>, &ChunkColumn)>> {
                 let Some(c) = c else { return Ok(None) };

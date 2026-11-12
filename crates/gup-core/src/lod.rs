@@ -25,8 +25,8 @@
 //! the finest stored tier a chunk draws every row ([`Tiers::prefix`] is
 //! `None`). Tier 0 is always stored.
 //!
-//! Nothing draws from the tiers yet: uploads are GUP-715's, the per-frame
-//! tier choice GUP-716's.
+//! Each frame, a visible chunk draws the prefix of the tier [`tier`]
+//! chooses for the view (GUP-716) through the indexed-rows glue (GUP-715).
 
 /// The finest tier: `2^16` cells a side, 16 bits of each axis in a key.
 pub(crate) const TMAX: u32 = 16;
@@ -159,6 +159,85 @@ impl Tiers {
     pub fn prefix(&self, t: u32) -> Option<u32> {
         self.counts.get(t as usize).copied()
     }
+}
+
+/// How many tiers finer than "at most one representative per pixel of
+/// area" a chunk draws: one, so at most four a pixel. GUP-631 measured the
+/// share of pixels more than ΔE00 10 from the full draw of a 10M-row
+/// scatter at 1920 × 1080: at the unbiased tier 0.994% of the image but
+/// 1.076% of the plot rect (over the 1% rule); one tier finer 0.580% /
+/// 0.628%, for 1.0 ms more GPU time (RFC-001 "GUP-631 findings",
+/// "Fidelity").
+const LOD_TIER_BIAS: u32 = 1;
+
+/// The tier a chunk draws, from its tiers' cell exponents `ex`, `ey` and
+/// the view's pixels per data unit along x and y over the chunk, `kx` and
+/// `ky` (0: the chunk has no span on that axis): the finest tier whose
+/// cells are at least one pixel in area, plus [`LOD_TIER_BIAS`],
+///
+/// ```text
+/// t = floor(16 + (ex + ey) / 2 - 0.5 * log2(A)) + LOD_TIER_BIAS
+/// ```
+///
+/// with `A = 1 / (kx * ky)` the data area of one pixel, clamped to
+/// `0..=16`. A chunk with no span on one axis is a line of cells: the
+/// finest tier whose cells are at least one pixel long on the other axis
+/// (`floor(16 + e + log2(k))`), with the same bias. With no span on either
+/// axis every row is at one place and one representative is drawn (tier
+/// 0). `None` (draw every row) for a scale that is not finite.
+pub(crate) fn tier(ex: i32, ey: i32, kx: f64, ky: f64) -> Option<u32> {
+    if !(kx.is_finite() && ky.is_finite() && kx >= 0.0 && ky >= 0.0) {
+        return None;
+    }
+    let t = match (kx > 0.0, ky > 0.0) {
+        (true, true) => f64::from(TMAX) + f64::from(ex + ey) / 2.0 + 0.5 * (kx * ky).log2(),
+        (true, false) => f64::from(TMAX) + f64::from(ex) + kx.log2(),
+        (false, true) => f64::from(TMAX) + f64::from(ey) + ky.log2(),
+        (false, false) => 0.0,
+    };
+    let t = t.floor() + f64::from(LOD_TIER_BIAS);
+    Some(t.clamp(0.0, f64::from(TMAX)) as u32)
+}
+
+/// What one prepare's level of detail may do: the plot's side of it.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct Frame<'a> {
+    /// Whether the plot shows each of the layer's draw entries
+    /// (`cull::visible_entries`; empty: every entry).
+    pub visible: &'a [bool],
+    /// Whether to spread lazy tier builds over frames, one chunk a
+    /// prepare: the plot has a host that draws again when asked
+    /// ([`Chart::needs_frame`](crate::Chart::needs_frame)). Otherwise (a
+    /// headless render, a host that never set a waker) every missing chunk
+    /// builds in the one prepare, so a single frame is complete.
+    pub spread: bool,
+}
+
+/// How a prepare chooses each chunk's representatives.
+#[derive(Debug)]
+pub(crate) enum Choice {
+    /// One tier for every chunk (GUP-715's test seam).
+    Forced(u32),
+    /// [`Lod::Auto`](crate::Lod::Auto)'s per-frame choice.
+    Auto(Auto),
+}
+
+/// [`Choice::Auto`]'s inputs.
+#[derive(Debug)]
+pub(crate) struct Auto {
+    /// [`Frame::visible`].
+    pub visible: Vec<bool>,
+    /// Per chunk, pixels per data unit along x and y over the chunk's
+    /// extent (0: no span), or `None` when not known (draw every row).
+    pub scale: Vec<Option<[f64; 2]>>,
+    /// Lazy tier builds allowed in this prepare.
+    pub builds: usize,
+    /// Whether this prepare's release drops the CPU copy of full chunks:
+    /// their tiers build now, whatever is visible.
+    pub release: bool,
+    /// Whether the layer has been appended to: its newest chunk, while not
+    /// full, draws every row.
+    pub appended: bool,
 }
 
 /// One axis of the tier-16 grid: `cell(v) = floor(v / 2^e) - origin`, the

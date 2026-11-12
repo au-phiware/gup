@@ -2077,6 +2077,26 @@ impl Prepared {
                 .sum::<usize>()
     }
 
+    /// Instances the data layers' draws record (the rows, or under a
+    /// level of detail the representatives, of their visible spans): a
+    /// test seam (`__private::drawn_instances`).
+    pub(crate) fn mark_instances(&self) -> u64 {
+        let spans = |s: &[Span]| {
+            s.iter()
+                .map(|s| u64::from(s.rows.end - s.rows.start))
+                .sum::<u64>()
+        };
+        self.coverage.iter().map(|c| spans(&c.spans)).sum::<u64>()
+            + self
+                .draws
+                .iter()
+                .map(|(_, draw)| match draw {
+                    Draw::Marks { spans: s, .. } => spans(s),
+                    _ => 0,
+                })
+                .sum::<u64>()
+    }
+
     /// Record each translucent line layer's offscreen pass into `encoder`
     /// (GUP-439): clear its target, then draw the layer with `Max`
     /// blending inside its clip. Call it once, before the pass that
