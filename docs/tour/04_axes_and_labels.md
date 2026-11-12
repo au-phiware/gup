@@ -54,7 +54,7 @@ plot
 
 A builder has no right-axis setter, so this chart is a `Plot`, the layer API
 under every builder. `plot.y_right(..)` adds the second axis and returns a
-handle. A layer reads the right axis through that handle: the orange line
+handle. A layer reads the right axis through that handle: the vermillion line
 (temperature) is on the left axis and the blue line (rainfall) on the right.
 
 ## Labels on the value axis and on the bars

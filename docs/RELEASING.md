@@ -45,8 +45,8 @@ All seven crates (`gup`, `gup-core`, `gup-core-macros`, `gup-wgsl`, `gup-text`,
      that holds a pre-release dependency block, replace the `git` and `rev`
      lines with the crates.io version: the README's Requirements and Quick
      Start, tutorial 1 (`docs/tutorials/01_getting_started.md`),
-     `docs/EGUI_INTEGRATION.md`, `docs/BEVY_INTEGRATION.md`, and
-     `docs/EMBEDDING.md` if it exists (GUP-702).
+     `docs/EGUI_INTEGRATION.md` and `docs/BEVY_INTEGRATION.md`.
+     `docs/EMBEDDING.md` holds no dependency block.
 - [ ] 9. Check docs.rs built all seven (`https://docs.rs/crate/<name>/0.1.0`).
      If one failed, read its build log, then fix it in a 0.1.1.
 

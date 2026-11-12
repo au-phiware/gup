@@ -156,7 +156,7 @@ either; GUP-702 last, so its code can use the new names.
 - [GUP-705](GUP-705_Line_Axes_Clear_Their_Rows.md) ✅ — A line's or area's
   automatic y axis leaves the gap rule's padding above and below its rows, so a
   round-number minimum never sits on the axis line. Deps: GUP-699 ✅.
-- [GUP-732](GUP-732_Docs_Match_The_Code_Before_0_1.md) 🚧 — Audit the
+- [GUP-732](GUP-732_Docs_Match_The_Code_Before_0_1.md) ✅ — Audit the
   user-facing documents against the code after the week's renames and behaviour
   changes; fix each false statement, listed with evidence.
 

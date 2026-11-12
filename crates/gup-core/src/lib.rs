@@ -28,8 +28,8 @@
 //! - [`Plot`]: any number of layers over shared x and y scales (and a
 //!   secondary [`Plot::y_right`]), with axes, grid, legends and title laid
 //!   out for you, styled by [`Theme`];
-//! - the [`scatter`], [`line()`], [`area`], [`bar`], [`barh`], [`histogram()`] and [`heatmap`] builders
-//!   ([`ChartExt`]), and the [`transform`] module they bin with;
+//! - the [`scatter`], [`line()`], [`area`], [`bar`], [`barh`], [`histogram()`], [`heatmap`] and
+//!   [`boxplot`] builders ([`ChartExt`]), and the [`transform`] module they bin with;
 //! - interaction ([`Input`], [`Response`]: picking, tooltips, pan, zoom and
 //!   brush) and streaming ([`Appender`]);
 //! - targets: [`ImageTarget`], [`TextureTarget`], [`WindowTarget`], the web

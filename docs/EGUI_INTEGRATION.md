@@ -2,7 +2,7 @@
 
 `gup-egui` puts any [`gup_core::Chart`] in an egui panel. It renders on egui's
 own GPU device into a texture that egui samples directly (no CPU readback) and
-forwards pointer input to the chart.
+forwards pointer and keyboard input to the chart.
 
 ## Adding the dependency
 
@@ -71,8 +71,11 @@ thread this way.
 `show` maps egui's pointer events to `gup_core::Input` (`gup_egui::to_input`)
 and calls `Chart::handle`: moves, presses inside the widget, releases (also
 outside, after a press), the mouse wheel while hovered, and the pointer leaving.
-Tooltips, brushing and zoom are the chart's own. `show` returns the
-`egui::Response` of the allocated rect.
+Tooltips, brushing and zoom are the chart's own. A primary press inside the
+widget gives it egui focus; while it has focus `show` also forwards key presses
+(arrows, Home, End, Enter, Space, Escape, `+`, `-`, `0`; Tab stays egui's), and
+Escape with nothing focused in the chart gives the focus back to egui. `show`
+returns the `egui::Response` of the allocated rect.
 
 ## Architecture
 

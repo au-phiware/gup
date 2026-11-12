@@ -82,10 +82,11 @@ updated.
 
 ## Not yet
 
-These are planned stories, not features: key columns (GUP-629), Arrow record
-batches (GUP-630), a level-of-detail design (GUP-631) and a 100-million-row
-demonstration (GUP-632). `CHANGELOG.md`, "Known limitations", says the same: no
-CSV, serde or Arrow input, and nothing above 10M rows measured.
+A 100-million-row demonstration (GUP-632) and a chart that draws a level of
+detail are not there yet. `CHANGELOG.md`, "Known limitations", says the same: no
+CSV or serde input, and nothing above 10M rows measured. Columns can also be
+dictionary-coded keys (`KeyColumn`, for categories) and `Columns::from_arrow`
+(feature `arrow`) reads Arrow record batches.
 
 **Go deeper**: [Tutorial 2](../tutorials/02_data_binding.md), "Step 6: What a
 Layer Keeps", and [Tutorial 5](../tutorials/05_streaming_data.md), "Step 4:

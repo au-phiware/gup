@@ -93,8 +93,8 @@ what each release contains and what its version number promises.
   `plot_mut()`.
 - `Plot` and `Selection`, the layered API the builders are made of: several
   layers of marks on shared scales, with a second y axis.
-- Marks: `Circle`, `Rect`, `Line` and `Area`, with typed channels, so a wrong
-  value type or an unknown channel does not compile.
+- Marks: `Circle`, `Rect`, `Segment`, `Line` and `Area`, with typed channels, so
+  a wrong value type or an unknown channel does not compile.
 - Line curves, including steps and monotone curves, and stacked areas and bars.
 - The x axis of a `gup::line` or `gup::area` chart ends at the first and last
   rows, with no empty strip at either edge; an explicit `.x_scale(..)` domain
