@@ -989,16 +989,20 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
     /// it (GUP-715).
     fn lod_entries(&mut self, cx: &Context, frame: &lod::Frame<'_>) -> Result<Vec<DrawEntry>> {
         let rows = self.len() as u64;
-        // A layer drawn largest first keeps every row until GUP-721 orders
-        // its representatives by size.
-        let eligible = self.lod_mark() && self.order.is_none();
-        let release = !self.retain.keeps_columns(rows);
-        let appended = self.appended > 0;
         let store = self.columns.as_ref().ok_or_else(|| {
             Error::config("layer", "prepare called before the columns were evaluated")
         })?;
         let mut entries = draw_entries(M::GEOMETRY, store.chunks());
         self.lod_pending = false;
+        // A layer drawn largest first keeps every row until GUP-721 orders
+        // its representatives by size.
+        let auto = self.lod == Lod::Auto
+            && self.lod_mark()
+            && self.order.is_none()
+            && rows > Lod::AUTO_MIN_ROWS;
+        if self.forced_tier.is_none() && !auto {
+            return Ok(entries);
+        }
         // The store columns of the first x and y column channels, and their
         // encodings.
         let (mut xy, mut enc, mut col) = ([None; 2], [None; 2], 0);
@@ -1016,50 +1020,41 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
                 col += 1;
             }
         }
-        let choice = match self.forced_tier {
-            Some(t) => lod::Choice::Forced(t),
-            None if self.lod == Lod::Auto && eligible && rows > Lod::AUTO_MIN_ROWS => {
-                // Pixels per data unit of each chunk along x and y, from its
-                // extent and that extent's image (0: no span; `None`: not
-                // known, so the chunk draws every row).
-                let scale = store
-                    .chunks()
-                    .iter()
-                    .map(|c| {
-                        let k = |a: usize| -> Option<f64> {
-                            let (Some(i), Some(e)) = (xy[a], enc[a]) else {
-                                return Some(0.0);
-                            };
-                            let (lo, hi) = c.columns()[i].stats()?.extent();
+        let ask = TierAsk {
+            forced: self.forced_tier,
+            release: !self.retain.keeps_columns(rows),
+            appended: self.appended > 0,
+            xy,
+            mark: M::NAME,
+            polyline: M::GEOMETRY == Geometry::Polyline,
+            sized: self.order.is_some(),
+        };
+        // Pixels per data unit of each chunk along x and y over its extent
+        // (0: no span; `None`: not known, so the chunk draws every row). A
+        // plain loop over trait objects: the same code for every row type.
+        let mut scale = Vec::new();
+        if ask.forced.is_none() {
+            scale.reserve(store.chunks().len());
+            for c in store.chunks() {
+                let mut k = [Some(0.0); 2];
+                for a in 0..2 {
+                    if let (Some(i), Some(e)) = (xy[a], enc[a]) {
+                        k[a] = c.columns()[i].stats().and_then(|s| {
+                            let (lo, hi) = s.extent();
                             let (p, q) = e.image((lo, hi))?;
                             Some(if hi > lo {
                                 (q - p).abs() / (hi - lo)
                             } else {
                                 0.0
                             })
-                        };
-                        Some([k(0)?, k(1)?])
-                    })
-                    .collect::<Vec<_>>();
-                lod::Choice::Auto(lod::Auto {
-                    visible: frame.visible.to_vec(),
-                    scale,
-                    builds: if frame.spread { 1 } else { usize::MAX },
-                    release,
-                    appended,
-                })
+                        });
+                    }
+                }
+                scale.push(k);
             }
-            None => return Ok(entries),
-        };
-        let ask = TierAsk {
-            choice,
-            xy,
-            mark: M::NAME,
-            polyline: M::GEOMETRY == Geometry::Polyline,
-            sized: self.order.is_some(),
-        };
+        }
         let store = self.columns.as_mut().expect("checked above");
-        let done = tier_entries(store, cx, &ask, &mut entries)?;
+        let done = tier_entries(store, cx, &ask, frame, &scale, &mut entries)?;
         self.lod_builds += done.builds;
         self.lod_pending = done.pending;
         Ok(entries)
@@ -1821,7 +1816,15 @@ pub(crate) trait Layer: wgpu::WasmNotSendSync {
 
 /// What [`tier_entries`] needs of a layer.
 struct TierAsk {
-    choice: lod::Choice,
+    /// The forced tier ([`Selection::force_lod_tier`]), else
+    /// [`Lod::Auto`]'s choice.
+    forced: Option<u32>,
+    /// Whether this prepare's release drops the CPU copy of full chunks:
+    /// their tiers build now, whatever is visible.
+    release: bool,
+    /// Whether the layer has been appended to: its newest chunk, while not
+    /// full, draws every row.
+    appended: bool,
     /// The store columns of the first x and y column channels (`None`: a
     /// constant axis), which a chunk's tiers are built over.
     xy: [Option<usize>; 2],
@@ -1870,41 +1873,41 @@ fn chunk_tiers(
 ///   budget (`pending`), draws every row.
 ///
 /// Not generic: one copy serves every row type.
+#[inline(never)]
 fn tier_entries(
     store: &mut ColumnStore,
     cx: &Context,
     ask: &TierAsk,
+    frame: &lod::Frame<'_>,
+    scale: &[[Option<f64>; 2]],
     entries: &mut [DrawEntry],
 ) -> Result<TierDone> {
     let mut done = TierDone::default();
-    let auto = match &ask.choice {
-        lod::Choice::Forced(t) => {
-            if ask.polyline {
-                return Err(no_lod(ask.mark));
-            }
-            if ask.sized {
-                return Err(Error::config(
-                    "lod",
-                    format!(
-                        "{}: a layer drawn by size has no level of detail yet (its \
-                         representatives must draw largest first)",
-                        ask.mark
-                    ),
-                ));
-            }
-            for e in entries {
-                chunk_tiers(store, e.this, ask.xy, &mut done)?;
-                if let Some(n) = store.lod_tiers(e.this, ask.xy)?.prefix(*t) {
-                    store.upload_lod(cx, e.this)?;
-                    e.instances = n;
-                    e.lod = Some(n);
-                }
-            }
-            return Ok(done);
+    if let Some(t) = ask.forced {
+        if ask.polyline {
+            return Err(no_lod(ask.mark));
         }
-        lod::Choice::Auto(auto) => auto,
-    };
-    if auto.release {
+        if ask.sized {
+            return Err(Error::config(
+                "lod",
+                format!(
+                    "{}: a layer drawn by size has no level of detail yet (its \
+                         representatives must draw largest first)",
+                    ask.mark
+                ),
+            ));
+        }
+        for e in entries {
+            chunk_tiers(store, e.this, ask.xy, &mut done)?;
+            if let Some(n) = store.lod_tiers(e.this, ask.xy)?.prefix(t) {
+                store.upload_lod(cx, e.this)?;
+                e.instances = n;
+                e.lod = Some(n);
+            }
+        }
+        return Ok(done);
+    }
+    if ask.release {
         for k in 0..store.chunks().len() {
             if store.releasable(k) {
                 chunk_tiers(store, k, ask.xy, &mut done)?;
@@ -1912,7 +1915,7 @@ fn tier_entries(
             }
         }
     }
-    let shown = |i: usize| auto.visible.get(i).copied().unwrap_or(true);
+    let shown = |i: usize| frame.visible.get(i).copied().unwrap_or(true);
     let visible_rows: u64 = entries
         .iter()
         .enumerate()
@@ -1923,14 +1926,14 @@ fn tier_entries(
         return Ok(done);
     }
     let last = store.chunks().len().saturating_sub(1);
-    let mut budget = auto.builds;
+    let mut budget = if frame.spread { 1 } else { usize::MAX };
     for (i, e) in entries.iter_mut().enumerate() {
         // The newest chunk of an appended layer changes with every append
         // (GUP-719 rebuilds its tiers at doubling sizes).
-        if !shown(i) || (auto.appended && e.this == last && !store.chunk_full(last)) {
+        if !shown(i) || (ask.appended && e.this == last && !store.chunk_full(last)) {
             continue;
         }
-        let Some([kx, ky]) = auto.scale[e.this] else {
+        let [Some(kx), Some(ky)] = scale[e.this] else {
             continue;
         };
         if !store.has_tiers(e.this, ask.xy) {
