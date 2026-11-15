@@ -15,6 +15,9 @@ use gup_core::{ImageTarget, Renderer, Scene};
 const W: u32 = 400;
 const H: u32 = 300;
 
+/// Ranges of representatives a chunk draws in a frame at most (GUP-720).
+const MAX_RANGES: usize = 64;
+
 /// `n` rows of a sorted random walk (x over 0..1000, y uniform steps of
 /// ±0.5), the GUP-631 spike's data; a third value for a size channel.
 fn walk(n: usize) -> Vec<(f64, f64, f64)> {
@@ -52,11 +55,14 @@ fn scatter(rows: Vec<Row>, lod: Lod) -> Plot {
 }
 
 /// What one frame of `plot` draws: the image, the draw calls and the
-/// instances of its first data layer.
+/// instances of its first data layer (`instances`: of its chunk draws, a
+/// tier's whole prefix; `drawn`: of the spans it can see, the runs of the
+/// prefix it draws, GUP-720).
 struct Drawn {
     image: image::RgbaImage,
     draw_calls: usize,
     instances: u64,
+    drawn: u64,
     chunks: usize,
 }
 
@@ -85,6 +91,7 @@ fn draw_at(cx: &Context, plot: &mut Plot, w: u32, h: u32) -> Drawn {
         image,
         draw_calls,
         instances: batch.instances(),
+        drawn: gup_core::__private::visible_instances(&batch),
         chunks: batch.chunks(),
     }
 }
@@ -132,8 +139,27 @@ fn at_the_threshold_nothing_changes_and_one_row_more_takes_lod() {
 
 /// A scatter of `rows` over explicit scales, so a test can zoom.
 fn zoomable(rows: usize, lod: Lod) -> (Plot, ScaleRef<Linear>, ScaleRef<Linear>) {
+    zoomable_rows(walk(rows), lod)
+}
+
+/// `walk(n)` shuffled (Fisher-Yates, a fixed seed), as `lod_spike
+/// --shuffle` draws it: every chunk spans the whole extent.
+fn shuffled_walk(n: usize) -> Vec<Row> {
+    let mut rows = walk(n);
+    let mut s = 0x9e37_79b9_7f4a_7c15u64;
+    for i in (1..n).rev() {
+        s ^= s << 13;
+        s ^= s >> 7;
+        s ^= s << 17;
+        rows.swap(i, (s % (i as u64 + 1)) as usize);
+    }
+    rows
+}
+
+/// A scatter of `rows` over explicit scales, so a test can zoom.
+fn zoomable_rows(rows: Vec<Row>, lod: Lod) -> (Plot, ScaleRef<Linear>, ScaleRef<Linear>) {
     let (mut plot, x, y) = plot();
-    plot.add(Selection::<Row, Circle>::new(walk(rows)))
+    plot.add(Selection::<Row, Circle>::new(rows))
         .attr(Circle::X, x.encode(|r: &Row| r.0))
         .attr(Circle::Y, y.encode(|r: &Row| r.1))
         .attr(Circle::RADIUS, Px(1.5))
@@ -183,16 +209,26 @@ struct Fidelity {
 /// `rows` rows at `w` x `h` under `Auto` against `Off`, in full view and
 /// zoomed ten times on both axes; prints both shares.
 fn fidelity(w: u32, h: u32, rows: usize) -> Fidelity {
+    fidelity_of(w, h, walk(rows), "")
+}
+
+/// [`fidelity`] of the walk's rows in the order `data` holds them
+/// (`tag` names the saved images).
+fn fidelity_of(w: u32, h: u32, data: Vec<Row>, tag: &str) -> Fidelity {
+    let rows = data.len();
     let cx = Context::new_blocking().unwrap();
-    let (mut auto, ax, ay) = zoomable(rows, Lod::Auto);
-    let (mut off, ox, oy) = zoomable(rows, Lod::Off);
+    let (mut auto, ax, ay) = zoomable_rows(data.clone(), Lod::Auto);
+    let (mut off, ox, oy) = zoomable_rows(data, Lod::Off);
     let (a, o) = (draw_at(&cx, &mut auto, w, h), draw_at(&cx, &mut off, w, h));
     let pixels = plot_rect_pixels(&auto);
-    save(&a.image, &format!("lod-auto-{w}x{h}.png"));
-    save(&o.image, &format!("lod-off-{w}x{h}.png"));
+    save(&a.image, &format!("lod-auto{tag}-{w}x{h}.png"));
+    save(&o.image, &format!("lod-off{tag}-{w}x{h}.png"));
     // The guides draw the same in both, and the layer has one instanced
-    // draw per chunk in both.
+    // draw per chunk in both: in the full view every run of a tier's
+    // prefix meets the plot rect, so its runs merge into one range
+    // (GUP-720).
     assert_eq!(a.draw_calls, o.draw_calls);
+    assert_eq!(a.drawn, a.instances);
     assert_eq!(a.chunks, o.chunks);
     assert!(a.chunks >= 1);
     assert_eq!(o.instances, rows as u64);
@@ -218,14 +254,23 @@ fn fidelity(w: u32, h: u32, rows: usize) -> Fidelity {
     zoom_ten(&auto, &ax, &ay, (middle.0, middle.1));
     zoom_ten(&off, &ox, &oy, (middle.0, middle.1));
     let (za, zo) = (draw_at(&cx, &mut auto, w, h), draw_at(&cx, &mut off, w, h));
-    save(&za.image, &format!("lod-auto-{w}x{h}-zoom.png"));
-    save(&zo.image, &format!("lod-off-{w}x{h}-zoom.png"));
-    assert_eq!(za.draw_calls, zo.draw_calls);
+    save(&za.image, &format!("lod-auto{tag}-{w}x{h}-zoom.png"));
+    save(&zo.image, &format!("lod-off{tag}-{w}x{h}-zoom.png"));
+    // A zoomed chunk drawing a tier draws the runs of its prefix that meet
+    // the plot rect: at most 64 ranges a chunk (GUP-720).
+    let ranges = MAX_RANGES * za.chunks;
+    assert!(
+        za.draw_calls <= zo.draw_calls - zo.chunks + ranges,
+        "{} draw calls against {} for Off",
+        za.draw_calls,
+        zo.draw_calls
+    );
     let (zoom_image, zoom) = shares(&za.image, &zo.image, &auto);
     eprintln!(
-        "{rows} rows at {w} x {h}, 10x zoom: {} representatives of {} rows; \
-         ΔE00 > 10: {zoom_image:.3}% of the image, {zoom:.3}% of the plot rect",
-        za.instances, zo.instances
+        "{rows} rows at {w} x {h}, 10x zoom: {} representatives drawn of a prefix of {} \
+         ({} rows), {} draw calls (Off: {}); ΔE00 > 10: {zoom_image:.3}% of the image, \
+         {zoom:.3}% of the plot rect",
+        za.drawn, za.instances, zo.instances, za.draw_calls, zo.draw_calls
     );
     Fidelity { full, zoom }
 }
@@ -239,6 +284,58 @@ fn a_million_row_walk_matches_the_exact_draw_at_400_by_300() {
     let f = fidelity(W, H, 1_000_000);
     assert!(f.full <= 2.0, "full view {:.3}% of the plot rect", f.full);
     assert!(f.zoom <= 3.0, "10x zoom {:.3}% of the plot rect", f.zoom);
+}
+
+/// GUP-720: a shuffled layer (every chunk spanning the extent) is as
+/// faithful as the sorted one at the same size; GUP-717's gates.
+#[test]
+fn a_shuffled_million_row_walk_matches_the_exact_draw_at_400_by_300() {
+    let f = fidelity_of(W, H, shuffled_walk(1_000_000), "-shuffled");
+    assert!(f.full <= 2.0, "full view {:.3}% of the plot rect", f.full);
+    assert!(f.zoom <= 3.0, "10x zoom {:.3}% of the plot rect", f.zoom);
+}
+
+/// GUP-720: a zoomed shuffled layer draws the runs of its chunks' prefixes
+/// that meet the plot rect, a small share of them, at most 64 ranges a
+/// chunk; and the image is the image of every run (no culling), byte for
+/// byte, so no run that reaches the plot rect is skipped.
+#[test]
+fn a_zoomed_shuffled_layer_draws_the_runs_it_can_see() {
+    let cx = Context::new_blocking().unwrap();
+    // Two full chunks, each spanning the extent (a part chunk stores
+    // coarser tiers only, so a zoom draws it whole).
+    let rows = 2 * 1_048_576;
+    let data = shuffled_walk(rows);
+    let middle = walk(rows)[rows / 2];
+    let zoomed = |cull: bool| {
+        let (mut plot, x, y) = zoomable_rows(data.clone(), Lod::Auto);
+        plot.chunk_culling(cull);
+        draw(&cx, &mut plot);
+        zoom_ten(&plot, &x, &y, (middle.0, middle.1));
+        draw(&cx, &mut plot)
+    };
+    let (culled, every) = (zoomed(true), zoomed(false));
+    save(&culled.image, "lod-auto-shuffled-runs-zoom.png");
+    assert_eq!(culled.chunks, 2);
+    assert_eq!(culled.instances, every.instances, "the same prefixes");
+    assert_eq!(every.drawn, every.instances);
+    eprintln!(
+        "{rows} shuffled rows, 10x zoom: {} of {} representatives in {} draw calls (every \
+         run: {})",
+        culled.drawn, culled.instances, culled.draw_calls, every.draw_calls
+    );
+    assert!(
+        culled.drawn * 3 < culled.instances,
+        "{} of {} representatives drawn",
+        culled.drawn,
+        culled.instances
+    );
+    assert!(culled.draw_calls <= every.draw_calls - every.chunks + MAX_RANGES * every.chunks);
+    assert!(culled.draw_calls > every.draw_calls, "runs were culled");
+    assert!(
+        culled.image.as_raw() == every.image.as_raw(),
+        "culling runs changed the image"
+    );
 }
 
 #[test]
@@ -803,14 +900,15 @@ fn the_pick_index_follows_the_zoom() {
     let cx = Context::new_blocking().unwrap();
     let rows = 1_000_000;
     let (mut plot, x, y) = zoomable(rows, Lod::Auto);
-    let full = draw(&cx, &mut plot).instances;
+    let full = draw(&cx, &mut plot).drawn;
     assert_eq!(plot.pick_item_count(), Some(full as usize));
     let middle = walk(rows)[rows / 2];
     zoom_ten(&plot, &x, &y, (middle.0, middle.1));
-    let zoomed = draw(&cx, &mut plot).instances;
+    let zoomed = draw(&cx, &mut plot).drawn;
     assert_ne!(zoomed, full, "the zoom changes what is drawn");
-    // Every instance of a visible chunk is indexed (a mark whose centre is
-    // outside the plot rect is still an item).
+    // Every instance drawn is indexed (a mark whose centre is outside the
+    // plot rect is still an item), and no representative of a run the
+    // plot rect cannot see (GUP-720).
     assert_eq!(plot.pick_item_count(), Some(zoomed as usize));
     // And what the index holds picks rows of the zoomed view.
     let hit = grid(&plot, 5.0)
