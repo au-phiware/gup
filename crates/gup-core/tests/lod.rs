@@ -1006,7 +1006,7 @@ fn appends_that_grow_the_extent_leave_full_chunks_alone() {
     }
     // The old chunks draw the same rows: at most the antialiased top edge
     // of the cloud moves (it does under `Lod::Off` too, so it is not the
-    // tiers).
+    // tiers; GUP-737).
     assert!(marks > 500, "{marks} marked pixels in the old corner");
     assert!(
         differ <= 2 * (x1 - x0) as usize,

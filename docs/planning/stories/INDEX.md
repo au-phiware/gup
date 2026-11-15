@@ -660,7 +660,10 @@ GUP-628 and GUP-631 (shared `selection.rs`).
 - [GUP-730](GUP-730_Tier_Builds_Off_The_Frame_Path.md) 💡 — Build tiers on
   worker threads (native) so an owned layer above 10M rows does not add about 1
   s per 10M rows to its first frame and hosted frames never wait for a build.
-  Deps: GUP-716 ✅. Enables GUP-632.
+  Deps: GUP-716 ✅. Enables GUP-632, GUP-719's every-frame bound.
+- [GUP-737](GUP-737_Windowed_Plot_Differs_From_Fresh_By_One_Pixel_Row.md) 💡 — A
+  layer with appended rows draws one pixel row of its old marks differently from
+  the same plot before the append, also under `Lod::Off`.
 - [GUP-731](GUP-731_Finer_LOD_Cells_At_Small_Chart_Sizes.md) 💡 — At 400 × 300
   the per-chunk power-of-two grid draws 0.48 / 0.68 points less faithfully than
   the spike's design: measure non-power-of-two cells, a size-aware bias and

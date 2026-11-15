@@ -59,6 +59,12 @@ tiers are not built draws in full").
       every missing chunk before its one frame (in parallel).
 - [ ] WASM (no threads) keeps GUP-716's one-chunk-a-frame build;
       `mask     wasm-size` unchanged within 1%.
+- [ ] Every frame of GUP-719's append loop (a 2,000,000-row window, 100,000 rows
+      a frame, release) is at most 8 ms at p95, building frames included:
+      GUP-719 measured 8-54 ms for the frames that rebuild the newest chunk's
+      tiers (about 0.1 s per million rows) and asserts the bound only on frames
+      that build nothing; `a_rolling_window_frame_is_cheap` then asserts all
+      frames.
 - [ ] `tests/lod.rs` gains a test that a hosted plot's frames never block on a
       build (a build seam that sleeps) and that the image converges to the
       headless one.
@@ -94,6 +100,7 @@ tiers are not built draws in full").
 ### Enables Stories
 
 - GUP-632: Hundred Million Row Demonstration (its 10 s first frame).
+- GUP-719: LOD With Appends and Windows (its every-frame 8 ms bound).
 
 ## Testing Strategy
 
