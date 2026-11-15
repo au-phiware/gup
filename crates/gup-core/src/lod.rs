@@ -18,15 +18,20 @@
 //! sort of `(key, row)` pairs puts every tier's cells in runs of keys, and
 //! a row represents its cell at every tier from its `first_tier` on (see
 //! [`first_tiers`]). Rows are kept in **progressive order**, by
-//! `first_tier` and then by key (Morton order): tier `t` is the prefix
-//! `order[..counts[t]]`, and each tier's block of it,
-//! `order[counts[t - 1]..counts[t]]`, follows a Morton curve over the chunk.
+//! `first_tier` first: tier `t` is the prefix `order[..counts[t]]`.
 //!
-//! Each block is cut into [`Run`]s of at most [`RUN_LEN`]
-//! representatives, each with the box of their positions (GUP-720). A
-//! stretch of a Morton curve is compact, so a frame draws, of the prefix,
-//! only the runs whose boxes it can see ([`ranges`]): a zoom into a chunk
-//! that spans the whole extent (unsorted rows) skips most of it.
+//! Each tier's block of the prefix, `order[counts[t - 1]..counts[t]]`, is
+//! cut into [`Run`]s: consecutive stretches of at most [`RUN_LEN`] of the
+//! block's representatives in Morton order of their keys, each with the
+//! box of their positions (GUP-720). A stretch of a Morton curve is
+//! compact, so a frame draws, of the prefix, only the runs whose boxes it
+//! can see ([`ranges`]): a zoom into a chunk that spans the whole extent
+//! (unsorted rows) skips most of it. Within a run the representatives are
+//! **spread**: drawn in bit-reversed order of their Morton positions, so
+//! consecutive instances land far apart. Drawn in Morton order, neighbours
+//! overlap and the GPU serialises their blending: a shuffled 10M-row full
+//! view took 20.3 ms against 13.9 in row order (GUP-720), as a sorted x
+//! costs more than a shuffled one (RFC-001 "GUP-631 findings").
 //!
 //! Tiers are stored while they hold at most half the chunk's rows; past
 //! the finest stored tier a chunk draws every row ([`Tiers::prefix`] is
@@ -192,6 +197,7 @@ impl Tiers {
         }
         drop(first);
         let runs = runs(&order, &counts, &xy);
+        spread(&mut order, &runs);
         Tiers {
             rows,
             ex,
@@ -208,6 +214,18 @@ impl Tiers {
     /// (draw every row).
     pub fn prefix(&self, t: u32) -> Option<u32> {
         self.counts.get(t as usize).copied()
+    }
+
+    /// The prefix a frame drawing tier `t` (as [`tier`] chooses it) draws:
+    /// [`prefix`](Self::prefix), or one tier past the stored tiers the
+    /// finest stored tier's, at most one tier coarser than asked (GUP-720:
+    /// a chunk spanning the extent of 10M unsorted rows stores tier 13 and a
+    /// 10x zoom asks 14, so it drew every row, 135 ms, against 15.9 ms and
+    /// 0.31% of the plot rect over ΔE00 10 for tier 13). Further past,
+    /// `None`: every row.
+    pub fn drawn_prefix(&self, t: u32) -> Option<u32> {
+        self.prefix(t)
+            .or_else(|| (t == self.stored + 1).then(|| self.counts[self.stored as usize]))
     }
 }
 
@@ -235,6 +253,33 @@ fn runs(order: &[u32], counts: &[u32], xy: &impl Fn(u32) -> (f64, f64)) -> Vec<R
         start = end;
     }
     runs
+}
+
+/// Reorder each run of `order` from Morton order to its bit-reversal: the
+/// representative at position `i` of a run of `n` is the one of Morton rank
+/// `reverse(i)`, over `ceil(log2 n)` bits, skipping ranks past the run's
+/// end. The run's set, and so its box, is unchanged.
+fn spread(order: &mut [u32], runs: &[Run]) {
+    let mut morton = Vec::with_capacity(RUN_LEN as usize);
+    for run in runs {
+        let s = &mut order[run.start as usize..run.end as usize];
+        morton.clear();
+        morton.extend_from_slice(s);
+        let n = s.len();
+        let bits = n.next_power_of_two().trailing_zeros();
+        let mut at = 0;
+        for i in 0..n.next_power_of_two() {
+            let j = if bits == 0 {
+                0
+            } else {
+                i.reverse_bits() >> (usize::BITS - bits)
+            };
+            if j < n {
+                s[at] = morton[j];
+                at += 1;
+            }
+        }
+    }
 }
 
 /// The ranges of `order[..count]` (a tier's prefix: `count` is one of the
@@ -658,23 +703,59 @@ mod tests {
             let reps = representatives(&cells, t);
             if t <= tiers.stored {
                 let mut prefix = tiers.order[..tiers.counts[t as usize] as usize].to_vec();
-                // Each tier block is in Morton order of the finest key
-                // (distinct: one representative a tier-`t` cell).
+                // Each tier block's runs are consecutive stretches of its
+                // Morton order of the finest key (distinct: one
+                // representative a tier-`t` cell), each spread.
                 let start = if t == 0 {
                     0
                 } else {
                     tiers.counts[t as usize - 1]
                 };
-                let keys: Vec<u32> = prefix[start as usize..]
+                let key = |r: u32| {
+                    let (cx, cy) = cells[r as usize].expect("a finite representative");
+                    part1by1(cx) | part1by1(cy) << 1
+                };
+                let mut keys = Vec::new();
+                for run in tiers
+                    .runs
                     .iter()
-                    .map(|&r| {
-                        let (cx, cy) = cells[r as usize].expect("a finite representative");
-                        part1by1(cx) | part1by1(cy) << 1
-                    })
-                    .collect();
+                    .filter(|r| r.start >= start && r.end <= tiers.counts[t as usize])
+                {
+                    let drawn: Vec<u32> = tiers.order[run.start as usize..run.end as usize]
+                        .iter()
+                        .map(|&r| key(r))
+                        .collect();
+                    let mut sorted = drawn.clone();
+                    sorted.sort_unstable();
+                    // Position `i` holds Morton rank `reverse(i)`.
+                    let n = sorted.len();
+                    let bits = n.next_power_of_two().trailing_zeros();
+                    let ranks: Vec<usize> = (0..n.next_power_of_two())
+                        .map(|i| {
+                            if bits == 0 {
+                                0
+                            } else {
+                                i.reverse_bits() >> (usize::BITS - bits)
+                            }
+                        })
+                        .filter(|&j| j < n)
+                        .collect();
+                    let want: Vec<u32> = ranks.iter().map(|&j| sorted[j]).collect();
+                    assert_eq!(
+                        drawn, want,
+                        "{name}: tier {t} run {}.. is not spread",
+                        run.start
+                    );
+                    keys.extend(sorted);
+                }
+                assert_eq!(
+                    keys.len(),
+                    prefix.len() - start as usize,
+                    "{name}: tier {t} runs"
+                );
                 assert!(
                     keys.windows(2).all(|w| w[0] < w[1]),
-                    "{name}: tier {t} block is not in Morton order"
+                    "{name}: tier {t} block's runs are not Morton stretches"
                 );
                 prefix.sort_unstable();
                 assert_eq!(prefix, reps, "{name}: tier {t}");
@@ -775,6 +856,11 @@ mod tests {
         assert_eq!((tiers.ex, tiers.ey), (-12, -12));
         assert_eq!(tiers.counts, [1, 4, 16, 64]);
         assert_eq!(tiers.prefix(4), None);
+        // One tier past the stored tiers draws the finest stored tier;
+        // further, every row (GUP-720).
+        assert_eq!(tiers.drawn_prefix(2), Some(16));
+        assert_eq!(tiers.drawn_prefix(4), Some(64));
+        assert_eq!(tiers.drawn_prefix(5), None);
         // 1,000 rows, one per cell of a 32 × 32 grid: tier 4 (256) is the
         // finest at most half the rows.
         let grid: Vec<(f64, f64)> = (0..1000)

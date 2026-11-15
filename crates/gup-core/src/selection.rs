@@ -155,6 +155,13 @@ impl Retain {
 /// At or under the threshold every row draws, exactly as with
 /// [`Off`](Lod::Off).
 ///
+/// Zoomed in, a chunk draws only the representatives near the plot rect
+/// (in compact stretches with their own boxes, GUP-720), so a zoom into
+/// unsorted rows, whose every chunk spans the whole extent, costs about
+/// what its visible region costs. A chunk keeps cells down to the size at
+/// which they hold half its rows; zoomed one step past that, it draws its
+/// finest cells, and further in, every row.
+///
 /// Only [`Circle`](crate::Circle) layers and [`Rect`](crate::Rect)
 /// layers with constant `width` and `height` take a level of detail.
 /// Lines, areas, segments, rects with per-row extents and layers drawn
@@ -1979,9 +1986,11 @@ fn chunk_tiers(
 ///   tiers of every chunk it drops (nothing could build them later; RFC-001
 ///   "GUP-631 findings", GUP-716 Decisions). Then, when the visible chunks
 ///   hold more than [`Lod::AUTO_MIN_ROWS`] rows, each visible chunk draws
-///   the prefix of [`lod::tier`] at its scale; a chunk past its stored
-///   tiers, or whose tiers are not built and over the prepare's build
-///   budget (`pending`), draws every row.
+///   the prefix of [`lod::tier`] at its scale, or one tier past its stored
+///   tiers its finest stored tier's ([`Tiers::drawn_prefix`](lod::Tiers::drawn_prefix),
+///   GUP-720); a chunk further past its stored tiers, or whose tiers are
+///   not built and over the prepare's build budget (`pending`), draws
+///   every row.
 ///
 /// Not generic: one copy serves every row type.
 #[inline(never)]
@@ -2102,7 +2111,7 @@ fn choose_tiers(
         let Some(t) = lod::tier(tiers.ex, tiers.ey, kx, ky) else {
             continue;
         };
-        if let Some(n) = tiers.prefix(t) {
+        if let Some(n) = tiers.drawn_prefix(t) {
             store.upload_lod(cx, e.this)?;
             e.instances = n;
             e.lod = Some(n);

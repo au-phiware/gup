@@ -324,6 +324,8 @@ fn a_zoomed_shuffled_layer_draws_the_runs_it_can_see() {
          run: {})",
         culled.drawn, culled.instances, culled.draw_calls, every.draw_calls
     );
+    // Measured 157,311 of 552,708 (28.5%): at 400 x 300 a chunk's prefix
+    // is about 135 runs, whose boxes are a few percent of the extent each.
     assert!(
         culled.drawn * 3 < culled.instances,
         "{} of {} representatives drawn",
@@ -340,11 +342,12 @@ fn a_zoomed_shuffled_layer_draws_the_runs_it_can_see() {
 
 #[test]
 fn a_million_row_walk_matches_the_exact_draw_at_1080p() {
-    // Measured 0.571% / 0.000% (every row draws: the tiers have run out);
-    // the full gate is 1.3x, the zoom gate allows a few antialiasing pixels.
+    // Measured 0.571% / 1.380%; the gates are 1.3x those. The zoom asks
+    // one tier past the chunk's finest stored tier, which it draws
+    // (GUP-720; before, every row drew there and it measured 0.000%).
     let f = fidelity(1920, 1080, 1_000_000);
     assert!(f.full <= 0.75, "full view {:.3}% of the plot rect", f.full);
-    assert!(f.zoom <= 0.1, "10x zoom {:.3}% of the plot rect", f.zoom);
+    assert!(f.zoom <= 1.8, "10x zoom {:.3}% of the plot rect", f.zoom);
 }
 
 /// The golden of the `Auto` full view (GUP-717): a continuous band, the
