@@ -672,7 +672,7 @@ GUP-628 and GUP-631 (shared `selection.rs`).
   size-ordered layer's resolve costs about 12 ms a frame against 1.1 ms for a
   plain scatter: profile, then cache per epoch. Carries GUP-492's 4.0 ms CPU
   gate. Deps: GUP-492 ✅.
-- [GUP-734](GUP-734_Slow_Frames_Do_Not_Fail_Texture_Acquire.md) 🚧 — A 10M-row
+- [GUP-734](GUP-734_Slow_Frames_Do_Not_Fail_Texture_Acquire.md) ✅ — A 10M-row
   `Lod::Off` frame failed with "Acquiring a texture failed" six times of six
   (GUP-717): reproduce, then retry a surface timeout instead of failing. Deps:
   GUP-716 ✅.

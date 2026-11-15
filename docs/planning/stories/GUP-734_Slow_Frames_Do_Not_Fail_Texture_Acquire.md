@@ -15,8 +15,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Track N5: Performance at Scale **Status**: 🚧 In Progress
-**Created**: 2026-11-16
+**Initiative**: Track N5: Performance at Scale **Status**: ✅ Complete
+(2026-11-16) **Created**: 2026-11-16
 
 ## Context
 
@@ -70,12 +70,12 @@ same error instead of a slow chart. Not investigated yet.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] `mask merge-check`, `mask all-check`
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] `mask merge-check`, `mask all-check`
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
 
 ## Investigation (2026-11-16)
 
@@ -111,3 +111,39 @@ loss, so nothing retries it. Changes:
   PERF_BUDGETS note. `zoom_bench` itself is unchanged: it is not at fault.
 - The retry is not exercised by a test (a surface cannot be made to time out
   headlessly); the lost-device path was shown on the real GPU (output above).
+
+## Retrospective
+
+**Completed**: 2026-11-16
+
+### Key Technical Learnings
+
+#### wgpu reports a lost device as `SurfaceError::Other`
+
+- **Challenge**: "Acquiring a texture failed with a generic error" names
+  nothing; no scope or uncaptured handler saw it.
+- **Solution**: read wgpu-core's `get_current_texture` (device validity check
+  first), then a `set_device_lost_callback` showed the reason.
+- **Pattern**: when a wgpu call fails generically, install the device-lost
+  callback before guessing at timeouts.
+
+### Architectural Decisions
+
+#### No retry for a lost device
+
+- **Decision**: only `Timeout` retries; a lost device is reported with its
+  reason.
+- **Trade-off**: `Lod::Off` at 10M rows on this GPU still fails; it fails
+  clearly.
+- **Future**: a pass over about 1 s is reset by the driver here. Splitting one
+  long pass is a design change (out of scope: "making a 10M-row full draw
+  faster").
+
+### Development Workflow Insights
+
+- The repro needed GUP-717's exact flags (Mailbox, uncapped, 1080p, MSAA 4); the
+  default Fifo run is paced to 1 fps and passes.
+
+### Follow-up Stories
+
+None: the GPU-batch limit is what level of detail is for.
