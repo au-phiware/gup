@@ -286,12 +286,14 @@ fn spread(order: &mut [u32], runs: &[Run]) {
 /// tiers' `counts`) a frame draws: the `runs` that `seen` keeps, adjacent
 /// ones merged into one range; past [`MAX_RANGES`] ranges, the ranges
 /// either side of the narrowest gaps merged too (drawing the gaps'
-/// instances, which `seen` rejected). In order; empty when no run is
-/// seen.
+/// instances, which `seen` rejected): every gap narrower than the
+/// narrowest kept one is merged, so ties may leave fewer ranges. In order;
+/// empty when no run is seen. `seen` is a trait object so one copy serves
+/// every caller (WASM size).
 pub(crate) fn ranges(
     runs: &[Run],
     count: u32,
-    mut seen: impl FnMut(&Run) -> bool,
+    seen: &mut dyn FnMut(&Run) -> bool,
 ) -> Vec<std::ops::Range<u32>> {
     let mut out: Vec<std::ops::Range<u32>> = Vec::new();
     for run in runs.iter().take_while(|r| r.start < count) {
@@ -305,28 +307,27 @@ pub(crate) fn ranges(
         }
     }
     if out.len() > MAX_RANGES {
-        // Keep the `MAX_RANGES - 1` widest gaps (the first of equal ones).
-        let mut gaps: Vec<(u32, usize)> = out
-            .windows(2)
-            .enumerate()
-            .map(|(i, w)| (w[1].start - w[0].end, i))
-            .collect();
-        gaps.sort_unstable_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
-        let mut kept = vec![false; gaps.len()];
-        for &(_, i) in &gaps[..MAX_RANGES - 1] {
-            kept[i] = true;
-        }
-        let mut merged = Vec::with_capacity(MAX_RANGES);
-        let mut current = out[0].clone();
-        for (i, r) in out.iter().enumerate().skip(1) {
-            if kept[i - 1] {
-                merged.push(current);
-                current = r.clone();
+        // The smallest gap width `g` that leaves at most `MAX_RANGES`
+        // ranges when every gap narrower than `g` is merged: a binary
+        // search over widths (no sort, a few dozen passes over the gaps).
+        let gaps = || out.windows(2).map(|w| w[1].start - w[0].end);
+        let kept = |g: u32| 1 + gaps().filter(|&w| w >= g).count();
+        let (mut lo, mut hi) = (0u32, gaps().max().unwrap_or(0) + 1);
+        while lo < hi {
+            let mid = lo + (hi - lo) / 2;
+            if kept(mid) <= MAX_RANGES {
+                hi = mid;
             } else {
-                current.end = r.end;
+                lo = mid + 1;
             }
         }
-        merged.push(current);
+        let mut merged: Vec<std::ops::Range<u32>> = Vec::with_capacity(MAX_RANGES);
+        for r in &out {
+            match merged.last_mut() {
+                Some(last) if r.start - last.end < lo => last.end = r.end,
+                _ => merged.push(r.clone()),
+            }
+        }
         out = merged;
     }
     out
@@ -1056,7 +1057,7 @@ mod tests {
             (10_000, 0.0),
         ] {
             let seen: Vec<bool> = (0..1000).map(|_| rng.unit() < p).collect();
-            let got = ranges(&runs, count, |r| seen[(r.start / 10) as usize]);
+            let got = ranges(&runs, count, &mut |r: &Run| seen[(r.start / 10) as usize]);
             // Brute force: the instances of the seen runs, merged.
             let want: Vec<u32> = (0..count).filter(|&i| seen[(i / 10) as usize]).collect();
             let mut exact: Vec<std::ops::Range<u32>> = Vec::new();
@@ -1073,7 +1074,8 @@ mod tests {
                 assert_eq!(got, exact, "count {count}, p {p}");
             } else {
                 // Every seen instance is drawn, the ranges start and end on
-                // seen runs, and the gaps kept are the widest.
+                // seen runs, and every gap kept is wider than every gap
+                // merged.
                 for &i in &want {
                     assert!(got.iter().any(|r| r.contains(&i)), "{i} not drawn");
                 }
@@ -1082,14 +1084,18 @@ mod tests {
                 }
                 let gap = |w: &[std::ops::Range<u32>]| w[1].start - w[0].end;
                 let kept_min = got.windows(2).map(gap).min().unwrap();
-                let mut all: Vec<u32> = exact.windows(2).map(gap).collect();
-                all.sort_unstable_by(|a, b| b.cmp(a));
-                assert_eq!(got.len(), MAX_RANGES);
-                assert!(kept_min >= all[MAX_RANGES - 1], "{kept_min} {all:?}");
+                let merged_max = exact
+                    .windows(2)
+                    .filter(|w| got.iter().any(|r| r.contains(&w[0].end)))
+                    .map(gap)
+                    .max()
+                    .unwrap();
+                assert!(kept_min > merged_max, "{kept_min} {merged_max}");
+                assert!(got.len() > MAX_RANGES / 2, "{} ranges", got.len());
             }
         }
-        assert!(ranges(&runs, 0, |_| true).is_empty());
-        let all = ranges(&runs, 10_000, |_| true);
+        assert!(ranges(&runs, 0, &mut |_: &Run| true).is_empty());
+        let all = ranges(&runs, 10_000, &mut |_: &Run| true);
         assert_eq!((all.len(), &all[0]), (1, &(0..10_000)));
     }
 

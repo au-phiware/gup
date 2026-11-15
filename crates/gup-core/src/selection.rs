@@ -2137,16 +2137,15 @@ fn lod_ranges(
     for (i, e) in entries.iter().enumerate() {
         let Some(n) = e.lod else { continue };
         let tiers = store.chunks()[e.this].tiers().expect("a tier draws");
-        let ranges = match plot {
-            Some(plot) => lod::ranges(&tiers.runs, n, |run| {
+        let ranges = lod::ranges(&tiers.runs, n, &mut |run| {
+            plot.is_none_or(|plot| {
                 PixelBox {
                     x: image(0, run.x),
                     y: image(1, run.y),
                 }
                 .visible(margin, plot)
-            }),
-            None => lod::ranges(&tiers.runs, n, |_| true),
-        };
+            })
+        });
         out.push((i, ranges));
     }
     out
