@@ -590,6 +590,7 @@ impl Context {
 
     /// Why the GPU device was lost, if it was and Gup created the device
     /// (a host's device keeps the host's callback).
+    #[cfg(any(feature = "window", test))]
     pub(crate) fn device_lost(&self) -> Option<String> {
         self.inner.gpu_errors.lost()
     }
