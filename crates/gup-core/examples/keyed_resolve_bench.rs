@@ -61,9 +61,11 @@ fn plot(rows: Vec<Row>, owned: bool) -> Plot {
     let (x, y) = (plot.x(Linear::new()), plot.y(Linear::new()));
     let colour = ScaleRef::new(Categorical::okabe_ito());
     let layer = plot.add(Selection::<Row, Circle>::new(rows));
+    // The bench times resolving keys, not drawing: every row (no tiers).
     layer
         .attr(Circle::X, x.encode(|r: &Row| r.x))
-        .attr(Circle::Y, y.encode(|r: &Row| r.y));
+        .attr(Circle::Y, y.encode(|r: &Row| r.y))
+        .lod(Lod::Off);
     if owned {
         layer.attr(
             Circle::FILL,

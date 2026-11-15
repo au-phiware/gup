@@ -223,7 +223,7 @@ pub use scale::{
 };
 pub use scale::{OKABE_ITO_DARK, OKABE_ITO_DISTINCT, OKABE_ITO_DISTINCT_DARK};
 pub use scene::Scene;
-pub use selection::{Retain, RowWindow, Selection};
+pub use selection::{Lod, Retain, RowWindow, Selection};
 pub use shader::WgslModule;
 pub use svg::{SvgOptions, SvgTarget, VectorTarget};
 pub use target::{DEFAULT_SAMPLES, Frame, ImageTarget, RenderTarget, TargetOptions, TextureTarget};
@@ -434,10 +434,11 @@ pub mod prelude {
     pub use crate::{
         Area, AreaAttrs, Axes, Band, Bins, Button, Categorical, Chart, ChartExt, Circle,
         CircleAttrs, Color, ColorScale, Columns, Context, CpuMirror, Curve, DataTable, Derived,
-        Description, Diverging, Drag, EncodeFn, Event, Input, Key, Line, LineAttrs, Linear, Log,
-        Mark, Modifiers, OKABE_ITO_DISTINCT, Offset, Plot, Point, PointScale, PositionScale, Pow,
-        Px, Rect, RectAttrs, Response, Retain, RowId, RowWindow, ScaleRef, Segment, SegmentAttrs,
-        Selection, Sequential, ShaderFn, Symlog, Theme, Time, Unbrushed, Unit, wgsl_function,
+        Description, Diverging, Drag, EncodeFn, Event, Input, Key, Line, LineAttrs, Linear, Lod,
+        Log, Mark, Modifiers, OKABE_ITO_DISTINCT, Offset, Plot, Point, PointScale, PositionScale,
+        Pow, Px, Rect, RectAttrs, Response, Retain, RowId, RowWindow, ScaleRef, Segment,
+        SegmentAttrs, Selection, Sequential, ShaderFn, Symlog, Theme, Time, Unbrushed, Unit,
+        wgsl_function,
     };
     pub use crate::{
         AreaChart, BarChart, BoxPlotChart, HeatmapChart, HistogramChart, LineChart, ScatterChart,
@@ -475,6 +476,20 @@ pub mod __private {
         t: Option<u32>,
     ) {
         layer.force_lod_tier(t);
+    }
+
+    /// Chunk tiers `layer` has built (GUP-716's laziness and threshold
+    /// tests).
+    pub fn lod_tier_builds<T: Send + Sync + 'static, M: crate::Mark>(
+        layer: &crate::Selection<T, M>,
+    ) -> u64 {
+        layer.lod_tier_builds()
+    }
+
+    /// Instances `batch` draws in its visible spans (rows, or
+    /// representatives under a level of detail), for tests and benches.
+    pub fn visible_instances(batch: &crate::scene::MarkBatch) -> u64 {
+        batch.visible_instances()
     }
 
     /// The library's flattened modules (`VIEW`, `SCALE_LINEAR`, …), which a

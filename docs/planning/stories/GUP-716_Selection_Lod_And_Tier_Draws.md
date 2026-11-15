@@ -18,8 +18,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Track N5: Performance at Scale **Status**: 📋 Planned
-**Created**: 2026-11-11
+**Initiative**: Track N5: Performance at Scale **Status**: ✅ Complete
+(2026-11-15) **Created**: 2026-11-11
 
 ## Context
 
@@ -57,26 +57,30 @@ of the image and failed it on the plot rect (1.076%); one tier finer scored
 
 ### AC1: The API
 
-- [ ] `#[non_exhaustive] pub enum Lod { Auto, Off }` with `Default = Auto`,
+- [x] `#[non_exhaustive] pub enum Lod { Auto, Off }` with `Default = Auto`,
       `pub const AUTO_MIN_ROWS: u64 = 200_000` on `Lod`,
       `Selection::lod(self, Lod) -> Self` (the setter's style as `retain`),
       `ScatterChart::lod(self, Lod) -> Self`, `Lod` in the prelude. Exercised
       from a doctest (external-crate view) and `crates/gup-core/tests/lod.rs`.
-- [ ] A layer drawn in size order (`Selection::size_order`) ignores `Lod` and
+      _Met as `Selection::lod(&mut self, Lod) -> &mut Self`_, which is
+      `retain`'s style; doctests on `Lod` and `ScatterChart::lod`.
+- [x] A layer drawn in size order (`Selection::size_order`) ignores `Lod` and
       draws every row until GUP-721 (a test asserts `Auto` and `Off` images and
-      draw calls are equal for one at 1M rows).
-- [ ] Only `Circle` and constant-extent `Rect` quads take LOD; a line, area,
+      draw calls are equal for one at 1M rows). _There is no public
+      `size_order`: a layer whose size channel is a column (`DrawOrder`)._
+- [x] Only `Circle` and constant-extent `Rect` quads take LOD; a line, area,
       segment, text or a `Rect` with per-row extents ignores the setting (a test
       per mark kind asserts `draw_calls()` and the image are unchanged under
-      `Lod::Auto` at 1M rows where applicable).
+      `Lod::Auto` at 1M rows where applicable). _Text: `TextLayer` has no `Lod`
+      setter, so not applicable._
 
 ### AC2: Threshold and tier rule
 
-- [ ] A layer whose visible (culled) rows are at most 200,000 draws exactly as
+- [x] A layer whose visible (culled) rows are at most 200,000 draws exactly as
       today: for 200,000 rows the image equals `Lod::Off`'s byte for byte and no
       `Tiers` are built (a counter on the layer, asserted 0). At 200,001 rows
       with a view that sees them all, LOD applies.
-- [ ] Tier for a visible chunk `c`, with `A` the data area of one pixel at the
+- [x] Tier for a visible chunk `c`, with `A` the data area of one pixel at the
       current domains and plot rect:
 
   ```text
@@ -88,31 +92,49 @@ of the image and failed it on the plot rect (1.076%); one tier finer scored
   stored tiers) draws every row of the chunk, so LOD never draws more than today
   (a test: zoomed far in, instances equal rows).
 
-- [ ] A unit test of the formula against `View::tier` of the spike on its own
+  _Met with one change: `t` above 16 draws every row (`None`), as the spike's
+  `View::tier` (clamped to 31, "past `TMAX` every row is drawn"), instead of
+  being clamped to 16. Clamped, a 1M-row chunk spanning a million seconds seen
+  through a 1 ms window drew one row per 16 s cell and lost the burst
+  `scales_png::time_zoomed_to_a_millisecond_draws_within_a_quarter_pixel`
+  checks._
+
+- [x] A unit test of the formula against `View::tier` of the spike on its own
       example (full view of a 10M-row layer 1920 x 1080 gives the spike's tier).
+      _`lod::tests`: on a chunk whose grid is the spike's, `tier` is the spike's
+      plus the bias for 28 views; on the spike's 10M full view (its tier 10),
+      one chunk over that extent draws 11, the spike's "one tier finer"._
 
 ### AC3: Draws and laziness
 
-- [ ] Tiers are built lazily on the first prepare that needs them, per chunk,
+- [x] Tiers are built lazily on the first prepare that needs them, per chunk,
       one chunk per frame at most when more than one is missing (so a first
       frame does not stall 10M x 70 ns; chunks not yet built draw in full for
       that frame and the plot requests a redraw). A test counts builds per
-      prepare.
-- [ ] A 1M-row sorted random-walk scatter at 400 x 300: `Prepared::draw_calls()`
+      prepare. _One a frame under a host with a waker (`Chart::needs_frame`
+      stays true and the resolve cache is bypassed until built); a headless plot
+      builds every missing chunk in one prepare (the Risk's flag is "the plot
+      has a waker", not a context flag). An owned layer whose release drops its
+      CPU copy builds every full chunk in that prepare (Decisions)._
+- [x] A 1M-row sorted random-walk scatter at 400 x 300: `Prepared::draw_calls()`
       is at most the chunk count (one instanced draw per visible chunk); the
       drawn instance count (`Prepared` stat or the test seam) is at most
       `plot_rect_pixels` (at most one per pixel of area, times 4 for the bias).
+      _10,476 representatives in one chunk, 84,150 plot pixels; draw calls equal
+      `Off`'s (one instanced draw per chunk plus the guides). Instances are
+      `MarkBatch::instances()`; `__private::visible_instances` serves benches._
 
 ### AC4: Appearance and opt-outs
 
-- [ ] Search `tests/`, `examples/`, `crates/gup-core/wasm-size/` and the browser
+- [x] Search `tests/`, `examples/`, `crates/gup-core/wasm-size/` and the browser
       scenes for scatters above 200,000 rows or exercising `Retain`: each either
       still passes (list them) or is opted out with `.lod(Lod::Off)` (list them
-      with the reason). `mask all-check` and `mask merge-check` pass.
-- [ ] The PNG of the 1M-row scatter under `Auto` is read by eye beside `Off`:
+      with the reason). `mask all-check` and `mask merge-check` pass. _See
+      "Opt-outs" in the Implementation Summary._
+- [x] The PNG of the 1M-row scatter under `Auto` is read by eye beside `Off`:
       same band, edges at most about 1 px narrower, no gaps; path in the
       retrospective. (The fidelity share and golden are GUP-717.)
-- [ ] `mask wasm-browser` passes; the scatter scene is unchanged (a small
+- [x] `mask wasm-browser` passes; the scatter scene is unchanged (a small
       layer).
 
 ## Decisions
@@ -166,10 +188,10 @@ of the image and failed it on the plot rect (1.076%); one tier finer scored
 
 ## Technical Tasks
 
-- [ ] `Lod`, setters, prelude, docs (with the "exact output: `Lod::Off`" note).
-- [ ] Tier formula and the prepare-time selection producing `DrawEntry::lod`.
-- [ ] Lazy, per-frame build scheduling.
-- [ ] Tests, opt-outs, doctest; changelog line under `[0.1.0]` Added.
+- [x] `Lod`, setters, prelude, docs (with the "exact output: `Lod::Off`" note).
+- [x] Tier formula and the prepare-time selection producing `DrawEntry::lod`.
+- [x] Lazy, per-frame build scheduling.
+- [x] Tests, opt-outs, doctest; changelog line under `[0.1.0]` Added.
 
 ## Dependencies
 
@@ -191,7 +213,7 @@ of the image and failed it on the plot rect (1.076%); one tier finer scored
 
 ## Success Metrics
 
-- [ ] A 1M-row scatter draws at most one instanced draw per visible chunk and a
+- [x] A 1M-row scatter draws at most one instanced draw per visible chunk and a
       bounded instance count; at or under the threshold nothing changes.
 
 ## Risk Assessment
@@ -205,15 +227,304 @@ of the image and failed it on the plot rect (1.076%); one tier finer scored
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (AC4's PNG pair)
-- [ ] `mask wasm-browser` (the default is new browser-visible behaviour)
-- [ ] WASM size: `mask wasm-size` scatter gz bytes reported; a rise above +2% is
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye (AC4's PNG pair)
+- [x] `mask wasm-browser` (the default is new browser-visible behaviour)
+- [x] WASM size: `mask wasm-size` scatter gz bytes reported; a rise above +2% is
       an escalation
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
+
+## Implementation Summary
+
+- **API** (`selection.rs`, `lib.rs`, `builder/scatter.rs`):
+  `#[non_exhaustive] pub enum Lod { Auto, Off }` (default `Auto`) with
+  `Lod::AUTO_MIN_ROWS = 200_000`, beside `Retain`, documented with what it
+  covers and what still reads every row (CPU pick, hover and tooltips over CPU
+  data, SVG); `Selection::lod(&mut self, Lod) -> &mut Self`;
+  `ScatterChart::lod(self, Lod) -> Self`; `Lod` re-exported and in the prelude.
+  Hidden seams: `__private::lod_tier_builds(&Selection)` (tiers built so far)
+  and `__private::visible_instances(&MarkBatch)` (instances of the visible
+  spans).
+- **Tier rule** (`lod.rs`): `tier(ex, ey, kx, ky)`, the AC's formula with
+  `LOD_TIER_BIAS = 1` (private, fidelity reason in its doc), from the chunk's
+  pixels per data unit along x and y (its extent's image over its extent). A
+  chunk with no span on one axis takes the 1-D rule on the other; no span on
+  either draws one row. Above tier 16, or for a scale that is not finite,
+  `None`: every row.
+- **Per-frame choice** (`selection.rs`): `Selection::lod_entries` (generic and
+  small: eligibility, the x/y store columns and each chunk's scale) and
+  `tier_entries` (not generic): first the release build (every chunk
+  `ColumnStore::releasable` when the prepare's release drops CPU copies), then,
+  when the visible chunks hold more than 200,000 rows, each visible chunk draws
+  its tier's prefix through GUP-715's `lod_tiers`, `upload_lod`,
+  `DrawEntry::lod` and indexed program, unchanged. Eligible: `Lod::Auto`, a quad
+  with `HitShape::Disc` or a constant-extent `AlignedBox`, no size order, more
+  than 200,000 rows. An appended layer's newest chunk, while not full, draws
+  every row (GUP-719). GUP-715's `ForcedTier` function pointers are gone (the
+  default links the build anyway); `force_lod_tier` stays as a test seam that
+  overrides the choice.
+- **Laziness** (`plot.rs`, `lod::Frame`): the plot now computes each layer's
+  visible-entry mask before `Layer::prepare` and passes it with `spread` (the
+  plot has a host waker). Spread: one missing chunk builds per prepare, the
+  layer reports `lod_pending`, `Chart::needs_frame` is true and `Plot::resolve`
+  bypasses its cache until every visible chunk is built. Headless: every missing
+  chunk builds in the one prepare.
+- **Store** (`column.rs`): `has_tiers`, `chunk_full`, `releasable`.
+- **Measurement** (`examples/lod_spike.rs`): candidate `auto` (`Lod::Auto`, its
+  first frame timed as `setup_ms`, plus `chunks_built`); the prototypes now draw
+  through `Lod::Off`.
+- **Opt-outs** (AC4), each `.lod(Lod::Off)` because its numbers were recorded on
+  full draws: `zoom_bench` (PERF_BUDGETS rows; GUP-717 adds `--lod`),
+  `edge_inset_bench` (times resolves of 4M rows), `keyed_resolve_bench` (1M
+  rows, times key resolves), `scale_bench` (default off; `--lod-draw auto`
+  measures the build) and `lod_spike`'s prototypes. Passing under `Auto`:
+  `tests/window.rs` (300,000 bubbles: sized, so ignored), `tests/scales_png.rs`
+  (1M rows; needed the tier-above-16 rule), and the `Retain` tests
+  `heatmap_png`, `events`, `msaa`, `pick`, `area_pick`, `row_text`, `svg_marks`,
+  `columns`, `line_monotone` and `scatter_png` (all small). `wasm-size` scenes:
+  200 and 60 rows, unchanged. `gup-culling-lod`'s examples are the old crate,
+  untouched.
+- **Tests**: `tests/lod.rs` 13 (threshold byte equality and 0 builds at 200,000,
+  LOD at 200,001; the 1M walk's draw calls, instances, PNG pair and ΔE share;
+  zoomed far in; one build a frame with a waker, all at once without; the
+  release build of a `GpuOnly` layer; `Off`; size order, line, area, segment and
+  per-row `Rect` unchanged at 1M; a constant `Rect` takes LOD; the scatter
+  builder); `lod.rs` 3 unit tests (the formula against the spike's `View::tier`,
+  the spike's own 10M full view, degenerate chunks); doctests on `Lod` and
+  `ScatterChart::lod`.
+
+### Measurements
+
+Release, Intel HD 630 (Mesa 26.0.0, Vulkan), headless 1920 × 1080, `lod_spike`
+sorted walk, radius 1.5, 30 frames after 3 warm-up; three runs, alternating
+order, with `pyramid --pyramid-bias 1` (the spike's B, one tier finer) as the
+same-session reference. Load 3.4-6.8 from other agents, `MemAvailable` 2.8-5.9
+GB (no 80M run: under 20 GB free). GPU ms is the scene pass median.
+
+| rows | view | candidate  | drawn   | run 1 | run 2 | run 3 | median | spike table (B / B+1) |
+| ---- | ---- | ---------- | ------- | ----- | ----- | ----- | ------ | --------------------- |
+| 10M  | full | auto       | 77,950  | 3.55  | 4.00  | 2.79  | 3.55   | 2.32 / 3.34           |
+| 10M  | full | pyramid +1 | 94,123  | 4.80  | 4.55  | 4.53  | 4.55   |                       |
+| 10M  | zoom | auto       | 106,393 | 4.62  | 4.79  | 3.65  | 4.62   | 3.62 / 3.89           |
+| 10M  | zoom | pyramid +1 | 196,181 | 4.77  | 4.89  | 4.85  | 4.85   |                       |
+| 30M  | full | auto       | 89,022  | 3.70  | 4.15  | 2.82  | 3.70   | 3.22 / -              |
+| 30M  | full | pyramid +1 | 139,192 | 4.93  | 4.59  | 5.32  | 4.93   |                       |
+| 30M  | zoom | auto       | 148,901 | 4.20  | 4.64  | 3.38  | 4.20   | 3.23 / -              |
+| 30M  | zoom | pyramid +1 | 203,978 | 5.05  | 4.33  | 4.78  | 4.78   |                       |
+
+Today's path at the same sizes (spike table): 934 / 27.1 ms (10M) and 2,914 /
+51.6 ms (30M). `auto`'s first frame (headless, so every visible chunk's tiers
+built and uploaded; shared columns): 953 / 1,269 / 1,294 ms at 10M, 2,363 /
+2,684 / 3,263 ms at 30M (29 chunks).
+
+**Eager build for an owned layer**
+(`scale_bench --rows 11000000 --resolve-only --lod-draw off|auto`: rows,
+`Retain::Auto`, so the first prepare releases; alternating, load 4.1):
+`first_resolve` off 248 / 255 / 275 ms (median 255), auto 1,225 / 1,276 / 1,357
+ms (median 1,276), so **+1,021 ms** (0.93 s per 10M rows: 11 chunks' tiers and
+gathers). The render and readback after it take 1,190 ms off against 125 ms
+auto, so the time to the first image is about equal (1,445 against 1,401 ms).
+Uploads: +46.9 MB of representatives (4.26 B a row).
+
+**Fidelity** (ΔE00 > 10 against `Lod::Off`, % of the image / of the plot rect;
+deterministic):
+
+| scene                          | auto full     | spike B+1 full | auto zoom     | spike B+1 zoom |
+| ------------------------------ | ------------- | -------------- | ------------- | -------------- |
+| 10M, 1920 × 1080               | 0.727 / 0.788 | 0.580 / 0.628¹ | 1.088 / 1.171 | 1.224 / 1.236¹ |
+| 1M, 1920 × 1080                | 0.807 / 0.874 | 0.567 / 0.614  | 0.000 / 0.000 | 0.000 / 0.000  |
+| 1M, 400 × 300 (spike's walk)   | 1.760 / 2.510 | 1.284 / 1.831  | 2.211 / 3.115 | 1.348 / 1.900  |
+| 1M, 400 × 300 (`tests/lod.rs`) | 1.098 / 1.566 | -              | -             | -              |
+
+¹ The spike's table (GUP-631). The gap to B+1 is the grid: each chunk's tier-16
+grid is a power of two of data units (GUP-714), up to twice the chunk's extent
+on each axis, so at the same tier its cells are up to 4× the spike's in area (at
+400 × 300: 0.48 px² against 0.30, 10,763 representatives against 16,912).
+
+### Definition-of-Done evidence
+
+- **Rendered output**:
+  `GUP_LOD_PNG_DIR=/tmp/gup716 cargo test -p gup-core --test lod a_million`
+  writes `lod-auto-1m.png` and `lod-off-1m.png` (400 × 300). Read side by side:
+  the same walk band, axes and ticks, no gaps; the `Auto` band's edges are
+  slightly lighter and at most about a pixel narrower.
+- **Goldens unchanged**: none blessed; `git diff --stat 9a39bdb8` lists no file
+  under `tests/golden`, and the gup-core golden tests (in `merge-check`), the
+  browser scene and the tour pages pass. Every golden draws far fewer than
+  200,000 rows.
+- **WASM** (`mask wasm-size`, scatter gz): 384,562 recorded on main 9a39bdb8,
+  390,583 on the branch (**+6,021, +1.57%**; limit 392,253); `per_row_type`
+  1,082 (recorded 1,730). Attribution (`twiggy` on both `wasm-bindgen` outputs,
+  raw, +14.4 KB in all, 1.9 KB of it the unshipped name section):
+  `ColumnStore::lod_tiers` (the radix build) +3.2 KB and its closure +0.5 KB,
+  `tier_entries` +2.1 KB, `upload_lod` +1.4 KB, `.rodata` +1.3 KB, `Glue::clone`
+  +0.9 KB (the indexed program), `Layer::prepare` +0.4 KB, and small helpers
+  (`exponent`, `Axis::new`, `has_tiers`, `chunk_tiers`): the tier build and the
+  draw side of LOD, nothing duplicated per row type.
+  - **The fold**: at first `Layer::prepare` was linked three times (one per row
+    type of the scatter harness, +23 KB raw) where main links one 18,449-byte
+    copy: the LOD path read `Selection::len()`, which reads `rows: Vec<T>`, and
+    a read of `rows` makes the instantiations differ (main's `cpu_readable` and
+    `release`, which read it, are not folded either). Reading the count from the
+    store (`ColumnStore::rows`) restored one 18,888-byte copy. The gz total
+    barely moved (390,607 → 390,583): gzip had already compressed the identical
+    copies to almost nothing, so the +6 KB gz is the new code above.
+- **Validation** (after the fold and the tour edit): `mask merge-check` every
+  step PASS (gup-core all features: 70 binaries, 1,022 passed, 0 failed, 8
+  ignored; tour pages, tour app, wasm-size, wasm-browser PASS); `mask all-check`
+  exit 0; `cargo test -p gup -- --test-threads=1` 11 binaries, 154 passed, 0
+  failed, 2 ignored; `cargo test -p gup-egui` 5 binaries, 19 passed, 0 failed, 1
+  ignored; `mask smoke-examples` PASS (before the fold).
+- **Not done**: `mask perf-budget` (the benches it runs are opted out, so it
+  measures what it did; GUP-717 adds the LOD rows); 80M (under 20 GB free).
+
+## Retrospective
+
+**Completed**: 2026-11-15
+
+### Key Technical Learnings
+
+#### The finest tier is not "every row"
+
+- **Challenge**: the AC clamped the tier to 16, but tier 16 is stored whenever
+  it holds at most half the rows, and its cells are a fixed fraction of the
+  chunk's extent. A 1M-row chunk spanning a million seconds, seen through a 1 ms
+  window, drew one row per 16 s cell; `scales_png`'s burst vanished.
+- **Solution**: a tier above 16 means the finest cells are coarser than the view
+  needs: draw every row, as the spike's `View::tier` did (clamped to 31).
+- **Pattern**: "past the stored tiers" includes "past the finest tier there is";
+  test LOD with a zoom far below the chunk's grid, not only the full view.
+
+#### The plot knows the view; the layer knows its chunks
+
+- **Challenge**: the tier needs the visible chunks and the scale, but
+  `Layer::prepare` ran before the plot computed the culling mask.
+- **Solution**: compute the mask first and pass it in `lod::Frame` (with
+  `spread`, "the plot has a waker"); the scale per chunk comes from the
+  encoding's image of the chunk's extent, so the layer needs no plot rect.
+- **Pattern**: a per-frame choice that depends on the view belongs in prepare,
+  fed by the plot, and needs a cache bypass (`lod_pending`) to finish work over
+  frames without a revision bump.
+
+#### Generic code and function folding in WASM
+
+- **Challenge**: the largest raw item was `Layer::prepare`: main linked one copy
+  for three row types (identical instantiations folded), the branch three.
+- **Solution**: the LOD path read `Selection::len()`, which reads
+  `rows: Vec<T>`; reading the row count from the column store instead made the
+  instantiations identical again (one copy, -23 KB raw). Moving code into
+  non-generic functions or `#[inline(never)]` had not helped.
+- **Pattern**: in a generic `Layer` method, read nothing typed by `T` (not even
+  `Vec<T>::len`) unless needed, and compare instantiation counts (`twiggy` CSV
+  grouped by name without hashes), not only sizes. Duplicates cost raw bytes but
+  little gz: the +6 KB gz was the new code all along.
+
+### Architectural Decisions
+
+#### Spreading builds: "has a waker" is the interactive flag
+
+- **Decision**: one chunk a prepare when the plot has a host waker (the window
+  app, the web canvas), every missing chunk otherwise (headless, `gup-egui`,
+  tests).
+- **Reasoning**: the hosts that set a waker are those that redraw on
+  `needs_frame`; a headless render must be complete in one frame.
+- **Trade-off**: an interactive frame that builds a 1M-row chunk takes about
+  90-130 ms; an owned layer above 10M builds every full chunk in its first
+  prepare (+1.0 s at 11M rows).
+- **Future**: building off the frame path (GUP-730).
+
+#### Opt-outs for the benches
+
+- **Decision**: `zoom_bench`, `edge_inset_bench`, `keyed_resolve_bench` and
+  `scale_bench` (default) draw `Lod::Off`.
+- **Reasoning**: their budgets and recorded numbers measure full draws; GUP-717
+  adds `zoom_bench --lod` and the LOD budget rows.
+
+### Development Workflow Insights
+
+- `lod_spike` with an `auto` candidate gave same-session A/Bs and fidelity
+  shares against the spike's own design at any size, which is how the grid's
+  effect at 400 × 300 was separated from the size's.
+- `mask merge-check` stops gup-core's tests at the first failing binary; after a
+  fix, run it again whole.
+- The worktree sandbox refuses heredocs and some compound commands; edit scripts
+  under `/tmp/gup716` ran without trouble.
+
+### Follow-up Stories
+
+1. **GUP-730: Tier builds off the frame path** — build chunk tiers and gathers
+   on worker threads (native), so an owned layer above 10M rows does not add
+   about 1 s per 10M rows to its first frame and an interactive frame never
+   waits for a chunk's build; needed for GUP-632's 10 s first frame at 100M.
+
+2. **GUP-731: Finer LOD cells at small chart sizes** — at 400 × 300 the
+   per-chunk power-of-two grid draws 0.48 / 0.68 points worse than the spike's
+   design; options are cells not a power of two, a size-aware tier bias, or
+   rounding the tier.
+
+`docs/tour/11_big_data.md` ("How far it goes") now says what LOD does and does
+not cover (the orchestrator's request, 2026-11-15).
+
+### Fidelity decision (orchestrator, 2026-11-15): A, the formula as specified
+
+- **Decision**: A. The AC's formula and bias ship unchanged.
+- **Evidence**: the fidelity table in Measurements. At 1920 × 1080 the plot-rect
+  share is inside the 1% rule (0.788% at 10M, 0.874% at 1M), within 0.3 points
+  of the spike's numbers; at 400 × 300 it is 2.510% against the spike design's
+  1.831%.
+- **Cause**: GUP-714's grid is a power of two of data units per chunk, anchored
+  so that appends leave built tiers valid. It spans up to twice the chunk's
+  extent on each axis, so at the same tier its cells are up to 4× the spike's in
+  area (at 400 × 300: 0.48 px² against 0.30; 10,763 representatives against
+  16,912).
+- **Why not B** (round the tier instead of flooring it): it buys spike parity at
+  1080p (0.653% of the plot rect at 10M) for about 40% more representatives, but
+  leaves the small-chart full view unchanged (2.510%), which is the case that
+  misses.
+- **GUP-717**: its gates (1.0% full, 2.0% zoom of the plot rect) must be
+  re-derived per scene size, the 400 × 300 case measured, not assumed: even the
+  spike's design scores 1.831% / 1.900% there. Smaller cells at small sizes are
+  GUP-731's.
+
+## Blocked (2026-11-12, resolved 2026-11-15: A)
+
+**Question**: at the story's own 1M-row, 400 × 300 scene, `Lod::Auto` is 0.48
+(image) / 0.68 (plot rect) points less faithful than the spike's design with the
+same bias (1.760% / 2.510% against 1.284% / 1.831%, full view), over the
+0.3-point escalation trigger; at the spike's 1920 × 1080 it is within it (1M:
++0.24 / +0.26; 10M: +0.15 / +0.16 against the spike's table, and better in the
+zoom view). Accept the formula as specified, or change the tier rule?
+
+**Evidence**: the fidelity table above
+(`lod_spike --candidates base,pyramid,auto --pyramid-bias 1 --fidelity`, sizes
+as listed). Cause: each chunk's tier-16 grid is a power of two of data units
+(GUP-714's anchored grid, which keeps built tiers valid as a layer grows), up to
+twice the chunk's extent per axis, so at the same tier its cells are up to 4×
+the spike's in area: at 400 × 300 both draw tier 9, with cells of 0.48 px²
+against 0.30 and 10,763 representatives against 16,912.
+
+**Options**:
+
+- **A. Accept** (as implemented): the AC's formula and bias. Within 0.3 points
+  of the spike's numbers at its own scenes; GUP-717's 400 × 300 gates (1.0% /
+  2.0% of the plot rect) would need new values, since the spike's design scores
+  1.831% / 1.900% there.
+- **B. Round instead of floor** (`t = floor(x + 0.5) + 1`, a half tier finer):
+  measured once (load about 6): 10M 1080p full 0.603% / 0.653% (spike 0.580 /
+  0.628), zoom 0.494 / 0.532; 1M 1080p 0.362 / 0.392; 110,031 / 265,507
+  representatives at 10M, GPU 3.11 / 4.71 ms. At 400 × 300 the full view is
+  unchanged (1.760 / 2.510; that view sits below the rounding point) and the
+  zoom improves to 0.720 / 1.014.
+- **C. A grid fitted to each chunk's extent** (not powers of two): the spike's
+  cells, but appends would invalidate built tiers (against GUP-714's Decisions).
+  Not recommended.
+
+**Recommendation**: A, with GUP-717's gates re-derived from measured values at
+its scene. B is a one-line change if the orchestrator prefers spike parity at
+1080p for about 40% more representatives.

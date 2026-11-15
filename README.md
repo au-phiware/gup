@@ -55,7 +55,9 @@ Each item names its track in
 
 - No CSV or serde input: rows enter through closures, `Columns` or Arrow record
   batches (feature `arrow`).
-- Nothing above 10M rows is measured, and there is no level of detail (N5).
+- Nothing above 30M rows is measured, and the level of detail (`Lod`) covers
+  scatters drawn in data order only; SVG output and CPU picks read every row
+  (N5).
 - No PDF export (N6).
 - No pie, violin, density or choropleth charts, and no facets.
 

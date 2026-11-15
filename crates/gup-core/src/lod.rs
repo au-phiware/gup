@@ -25,8 +25,8 @@
 //! the finest stored tier a chunk draws every row ([`Tiers::prefix`] is
 //! `None`). Tier 0 is always stored.
 //!
-//! Nothing draws from the tiers yet: uploads are GUP-715's, the per-frame
-//! tier choice GUP-716's.
+//! Each frame, a visible chunk draws the prefix of the tier [`tier`]
+//! chooses for the view (GUP-716) through the indexed-rows glue (GUP-715).
 
 /// The finest tier: `2^16` cells a side, 16 bits of each axis in a key.
 pub(crate) const TMAX: u32 = 16;
@@ -159,6 +159,62 @@ impl Tiers {
     pub fn prefix(&self, t: u32) -> Option<u32> {
         self.counts.get(t as usize).copied()
     }
+}
+
+/// How many tiers finer than "at most one representative per pixel of
+/// area" a chunk draws: one, so at most four a pixel. GUP-631 measured the
+/// share of pixels more than ΔE00 10 from the full draw of a 10M-row
+/// scatter at 1920 × 1080: at the unbiased tier 0.994% of the image but
+/// 1.076% of the plot rect (over the 1% rule); one tier finer 0.580% /
+/// 0.628%, for 1.0 ms more GPU time (RFC-001 "GUP-631 findings",
+/// "Fidelity").
+const LOD_TIER_BIAS: u32 = 1;
+
+/// The tier a chunk draws, from its tiers' cell exponents `ex`, `ey` and
+/// the view's pixels per data unit along x and y over the chunk, `kx` and
+/// `ky` (0: the chunk has no span on that axis): the finest tier whose
+/// cells are at least one pixel in area, plus [`LOD_TIER_BIAS`],
+///
+/// ```text
+/// t = floor(16 + (ex + ey) / 2 - 0.5 * log2(A)) + LOD_TIER_BIAS
+/// ```
+///
+/// with `A = 1 / (kx * ky)` the data area of one pixel, at least 0. Past
+/// tier 16 the finest cells are coarser than the view needs, so `None`:
+/// the chunk draws every row (as the GUP-631 spike did past its finest
+/// tier; a chunk spanning a million seconds seen through a 1 ms window
+/// must not draw one row per 16 s). A chunk with no span on one axis is a
+/// line of cells: the finest tier whose cells are at least one pixel long
+/// on the other axis (`floor(16 + e + log2(k))`), with the same bias. With
+/// no span on either axis every row is at one place and one representative
+/// is drawn (tier 0). `None` (draw every row) for a scale that is not
+/// finite.
+pub(crate) fn tier(ex: i32, ey: i32, kx: f64, ky: f64) -> Option<u32> {
+    if !(kx.is_finite() && ky.is_finite() && kx >= 0.0 && ky >= 0.0) {
+        return None;
+    }
+    let t = match (kx > 0.0, ky > 0.0) {
+        (true, true) => f64::from(TMAX) + f64::from(ex + ey) / 2.0 + 0.5 * (kx * ky).log2(),
+        (true, false) => f64::from(TMAX) + f64::from(ex) + kx.log2(),
+        (false, true) => f64::from(TMAX) + f64::from(ey) + ky.log2(),
+        (false, false) => 0.0,
+    };
+    let t = t.floor() + f64::from(LOD_TIER_BIAS);
+    (t <= f64::from(TMAX)).then(|| t.max(0.0) as u32)
+}
+
+/// What one prepare's level of detail may do: the plot's side of it.
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct Frame<'a> {
+    /// Whether the plot shows each of the layer's draw entries
+    /// (`cull::visible_entries`; empty: every entry).
+    pub visible: &'a [bool],
+    /// Whether to spread lazy tier builds over frames, one chunk a
+    /// prepare: the plot has a host that draws again when asked
+    /// ([`Chart::needs_frame`](crate::Chart::needs_frame)). Otherwise (a
+    /// headless render, a host that never set a waker) every missing chunk
+    /// builds in the one prepare, so a single frame is complete.
+    pub spread: bool,
 }
 
 /// One axis of the tier-16 grid: `cell(v) = floor(v / 2^e) - origin`, the
@@ -670,5 +726,89 @@ mod tests {
                 tiers.ex
             );
         }
+    }
+
+    /// The GUP-631 spike's `View::tier` (`examples/lod_spike.rs`): the
+    /// finest tier of a grid of `2^t × 2^t` cells over the layer's extent
+    /// `ext` whose cells are at least one pixel in area, for domains `dom`
+    /// drawn into a `w × h` plot rect.
+    fn spike_tier(ext: [(f64, f64); 2], dom: [(f64, f64); 2], w: f64, h: f64) -> u32 {
+        let ([(x0, x1), (y0, y1)], [(d0, d1), (e0, e1)]) = (ext, dom);
+        let a0 = w * (x1 - x0) / (d1 - d0) * h * (y1 - y0) / (e1 - e0);
+        (0.5 * a0.log2()).floor().clamp(0.0, 31.0) as u32
+    }
+
+    /// Pixels per data unit of `dom` drawn over `px` pixels.
+    fn k(dom: (f64, f64), px: f64) -> f64 {
+        px / (dom.1 - dom.0)
+    }
+
+    /// Where a chunk's grid is the spike's (its extent is exactly
+    /// `65,536` cells of `2^ex × 2^ey`), [`tier`] is the spike's tier plus
+    /// the bias, whatever the view.
+    #[test]
+    fn the_tier_is_the_spikes_plus_the_bias_on_the_same_grid() {
+        let (w, h) = (1850.0, 1035.0);
+        for (ex, ey) in [(-6, -5), (-9, -7), (0, 0), (-20, 3)] {
+            let ext = [
+                (0.0, 65_536.0 * 2f64.powi(ex)),
+                (-1.0, -1.0 + 65_536.0 * 2f64.powi(ey)),
+            ];
+            for zoom in [1.04, 1.0, 0.5, 0.1, 1e-3, 3.0, 1e3] {
+                let pad = |(a, b): (f64, f64)| {
+                    let (m, r) = ((a + b) / 2.0, (b - a) / 2.0 * zoom);
+                    (m - r, m + r)
+                };
+                let dom = [pad(ext[0]), pad(ext[1])];
+                let spike = spike_tier(ext, dom, w, h);
+                let ours = tier(ex, ey, k(dom[0], w), k(dom[1], h));
+                let want = Some(spike + LOD_TIER_BIAS).filter(|&t| t <= TMAX);
+                assert_eq!(ours, want, "{ex} {ey} {zoom}");
+            }
+        }
+    }
+
+    /// The spike's own example: the full view of its 10M-row walk at
+    /// 1920 × 1080 (domains the extent padded 2%, the plot rect 1850 ×
+    /// 1035, as `lod_spike` prints) is its tier 10. One chunk spanning that
+    /// extent has cells of `2^-6 × 2^-5` data units (a grid of 1,024 ×
+    /// 2,048 over 1,000 × 1,450.6: 1.45 times the area, a quarter tier
+    /// coarser): its tier is also 10 before the bias, so it draws 11, the
+    /// spike's "one tier finer".
+    #[test]
+    fn the_spikes_full_view_of_10m_rows_is_its_tier() {
+        let ext = [
+            (0.0, 999.9999),
+            (-884.399_506_026_744_9, 566.157_731_420_119),
+        ];
+        let dom = [
+            (-19.999_998, 1_019.999_898),
+            (-913.410_650_775_682_1, 595.168_876_169_056_3),
+        ];
+        let (w, h) = (1850.0, 1035.0);
+        assert_eq!(spike_tier(ext, dom, w, h), 10);
+        let rows: Vec<(f64, f64)> = vec![(ext[0].0, ext[1].0), (ext[0].1, ext[1].1)];
+        let tiers = Tiers::build(2, |r| rows[r as usize]);
+        assert_eq!((tiers.ex, tiers.ey), (-6, -5));
+        let (kx, ky) = (k(dom[0], w), k(dom[1], h));
+        assert_eq!(tier(tiers.ex, tiers.ey, kx, ky), Some(11));
+        assert_eq!(LOD_TIER_BIAS, 1);
+    }
+
+    /// A chunk without a span on one axis is a line of cells, and one
+    /// without a span on either a point; a scale that is not finite draws
+    /// every row.
+    #[test]
+    fn degenerate_chunks_and_scales() {
+        // Cells of 2^-6 units at tier 16, 4 px a unit: 2^-4 px. Tier 12's
+        // cells are one pixel long, so 13 with the bias.
+        assert_eq!(tier(-6, -6, 4.0, 0.0), Some(13));
+        assert_eq!(tier(-6, -6, 0.0, 4.0), Some(13));
+        assert_eq!(tier(-6, -6, 0.0, 0.0), Some(LOD_TIER_BIAS));
+        assert_eq!(tier(-6, -6, f64::INFINITY, 1.0), None);
+        assert_eq!(tier(-6, -6, f64::NAN, 1.0), None);
+        // Zoomed in past the finest tier: every row; out: tier 0.
+        assert_eq!(tier(0, 0, 1e9, 1e9), None);
+        assert_eq!(tier(0, 0, 1e-12, 1e-12), Some(0));
     }
 }

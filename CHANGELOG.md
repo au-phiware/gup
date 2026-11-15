@@ -173,6 +173,15 @@ what each release contains and what its version number promises.
   a pixel stands for, through the axes' own scales, so right on log, symlog, pow
   and time axes too. The tour and tutorial 4 no longer interpolate tick marks by
   hand.
+- Level of detail for large scatters: `Selection::lod(Lod)` and
+  `ScatterChart::lod`, default `Lod::Auto`. A circle layer (or a rect layer of
+  constant size) whose visible chunks hold more than `Lod::AUTO_MIN_ROWS`
+  (200,000) rows draws per chunk the lowest row of each occupied cell of a grid
+  of about a quarter pixel: about 80,000 marks for a 10M- or 30M-row walk at
+  1920 × 1080, 2.8-4.2 ms of GPU time on an integrated GPU instead of 0.9-2.9 s.
+  Tiers are built per chunk on first need (about 1 s per 10M rows). `Lod::Off`
+  draws every row. CPU picks, hover, tooltips over CPU data and SVG output still
+  read every row.
 
 ### Changed
 
@@ -210,7 +219,10 @@ what each release contains and what its version number promises.
 
 - No CSV or serde input: rows enter through closures, `Columns` or Arrow record
   batches (feature `arrow`).
-- Nothing above 10M rows is measured, and there is no level of detail.
+- Nothing above 30M rows is measured. The level of detail covers circles and
+  constant-size rects drawn in data order only (not lines, areas, layers sized
+  by a column, or the newest chunk of a layer that is appended to), and SVG
+  output and CPU picks still read every row.
 - No PDF export.
 - Accessibility: no screen reader has been tested by hand, nothing outside the
   browser speaks `focus_text`, and keyboard focus skips a layer that dropped its

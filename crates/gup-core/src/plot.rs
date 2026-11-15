@@ -508,7 +508,11 @@ impl crate::chart::Chart for Plot {
         Plot::pick_row(self, at)
     }
     fn needs_frame(&self) -> bool {
-        self.gpu_hover.busy() || self.layers.iter().any(|l| l.feed_pending())
+        self.gpu_hover.busy()
+            || self
+                .layers
+                .iter()
+                .any(|l| l.feed_pending() || l.lod_pending())
     }
     fn set_waker(&mut self, waker: std::task::Waker) {
         for layer in &mut self.layers {
@@ -1470,7 +1474,10 @@ impl Plot {
             revisions: plot.revision_sum(),
             fonts,
         };
-        if self.cache.as_ref().is_some_and(|(k, _)| *k == key(self)) {
+        // A layer still building its level-of-detail tiers (one chunk a
+        // frame) resolves again.
+        let pending = self.layers.iter().any(|l| l.lod_pending());
+        if !pending && self.cache.as_ref().is_some_and(|(k, _)| *k == key(self)) {
             // A browser reports errors late.
             cx.take_gpu_errors()?;
         } else {
@@ -3357,21 +3364,28 @@ impl Plot {
         let brushable = self.drag == Drag::Brush && th.unbrushed.dims();
         let mut batches = Vec::with_capacity(self.layers.len());
         let mut visible = Vec::with_capacity(self.layers.len());
+        // A host that draws again when asked spreads tier builds over
+        // frames (GUP-716); a headless render builds them all at once.
+        let spread = self.waker.is_some();
         for layer in &mut self.layers {
-            let batch = cx.scoped(
-                || "layer resolution (column upload, uniforms)".to_owned(),
-                || layer.prepare(cx, &th, brushable),
-            )?;
-            // Only after the upload succeeded: CPU data the layer's
-            // `Retain` policy does not keep.
-            layer.release();
             // Chunks that cannot reach the plot rect are neither drawn nor
-            // picked (RFC-001 S9f).
+            // picked (RFC-001 S9f), nor count towards the level of detail.
             let mask = if self.cull {
                 layer.visible_entries(plot)
             } else {
                 Vec::new()
             };
+            let frame = crate::lod::Frame {
+                visible: &mask,
+                spread,
+            };
+            let batch = cx.scoped(
+                || "layer resolution (column upload, uniforms)".to_owned(),
+                || layer.prepare(cx, &th, brushable, &frame),
+            )?;
+            // Only after the upload succeeded: CPU data the layer's
+            // `Retain` policy does not keep.
+            layer.release();
             let mut batch = batch;
             if !mask.is_empty() {
                 batch.visible = cull::visible_spans(&batch.gpu.spans, &mask).into();

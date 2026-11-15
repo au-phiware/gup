@@ -635,7 +635,7 @@ GUP-628 and GUP-631 (shared `selection.rs`).
   representative buffers plus a `u32` row column, and the indexed-rows glue so
   brush, validity and pick read the data row; proven with a forced tier. Opus.
   Deps: GUP-714 ✅.
-- [GUP-716](GUP-716_Selection_Lod_And_Tier_Draws.md) 📋 — `Lod::{Auto, Off}`,
+- [GUP-716](GUP-716_Selection_Lod_And_Tier_Draws.md) ✅ — `Lod::{Auto, Off}`,
   `Selection::lod`, `ScatterChart::lod`, the 200,000-row threshold, per-chunk
   tier per frame (one tier finer than the spike), lazy builds. Opus. Deps:
   GUP-714 ✅, GUP-715 📋.
@@ -657,6 +657,14 @@ GUP-628 and GUP-631 (shared `selection.rs`).
 - [GUP-721](GUP-721_LOD_For_Size_Ordered_Layers.md) 📋 — Largest-first tier
   blocks and the largest mark as a cell's representative for size-ordered
   layers. Deps: GUP-492 ✅, GUP-716 📋, GUP-720 📋 (sequencing), GUP-724 📋.
+- [GUP-730](GUP-730_Tier_Builds_Off_The_Frame_Path.md) 💡 — Build tiers on
+  worker threads (native) so an owned layer above 10M rows does not add about 1
+  s per 10M rows to its first frame and hosted frames never wait for a build.
+  Deps: GUP-716 ✅. Enables GUP-632.
+- [GUP-731](GUP-731_Finer_LOD_Cells_At_Small_Chart_Sizes.md) 💡 — At 400 × 300
+  the per-chunk power-of-two grid draws 0.48 / 0.68 points less faithfully than
+  the spike's design: measure non-power-of-two cells, a size-aware bias and
+  rounding, ship one. Deps: GUP-716 ✅, GUP-717 📋.
 - [GUP-724](GUP-724_Size_Ordered_Resolve_Cost.md) ✅ — A multi-chunk
   size-ordered layer's resolve costs about 12 ms a frame against 1.1 ms for a
   plain scatter: profile, then cache per epoch. Carries GUP-492's 4.0 ms CPU
