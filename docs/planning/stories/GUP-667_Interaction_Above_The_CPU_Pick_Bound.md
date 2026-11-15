@@ -51,6 +51,13 @@ design question (GPU pick fallback against a streaming read, no `Context` in
 the ACs: the first two apply only to marks and layers outside LOD, and the
 anchor of a GPU-picked row is already done there for LOD layers.
 
+**After GUP-718 (2026-11-16).** Landed as described: a LOD scatter's CPU index
+holds its drawn representatives (so `pick_row`, hover and tooltips work above
+`Retain::AUTO_MAX_ROWS` for it), the marquee brush stays exact through a
+separate full-row index built at the release (`Plot::brushed_rows`; above the
+bound it is still empty, which is this story's), and keyboard focus over such a
+layer walks the representatives, not data rows (still this story's).
+
 ## User Story
 
 > "As a developer showing 100M points, I want `pick_row`, the brush and the

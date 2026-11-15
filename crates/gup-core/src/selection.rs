@@ -162,10 +162,21 @@ impl Retain {
 /// whatever the setting, and so does the newest chunk of a layer that
 /// has been appended to.
 ///
-/// Not yet under the level of detail (they read every row): CPU picks,
-/// hover outlines and tooltips over a layer with CPU data, and vector
-/// (SVG) output. For the exact picture, or SVG parity, use
-/// [`Off`](Lod::Off).
+/// What you see is what you pick (GUP-718). A layer drawing
+/// representatives has a CPU pick index of those marks alone (tens of
+/// thousands at any row count, so it picks even above
+/// [`Retain::AUTO_MAX_ROWS`] rows), each carrying its data row:
+/// [`Plot::pick_row`](crate::Plot::pick_row), hover, the hover outline
+/// and the tooltip read the representative under the pointer, and the
+/// tooltip is that data row's. Under a zoom the index follows the marks
+/// drawn. SVG output writes the marks drawn (an SVG of ten million
+/// circles is not a useful file); the marquee brush still selects every
+/// data row in its rectangle, and the chart's description is the same.
+/// A pointer between representatives finds a neighbour, or nothing, where
+/// [`Off`](Lod::Off) would find the exact row. For every row in the
+/// picture, the SVG or the picks, use `Off`. Keyboard focus walks the
+/// representatives, and layers under `Off` above
+/// [`Retain::AUTO_MAX_ROWS`] rows are not picked on the CPU (GUP-667).
 ///
 /// ```
 /// use gup_core::prelude::*;
@@ -1801,7 +1812,17 @@ pub(crate) trait Layer: wgpu::WasmNotSendSync {
     ///
     /// `visible` is [`visible_entries`](Self::visible_entries)'s result
     /// (empty: every entry): rows of culled entries are skipped.
-    fn hit_items(&mut self, layer: usize, visible: &[bool], out: &mut Vec<PickItem>) -> Result<()>;
+    fn hit_items(
+        &mut self,
+        layer: usize,
+        visible: &[bool],
+        exact: bool,
+        out: &mut Vec<PickItem>,
+    ) -> Result<()>;
+    /// Whether the last [`prepare`](Self::prepare) drew representatives
+    /// (a level-of-detail tier), so that the pick items of `hit_items`
+    /// without `exact` are those, not every row (GUP-718).
+    fn drawing_lod(&self) -> bool;
     /// Whether the layer's mark has a GPU pick (`#[mark(.., gpu_pick)]`).
     fn gpu_pickable(&self) -> bool;
     /// Whether the CPU can pick the layer: it kept its CPU columns or its
@@ -3260,7 +3281,17 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         }
     }
 
-    fn hit_items(&mut self, layer: usize, visible: &[bool], out: &mut Vec<PickItem>) -> Result<()> {
+    fn drawing_lod(&self) -> bool {
+        !self.lod_drawn.is_empty()
+    }
+
+    fn hit_items(
+        &mut self,
+        layer: usize,
+        visible: &[bool],
+        exact: bool,
+        out: &mut Vec<PickItem>,
+    ) -> Result<()> {
         if M::HIT == HitShape::Unpickable {
             return Ok(());
         }
@@ -3272,7 +3303,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             return Ok(());
         }
         // What is drawn is what is picked (GUP-718).
-        if !self.lod_drawn.is_empty() && (store.is_shared() || store.cpu_kept()) {
+        if !exact && !self.lod_drawn.is_empty() && (store.is_shared() || store.cpu_kept()) {
             self.lod_hit_items(layer, visible, out);
             return Ok(());
         }

@@ -2351,6 +2351,22 @@ impl Plot {
         self.focus_order.as_ref()
     }
 
+    /// The rows whose position is in `r`: exact data rows, so a layer
+    /// drawing representatives (GUP-718) is read in full for the brush,
+    /// as it was before the level of detail, not through its pick items.
+    fn brushed_rows(&mut self, r: Rect) -> Option<Vec<RowId>> {
+        if !self.layers.iter().any(|l| l.drawing_lod()) {
+            return self.pick_index().map(|i| i.rows_in(r));
+        }
+        let plot = self.layout()?.plot;
+        let mut items = Vec::new();
+        for (i, layer) in self.layers.iter_mut().enumerate() {
+            let visible = self.visible.get(i).map_or(&[][..], Vec::as_slice);
+            layer.hit_items(i, visible, true, &mut items).ok()?;
+        }
+        Some(PickIndex::new(plot, items).rows_in(r))
+    }
+
     /// The rectangle from `a` to `b` clamped to the plot rect.
     fn clamped_rect(&self, a: Point, b: Point) -> Option<Rect> {
         let plot = self.layout()?.plot;
@@ -2374,7 +2390,7 @@ impl Plot {
             self.drop_brush();
             return true;
         }
-        let Some(rows) = self.pick_index().map(|i| i.rows_in(r)) else {
+        let Some(rows) = self.brushed_rows(r) else {
             return false;
         };
         let (x0, x1) = (
@@ -2717,7 +2733,7 @@ impl Plot {
             let mut items = Vec::new();
             for (i, layer) in self.layers.iter_mut().enumerate() {
                 let visible = self.visible.get(i).map_or(&[][..], Vec::as_slice);
-                layer.hit_items(i, visible, &mut items).ok()?;
+                layer.hit_items(i, visible, false, &mut items).ok()?;
             }
             self.pick = Some((key, PickIndex::new(plot, items)));
         }

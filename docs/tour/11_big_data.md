@@ -79,20 +79,24 @@ updated.
   bounded number of representatives (at most about four a pixel of area) instead
   of every row; `.lod(Lod::Off)` on the layer, or on a `ScatterChart`, draws
   every row. Lines, areas, layers sized by a column and the newest chunk of a
-  layer that is appended to always draw every row, and SVG output, CPU picks and
-  tooltips over CPU data still read every row.
+  layer that is appended to always draw every row. What you see is what you
+  pick: a level-of-detail layer picks, hovers, shows its tooltip and writes SVG
+  through the marks it draws (each with its data row), at any row count, and the
+  brush still selects every data row in its rectangle. `Lod::Off` picks and
+  writes every row.
 - Above 10 million visible rows at full extent, a layer that has dropped its CPU
-  data cannot be walked by keyboard focus, and `pick_row` and the brush find
-  nothing there until you zoom in below the limit. Pointer hover and click still
-  work through the GPU pick (GUP-667).
+  data and does not draw a level of detail (`Lod::Off`, a line, an area) cannot
+  be walked by keyboard focus, and `pick_row` and the brush find nothing there
+  until you zoom in below the limit. Pointer hover and click still work through
+  the GPU pick (GUP-667).
 
 ## Not yet
 
-A 100-million-row demonstration (GUP-632) and a chart that draws a level of
-detail are not there yet. `CHANGELOG.md`, "Known limitations", says the same: no
-CSV or serde input, and nothing above 10M rows measured. Columns can also be
-dictionary-coded keys (`KeyColumn`, for categories) and `Columns::from_arrow`
-(feature `arrow`) reads Arrow record batches.
+A 100-million-row demonstration (GUP-632) is not there yet. `CHANGELOG.md`,
+"Known limitations", says the same: no CSV or serde input, and nothing above 10M
+rows measured. Columns can also be dictionary-coded keys (`KeyColumn`, for
+categories) and `Columns::from_arrow` (feature `arrow`) reads Arrow record
+batches.
 
 **Go deeper**: [Tutorial 2](../tutorials/02_data_binding.md), "Step 6: What a
 Layer Keeps", and [Tutorial 5](../tutorials/05_streaming_data.md), "Step 4:

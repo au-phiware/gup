@@ -18,7 +18,12 @@
 //! (`crate::vector`), so the file and the picks agree; rows hidden by a
 //! null are not written, and neither are chunks culled for lying outside
 //! the plot (they could not reach a pixel; the file is the view, not the
-//! data). Coordinates have at most two decimals.
+//! data). A layer drawing a level of detail ([`Lod`](crate::Lod), GUP-718)
+//! writes the representatives it draws, not every row: what you see is what
+//! the file holds, with each mark's drawn size and colour (set `Lod::Off`
+//! for every row). Layers of shared columns are written whatever their
+//! `Retain` policy, so a `GpuOnly` scatter rasterises too. Coordinates have
+//! at most two decimals.
 //!
 //! A layer that cannot be evaluated on the CPU is **skipped with an XML
 //! comment**, `<!-- layer N skipped: <reason> -->`, never an error: a
