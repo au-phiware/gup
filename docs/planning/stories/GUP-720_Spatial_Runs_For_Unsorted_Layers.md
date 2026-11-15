@@ -185,3 +185,78 @@ reorders each block to Morton order and adds the runs.
 - [ ] WASM size: `mask wasm-size` scatter gz bytes reported
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
+
+## Blocked (2026-11-16)
+
+**Question**: AC3's shuffled targets cannot be met by runs alone under
+`Lod::Auto`, and the Decision "Morton order within a block replaces row order"
+slows dense views by 46%. Which of the options below should the story take?
+
+**What is built** (commits `84c7417a`, `2204ea47` and the WIP commit after
+them): Morton-ordered tier blocks (AC1, tests pass), runs of at most 4,096 with
+exact f64 boxes, per-frame run culling through the encodings' images with the
+chunk rule's margin, adjacent runs merged, at most 64 ranges a chunk (AC2; the
+spans carry the ranges, so draws, GPU picks, the CPU pick index (GUP-718) and
+SVG all read the drawn runs only). `zoom_bench --shuffle` added. `tests/lod.rs`
+passes except the provisional bound of the new shuffled-zoom test (28.5% of the
+prefix drawn at 400 x 300; culled and unculled images are byte-identical, the
+brute-force check).
+
+**Evidence** (release, HD 630, headless 1920 x 1080,
+`lod_spike --rows 10000000 --shuffle`, same session, main's
+`crates/gup-core/src` built into the same worktree for "before", load 1.0-1.7,
+7.5-8.9 GB available):
+
+| run                                           | before (main)         | after (branch)          |
+| --------------------------------------------- | --------------------- | ----------------------- |
+| `auto` full, GPU median ms (3 runs each)      | 13.92 / 13.92 / 13.92 | 20.20 / 20.30 / 20.37   |
+| `auto` zoom, GPU median ms (drawn)            | 135.35 (10,000,000)   | 134.77 (10,000,000)     |
+| forced tier 13 (`indexed --lod-tier 13`) zoom | 52.82 (prefix 3.92M)  | 16.46 (1,143,533 drawn) |
+| forced tier 13 full                           | 86.70                 | 202.99-208.24           |
+| forced tier 12 zoom                           | 21.78 (prefix 1.63M)  | 5.77 (399,467 drawn)    |
+| sorted `auto` full / zoom (2 runs)            | 3.21-3.38 / 4.16-4.20 | 2.86-2.92 / 3.27-3.95   |
+
+1. **The zoom draws every row under `Auto`, before and after.** Each shuffled
+   1M-row chunk spans the whole extent; `lod::tier` picks 14 (the spike's tier
+   13 plus `LOD_TIER_BIAS`), but tier 14 holds more than half the chunk's rows,
+   so it is not stored and the chunk draws every row (GUP-716's "past the stored
+   tiers"). Runs cull only tier prefixes. The spike's 65.4 ms was its own B at
+   tier 13, not the library's `Auto`.
+2. **Morton order slows dense views.** Consecutive instances now land on
+   neighbouring pixels (RFC-001 "GUP-631 findings": sorted x costs 934 ms
+   against 229 shuffled). `auto` full: 13.92 -> 20.30 ms; forced tier 13 full:
+   86.7 -> 208 ms. Sorted layers are not slower.
+3. **AC3's full view (at most 10 ms) fails on main already**: 13.92 ms, because
+   `Auto` draws 629,602 representatives (bias 1) against the spike's 327,065.
+
+**Prototype** (env-gated, measured, reverted; patch kept at
+`~/.cache/gup/gup720/spread_and_cap.patch`, outside the repository):
+
+- **Spread within runs**: keep each run's set (and box) but draw its
+  representatives in bit-reversed order of their Morton position. `auto` full
+  20.30 -> 13.89 / 13.90 ms (main's); forced tier 13 full 208 -> 86 ms, zoom
+  16.47 -> 15.80 ms. Culling is unchanged (runs are the same sets).
+- **Cap**: when `lod::tier` is one past the finest stored tier
+  (`t <= stored + 1`), draw the finest stored tier instead of every row. With
+  the spread, `auto` shuffled zoom: **15.86 ms**, 1,143,533 instances (562,816
+  of them the partial last chunk, which stores only coarser tiers and still
+  draws every row), ΔE00 > 10 against `base`: **0.306%** of the plot rect (10
+  frames; PNG read by eye: the walk, no gaps).
+
+**Options**:
+
+- **A (recommended)**: spread within runs (amends AC1's "block in Morton order"
+  to "runs are Morton stretches; draw order within a run is bit-reversed") and
+  the one-tier cap (amends GUP-716's "past the stored tiers draws every row" for
+  the bias tier only). Meets 16.7 ms zoom; full view back to main's 13.9 ms;
+  instances 1.14M (over AC3's 500,000 because of the partial chunk); the full
+  view stays over 10 ms (a bias question, GUP-716/717's). Needs fidelity gates
+  re-measured at 400 x 300 for the cap.
+- **B**: spread only, no cap: no regression, runs help forced tiers and any view
+  whose tier is stored, but the shuffled 10M `Auto` zoom stays at 135 ms (AC3
+  not met; a follow-up decides the tier/storage rule).
+- **C**: store all rows in Morton runs (a full Morton gather, up to 12 B a row
+  of extra GPU memory, twice GUP-715's bound) so a chunk past its stored tiers
+  also draws only visible runs; fixes the partial chunk too. Largest change.
+- **D**: keep Morton order as decided (the full-view regression stays) and relax
+  AC3.

@@ -1694,7 +1694,6 @@ fn main() -> gup_core::Result<()> {
                     LibPlot::circles(Arc::clone(&data.xs), Arc::clone(&data.ys), o.radius);
                 let layer = lib.plot.layer_mut::<(), Circle>().expect("the circles");
                 gup_core::__private::force_lod_tier(layer, Some(o.lod_tier));
-                let reps = library_reps(&data, o.lod_tier);
                 for (v, view) in &views {
                     let t = Instant::now();
                     // The first frame builds and uploads the tiers.
@@ -1703,7 +1702,9 @@ fn main() -> gup_core::Result<()> {
                         .resolve(&gpu.cx, o.size.0 as f32, o.size.1 as f32)?;
                     let setup = ms(t.elapsed());
                     let mut m = measure_lib(&mut gpu, &o, &mut lib, view.dom, || {})?;
-                    m.drawn = visible_reps(&data, &reps, view, margin);
+                    // The instances drawn: the runs of the visible chunks' prefixes
+                    // that the plot rect can see (GUP-720).
+                    m.drawn = m.visible;
                     m.setup_ms = setup;
                     report_view(&o, cand, *v, &m);
                     rows.push(Row { cand, view: *v, m });
@@ -1910,16 +1911,6 @@ fn library_reps(data: &Data, t: u32) -> Vec<Vec<u32>> {
             )
         })
         .collect()
-}
-
-/// The representatives of the chunks `view` sees.
-fn visible_reps(data: &Data, reps: &[Vec<u32>], view: &View, margin: f64) -> u64 {
-    data.chunks
-        .iter()
-        .zip(reps)
-        .filter(|(c, _)| view.sees(c, margin))
-        .map(|(_, r)| r.len() as u64)
-        .sum()
 }
 
 /// (C)'s cells as a `Rect` layer coloured by log count, then the rows of
