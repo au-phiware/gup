@@ -78,12 +78,15 @@ updated.
   constant size, whose visible chunks hold more than 200,000 rows draws a
   bounded number of representatives (at most about four a pixel of area) instead
   of every row; `.lod(Lod::Off)` on the layer, or on a `ScatterChart`, draws
-  every row. Lines, areas, layers sized by a column and the newest chunk of a
-  layer that is appended to always draw every row. What you see is what you
-  pick: a level-of-detail layer picks, hovers, shows its tooltip and writes SVG
-  through the marks it draws (each with its data row), at any row count, and the
-  brush still selects every data row in its rectangle. `Lod::Off` picks and
-  writes every row.
+  every row. Lines, areas and layers sized by a column always draw every row. A
+  layer that grows by appends keeps its tiers for its full chunks; its newest
+  chunk draws every row under 65,536 rows, then builds tiers and builds them
+  again each time its rows double, drawing the rows past them in full. A
+  `RowWindow::LastRows` window drops a chunk with its tiers. What you see is
+  what you pick: a level-of-detail layer picks, hovers, shows its tooltip and
+  writes SVG through the marks it draws (each with its data row), at any row
+  count, and the brush still selects every data row in its rectangle. `Lod::Off`
+  picks and writes every row.
 - Above 10 million visible rows at full extent, a layer that has dropped its CPU
   data and does not draw a level of detail (`Lod::Off`, a line, an area) cannot
   be walked by keyboard focus, and `pick_row` and the brush find nothing there

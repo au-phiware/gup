@@ -159,8 +159,18 @@ impl Retain {
 /// layers with constant `width` and `height` take a level of detail.
 /// Lines, areas, segments, rects with per-row extents and layers drawn
 /// largest first (a size channel read from a column) draw every row
-/// whatever the setting, and so does the newest chunk of a layer that
-/// has been appended to.
+/// whatever the setting.
+///
+/// A layer that grows by appends (GUP-719): its full chunks keep their
+/// tiers whatever the new rows' extent. Its newest chunk draws every row
+/// until it holds 65,536 rows, then builds tiers and builds them again
+/// each time its rows have doubled (and when it is full), so the cost of
+/// building stays within about two builds of a chunk; the rows past its
+/// tiers draw in full, so a new row shows at once. A rebuild changes which
+/// mark draws which row, so a GPU pick drawn before it is dropped. Under
+/// [`RowWindow::LastRows`] a chunk holds at most `n / 4` rows and leaves
+/// with its tiers: a window under 800,000 rows has no chunk over 200,000
+/// rows, so it never takes a level of detail.
 ///
 /// What you see is what you pick (GUP-718). A layer drawing
 /// representatives has a CPU pick index of those marks alone (tens of
@@ -922,7 +932,8 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
     /// [`Lod::AUTO_MIN_ROWS`] visible rows, draw a bounded number of
     /// representatives per chunk instead of every row; [`Lod::Off`]
     /// always draws every row (the exact output). See [`Lod`] for which
-    /// layers take it and what it does not cover yet.
+    /// layers take it, what it does not cover yet, and how it follows
+    /// appends and a [`RowWindow`] (GUP-719).
     pub fn lod(&mut self, lod: Lod) -> &mut Self {
         self.lod = lod;
         self
@@ -1899,7 +1910,7 @@ struct TierAsk {
     /// their tiers build now, whatever is visible.
     release: bool,
     /// Whether the layer has been appended to: its newest chunk, while not
-    /// full, draws every row.
+    /// full, builds tiers at doubling sizes (GUP-719).
     appended: bool,
     /// The store columns of the first x and y column channels (`None`: a
     /// constant axis), which a chunk's tiers are built over.
