@@ -180,8 +180,10 @@ what each release contains and what its version number promises.
   of about a quarter pixel: about 80,000 marks for a 10M- or 30M-row walk at
   1920 × 1080, 2.8-4.2 ms of GPU time on an integrated GPU instead of 0.9-2.9 s.
   Tiers are built per chunk on first need (about 1 s per 10M rows). `Lod::Off`
-  draws every row. CPU picks, hover, tooltips over CPU data and SVG output still
-  read every row.
+  draws every row. What you see is what you pick: the CPU pick index, hover
+  outline, tooltips and SVG output hold the marks drawn (each with its data row;
+  tens of thousands at any row count, so such a scatter picks above 10M rows),
+  while the brush still selects every data row.
 
 ### Changed
 
@@ -221,8 +223,8 @@ what each release contains and what its version number promises.
   batches (feature `arrow`).
 - Nothing above 30M rows is measured. The level of detail covers circles and
   constant-size rects drawn in data order only (not lines, areas, layers sized
-  by a column, or the newest chunk of a layer that is appended to), and SVG
-  output and CPU picks still read every row.
+  by a column, or the newest chunk of a layer that is appended to); under
+  `Lod::Off`, lines and areas, SVG output and CPU picks still read every row.
 - No PDF export.
 - Accessibility: no screen reader has been tested by hand, nothing outside the
   browser speaks `focus_text`, and keyboard focus skips a layer that dropped its

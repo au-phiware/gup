@@ -713,7 +713,7 @@ struct ChunkLod {
     /// The store columns of x and y the tiers were built from (`None`:
     /// that axis was a constant).
     xy: [Option<usize>; 2],
-    tiers: Tiers,
+    tiers: Arc<Tiers>,
     gpu: Option<LodGpu>,
 }
 
@@ -876,8 +876,7 @@ impl Chunk {
 
     /// The chunk's tiers, if [`ColumnStore::lod_tiers`] built them for
     /// its current rows.
-    #[cfg(test)]
-    pub(crate) fn tiers(&self) -> Option<&Tiers> {
+    pub(crate) fn tiers(&self) -> Option<&Arc<Tiers>> {
         self.lod.as_ref().map(|l| &l.tiers)
     }
 
@@ -1826,7 +1825,7 @@ impl ColumnStore {
                 a.as_ref()
                     .map_or(0.0, |(cells, col)| cells.get(col, r as usize))
             };
-            let tiers = Tiers::build(self.chunks[k].len, |r| (at(&x, r), at(&y, r)));
+            let tiers = Arc::new(Tiers::build(self.chunks[k].len, |r| (at(&x, r), at(&y, r))));
             self.chunks[k].lod = Some(Box::new(ChunkLod {
                 xy,
                 tiers,
@@ -2864,7 +2863,7 @@ mod tests {
                 assert!(tiers.stored > 2, "chunk {k}: {tiers:?}");
                 store.upload_lod(&cx, k).unwrap();
                 let chunk = &store.chunks()[k];
-                assert_eq!(chunk.tiers(), Some(&tiers));
+                assert_eq!(chunk.tiers().map(|t| &**t), Some(&tiers));
                 let lod = chunk.lod_gpu(&cx).unwrap();
                 let reps = tiers.order.len();
                 assert_eq!(lod.reps() as usize, reps);

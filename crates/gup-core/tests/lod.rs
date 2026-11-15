@@ -479,3 +479,342 @@ fn the_scatter_builder_forwards_lod() {
     assert!(drawn[0] < 100_000, "{drawn:?}");
     assert_eq!(drawn[1], 300_000);
 }
+
+// GUP-718: what you see is what you pick.
+
+/// A scatter of `rows` as shared columns under `Retain::GpuOnly`, as a layer
+/// above `Retain::AUTO_MAX_ROWS` rows is (its CPU columns are not kept, so
+/// the plot would pick it on the GPU), with 3 px discs.
+fn columnar(rows: &[Row], lod: Lod) -> Plot {
+    let cols = Columns::new()
+        .with("x", rows.iter().map(|r| r.0).collect::<Vec<_>>())
+        .unwrap()
+        .with("y", rows.iter().map(|r| r.1).collect::<Vec<_>>())
+        .unwrap();
+    let (mut plot, ..) = plot();
+    plot.add_columns::<Circle>(&cols)
+        .x_column(&cols["x"])
+        .y_column(&cols["y"])
+        .attr(Circle::RADIUS, Px(3.0))
+        .retain(Retain::GpuOnly)
+        .lod(lod);
+    plot
+}
+
+/// Pixels on a grid over the plot rect, `step` apart.
+fn grid(plot: &Plot, step: f32) -> Vec<gup_core::geom::Point> {
+    let r = plot.layout().expect("resolved").plot;
+    let mut out = Vec::new();
+    let mut y = r.top() + step / 2.0;
+    while y < r.bottom() {
+        let mut x = r.left() + step / 2.0;
+        while x < r.right() {
+            out.push(gup_core::geom::Point::new(x, y));
+            x += step;
+        }
+        y += step;
+    }
+    out
+}
+
+#[test]
+fn the_pick_index_holds_the_drawn_representatives() {
+    let cx = Context::new_blocking().unwrap();
+    let rows = walk(300_000);
+    let mut lod = columnar(&rows, Lod::Auto);
+    let d = draw(&cx, &mut lod);
+    assert!(d.instances < 30_000, "{} drawn", d.instances);
+    let items = lod.pick_item_count().expect("an index");
+    assert!(items > 0 && items <= d.instances as usize, "{items} items");
+    assert!(items < rows.len() / 10, "{items} items of {}", rows.len());
+
+    // Every hit is a data row, drawn where its data says.
+    let mut hits = 0;
+    for at in grid(&lod, 7.0) {
+        let Some(id) = lod.pick_row(at) else { continue };
+        hits += 1;
+        let (x, y, _) = rows[id.row];
+        let p = lod.pixel(x, y).unwrap();
+        assert!(
+            (p.x - at.x).hypot(p.y - at.y) <= 3.0 + gup_core::PICK_TOLERANCE.0 + 0.5,
+            "row {} is at {p:?}, picked at {at:?}",
+            id.row
+        );
+        // Its anchor is its own position, and picking there finds a row.
+        let anchor = lod.pick_anchor(id).expect("a drawn row has an anchor");
+        assert!((anchor.x - p.x).abs() < 0.01 && (anchor.y - p.y).abs() < 0.01);
+        assert!(lod.pick_row(anchor).is_some());
+    }
+    assert!(hits > 50, "{hits} grid points hit a representative");
+
+    // Under `Off` every row is indexed: unchanged (the layer is under
+    // the bound).
+    let mut off = columnar(&rows, Lod::Off);
+    draw(&cx, &mut off);
+    assert_eq!(off.pick_item_count(), Some(rows.len()));
+}
+
+#[test]
+fn cpu_and_gpu_picks_agree_under_lod() {
+    let cx = Context::new_blocking().unwrap();
+    let mut plot = scatter(walk(1_000_000), Lod::Auto);
+    let d = draw(&cx, &mut plot);
+    assert!(d.instances < 100_000);
+    let r = plot.layout().unwrap().plot;
+    let mut state = 0x9e37_79b9_7f4a_7c15u64;
+    let mut next = move || {
+        state ^= state << 13;
+        state ^= state >> 7;
+        state ^= state << 17;
+        (state >> 11) as f32 / (1u64 << 53) as f32
+    };
+    let (mut hits, mut disagree) = (0, 0);
+    for _ in 0..200 {
+        let q = gup_core::geom::Point::new(r.x + next() * r.width, r.y + next() * r.height);
+        let (cpu, gpu) = (plot.pick_row(q), plot.pick_row_gpu(&cx, q).unwrap());
+        hits += usize::from(cpu.is_some() || gpu.is_some());
+        disagree += usize::from(cpu != gpu);
+    }
+    assert!(hits >= 20, "only {hits} of 200 points hit a mark");
+    assert!(disagree <= 2, "{disagree} of {hits} picks differ");
+}
+
+/// The tooltip text shown, if any.
+fn tooltip_text(plot: &mut Plot, cx: &Context) -> Option<String> {
+    use gup_core::scene::{ItemKind, Z_TOOLTIP};
+    let resolved = plot.resolve(cx, W as f32, H as f32).unwrap();
+    resolved
+        .scene
+        .items
+        .iter()
+        .filter(|i| i.z == Z_TOOLTIP)
+        .find_map(|i| match &i.kind {
+            ItemKind::Text(runs) => runs.first().map(|r| r.text.to_string()),
+            _ => None,
+        })
+}
+
+fn with_tooltip(rows: Vec<Row>, lod: Lod) -> Plot {
+    let (mut plot, x, y) = plot();
+    plot.add(Selection::<Row, Circle>::new(rows))
+        .attr(Circle::X, x.encode(|r: &Row| r.0))
+        .attr(Circle::Y, y.encode(|r: &Row| r.1))
+        .attr(Circle::RADIUS, Px(4.0))
+        .tooltip(|r| format!("x {:.3}, y {:.3}", r.0, r.1))
+        .lod(lod);
+    plot
+}
+
+#[test]
+fn hover_outlines_a_representative_and_shows_its_row() {
+    let cx = Context::new_blocking().unwrap();
+    let rows = walk(1_000_000);
+    let text = |r: usize| format!("x {:.3}, y {:.3}", rows[r].0, rows[r].1);
+    let mut plot = with_tooltip(rows.clone(), Lod::Auto);
+    let d = draw(&cx, &mut plot);
+    assert!(d.instances < 100_000);
+    let plain = d.image;
+
+    // A representative near the middle of the plot.
+    let rect = plot.layout().unwrap().plot;
+    let mid = gup_core::geom::Point::new(rect.x + rect.width / 2.0, rect.y + rect.height / 2.0);
+    let points = grid(&plot, 3.0);
+    let hits: Vec<_> = points
+        .into_iter()
+        .filter_map(|at| plot.pick_row(at))
+        .collect();
+    let hit = hits
+        .into_iter()
+        .min_by(|a, b| {
+            let d = |r: &gup_core::RowId| {
+                let p = plot.pixel(rows[r.row].0, rows[r.row].1).unwrap();
+                (p.x - mid.x).hypot(p.y - mid.y)
+            };
+            d(a).total_cmp(&d(b))
+        })
+        .expect("a representative under the grid");
+    let at = plot.pick_anchor(hit).expect("anchored at its own position");
+    let p = plot.pixel(rows[hit.row].0, rows[hit.row].1).unwrap();
+    assert!((at.x - p.x).abs() < 0.01 && (at.y - p.y).abs() < 0.01);
+
+    assert!(plot.handle(gup_core::Input::pointer_moved(at)).redraw);
+    let hovered = plot.hovered().expect("hovering a representative");
+    assert!(hovered.row < rows.len());
+    // Ringed at the representative, with the tooltip of its data row.
+    let ring = plot.resolve(&cx, W as f32, H as f32).unwrap().layout.hover;
+    let ring = ring.expect("a hover ring");
+    let anchor = plot.pick_anchor(hovered).unwrap();
+    assert!((ring.x + ring.width / 2.0 - anchor.x).abs() <= 1.0);
+    assert!((ring.y + ring.height / 2.0 - anchor.y).abs() <= 1.0);
+    assert_eq!(tooltip_text(&mut plot, &cx), Some(text(hovered.row)));
+    // Under `Off` the same pointer gets the tooltip of the row it shows.
+    let mut off = with_tooltip(rows.clone(), Lod::Off);
+    draw(&cx, &mut off);
+    let _ = off.handle(gup_core::Input::pointer_moved(at));
+    let h = off.hovered().expect("a row at the pointer");
+    assert_eq!(tooltip_text(&mut off, &cx), Some(text(h.row)));
+
+    let image = draw(&cx, &mut plot).image;
+    save(&image, "hover_1m.png");
+    // One ring: the hover changes few pixels, all near the anchor.
+    let near =
+        |x: u32, y: u32| (x as f32 - anchor.x).abs() <= 14.0 && (y as f32 - anchor.y).abs() <= 14.0;
+    let (mut changed, mut away) = (0, 0);
+    for (x, y, p) in image.enumerate_pixels() {
+        if p != plain.get_pixel(x, y) {
+            changed += 1;
+            // The tooltip is the other change, beside the ring.
+            away += usize::from(!near(x, y));
+        }
+    }
+    assert!(changed > 20, "the ring changes {changed} pixels");
+    assert!(away < changed, "all changes are away from the pointer");
+
+    // Leaving clears the ring and the tooltip.
+    let _ = plot.handle(gup_core::Input::PointerLeft);
+    assert_eq!(plot.hovered(), None);
+    assert_eq!(tooltip_text(&mut plot, &cx), None);
+}
+
+/// `plot` as SVG after resolving it at the test size.
+fn svg_of(cx: &Context, plot: &mut Plot, w: u32, h: u32) -> String {
+    let scene = plot.resolve(cx, w as f32, h as f32).unwrap().scene.clone();
+    let mut target = gup_core::SvgTarget::new();
+    gup_core::VectorTarget::render(&mut target, &scene).unwrap();
+    target.into_string()
+}
+
+fn rasterise(svg: &str, w: u32, h: u32) -> image::RgbaImage {
+    use resvg::{tiny_skia, usvg};
+    let mut opt = usvg::Options::default();
+    opt.fontdb_mut()
+        .load_font_data(gup_text::INTER_REGULAR.to_vec());
+    let tree = usvg::Tree::from_str(svg, &opt).expect("SvgTarget output parses");
+    let mut pixmap = tiny_skia::Pixmap::new(w, h).unwrap();
+    resvg::render(&tree, tiny_skia::Transform::default(), &mut pixmap.as_mut());
+    let data = pixmap
+        .pixels()
+        .iter()
+        .flat_map(|p| {
+            let c = p.demultiply();
+            [c.red(), c.green(), c.blue(), c.alpha()]
+        })
+        .collect();
+    image::RgbaImage::from_raw(w, h, data).unwrap()
+}
+
+/// 300,000 rows written as SVG at `w` x `h` under `Auto` and `Off`:
+/// the circle counts, the SVG's share of the plot rect over ΔE00 10 from
+/// `Off`'s, and the PNG's.
+fn svg_parity(w: u32, h: u32) -> ((usize, usize, usize), (f64, f64)) {
+    let cx = Context::new_blocking().unwrap();
+    let rows = walk(300_000);
+    let mut auto = scatter(rows.clone(), Lod::Auto);
+    let mut off = scatter(rows, Lod::Off);
+    let (png_a, png_o) = (draw_at(&cx, &mut auto, w, h), draw_at(&cx, &mut off, w, h));
+    let (a, o) = (svg_of(&cx, &mut auto, w, h), svg_of(&cx, &mut off, w, h));
+    let counts = (
+        png_a.instances as usize,
+        a.matches("<circle ").count(),
+        o.matches("<circle ").count(),
+    );
+    // The circles are the drawn ones: the same size.
+    let first = &a[a.find("<circle ").expect("a circle")..];
+    assert!(first[..first.find("/>").unwrap()].contains(r#"r="1.5""#));
+    let (ra, ro) = (rasterise(&a, w, h), rasterise(&o, w, h));
+    let svg = shares(&ra, &ro, &auto).1;
+    let png = shares(&png_a.image, &png_o.image, &auto).1;
+    eprintln!(
+        "300,000 rows at {w} x {h}: {} representatives; ΔE00 > 10 from Off, of the plot \
+         rect: SVG {svg:.3}%, PNG {png:.3}%",
+        counts.0
+    );
+    (counts, (svg, png))
+}
+
+#[test]
+fn svg_writes_the_representatives_of_a_small_chart() {
+    let ((drawn, auto, off), (svg, png)) = svg_parity(W, H);
+    assert_eq!(off, 300_000, "Off writes every row");
+    assert_eq!(auto, drawn, "Auto writes what it draws");
+    assert!(auto < off / 10, "{auto} circles of {off}");
+    // A small chart draws coarsely (GUP-717's gates): the SVG is as close
+    // to every row as the PNG is.
+    assert!(svg <= png + 0.5, "SVG {svg:.3}% against PNG {png:.3}%");
+}
+
+#[test]
+fn svg_looks_like_every_row_at_1080p() {
+    let ((drawn, auto, off), (svg, _)) = svg_parity(1920, 1080);
+    assert_eq!((auto, off), (drawn, 300_000));
+    assert!(auto < off / 2, "{auto} circles of {off}");
+    assert!(svg <= 1.0, "{svg:.3}% of the plot rect differs");
+}
+
+#[test]
+fn a_gpu_only_lod_layer_still_rasterises() {
+    let cx = Context::new_blocking().unwrap();
+    let rows = walk(300_000);
+    let mut plot = columnar(&rows, Lod::Auto);
+    let drawn = draw(&cx, &mut plot).instances as usize;
+    let svg = svg_of(&cx, &mut plot, W, H);
+    assert_eq!(svg.matches("<circle ").count(), drawn, "{svg:.300}");
+    assert!(!svg.contains("skipped"));
+}
+
+#[test]
+fn a_brush_is_exact_and_the_description_is_unchanged_under_lod() {
+    use gup_core::{Button, Input};
+    let cx = Context::new_blocking().unwrap();
+    let rows = walk(300_000);
+    let run = |lod| {
+        let mut plot = scatter(rows.clone(), lod);
+        plot.drag(gup_core::Drag::Brush);
+        draw(&cx, &mut plot);
+        let r = plot.layout().unwrap().plot;
+        let a = gup_core::geom::Point::new(r.x + 0.2 * r.width, r.y + 0.1 * r.height);
+        let b = gup_core::geom::Point::new(r.x + 0.5 * r.width, r.y + 0.9 * r.height);
+        let button = Button::Primary;
+        let mut feed = |input| {
+            let _ = plot.handle(input);
+        };
+        feed(Input::PointerDown { at: a, button });
+        feed(Input::PointerMoved {
+            at: gup_core::geom::Point::new(a.x + 20.0, a.y + 20.0),
+        });
+        feed(Input::PointerMoved { at: b });
+        feed(Input::PointerUp { at: b, button });
+        let brushed = plot.brush().expect("a brush").rows.clone();
+        draw(&cx, &mut plot);
+        let text = plot.describe().expect("resolved").alt_text();
+        (brushed, text)
+    };
+    let (auto, off) = (run(Lod::Auto), run(Lod::Off));
+    assert!(auto.0.len() > 50_000, "{} rows brushed", auto.0.len());
+    assert!(auto.0 == off.0, "the brushed rows differ");
+    assert_eq!(auto.1, off.1);
+}
+
+/// The index follows the view: every resolve (a zoom writes the scales)
+/// prepares the tiers again and the index is rebuilt for them, so it never
+/// holds representatives the frame did not draw.
+#[test]
+fn the_pick_index_follows_the_zoom() {
+    let cx = Context::new_blocking().unwrap();
+    let rows = 1_000_000;
+    let (mut plot, x, y) = zoomable(rows, Lod::Auto);
+    let full = draw(&cx, &mut plot).instances;
+    assert_eq!(plot.pick_item_count(), Some(full as usize));
+    let middle = walk(rows)[rows / 2];
+    zoom_ten(&plot, &x, &y, (middle.0, middle.1));
+    let zoomed = draw(&cx, &mut plot).instances;
+    assert_ne!(zoomed, full, "the zoom changes what is drawn");
+    // Every instance of a visible chunk is indexed (a mark whose centre is
+    // outside the plot rect is still an item).
+    assert_eq!(plot.pick_item_count(), Some(zoomed as usize));
+    // And what the index holds picks rows of the zoomed view.
+    let hit = grid(&plot, 5.0)
+        .into_iter()
+        .find_map(|at| plot.pick_row(at));
+    assert!(hit.is_some_and(|r| r.row < rows));
+}
