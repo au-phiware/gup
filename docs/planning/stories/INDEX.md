@@ -757,3 +757,6 @@ will pick each up.
   per-checkout member `codegen-units` is worth its disk, and if so add it to
   `scripts/cargo_env.sh`. Deps: GUP-411 ✅. Related to GUP-427 (disk growth),
   not superseded by it. No track; keep.
+- [GUP-741](GUP-741_Lod_Append_Test_On_Lavapipe.md) ✅ — The LOD append test
+  (GUP-719) fails on lavapipe: find why (device limits, MSAA, scale refit or a
+  real LOD bug) and make the test assert a device-independent property.
