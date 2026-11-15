@@ -988,10 +988,13 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
     /// ([`force_lod_tier`](Self::force_lod_tier)), each chunk that stores
     /// it (GUP-715).
     fn lod_entries(&mut self, cx: &Context, frame: &lod::Frame<'_>) -> Result<Vec<DrawEntry>> {
-        let rows = self.len() as u64;
         let store = self.columns.as_ref().ok_or_else(|| {
             Error::config("layer", "prepare called before the columns were evaluated")
         })?;
+        // The stored rows (the selection's, less evicted ones), read from
+        // the store: no access to `rows: Vec<T>` keeps this code the same
+        // for every row type, so their copies fold into one (WASM size).
+        let rows = store.rows();
         let mut entries = draw_entries(M::GEOMETRY, store.chunks());
         self.lod_pending = false;
         // A layer drawn largest first keeps every row until GUP-721 orders
