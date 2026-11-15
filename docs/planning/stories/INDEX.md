@@ -643,7 +643,7 @@ GUP-628 and GUP-631 (shared `selection.rs`).
   golden, a ΔE00 share against `Lod::Off` (1.0% full, 2.0% zoom of the plot
   rect) and `zoom_bench --lod` with proposed `lod.*` budget rows. Deps: GUP-716
   📋.
-- [GUP-718](GUP-718_LOD_In_Pick_Hover_Tooltips_And_SVG.md) 📋 — The CPU pick
+- [GUP-718](GUP-718_LOD_In_Pick_Hover_Tooltips_And_SVG.md) ✅ — The CPU pick
   index, hover outline, tooltips and SVG over the drawn representatives (a LOD
   scatter stays pickable above `Retain::AUTO_MAX_ROWS`); GUP-667 is kept,
   narrowed. Deps: GUP-716 📋, GUP-684 ✅.
