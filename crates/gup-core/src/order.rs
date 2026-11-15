@@ -307,18 +307,30 @@ impl DrawOrder {
     }
 }
 
-/// One span per draw entry of a quad layer, its instances in upload order:
-/// a layer's draws without a size order. An entry draws a chunk's rows, or
-/// a tier's representatives or the rows past them (GUP-719).
-pub(crate) fn entry_spans(entries: &[DrawEntry]) -> Vec<Span> {
-    entries
-        .iter()
-        .enumerate()
-        .map(|(i, e)| Span {
-            chunk: i as u32,
-            rows: 0..e.instances,
-        })
-        .collect()
+/// The spans of a quad layer's draw entries, its instances in upload order:
+/// a layer's draws without a size order. An entry draws a chunk's rows (one
+/// span), a tier's representatives, as the ranges `lod` lists for it by
+/// entry index, in entry order (GUP-720), or the rows past them (GUP-719).
+pub(crate) fn entry_spans(
+    entries: &[DrawEntry],
+    lod: &[(usize, Vec<std::ops::Range<u32>>)],
+) -> Vec<Span> {
+    let mut spans = Vec::with_capacity(entries.len());
+    let mut lod = lod.iter().peekable();
+    for (i, e) in entries.iter().enumerate() {
+        let chunk = i as u32;
+        match lod.next_if(|d| d.0 == i) {
+            Some((_, ranges)) => spans.extend(ranges.iter().map(|r| Span {
+                chunk,
+                rows: r.clone(),
+            })),
+            None => spans.push(Span {
+                chunk,
+                rows: 0..e.instances,
+            }),
+        }
+    }
+    spans
 }
 
 /// One of a layer's instanced draw entries: what one `Chunk` uniform entry

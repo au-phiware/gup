@@ -18,8 +18,15 @@
 //! sort of `(key, row)` pairs puts every tier's cells in runs of keys, and
 //! a row represents its cell at every tier from its `first_tier` on (see
 //! [`first_tiers`]). Rows are kept in **progressive order**, by
-//! `first_tier` and then by row: tier `t` is the prefix
-//! `order[..counts[t]]`.
+//! `first_tier` and then by key (Morton order): tier `t` is the prefix
+//! `order[..counts[t]]`, and each tier's block of it,
+//! `order[counts[t - 1]..counts[t]]`, follows a Morton curve over the chunk.
+//!
+//! Each block is cut into [`Run`]s of at most [`RUN_LEN`]
+//! representatives, each with the box of their positions (GUP-720). A
+//! stretch of a Morton curve is compact, so a frame draws, of the prefix,
+//! only the runs whose boxes it can see ([`ranges`]): a zoom into a chunk
+//! that spans the whole extent (unsorted rows) skips most of it.
 //!
 //! Tiers are stored while they hold at most half the chunk's rows; past
 //! the finest stored tier a chunk draws every row ([`Tiers::prefix`] is
@@ -48,8 +55,30 @@ const DIGIT_BITS: u32 = 11;
 /// Buckets of a radix-sort pass.
 const BUCKETS: usize = 1 << DIGIT_BITS;
 
+/// Representatives a [`Run`] holds at most: small enough that a zoom view
+/// skips most of a block, large enough that a 476,000-representative chunk
+/// is about 120 runs (GUP-720).
+pub(crate) const RUN_LEN: u32 = 4_096;
+
+/// Ranges of representatives one chunk draws in a frame at most: further
+/// runs merge across the smallest gaps between them, drawing a few
+/// instances more instead of a draw more (GUP-720, after GUP-492's finding
+/// on draw counts).
+pub(crate) const MAX_RANGES: usize = 64;
+
+/// A stretch of a tier's block of representatives, `order[start..end]`,
+/// and the box of their positions in data units (each axis `(min, max)`;
+/// a constant axis reads 0).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) struct Run {
+    pub start: u32,
+    pub end: u32,
+    pub x: (f64, f64),
+    pub y: (f64, f64),
+}
+
 /// The tiers of one chunk: see the [module docs](self).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub(crate) struct Tiers {
     /// The rows of the chunk when the tiers were built: `order` holds rows
     /// below it only (an appended chunk's later rows draw in full, GUP-719).
@@ -67,6 +96,9 @@ pub(crate) struct Tiers {
     /// `0..=stored`: non-decreasing, `counts[0]` is 1 (0 for a chunk
     /// without a finite row).
     pub counts: Vec<u32>,
+    /// Every tier block cut into runs of at most [`RUN_LEN`], in `order`'s
+    /// order: they tile `order`, and none crosses a block's end.
+    pub runs: Vec<Run>,
 }
 
 impl Tiers {
@@ -96,6 +128,7 @@ impl Tiers {
                 stored: 0,
                 order: Vec::new(),
                 counts: vec![0],
+                runs: Vec::new(),
             };
         }
         let (ex, ey) = match (exponent(x0, x1), exponent(y0, y1)) {
@@ -119,6 +152,9 @@ impl Tiers {
             }
         }
         let mut sorted = radix_sort(pairs, &mut hist);
+        // The rows in key order, for the blocks' Morton order (`first_tiers`
+        // consumes the pairs).
+        let morton: Vec<u32> = sorted.iter().map(|&p| p as u32).collect();
 
         // Each row's first tier, by row, and how many rows start at each.
         let mut first = vec![NEVER; rows as usize];
@@ -142,16 +178,20 @@ impl Tiers {
         }
         let stored = counts.len() as u32 - 1;
 
-        // The progressive order: a stable counting sort by first tier.
+        // The progressive order: a stable counting sort by first tier of
+        // the rows in key order, so each block is in Morton order.
         let mut next: Vec<u32> = std::iter::once(0).chain(counts.iter().copied()).collect();
         let mut order = vec![0u32; counts[stored as usize] as usize];
-        for (r, &t) in (0..rows).zip(&first) {
+        for r in morton {
+            let t = first[r as usize];
             if u32::from(t) <= stored {
-                let at = &mut next[t as usize];
+                let at = &mut next[usize::from(t)];
                 order[*at as usize] = r;
                 *at += 1;
             }
         }
+        drop(first);
+        let runs = runs(&order, &counts, &xy);
         Tiers {
             rows,
             ex,
@@ -159,6 +199,7 @@ impl Tiers {
             stored,
             order,
             counts,
+            runs,
         }
     }
 
@@ -168,6 +209,82 @@ impl Tiers {
     pub fn prefix(&self, t: u32) -> Option<u32> {
         self.counts.get(t as usize).copied()
     }
+}
+
+/// Each tier block of `order` (blocks end at `counts`) cut into runs of at
+/// most [`RUN_LEN`], with the boxes of their rows' positions `xy`.
+fn runs(order: &[u32], counts: &[u32], xy: &impl Fn(u32) -> (f64, f64)) -> Vec<Run> {
+    let mut runs = Vec::with_capacity(order.len().div_ceil(RUN_LEN as usize) + counts.len());
+    let mut start = 0;
+    for &end in counts {
+        for s in (start..end).step_by(RUN_LEN as usize) {
+            let e = end.min(s + RUN_LEN);
+            let mut run = Run {
+                start: s,
+                end: e,
+                x: (f64::INFINITY, f64::NEG_INFINITY),
+                y: (f64::INFINITY, f64::NEG_INFINITY),
+            };
+            for &r in &order[s as usize..e as usize] {
+                let (x, y) = xy(r);
+                run.x = (run.x.0.min(x), run.x.1.max(x));
+                run.y = (run.y.0.min(y), run.y.1.max(y));
+            }
+            runs.push(run);
+        }
+        start = end;
+    }
+    runs
+}
+
+/// The ranges of `order[..count]` (a tier's prefix: `count` is one of the
+/// tiers' `counts`) a frame draws: the `runs` that `seen` keeps, adjacent
+/// ones merged into one range; past [`MAX_RANGES`] ranges, the ranges
+/// either side of the narrowest gaps merged too (drawing the gaps'
+/// instances, which `seen` rejected). In order; empty when no run is
+/// seen.
+pub(crate) fn ranges(
+    runs: &[Run],
+    count: u32,
+    mut seen: impl FnMut(&Run) -> bool,
+) -> Vec<std::ops::Range<u32>> {
+    let mut out: Vec<std::ops::Range<u32>> = Vec::new();
+    for run in runs.iter().take_while(|r| r.start < count) {
+        debug_assert!(run.end <= count, "a run crosses the prefix's end");
+        if !seen(run) {
+            continue;
+        }
+        match out.last_mut() {
+            Some(last) if last.end == run.start => last.end = run.end,
+            _ => out.push(run.start..run.end),
+        }
+    }
+    if out.len() > MAX_RANGES {
+        // Keep the `MAX_RANGES - 1` widest gaps (the first of equal ones).
+        let mut gaps: Vec<(u32, usize)> = out
+            .windows(2)
+            .enumerate()
+            .map(|(i, w)| (w[1].start - w[0].end, i))
+            .collect();
+        gaps.sort_unstable_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
+        let mut kept = vec![false; gaps.len()];
+        for &(_, i) in &gaps[..MAX_RANGES - 1] {
+            kept[i] = true;
+        }
+        let mut merged = Vec::with_capacity(MAX_RANGES);
+        let mut current = out[0].clone();
+        for (i, r) in out.iter().enumerate().skip(1) {
+            if kept[i - 1] {
+                merged.push(current);
+                current = r.clone();
+            } else {
+                current.end = r.end;
+            }
+        }
+        merged.push(current);
+        out = merged;
+    }
+    out
 }
 
 /// How many tiers finer than "at most one representative per pixel of
@@ -224,6 +341,10 @@ pub(crate) struct Frame<'a> {
     /// headless render, a host that never set a waker) every missing chunk
     /// builds in the one prepare, so a single frame is complete.
     pub spread: bool,
+    /// The plot rect when the plot culls (as `visible` is computed): a
+    /// chunk drawing a tier draws only the [`Run`]s that can reach it
+    /// (GUP-720). `None`: every run.
+    pub plot: Option<crate::geom::Rect>,
 }
 
 /// One axis of the tier-16 grid: `cell(v) = floor(v / 2^e) - origin`, the
@@ -537,15 +658,23 @@ mod tests {
             let reps = representatives(&cells, t);
             if t <= tiers.stored {
                 let mut prefix = tiers.order[..tiers.counts[t as usize] as usize].to_vec();
-                // Each tier block is in row order.
+                // Each tier block is in Morton order of the finest key
+                // (distinct: one representative a tier-`t` cell).
                 let start = if t == 0 {
                     0
                 } else {
                     tiers.counts[t as usize - 1]
                 };
+                let keys: Vec<u32> = prefix[start as usize..]
+                    .iter()
+                    .map(|&r| {
+                        let (cx, cy) = cells[r as usize].expect("a finite representative");
+                        part1by1(cx) | part1by1(cy) << 1
+                    })
+                    .collect();
                 assert!(
-                    prefix[start as usize..].is_sorted(),
-                    "{name}: tier {t} block"
+                    keys.windows(2).all(|w| w[0] < w[1]),
+                    "{name}: tier {t} block is not in Morton order"
                 );
                 prefix.sort_unstable();
                 assert_eq!(prefix, reps, "{name}: tier {t}");
@@ -561,7 +690,38 @@ mod tests {
                 }
             }
         }
+        check_runs(name, rows, &tiers);
         tiers
+    }
+
+    /// The runs tile `order`, each within one tier block and at most
+    /// `RUN_LEN` long, and each box is its representatives' exact box.
+    fn check_runs(name: &str, rows: &[(f64, f64)], tiers: &Tiers) {
+        let mut at = 0;
+        for run in &tiers.runs {
+            assert_eq!(run.start, at, "{name}: runs tile the order");
+            assert!(run.end > run.start && run.end - run.start <= RUN_LEN);
+            let block = tiers.counts.partition_point(|&c| c <= run.start);
+            assert!(
+                run.end <= tiers.counts[block],
+                "{name}: a run crosses a block"
+            );
+            let reps = &tiers.order[run.start as usize..run.end as usize];
+            let along = |f: fn(&(f64, f64)) -> f64| {
+                let v = reps.iter().map(|&r| f(&rows[r as usize]));
+                (
+                    v.clone().fold(f64::INFINITY, f64::min),
+                    v.fold(f64::NEG_INFINITY, f64::max),
+                )
+            };
+            assert_eq!((run.x, run.y), (along(|p| p.0), along(|p| p.1)), "{name}");
+            at = run.end;
+        }
+        assert_eq!(
+            at as usize,
+            tiers.order.len(),
+            "{name}: runs cover the order"
+        );
     }
 
     #[test]
@@ -671,13 +831,18 @@ mod tests {
         assert_eq!(first, alone);
         let first_of_three = check("chunk 0 of 3", &layer[..chunk]);
         assert_eq!(first_of_three, alone);
-        // Shifting the chunk by whole cells moves its origin, not its grid.
-        let cell = 2f64.powi(alone.ex);
+        // Shifting the chunk by whole cells moves its origin (and its runs'
+        // boxes), not its grid.
+        let shift = 4096.0 * 2f64.powi(alone.ex);
         let shifted: Vec<(f64, f64)> = layer[..chunk]
             .iter()
-            .map(|&(x, y)| (x + 4096.0 * cell, y))
+            .map(|&(x, y)| (x + shift, y))
             .collect();
-        assert_eq!(build(&shifted), alone);
+        let mut moved = alone.clone();
+        for run in &mut moved.runs {
+            run.x = (run.x.0 + shift, run.x.1 + shift);
+        }
+        assert_eq!(build(&shifted), moved);
     }
 
     #[test]
@@ -735,6 +900,111 @@ mod tests {
                 tiers.ex
             );
         }
+    }
+
+    /// A sorted walk of `n` rows, shuffled (Fisher-Yates), as `lod_spike
+    /// --shuffle` draws it: the chunk then spans the whole extent.
+    fn shuffled(n: usize, seed: u64) -> Vec<(f64, f64)> {
+        let mut rows = walk(n, seed);
+        let mut rng = Lcg(seed ^ 0x9e37_79b9_7f4a_7c15);
+        for i in (1..n).rev() {
+            let j = (rng.unit() * (i + 1) as f64) as usize;
+            rows.swap(i, j.min(i));
+        }
+        rows
+    }
+
+    /// A Morton run is compact: the median run's box is a small share of
+    /// the chunk's extent, even when the chunk's rows are unsorted (AC1).
+    #[test]
+    fn runs_are_compact_in_a_shuffled_chunk() {
+        let rows = shuffled(1_000_000, 9);
+        let tiers = check("shuffled walk", &rows);
+        let extent = |f: fn(&(f64, f64)) -> f64| {
+            let v = rows.iter().map(f);
+            v.clone().fold(f64::NEG_INFINITY, f64::max) - v.fold(f64::INFINITY, f64::min)
+        };
+        let area = extent(|p| p.0) * extent(|p| p.1);
+        let mut shares: Vec<f64> = tiers
+            .runs
+            .iter()
+            .map(|r| (r.x.1 - r.x.0) * (r.y.1 - r.y.0) / area)
+            .collect();
+        shares.sort_by(f64::total_cmp);
+        let median = shares[shares.len() / 2];
+        eprintln!(
+            "{} runs over {} representatives; box share of the extent: median {:.4}%, \
+             max {:.2}%",
+            tiers.runs.len(),
+            tiers.order.len(),
+            100.0 * median,
+            100.0 * shares[shares.len() - 1]
+        );
+        assert!(tiers.runs.len() > 50, "{} runs", tiers.runs.len());
+        assert!(
+            median < 0.03,
+            "median run box {:.3}% of the extent",
+            100.0 * median
+        );
+    }
+
+    /// `ranges` keeps the runs `seen` keeps and nothing past the prefix,
+    /// merges adjacent ones, and past `MAX_RANGES` merges across the
+    /// narrowest gaps: checked against brute force.
+    #[test]
+    fn ranges_merge_the_seen_runs() {
+        let runs: Vec<Run> = (0..1000u32)
+            .map(|i| Run {
+                start: 10 * i,
+                end: 10 * i + 10,
+                x: (f64::from(i), f64::from(i)),
+                y: (0.0, 0.0),
+            })
+            .collect();
+        let mut rng = Lcg(11);
+        for (count, p) in [
+            (10_000, 0.5),
+            (5_000, 0.05),
+            (10_000, 0.01),
+            (2_000, 1.0),
+            (10_000, 0.0),
+        ] {
+            let seen: Vec<bool> = (0..1000).map(|_| rng.unit() < p).collect();
+            let got = ranges(&runs, count, |r| seen[(r.start / 10) as usize]);
+            // Brute force: the instances of the seen runs, merged.
+            let want: Vec<u32> = (0..count).filter(|&i| seen[(i / 10) as usize]).collect();
+            let mut exact: Vec<std::ops::Range<u32>> = Vec::new();
+            for &i in &want {
+                match exact.last_mut() {
+                    Some(r) if r.end == i => r.end = i + 1,
+                    _ => exact.push(i..i + 1),
+                }
+            }
+            assert!(got.len() <= MAX_RANGES);
+            assert!(got.iter().all(|r| r.end <= count && r.start < r.end));
+            assert!(got.windows(2).all(|w| w[0].end < w[1].start), "{got:?}");
+            if exact.len() <= MAX_RANGES {
+                assert_eq!(got, exact, "count {count}, p {p}");
+            } else {
+                // Every seen instance is drawn, the ranges start and end on
+                // seen runs, and the gaps kept are the widest.
+                for &i in &want {
+                    assert!(got.iter().any(|r| r.contains(&i)), "{i} not drawn");
+                }
+                for r in &got {
+                    assert!(seen[(r.start / 10) as usize] && seen[((r.end - 1) / 10) as usize]);
+                }
+                let gap = |w: &[std::ops::Range<u32>]| w[1].start - w[0].end;
+                let kept_min = got.windows(2).map(gap).min().unwrap();
+                let mut all: Vec<u32> = exact.windows(2).map(gap).collect();
+                all.sort_unstable_by(|a, b| b.cmp(a));
+                assert_eq!(got.len(), MAX_RANGES);
+                assert!(kept_min >= all[MAX_RANGES - 1], "{kept_min} {all:?}");
+            }
+        }
+        assert!(ranges(&runs, 0, |_| true).is_empty());
+        let all = ranges(&runs, 10_000, |_| true);
+        assert_eq!((all.len(), &all[0]), (1, &(0..10_000)));
     }
 
     /// The GUP-631 spike's `View::tier` (`examples/lod_spike.rs`): the

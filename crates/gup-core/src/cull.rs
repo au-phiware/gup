@@ -47,7 +47,7 @@ impl PixelBox {
     }
 
     /// Whether the box, grown by `margin` on every side, meets `plot`.
-    fn visible(self, margin: f64, plot: Rect) -> bool {
+    pub(crate) fn visible(self, margin: f64, plot: Rect) -> bool {
         let (l, r) = (f64::from(plot.left()), f64::from(plot.right()));
         let (t, b) = (f64::from(plot.top()), f64::from(plot.bottom()));
         self.x.1 + margin >= l
