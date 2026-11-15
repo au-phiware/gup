@@ -306,3 +306,156 @@ brute-force check).
   also draws only visible runs; fixes the partial chunk too. Largest change.
 - **D**: keep Morton order as decided (the full-view regression stays) and relax
   AC3.
+
+## Implementation Summary
+
+**Delivered** (option A of the Blocked section, see Decisions):
+
+- `lod.rs`: `Tiers::build` orders each tier block by the rows' Morton keys (a
+  stable counting sort by first tier of the key-sorted rows), cuts it into
+  `Run`s of at most `RUN_LEN = 4,096` with exact f64 boxes, then spreads each
+  run (bit-reversed order of Morton positions). `lod::ranges` keeps the runs a
+  predicate sees, merges adjacent ones and, past `MAX_RANGES = 64`, merges
+  across every gap narrower than a width found by binary search (no sort).
+  `Tiers::drawn_prefix`: one tier past the stored tiers draws the finest stored
+  one.
+- `selection.rs`: `lod_ranges` maps each run's box through the x and y
+  encodings' `image` and keeps those meeting the plot rect grown by the chunk
+  rule's margin; `lod_drawn` holds each LOD entry's ranges, which become its
+  spans (`order::entry_spans`), its CPU pick items (GUP-718) and so its SVG
+  marks. `lod::Frame` carries the plot rect when the plot culls. `Lod`'s docs
+  describe the zoom.
+- `zoom_bench --shuffle`; `lod_spike`'s `indexed` candidate reports the
+  instances it draws.
+- Tests: `lod::tests` (block runs are Morton stretches, spread, boxes exact,
+  runs compact in a shuffled chunk, `ranges` against brute force, the cap);
+  `tests/lod.rs` (a shuffled 1M walk's fidelity at 400 x 300; a zoomed shuffled
+  two-chunk layer draws 28.5% of its prefixes and its image equals the image
+  with no culling, byte for byte; the pick index holds the drawn runs; draw
+  calls bounded by 64 a chunk; the 1080p zoom gate re-derived).
+
+**Measured** (release, HD 630, 1920 x 1080, 10M rows, medians, same-session A/B
+against main's `crates/gup-core/src` built in this worktree):
+
+| run                                         | main                     | branch                   |
+| ------------------------------------------- | ------------------------ | ------------------------ |
+| `lod_spike` shuffled `auto` full, GPU ms    | 13.99 / 13.99 / 13.96    | 13.93 / 13.96 / 13.99    |
+| `lod_spike` shuffled `auto` zoom, GPU ms    | 138.77 / 141.46 / 141.35 | 15.87 / 16.29 / 16.49    |
+| shuffled `auto` zoom, instances             | 10,000,000               | 1,143,533                |
+| shuffled ΔE00 > 10 vs `base`, plot rect     | -                        | 0.197% full, 0.306% zoom |
+| `zoom_bench` sorted zoom cycle, GPU ms      | 2.68 / 2.20 / 2.54       | 2.10 / 2.10 / 2.09       |
+| `zoom_bench` sorted zoom, draws / instances | 4 / 28,430               | 7 / 26,954               |
+| `zoom_bench` sorted full, draws / instances | 13 / 26,954              | 13 / 26,954              |
+| `zoom_bench --shuffle` zoom cycle, GPU ms   | 4.31 / 4.84 / 5.23       | 3.16 / 3.45 / 2.93       |
+| `zoom_bench --shuffle` zoom, instances      | 173,502                  | 137,408                  |
+| `zoom_bench --shuffle --static`, GPU ms     | 3.26 / 3.06 / 3.58       | 4.28 / 3.65 / 3.35       |
+
+The `lod_spike` rows ran at load 5.4-11 (other agents) with 5.7-6.4 GB
+available; an earlier set at load 1.0-1.7 gave the same medians. The
+`zoom_bench` rows ran at load 5.6-7.3 with 2.7-7.6 GB available; its shuffled
+static view is noisy at that load (draws and instances are identical).
+
+**Proposed `PERF_BUDGETS.md` rows** (not edited; the orchestrator records):
+
+- `lod.draws.median` 4 -> **7**, `lod.instances.median` 28,430 -> **26,954**
+  (sorted zoom cycle; deterministic, exact). `lod_full.*` unchanged.
+- New, if wanted: `lod_shuffled.*` from
+  `zoom_bench --columns --lod auto --shuffle`: draws 13, instances 137,408
+  (exact), GPU about 3.2 ms (+25%); `lod_shuffled_full.*` with `--static`: draws
+  13, instances 56,827, GPU about 3.6 ms.
+
+**WASM** (`mask wasm-size`, scatter gz): main 392,836 B, branch 395,572 B
+(+2,736 B; limit 399,601). A first version was +4,097 B; removing a
+`sort_unstable_by` from the cap and the second instantiation of `lod::ranges`
+saved 1,361 B. The rest (`mask wasm-attrib`, raw): gup_core +3.1 KB (runs,
+spread, ranges, the run culling, the span and pick-range changes;
+`ColumnStore::lod_tiers` is now an outlined 4,357 B function), alloc +0.7 KB,
+core +0.6 KB: new code on the default `Auto` path.
+
+**Images**: not byte-identical. The 1M golden scene differs from main's in 807
+of 120,000 pixels by at most 2/255 a channel (antialiased edges blended in
+another order); the golden passes unchanged and was not re-blessed. The 1080p 1M
+zoom changed with the cap (exact before, 1.380% of the plot rect now).
+
+## Retrospective
+
+**Completed**: 2026-11-16
+
+### Key Technical Learnings
+
+#### Locality is a cost as well as a benefit
+
+- **Challenge**: Morton order makes runs compact, which culling needs, but it
+  also makes consecutive instances overlap. The GPU serialises their blending:
+  the shuffled 10M full view went from 13.9 to 20.3 ms, and forced tier 13 from
+  86.7 to 208 ms.
+- **Solution**: keep each run's set (and so its box) and draw it in bit-reversed
+  order of its Morton positions. Culling sees the same runs, and the GPU sees
+  instances spread across the run's box: 13.9 ms again.
+- **Pattern**: separate "which instances share a range" (spatial, for culling)
+  from "in which order a range draws" (spread, for blending throughput). The
+  sorted-x finding (934 ms against 229 shuffled) predicted this.
+
+#### Measure the library, not the spike's prototype
+
+- **Challenge**: the story's 65.4 ms was the spike's own pyramid at tier 13. The
+  library's `Auto` asks tier 14 (bias 1, a coarser per-chunk grid), which a
+  shuffled 1M-row chunk does not store, so it drew every row (135 ms) and runs
+  could not help.
+- **Solution**: the A/B on `lod_spike`'s `auto` and a forced tier
+  (`indexed --lod-tier 13`) separated the two effects in minutes. The
+  orchestrator chose a one-tier cap.
+- **Pattern**: before optimising a measured path, run the shipped candidate on
+  the story's own data; `lod_spike`'s `auto` and `indexed` candidates exist for
+  that.
+
+#### What the drawn set means for every reader
+
+- **Challenge**: with several ranges per chunk, `MarkBatch::instances` (the
+  chunk draws) is no longer what is drawn.
+- **Solution**: the ranges are the entry's spans, so GPU draws, GPU picks
+  (visible spans), SVG (spans) and the CPU pick index (the same ranges) agree;
+  tests compare the pick index with `__private::visible_instances`.
+- **Pattern**: put a per-frame subset in the spans, not in new draw entries, and
+  every span reader follows; entry indexes (masks, uniforms) keep their meaning.
+
+### Architectural Decisions
+
+#### Ranges as spans, not draw entries
+
+- **Decision**: one `DrawEntry` per chunk as before; the merged ranges are its
+  `Span`s.
+- **Reasoning**: culling masks, `Chunk` uniforms and `visible_spans` index
+  entries; more entries per chunk would have shifted all of them.
+- **Trade-off**: `LayerGpu::draws_chunks` compares spans, so a pan that changes
+  the visible runs rebuilds the layer's chunk bind groups (`with_chunks`); the
+  CPU frame stayed at 0.5-0.9 ms.
+- **Future**: a spans-only fast path if that ever shows in a profile.
+
+#### The cap is one tier only
+
+- **Decision**: `Tiers::drawn_prefix` draws the finest stored tier for the bias
+  tier; further past, every row (GUP-716's "zoomed far in").
+- **Reasoning**: at most one tier coarser than asked is what the bias bought
+  (0.306% at 10M); more would bring back GUP-716's lost time-series burst.
+- **Trade-off**: a chunk whose finest stored tier is two below the ask (the
+  partial last chunk at 10M) still draws every row: 562,816 of the 1,143,533
+  instances.
+
+### Development Workflow Insights
+
+- `git checkout main -- crates/gup-core/src` into the worktree (clean tree
+  first), build, copy the binaries out, and restore gave same-session A/Bs
+  without a second worktree; the safety classifier refused it once over
+  uncommitted edits, rightly.
+- Environment-gated prototypes (`GUP720_SPREAD`, `GUP720_CAP`) in one binary
+  measured both options before escalating, then were reverted.
+- The data-space diagnostic (runs meeting a window, per tier block) showed that
+  a part chunk storing only coarse tiers, not the culling, was why a first test
+  drew 52% of its prefix.
+
+### Follow-up Stories
+
+None written. Noted: the partial last chunk at 10M draws every row in the
+shuffled zoom (option C, a full Morton gather, would fix it at up to 12 B a row
+of GPU memory); a spans-only reuse path for `LayerGpu`.
