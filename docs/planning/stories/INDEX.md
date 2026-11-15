@@ -676,6 +676,9 @@ GUP-628 and GUP-631 (shared `selection.rs`).
   `Lod::Off` frame failed with "Acquiring a texture failed" six times of six
   (GUP-717): reproduce, then retry a surface timeout instead of failing. Deps:
   GUP-716 ✅.
+- [GUP-738](GUP-738_Long_Draws_Split_Across_Submits.md) 💡 — A ~1.1 s full draw
+  makes the HD 630 driver reset the device (GUP-734): split very long draws
+  across submits without changing the picture. Opus. Deps: GUP-734 ✅.
 
 ## Polish after 0.1
 
