@@ -818,3 +818,222 @@ fn the_pick_index_follows_the_zoom() {
         .find_map(|at| plot.pick_row(at));
     assert!(hit.is_some_and(|r| r.row < rows));
 }
+
+// GUP-719: appends. The newest chunk of an appended layer draws every row
+// under `TAIL` rows, builds tiers from there and again each time its rows
+// double, and draws the rows past its tiers in full.
+
+/// Rows an appended chunk holds before it builds tiers.
+const TAIL: usize = 65_536;
+
+/// A stream of scattered rows: x climbs 0.001 a row, y is a hash.
+fn streamed(i: usize) -> Row {
+    let h = (i as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15) >> 40;
+    (i as f64 * 0.001, (h % 10_000) as f64 / 100.0, 0.0)
+}
+
+/// An appended layer of `first` rows in `chunk`-row chunks over fixed
+/// scales (x 0..2000, y 0..100), and its appender.
+fn appended(first: usize, chunk: u32, lod: Lod) -> (Plot, gup_core::Appender<Row>) {
+    appended_over(first, chunk, lod, (2000.0, 100.0))
+}
+
+fn appended_over(
+    first: usize,
+    chunk: u32,
+    lod: Lod,
+    (xmax, ymax): (f64, f64),
+) -> (Plot, gup_core::Appender<Row>) {
+    let mut plot = Plot::new();
+    let x = plot.x(Linear::new().domain(0.0, xmax));
+    let y = plot.y(Linear::new().domain(0.0, ymax));
+    plot.add(Selection::<Row, Circle>::new(
+        (0..first).map(streamed).collect::<Vec<_>>(),
+    ))
+    .attr(Circle::X, x.encode(|r: &Row| r.0))
+    .attr(Circle::Y, y.encode(|r: &Row| r.1))
+    .attr(Circle::RADIUS, Px(1.5))
+    .lod(lod);
+    let layer = plot.layer_mut::<Row, Circle>().unwrap();
+    layer.max_chunk_rows(chunk);
+    let feed = layer.appender();
+    (plot, feed)
+}
+
+fn push(feed: &gup_core::Appender<Row>, from: usize, to: usize) {
+    feed.extend((from..to).map(streamed)).unwrap();
+}
+
+fn resolve_time(cx: &Context, plot: &mut Plot) -> std::time::Duration {
+    let t = std::time::Instant::now();
+    plot.resolve(cx, W as f32, H as f32).unwrap();
+    t.elapsed()
+}
+
+/// AC1: the tail draws every row under `TAIL` rows, then builds at its
+/// doublings and at its last row (exactly 5 builds to a 1,048,576-row
+/// chunk), and the amortised cost stays within 2.5 builds of the chunk. A
+/// full first chunk keeps the layer over the threshold throughout.
+#[test]
+fn the_tail_builds_at_doubling_sizes() {
+    let cx = Context::new_blocking().unwrap();
+    const CHUNK: usize = 1 << 20;
+    let (mut plot, tx) = appended(CHUNK, CHUNK as u32, Lod::Auto);
+    draw(&cx, &mut plot);
+    let first = builds(&mut plot);
+    assert_eq!(first, 1, "the full chunk builds once");
+
+    let mut total = CHUNK;
+    let mut at = Vec::new();
+    let (mut build_time, mut quiet) = (std::time::Duration::ZERO, Vec::new());
+    while total < 2 * CHUNK {
+        let n = 1_000.min(2 * CHUNK - total);
+        push(&tx, total, total + n);
+        total += n;
+        let before = builds(&mut plot);
+        let took = resolve_time(&cx, &mut plot);
+        let tail = total - CHUNK;
+        match builds(&mut plot) - before {
+            0 => quiet.push(took),
+            1 => {
+                at.push(tail);
+                build_time += took;
+            }
+            n => panic!("{n} builds in one frame at {tail} tail rows"),
+        }
+        if tail < TAIL {
+            assert_eq!(builds(&mut plot), first, "no tiers under {TAIL} rows");
+        }
+    }
+    eprintln!("tail builds at {at:?}");
+    assert_eq!(at.len(), 5, "builds at {at:?}");
+    assert_eq!(*at.last().unwrap(), CHUNK, "the last, when full");
+    // The first just over `TAIL`, each next as its rows double.
+    assert!((TAIL..TAIL + 1_000).contains(&at[0]), "{at:?}");
+    for w in at[..4].windows(2) {
+        assert!((2 * w[0]..2 * w[0] + 1_000).contains(&w[1]), "{at:?}");
+    }
+
+    // One build of the chunk: a two-chunk layer's first frame with tiers,
+    // less the same frame without, over its two builds.
+    let frame = |lod| {
+        let (mut p, _tx) = appended(2 * CHUNK, CHUNK as u32, lod);
+        resolve_time(&cx, &mut p)
+    };
+    let one = frame(Lod::Auto).saturating_sub(frame(Lod::Off)) / 2;
+    quiet.sort();
+    let typical = quiet[quiet.len() / 2];
+    let spent = build_time.saturating_sub(typical * 5);
+    eprintln!(
+        "tail builds {spent:?} (5 frames {build_time:?} less 5 quiet frames of {typical:?}); one \
+         build of a {CHUNK}-row chunk {one:?}"
+    );
+    assert!(
+        spent <= one.mul_f64(2.5),
+        "appends cost {spent:?}, one build {one:?}"
+    );
+}
+
+/// AC1: a row appended after a build draws at once, in a second range.
+#[test]
+fn rows_past_the_tiers_draw_in_full() {
+    let cx = Context::new_blocking().unwrap();
+    const CHUNK: usize = 300_000;
+    let (mut plot, tx) = appended(CHUNK, CHUNK as u32, Lod::Auto);
+    let base = draw(&cx, &mut plot).instances;
+    assert_eq!(builds(&mut plot), 1);
+    push(&tx, CHUNK, CHUNK + TAIL + 4_000);
+    let built = draw(&cx, &mut plot);
+    assert_eq!(builds(&mut plot), 2, "the tail builds over {TAIL} rows");
+    assert_eq!(built.chunks, 2);
+    let tail_reps = built.instances - base;
+    assert!(tail_reps < (TAIL as u64) / 2, "{tail_reps} tail instances");
+
+    // A far-out row (the corner of the plot) is drawn by the next frame.
+    let row = CHUNK + TAIL + 4_000;
+    tx.extend([(1999.0, 99.5, 0.0)]).unwrap();
+    let next = draw(&cx, &mut plot);
+    assert_eq!(builds(&mut plot), 2, "no rebuild for one row");
+    assert_eq!(next.instances, built.instances + 1, "one more instance");
+    let at = plot
+        .pick_anchor(gup_core::RowId { layer: 0, row })
+        .expect("the new row is in the pick index");
+    let around = |image: &image::RgbaImage| {
+        let (px, py) = (at.x.round() as i32, at.y.round() as i32);
+        let mut hit = 0;
+        for (dx, dy) in [(0, 0), (1, 0), (-1, 0), (0, 1), (0, -1)] {
+            let p = image.get_pixel((px + dx) as u32, (py + dy) as u32).0;
+            hit += usize::from(p != [255, 255, 255, 255] && p[3] > 0);
+        }
+        hit
+    };
+    assert!(around(&next.image) > 0, "no mark at {at:?}");
+    assert_eq!(around(&built.image), 0, "something was there before");
+}
+
+/// AC2: appends that stretch the extents ten-fold leave full chunks'
+/// tiers and draws alone.
+#[test]
+fn appends_that_grow_the_extent_leave_full_chunks_alone() {
+    let cx = Context::new_blocking().unwrap();
+    const CHUNK: usize = 250_000;
+    // The first chunks span x 0..500, y 0..100, in the plot's bottom left
+    // tenth of x and y.
+    let (mut plot, tx) = appended_over(2 * CHUNK, CHUNK as u32, Lod::Auto, (5000.0, 1000.0));
+    let before = draw(&cx, &mut plot);
+    assert_eq!(builds(&mut plot), 2);
+    // Ten times the extents, far from the old marks.
+    tx.extend((0..10_000).map(|i| (2_500.0 + i as f64 * 0.25, 500.0 + i as f64 * 0.05, 0.0)))
+        .unwrap();
+    let after = draw(&cx, &mut plot);
+    assert_eq!(builds(&mut plot), 2, "no tiers rebuilt");
+    assert_eq!(after.instances, before.instances + 10_000);
+    let r = plot.layout().unwrap().plot;
+    let (x0, x1) = (r.x as u32, (r.x + r.width * 0.12) as u32);
+    let (y0, y1) = ((r.y + r.height * 0.88) as u32, (r.y + r.height) as u32 - 1);
+    let (mut differ, mut marks) = (0, 0);
+    for y in y0..y1 {
+        for x in x0..x1 {
+            let (a, b) = (before.image.get_pixel(x, y), after.image.get_pixel(x, y));
+            differ += usize::from(a != b);
+            marks += usize::from(a.0 != [255, 255, 255, 255]);
+        }
+    }
+    // The old chunks draw the same rows: at most the antialiased top edge
+    // of the cloud moves (it does under `Lod::Off` too, so it is not the
+    // tiers).
+    assert!(marks > 500, "{marks} marked pixels in the old corner");
+    assert!(
+        differ <= 2 * (x1 - x0) as usize,
+        "{differ} of {marks} pixels changed"
+    );
+}
+
+/// AC3: a rebuild bumps the pick epoch: a GPU pick requested before is
+/// dropped, one after is answered with the data row.
+#[test]
+fn a_rebuild_drops_a_pending_gpu_pick() {
+    let cx = Context::new_blocking().unwrap();
+    const CHUNK: usize = 300_000;
+    let (mut plot, tx) = appended(CHUNK, CHUNK as u32, Lod::Auto);
+    push(&tx, CHUNK, CHUNK + TAIL + 4_000);
+    draw(&cx, &mut plot);
+    assert_eq!(builds(&mut plot), 2);
+    // Row 0 represents its cell at every tier.
+    let at = plot
+        .pick_anchor(gup_core::RowId { layer: 0, row: 0 })
+        .expect("row 0 is drawn");
+    // Doubling the tail rebuilds it.
+    let dropped = plot.request_pick(&cx, at).unwrap();
+    push(&tx, CHUNK + TAIL + 5_000, CHUNK + 2 * (TAIL + 5_000));
+    draw(&cx, &mut plot);
+    assert_eq!(builds(&mut plot), 3, "the tail rebuilt");
+    let answered = plot.pick_row_gpu(&cx, at).unwrap();
+    assert!(
+        answered.is_some_and(|r| r.row < CHUNK),
+        "a pick after the rebuild finds a row of the first chunk: {answered:?}"
+    );
+    let picks = plot.poll_picks(&cx);
+    let row_of = |t| picks.iter().find(|p| p.ticket == t).expect("polled").row;
+    assert_eq!(row_of(dropped), None, "a pick across a rebuild is dropped");
+}
