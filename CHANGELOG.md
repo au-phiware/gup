@@ -183,7 +183,10 @@ what each release contains and what its version number promises.
   draws every row. What you see is what you pick: the CPU pick index, hover
   outline, tooltips and SVG output hold the marks drawn (each with its data row;
   tens of thousands at any row count, so such a scatter picks above 10M rows),
-  while the brush still selects every data row.
+  while the brush still selects every data row. A layer that grows by appends or
+  under `RowWindow::LastRows` keeps it: full chunks keep their tiers, the newest
+  chunk builds them from 65,536 rows and again each time its rows double (the
+  rows past them draw in full), and an evicted chunk takes its tiers with it.
 
 ### Changed
 
@@ -222,9 +225,10 @@ what each release contains and what its version number promises.
 - No CSV or serde input: rows enter through closures, `Columns` or Arrow record
   batches (feature `arrow`).
 - Nothing above 30M rows is measured. The level of detail covers circles and
-  constant-size rects drawn in data order only (not lines, areas, layers sized
-  by a column, or the newest chunk of a layer that is appended to); under
-  `Lod::Off`, lines and areas, SVG output and CPU picks still read every row.
+  constant-size rects drawn in data order only (not lines, areas or layers sized
+  by a column; the newest chunk of a layer that is appended to draws in full
+  under 65,536 rows); under `Lod::Off`, lines and areas, SVG output and CPU
+  picks still read every row.
 - No PDF export.
 - Accessibility: no screen reader has been tested by hand, nothing outside the
   browser speaks `focus_text`, and keyboard focus skips a layer that dropped its

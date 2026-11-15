@@ -307,15 +307,16 @@ impl DrawOrder {
     }
 }
 
-/// One span per chunk, every row in upload order: a layer's draws
-/// without a size order.
-pub(crate) fn chunk_spans(chunks: &[Chunk]) -> Vec<Span> {
-    chunks
+/// One span per draw entry of a quad layer, its instances in upload order:
+/// a layer's draws without a size order. An entry draws a chunk's rows, or
+/// a tier's representatives or the rows past them (GUP-719).
+pub(crate) fn entry_spans(entries: &[DrawEntry]) -> Vec<Span> {
+    entries
         .iter()
         .enumerate()
-        .map(|(k, c)| Span {
-            chunk: k as u32,
-            rows: 0..c.rows(),
+        .map(|(i, e)| Span {
+            chunk: i as u32,
+            rows: 0..e.instances,
         })
         .collect()
 }
@@ -361,7 +362,28 @@ pub(crate) fn draw_entries(geometry: Geometry, chunks: &[Chunk]) -> Vec<DrawEntr
         lod: None,
     });
     match geometry {
-        Geometry::Quad => own.collect(),
+        Geometry::Quad => {
+            let mut entries: Vec<_> = own.collect();
+            // An appended chunk whose tiers stand for fewer rows than it
+            // holds: they draw first, the rows past them (which a tier
+            // would leave out) in a second range, so a new row is seen at
+            // once (GUP-719).
+            if let Some((k, last)) = chunks.iter().enumerate().next_back()
+                && let Some(built) = last.tier_rows()
+                && built < last.rows()
+            {
+                entries[k].instances = built;
+                entries.push(DrawEntry {
+                    this: k,
+                    first: built,
+                    next: k,
+                    next_first: built + 1,
+                    instances: last.rows() - built,
+                    lod: None,
+                });
+            }
+            entries
+        }
         Geometry::Polyline => own
             .chain(chunks.windows(2).enumerate().map(|(k, pair)| DrawEntry {
                 this: k,

@@ -486,6 +486,14 @@ pub mod __private {
         layer.lod_tier_builds()
     }
 
+    /// Bytes of level-of-detail representatives `layer` holds on the GPU
+    /// (GUP-719: an evicted chunk's go with it).
+    pub fn lod_gpu_bytes<T: Send + Sync + 'static, M: crate::Mark>(
+        layer: &crate::Selection<T, M>,
+    ) -> u64 {
+        layer.lod_gpu_bytes()
+    }
+
     /// Instances `batch` draws in its visible spans (rows, or
     /// representatives under a level of detail), for tests and benches.
     pub fn visible_instances(batch: &crate::scene::MarkBatch) -> u64 {

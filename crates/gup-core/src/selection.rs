@@ -17,7 +17,7 @@ use crate::geom::Rect;
 use crate::input::{Event, EventInfo};
 use crate::lod;
 use crate::marks::{Curve, Line};
-use crate::order::{DrawEntry, DrawOrder, chunk_spans, draw_entries, polyline_spans};
+use crate::order::{DrawEntry, DrawOrder, draw_entries, entry_spans, polyline_spans};
 use crate::pick::PICK_TOLERANCE;
 use crate::pick::{Chan, Chans, PickItem, build_items};
 use crate::plot::inset::EdgeAxis;
@@ -159,8 +159,18 @@ impl Retain {
 /// layers with constant `width` and `height` take a level of detail.
 /// Lines, areas, segments, rects with per-row extents and layers drawn
 /// largest first (a size channel read from a column) draw every row
-/// whatever the setting, and so does the newest chunk of a layer that
-/// has been appended to.
+/// whatever the setting.
+///
+/// A layer that grows by appends (GUP-719): its full chunks keep their
+/// tiers whatever the new rows' extent. Its newest chunk draws every row
+/// until it holds 65,536 rows, then builds tiers and builds them again
+/// each time its rows have doubled (and when it is full), so the cost of
+/// building stays within about two builds of a chunk; the rows past its
+/// tiers draw in full, so a new row shows at once. A rebuild changes which
+/// mark draws which row, so a GPU pick drawn before it is dropped. Under
+/// [`RowWindow::LastRows`] a chunk holds at most `n / 4` rows and leaves
+/// with its tiers: a window under 800,000 rows has no chunk over 200,000
+/// rows, so it never takes a level of detail.
 ///
 /// What you see is what you pick (GUP-718). A layer drawing
 /// representatives has a CPU pick index of those marks alone (tens of
@@ -922,7 +932,8 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
     /// [`Lod::AUTO_MIN_ROWS`] visible rows, draw a bounded number of
     /// representatives per chunk instead of every row; [`Lod::Off`]
     /// always draws every row (the exact output). See [`Lod`] for which
-    /// layers take it and what it does not cover yet.
+    /// layers take it, what it does not cover yet, and how it follows
+    /// appends and a [`RowWindow`] (GUP-719).
     pub fn lod(&mut self, lod: Lod) -> &mut Self {
         self.lod = lod;
         self
@@ -931,6 +942,11 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
     /// Chunk tiers built for this layer so far (a test seam).
     pub(crate) fn lod_tier_builds(&self) -> u64 {
         self.lod_builds
+    }
+
+    /// Bytes of representatives on the GPU, over every chunk (a test seam).
+    pub(crate) fn lod_gpu_bytes(&self) -> u64 {
+        self.columns.as_ref().map_or(0, ColumnStore::lod_bytes)
     }
 
     /// Draw each chunk's tier-`t` representatives (the prefix of its
@@ -1083,6 +1099,11 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         let store = self.columns.as_mut().expect("checked above");
         let done = tier_entries(store, cx, &ask, frame, &scale, &mut entries)?;
         self.lod_builds += done.builds;
+        if done.rebuilds > 0 {
+            // Which instance draws which row changed: a GPU pick drawn
+            // before is dropped (GUP-719).
+            self.epoch = self.epoch.wrapping_add(1);
+        }
         self.lod_pending = done.pending;
         // What the pick index holds (GUP-718): the representatives drawn
         // and every row of the other visible chunks.
@@ -1092,7 +1113,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
                 self.lod_drawn.push((e.this, n));
                 self.lod_items += u64::from(n);
             } else if shown(i) {
-                self.lod_items += u64::from(store.chunks()[e.this].rows());
+                self.lod_items += u64::from(e.instances);
             }
         }
         if self.lod_drawn.is_empty() {
@@ -1604,6 +1625,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
     /// chunk it reads (a polyline's next-row base, the next chunk's in a
     /// bridge); a later link reads an absolute value (origin 0). A hi/lo
     /// link gets its base as a hi/lo pair.
+    #[cfg(test)]
     fn chunk_uniform_bytes(
         &self,
         layout: &crate::shader::StructLayout,
@@ -1613,6 +1635,20 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             Error::config("layer", "prepare called before the columns were evaluated")
         })?;
         let entries = draw_entries(M::GEOMETRY, store.chunks());
+        self.chunk_uniforms_of(&entries, layout, relative)
+    }
+
+    /// [`chunk_uniform_bytes`](Self::chunk_uniform_bytes) for `entries`,
+    /// the draw entries after the level of detail's choice.
+    fn chunk_uniforms_of(
+        &self,
+        entries: &[DrawEntry],
+        layout: &crate::shader::StructLayout,
+        relative: &[ChunkBase],
+    ) -> Result<Vec<u8>> {
+        let store = self.columns.as_ref().ok_or_else(|| {
+            Error::config("layer", "prepare called before the columns were evaluated")
+        })?;
         let channel_columns = self.column_encodings().count();
         // (base, column index, link function) per relative link; a control
         // column's base is its own column's origin.
@@ -1874,7 +1910,7 @@ struct TierAsk {
     /// their tiers build now, whatever is visible.
     release: bool,
     /// Whether the layer has been appended to: its newest chunk, while not
-    /// full, draws every row.
+    /// full, builds tiers at doubling sizes (GUP-719).
     appended: bool,
     /// The store columns of the first x and y column channels (`None`: a
     /// constant axis), which a chunk's tiers are built over.
@@ -1890,6 +1926,9 @@ struct TierAsk {
 struct TierDone {
     /// Chunk tiers built.
     builds: u64,
+    /// Of those, tiers that replaced tiers: which instance draws which row
+    /// changed (an appended chunk's, GUP-719).
+    rebuilds: u64,
     /// Whether a visible chunk drew every row for want of its tiers.
     pending: bool,
 }
@@ -1904,6 +1943,9 @@ fn chunk_tiers(
 ) -> Result<(i32, i32)> {
     if !store.has_tiers(k, xy) {
         done.builds += 1;
+        if store.chunks()[k].tiers().is_some() {
+            done.rebuilds += 1;
+        }
     }
     store.lod_tiers(k, xy).map(|t| (t.ex, t.ey))
 }
@@ -1931,6 +1973,33 @@ fn tier_entries(
     ask: &TierAsk,
     frame: &lod::Frame<'_>,
     scale: &[[Option<f64>; 2]],
+    entries: &mut Vec<DrawEntry>,
+) -> Result<TierDone> {
+    let done = choose_tiers(store, cx, ask, frame, scale, entries)?;
+    // Tiers built for all of the newest chunk's rows leave no rows past
+    // them: its draw is one entry again.
+    if let Some(last) = store.chunks().len().checked_sub(1)
+        && entries
+            .last()
+            .is_some_and(|e| e.this == last && e.first > 0)
+        && store.chunks()[last].tier_rows() == Some(store.chunks()[last].rows())
+    {
+        entries.pop();
+        if let Some(main) = entries.last_mut()
+            && main.lod.is_none()
+        {
+            main.instances = store.chunks()[last].rows();
+        }
+    }
+    Ok(done)
+}
+
+fn choose_tiers(
+    store: &mut ColumnStore,
+    cx: &Context,
+    ask: &TierAsk,
+    frame: &lod::Frame<'_>,
+    scale: &[[Option<f64>; 2]],
     entries: &mut [DrawEntry],
 ) -> Result<TierDone> {
     let mut done = TierDone::default();
@@ -1948,7 +2017,7 @@ fn tier_entries(
                 ),
             ));
         }
-        for e in entries {
+        for e in entries.iter_mut().filter(|e| e.first == 0) {
             chunk_tiers(store, e.this, ask.xy, &mut done)?;
             if let Some(n) = store.lod_tiers(e.this, ask.xy)?.prefix(t) {
                 store.upload_lod(cx, e.this)?;
@@ -1979,26 +2048,43 @@ fn tier_entries(
     let last = store.chunks().len().saturating_sub(1);
     let mut budget = if frame.spread { 1 } else { usize::MAX };
     for (i, e) in entries.iter_mut().enumerate() {
-        // The newest chunk of an appended layer changes with every append
-        // (GUP-719 rebuilds its tiers at doubling sizes).
-        if !shown(i) || (ask.appended && e.this == last && !store.chunk_full(last)) {
+        // The rows past an appended chunk's tiers draw in full.
+        if e.first > 0 || !shown(i) {
             continue;
         }
         let [Some(kx), Some(ky)] = scale[e.this] else {
             continue;
         };
-        if !store.has_tiers(e.this, ask.xy) {
+        // The newest chunk of an appended layer changes with every append:
+        // it builds tiers once it holds `TAIL_MIN_ROWS` rows and again each
+        // time its rows have doubled (amortised `O(n log n)`), the rows
+        // past its tiers drawing in full meanwhile (GUP-719).
+        let rows = store.chunks()[e.this].rows();
+        let tail = ask.appended && e.this == last && !store.chunk_full(last);
+        let built = store.tier_rows(e.this, ask.xy);
+        let wanted = match built {
+            Some(b) if b == rows => false,
+            Some(b) => !tail || rows >= b.saturating_mul(2),
+            None => !tail || rows >= lod::TAIL_MIN_ROWS,
+        };
+        if wanted {
             if budget == 0 {
                 done.pending = true;
-                continue;
+                if built.is_none() || e.this != last {
+                    continue;
+                }
+            } else {
+                budget -= 1;
+                chunk_tiers(store, e.this, ask.xy, &mut done)?;
             }
-            budget -= 1;
+        } else if built.is_none() {
+            continue;
         }
-        let (ex, ey) = chunk_tiers(store, e.this, ask.xy, &mut done)?;
-        let Some(t) = lod::tier(ex, ey, kx, ky) else {
+        let tiers = store.chunks()[e.this].tiers().expect("built above");
+        let Some(t) = lod::tier(tiers.ex, tiers.ey, kx, ky) else {
             continue;
         };
-        if let Some(n) = store.lod_tiers(e.this, ask.xy)?.prefix(t) {
+        if let Some(n) = tiers.prefix(t) {
             store.upload_lod(cx, e.this)?;
             e.instances = n;
             e.lod = Some(n);
@@ -2261,6 +2347,9 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             match lod.zip(c.tiers()) {
                 Some((n, tiers)) if n <= tiers.order.len() => {
                     rows.extend(tiers.order[..n].iter().map(|&r| base + u64::from(r)));
+                    // The rows past the tiers (an appended chunk's) draw
+                    // in full (GUP-719).
+                    rows.extend(base + u64::from(tiers.rows)..base + u64::from(c.rows()));
                 }
                 _ => rows.extend(base..base + u64::from(c.rows())),
             }
@@ -3064,7 +3153,9 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             &lut_channels,
         );
 
-        let chunks = self.chunk_uniform_bytes(&program.chunk, &glue.relative)?;
+        // Under the level of detail, chunks' representatives (GUP-716).
+        let entries = self.lod_entries(cx, frame)?;
+        let chunks = self.chunk_uniforms_of(&entries, &program.chunk, &glue.relative)?;
 
         let limits = &cx.caps().limits;
         // A polyline reads two rows' validity bits (RFC-001 "GUP-432
@@ -3081,8 +3172,6 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
                 ),
             ));
         }
-        // Under the level of detail, chunks' representatives (GUP-716).
-        let entries = self.lod_entries(cx, frame)?;
         let lod_rows = entries.iter().any(|e| e.lod.is_some());
         // Every column (and a polyline's next-row column, and a tier's row
         // column) is a vertex buffer (RFC-001 §12 risk 7).
@@ -3144,18 +3233,13 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         // A polyline in data order, bridges between its chunks; else
         // largest first when the size is a column, or each chunk in
         // upload order.
-        let mut spans = match &self.order {
+        let spans = match &self.order {
             _ if glue.polyline => polyline_spans(stored),
             Some(order) => order.spans(stored),
-            None => chunk_spans(stored),
+            // A quad layer in upload order, one span per entry: a chunk's
+            // rows, its tier prefix (GUP-715) or the rows past its tiers.
+            None => entry_spans(&entries),
         };
-        if lod_rows {
-            // Each chunk's tier prefix, or its rows (GUP-715): a quad
-            // layer in upload order, one span per entry.
-            for span in &mut spans {
-                span.rows.end = entries[span.chunk as usize].instances;
-            }
-        }
         let chunk_draws = || -> Vec<ChunkDraw> {
             entries
                 .iter()
