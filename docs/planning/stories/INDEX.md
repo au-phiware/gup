@@ -639,7 +639,7 @@ GUP-628 and GUP-631 (shared `selection.rs`).
   `Selection::lod`, `ScatterChart::lod`, the 200,000-row threshold, per-chunk
   tier per frame (one tier finer than the spike), lazy builds. Opus. Deps:
   GUP-714 ✅, GUP-715 📋.
-- [GUP-717](GUP-717_LOD_Golden_Fidelity_And_Budgets.md) 📋 — A 1M-row LOD
+- [GUP-717](GUP-717_LOD_Golden_Fidelity_And_Budgets.md) 🚧 — A 1M-row LOD
   golden, a ΔE00 share against `Lod::Off` (1.0% full, 2.0% zoom of the plot
   rect) and `zoom_bench --lod` with proposed `lod.*` budget rows. Deps: GUP-716
   📋.
