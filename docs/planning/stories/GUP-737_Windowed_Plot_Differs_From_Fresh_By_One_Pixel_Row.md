@@ -33,6 +33,11 @@ So it is not the tiers. Suspects: the plot's per-frame layout or the edge solve
 (GUP-567) reading the layer's extent, moving a mark by a sub-pixel; the new
 chunk changing a chunk uniform of the old ones.
 
+**Cause (GUP-741)**: the appended rows reach the scale domains' ends (x 5,000, y
+1,000), so the edge solve (GUP-567) insets the scale ranges (the axis rules end
+at 376.5 and start at 17.49 instead of 378 and 16) and every old mark moves by a
+sub-pixel amount. GUP-719's test now keeps its rows clear of the ends.
+
 ## User Story
 
 > "As a developer of a live chart, I want an append that adds no marks near the
