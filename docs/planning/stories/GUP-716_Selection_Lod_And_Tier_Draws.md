@@ -375,8 +375,12 @@ on each axis, so at the same tier its cells are up to 4× the spike's in area (a
     store (`ColumnStore::rows`) restored one 18,888-byte copy. The gz total
     barely moved (390,607 → 390,583): gzip had already compressed the identical
     copies to almost nothing, so the +6 KB gz is the new code above.
-- **Validation** (after the fold and the tour edit): VALIDATION_LINE
-  `mask smoke-examples` PASS (before the fold).
+- **Validation** (after the fold and the tour edit): `mask merge-check` every
+  step PASS (gup-core all features: 70 binaries, 1,022 passed, 0 failed, 8
+  ignored; tour pages, tour app, wasm-size, wasm-browser PASS); `mask all-check`
+  exit 0; `cargo test -p gup -- --test-threads=1` 11 binaries, 154 passed, 0
+  failed, 2 ignored; `cargo test -p gup-egui` 5 binaries, 19 passed, 0 failed, 1
+  ignored; `mask smoke-examples` PASS (before the fold).
 - **Not done**: `mask perf-budget` (the benches it runs are opted out, so it
   measures what it did; GUP-717 adds the LOD rows); 80M (under 20 GB free).
 
