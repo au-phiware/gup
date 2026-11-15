@@ -976,8 +976,11 @@ fn rows_past_the_tiers_draw_in_full() {
     assert_eq!(around(&built.image), 0, "something was there before");
 }
 
-/// AC2: appends that stretch the extents ten-fold leave full chunks'
-/// tiers and draws alone.
+/// AC2: appends that stretch the extents nine-fold leave full chunks'
+/// tiers and draws alone. The new rows stay clear of the scale domains'
+/// ends: marks that touch an end make the plot inset the scale range
+/// (the edge solve), which moves every old mark by a sub-pixel amount that
+/// each device rasterises differently (GUP-741).
 #[test]
 fn appends_that_grow_the_extent_leave_full_chunks_alone() {
     let cx = Context::new_blocking().unwrap();
@@ -987,8 +990,8 @@ fn appends_that_grow_the_extent_leave_full_chunks_alone() {
     let (mut plot, tx) = appended_over(2 * CHUNK, CHUNK as u32, Lod::Auto, (5000.0, 1000.0));
     let before = draw(&cx, &mut plot);
     assert_eq!(builds(&mut plot), 2);
-    // Ten times the extents, far from the old marks.
-    tx.extend((0..10_000).map(|i| (2_500.0 + i as f64 * 0.25, 500.0 + i as f64 * 0.05, 0.0)))
+    // Nine times the extents (x to 4,500, y to 900), far from the old marks.
+    tx.extend((0..10_000).map(|i| (2_000.0 + i as f64 * 0.25, 400.0 + i as f64 * 0.05, 0.0)))
         .unwrap();
     let after = draw(&cx, &mut plot);
     assert_eq!(builds(&mut plot), 2, "no tiers rebuilt");
@@ -1004,14 +1007,10 @@ fn appends_that_grow_the_extent_leave_full_chunks_alone() {
             marks += usize::from(a.0 != [255, 255, 255, 255]);
         }
     }
-    // The old chunks draw the same rows: at most the antialiased top edge
-    // of the cloud moves (it does under `Lod::Off` too, so it is not the
-    // tiers; GUP-737).
+    // The old chunks draw the same rows, so the old corner is byte for byte
+    // what it was, on every device.
     assert!(marks > 500, "{marks} marked pixels in the old corner");
-    assert!(
-        differ <= 2 * (x1 - x0) as usize,
-        "{differ} of {marks} pixels changed"
-    );
+    assert_eq!(differ, 0, "{differ} of {marks} pixels changed");
 }
 
 /// AC3: a rebuild bumps the pick epoch: a GPU pick requested before is
