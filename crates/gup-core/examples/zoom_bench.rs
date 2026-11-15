@@ -48,6 +48,17 @@
 //!                                      the rows are fed in 1,000-row appends,
 //!                                      each resolved, before the measured
 //!                                      frames
+//!   --columns                          draw --points circles from `Columns`
+//!                                      (sorted x over 0..1000, a log-scale y
+//!                                      random walk, `f32` columns): no row
+//!                                      vector, so 10M rows fit (GUP-717)
+//!   --lod auto|off                     the layer's `Lod` (default off, every
+//!                                      row drawn, as every recorded budget);
+//!                                      `auto` also prints
+//!                                      `<prefix>.instances.median`, the
+//!                                      instances a frame draws (GUP-717)
+//!   --static                           no zoom: every frame is the full view
+//!                                      (default: zoom continuously)
 //!   --metric-prefix NAME               prefix of every `metric` line
 //!                                      (default `zoom`)
 //!   --size WxH                         windowed at this physical size
@@ -97,6 +108,9 @@ struct Options {
     cull: bool,
     bubbles: bool,
     window: Option<usize>,
+    columns: bool,
+    lod: Lod,
+    fixed_view: bool,
     prefix: String,
 }
 
@@ -119,6 +133,9 @@ fn options() -> Options {
         cull: true,
         bubbles: false,
         window: None,
+        columns: false,
+        lod: Lod::Off,
+        fixed_view: false,
         prefix: "zoom".to_owned(),
     };
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -157,6 +174,15 @@ fn options() -> Options {
             "--no-cull" => o.cull = false,
             "--bubbles" => o.bubbles = true,
             "--window" => o.window = Some(value().parse().expect("--window N")),
+            "--columns" => o.columns = true,
+            "--lod" => {
+                o.lod = match value().as_str() {
+                    "auto" => Lod::Auto,
+                    "off" => Lod::Off,
+                    other => panic!("--lod auto|off, not {other}"),
+                }
+            }
+            "--static" => o.fixed_view = true,
             "--metric-prefix" => o.prefix = value().clone(),
             "--size" => {
                 let (w, h) = value().split_once('x').expect("--size WxH");
@@ -209,6 +235,9 @@ struct Bench {
     gpu_ms: Vec<f64>,
     /// `Prepared::draw_calls` of each measured frame.
     draws: Vec<usize>,
+    /// Instances the visible chunks of the first mark layer draw, of each
+    /// measured frame.
+    instances: Vec<u64>,
     /// Build time and items of the CPU pick index at the deepest zoom.
     pick_index: Option<(Duration, usize)>,
     error: Option<String>,
@@ -305,7 +334,7 @@ impl Bench {
         self.started = Some(start);
 
         // Frame 0 fits the data domains; every later frame zooms.
-        if self.frame > 0 {
+        if self.frame > 0 && !self.o.fixed_view {
             let t = self.frame as f64 / (self.o.warmup + self.o.frames) as f64;
             self.zoom(t)?;
         }
@@ -336,6 +365,12 @@ impl Bench {
         let t_prepare = Instant::now();
         if measured.is_some() {
             self.draws.push(prepared.draw_calls());
+            let batch = resolved.scene.items.iter().find_map(|i| match &i.kind {
+                gup_core::scene::ItemKind::Marks(b) => Some(b),
+                _ => None,
+            });
+            self.instances
+                .push(batch.map_or(0, gup_core::__private::visible_instances));
         }
         let frame = gpu.target.acquire(&gpu.cx)?;
         let t_acquire = Instant::now();
@@ -561,6 +596,18 @@ impl Bench {
                 draws.get(draws.len() / 2).copied().unwrap_or(0).to_string(),
             ),
         ];
+        if o.lod == Lod::Auto {
+            let mut instances = self.instances.clone();
+            instances.sort_unstable();
+            metrics.push((
+                format!("{p}.instances.median"),
+                instances
+                    .get(instances.len() / 2)
+                    .copied()
+                    .unwrap_or(0)
+                    .to_string(),
+            ));
+        }
         if let Some((gpu_med, gpu_p95)) = gpu {
             metrics.push((format!("{p}.gpu_pass.median_ms"), format!("{gpu_med:.3}")));
             metrics.push((format!("{p}.gpu_pass.p95_ms"), format!("{gpu_p95:.3}")));
@@ -681,7 +728,12 @@ impl ApplicationHandler for Bench {
 fn main() {
     let o = options();
     let t = Instant::now();
-    let mut rows = scatter::countries_n(o.points);
+    // `--columns` has no row vector: that is what lets 10M rows fit.
+    let mut rows = if o.columns {
+        Vec::new()
+    } else {
+        scatter::countries_n(o.points)
+    };
     if o.sorted {
         rows.sort_by(|a, b| a.gdp_per_capita.total_cmp(&b.gdp_per_capita));
     }
@@ -689,6 +741,9 @@ fn main() {
     let (mut plot, x, y) = if o.bubbles {
         let (plot, x, y, rest) = bubble_plot(o.points, o.window, o.chunk_rows);
         feed = rest;
+        (plot, XScale::Linear(x), y)
+    } else if o.columns {
+        let (plot, x, y) = columns_plot(o.points, Px(o.radius), o.lod, o.chunk_rows);
         (plot, XScale::Linear(x), y)
     } else if let Some(curve) = o.line {
         let (plot, x, y) = line_plot(o.points, curve, o.translucent, o.chunk_rows);
@@ -701,10 +756,11 @@ fn main() {
         (plot, XScale::Linear(x), y)
     };
     plot.chunk_culling(o.cull);
-    // The budgets in PERF_BUDGETS.md were recorded drawing every row; the
-    // level of detail has its own measurements (GUP-717).
+    // The budgets in PERF_BUDGETS.md were recorded drawing every row, so
+    // `Off` is the default; `--lod auto` measures the level of detail
+    // (GUP-717).
     if let Some(layer) = plot.layer_mut::<scatter::Country, Circle>() {
-        layer.lod(Lod::Off);
+        layer.lod(o.lod);
     }
     println!(
         "generated {} rows in {:.1} ms",
@@ -736,6 +792,7 @@ fn main() {
         uploads_during: None,
         gpu_ms: Vec::new(),
         draws: Vec::new(),
+        instances: Vec::new(),
         pick_index: None,
         error: None,
         finished: false,
@@ -805,6 +862,48 @@ fn time_plot(
 
 /// `--line`: a random walk of `n` rows drawn as one line, 1.5 px wide, x
 /// the row index and y (positive) on the log scale, with `curve`.
+/// `--columns`: `n` circles from `f32` columns, x sorted over 0..1000 and
+/// y (log scale) a random walk in 1e6 * e^v, the walk of `--line`.
+fn columns_plot(
+    n: usize,
+    radius: Px,
+    lod: Lod,
+    max_chunk_rows: Option<u32>,
+) -> (Plot, ScaleRef<Linear>, ScaleRef<Log>) {
+    use gup_core::Columns;
+    let mut seed = 0x2545_f491_4f6c_dd1d_u64;
+    let mut v = 0.0f64;
+    let xs: Arc<[f32]> = (0..n)
+        .map(|i| (1000.0 * i as f64 / n as f64) as f32)
+        .collect();
+    let ys: Arc<[f32]> = (0..n)
+        .map(|_| {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            v += ((seed >> 11) as f64 / (1u64 << 53) as f64 - 0.5) * 0.05;
+            (1e6 * v.exp()) as f32
+        })
+        .collect();
+    let cols = Columns::new()
+        .with("x", xs)
+        .and_then(|c| c.with("y", ys))
+        .expect("equal-length columns");
+    let mut plot = Plot::new();
+    let (x, y) = (plot.x(Linear::new()), plot.y(Log::new()));
+    plot.legends(false);
+    let layer = plot.title("Random walk").add_columns::<Circle>(&cols);
+    layer
+        .attr(Circle::X, x.encode_column(&cols["x"]))
+        .attr(Circle::Y, y.encode_column(&cols["y"]))
+        .attr(Circle::RADIUS, radius)
+        .lod(lod);
+    if let Some(rows) = max_chunk_rows {
+        layer.max_chunk_rows(rows);
+    }
+    (plot, x, y)
+}
+
 fn line_plot(
     n: usize,
     curve: Curve,
