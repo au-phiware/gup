@@ -293,6 +293,15 @@ pub struct Selection<T, M: Mark> {
     /// because its tiers were not built yet (one chunk builds a frame):
     /// the plot draws again.
     lod_pending: bool,
+    /// The chunks the last prepare drew as representatives, with how many
+    /// each (a tier's prefix of its [`Tiers::order`](crate::lod::Tiers)),
+    /// in chunk order: what the CPU pick index holds of them (GUP-718).
+    /// Empty when no chunk drew a tier.
+    lod_drawn: Vec<(usize, u32)>,
+    /// What the CPU pick index holds for the layer while `lod_drawn` is not
+    /// empty: the representatives and the rows of the visible chunks that
+    /// drew every row.
+    lod_items: u64,
     window: RowWindow,
     retain: Retain,
     /// Draw order among the plot's items (default 0).
@@ -558,6 +567,8 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             forced_tier: None,
             lod_builds: 0,
             lod_pending: false,
+            lod_drawn: Vec::new(),
+            lod_items: 0,
             window: RowWindow::All,
             retain: Retain::Auto,
             z: 0,
@@ -997,6 +1008,8 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         let rows = store.rows();
         let mut entries = draw_entries(M::GEOMETRY, store.chunks());
         self.lod_pending = false;
+        self.lod_drawn.clear();
+        self.lod_items = 0;
         // A layer drawn largest first keeps every row until GUP-721 orders
         // its representatives by size.
         let auto = self.lod == Lod::Auto
@@ -1060,6 +1073,20 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         let done = tier_entries(store, cx, &ask, frame, &scale, &mut entries)?;
         self.lod_builds += done.builds;
         self.lod_pending = done.pending;
+        // What the pick index holds (GUP-718): the representatives drawn
+        // and every row of the other visible chunks.
+        let shown = |i: usize| frame.visible.get(i).copied().unwrap_or(true);
+        for (i, e) in entries.iter().enumerate() {
+            if let Some(n) = e.lod {
+                self.lod_drawn.push((e.this, n));
+                self.lod_items += u64::from(n);
+            } else if shown(i) {
+                self.lod_items += u64::from(store.chunks()[e.this].rows());
+            }
+        }
+        if self.lod_drawn.is_empty() {
+            self.lod_items = 0;
+        }
         Ok(entries)
     }
 
@@ -2183,6 +2210,113 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         c.legend()
     }
 
+    /// The pick items of a layer drawing representatives (GUP-718): what you
+    /// see is what you pick, so the items are the representatives each
+    /// visible chunk drew (as the last prepare chose them) and every row of
+    /// a visible chunk that drew them all. Values are read for those rows
+    /// alone, never for the chunk. A layer that cannot be read leaves no
+    /// items, as `hit_items` does.
+    fn lod_hit_items(&self, layer: usize, visible: &[bool], out: &mut Vec<PickItem>) {
+        let Some(store) = &self.columns else {
+            return;
+        };
+        let wanted: &[&str] = match M::HIT {
+            HitShape::Disc => &["x", "y", "radius"],
+            HitShape::AlignedBox => &["x", "y", "width", "height", "x_end", "y_end"],
+            _ => return,
+        };
+        if self.lod_items > Retain::AUTO_MAX_ROWS {
+            return;
+        }
+        // The stored rows indexed, in draw order.
+        let mut rows: Vec<u64> = Vec::with_capacity(self.lod_items as usize);
+        let mut drawn = self.lod_drawn.iter().peekable();
+        for (k, c) in store.chunks().iter().enumerate() {
+            let lod = drawn.next_if(|&&(d, _)| d == k).map(|&(_, n)| n as usize);
+            if !visible.get(k).copied().unwrap_or(true) {
+                continue;
+            }
+            let base = c.row_base();
+            match lod.zip(c.tiers()) {
+                Some((n, tiers)) if n <= tiers.order.len() => {
+                    rows.extend(tiers.order[..n].iter().map(|&r| base + u64::from(r)));
+                }
+                _ => rows.extend(base..base + u64::from(c.rows())),
+            }
+        }
+        let slot_of = |name: &str| M::CHANNELS.iter().position(|d| d.name == name);
+        let mut col_of = vec![None; M::CHANNELS.len()];
+        let mut k = 0;
+        for (slot, e) in self.encodings.iter().enumerate() {
+            if matches!(e, Some(Encoding::Column(_))) {
+                col_of[slot] = Some(k);
+                k += 1;
+            }
+        }
+        let as_px = |v: ConstValue| match v {
+            ConstValue::F32(v) => f64::from(v),
+            ConstValue::Vec4(_) => f64::NAN,
+        };
+        let chan = |name: &str| -> Option<Chan> {
+            if !wanted.contains(&name) {
+                return Some(Chan::Unused);
+            }
+            let Some(slot) = slot_of(name) else {
+                return Some(Chan::Unused);
+            };
+            Some(match &self.encodings[slot] {
+                None => Chan::Const(as_px(M::CHANNELS[slot].default)),
+                Some(Encoding::Const(c)) => Chan::Const(as_px(*c)),
+                Some(Encoding::Derived(f)) => Chan::Const(as_px(f())),
+                Some(Encoding::Column(c)) => {
+                    let column = col_of[slot]?;
+                    let mut col = Vec::with_capacity(rows.len());
+                    for &r in &rows {
+                        let v = store.value(r, column)?;
+                        col.push(if v.is_nan() {
+                            f64::NAN
+                        } else {
+                            c.cpu_eval(v).unwrap_or(f64::NAN)
+                        });
+                    }
+                    Chan::Col(col)
+                }
+            })
+        };
+        let (Some(x), Some(y), Some(radius), Some(width), Some(height), Some(x_end), Some(y_end)) = (
+            chan("x"),
+            chan("y"),
+            chan("radius"),
+            chan("width"),
+            chan("height"),
+            chan("x_end"),
+            chan("y_end"),
+        ) else {
+            return;
+        };
+        let chans = Chans {
+            x,
+            y,
+            radius,
+            width,
+            height,
+            x_end,
+            y_end,
+            curve: self.curve,
+            pieces: self.pieces,
+            ctrl: [Chan::Unused, Chan::Unused],
+        };
+        // Items indexed by position in `rows` (the channels are compact),
+        // then named by their data row; the rank is the draw position.
+        let first = self.evicted as usize;
+        let slots: Vec<(usize, u64)> = (0..rows.len()).map(|i| (i, i as u64)).collect();
+        let start = out.len();
+        build_items(M::HIT, layer, self.z, first, &slots, &chans, out);
+        for item in &mut out[start..] {
+            item.row.row = first + rows[item.row.row - first] as usize;
+        }
+    }
+
     /// The batch's vector slot: the snapshot with the `svg` feature.
     #[cfg(feature = "svg")]
     fn vector_slot(&self, theme: &Theme, entries: &[DrawEntry]) -> Arc<LayerVector> {
@@ -2274,6 +2408,18 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             kind,
             cols,
             entries: entries.to_vec(),
+            tiers: if entries.iter().any(|e| e.lod.is_some()) {
+                let store = self.columns.as_ref();
+                entries
+                    .iter()
+                    .map(|e| {
+                        e.lod
+                            .and_then(|_| store?.chunks()[e.this].tiers().map(Arc::clone))
+                    })
+                    .collect()
+            } else {
+                Vec::new()
+            },
             chans,
             null_color: theme.null_color,
             brush: Arc::clone(&self.brush_mirror),
@@ -2965,17 +3111,9 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         let brush_words = glue
             .brush_binding
             .map(|_| crate::render::brush_words(store.rows()));
-        // The vector targets write every row (GUP-718 writes tiers).
-        let every_row;
-        let vector = self.vector_slot(
-            theme,
-            if lod_rows {
-                every_row = draw_entries(M::GEOMETRY, stored);
-                &every_row
-            } else {
-                &entries
-            },
-        );
+        // The vector targets write what is drawn: the representatives of a
+        // chunk that draws them (GUP-718).
+        let vector = self.vector_slot(theme, &entries);
         let uploaded = || {
             entries.iter().map(|d| {
                 let c = &stored[d.this];
@@ -3131,6 +3269,11 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         };
         let n = store.rows() as usize;
         if n == 0 {
+            return Ok(());
+        }
+        // What is drawn is what is picked (GUP-718).
+        if !self.lod_drawn.is_empty() && (store.is_shared() || store.cpu_kept()) {
+            self.lod_hit_items(layer, visible, out);
             return Ok(());
         }
         let wanted: &[&str] = match M::HIT {
@@ -3381,7 +3524,12 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
     /// the GPU, as it does a layer of rows.
     fn cpu_readable(&self) -> bool {
         self.columns.as_ref().is_none_or(|store| {
-            !self.rows.is_empty()
+            // A layer drawing representatives indexes them, whatever it
+            // keeps, if their rows can be read (GUP-718).
+            (!self.lod_drawn.is_empty()
+                && self.lod_items <= Retain::AUTO_MAX_ROWS
+                && (store.is_shared() || store.cpu_kept()))
+                || !self.rows.is_empty()
                 || if store.is_shared() {
                     self.retain.keeps_columns(self.len() as u64)
                 } else {

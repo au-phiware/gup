@@ -27,6 +27,7 @@ use crate::channel::{ConstValue, Role};
 use crate::column::CpuColumns;
 use crate::encoding::ColumnMirror;
 use crate::geom::Point;
+use crate::lod::Tiers;
 use crate::marks::Curve;
 use crate::order::DrawEntry;
 use crate::render::Span;
@@ -130,6 +131,10 @@ pub(crate) struct CpuLayer {
     pub kind: MarkKind,
     pub cols: CpuColumns,
     pub entries: Vec<DrawEntry>,
+    /// The tiers of each entry that draws representatives, by entry (GUP-718):
+    /// instance `i` of such an entry is row `order[i]` of its chunk. Empty
+    /// when no entry does.
+    pub tiers: Vec<Option<Arc<Tiers>>>,
     /// One per mark channel, in channel order.
     pub chans: Vec<(&'static str, Option<Role>, VChan)>,
     /// The theme's colour for a null in a numeric colour column.
@@ -224,6 +229,16 @@ fn px(v: ConstValue) -> f64 {
 }
 
 impl CpuLayer {
+    /// The stored row instance `i` of entry `entry` draws.
+    fn own_row(&self, entry: usize, i: u32) -> usize {
+        let e = &self.entries[entry];
+        let local = match self.tiers.get(entry) {
+            Some(Some(tiers)) if e.lod.is_some() => tiers.order[i as usize],
+            _ => e.first + i,
+        };
+        self.cols.row_base(e.this) as usize + local as usize
+    }
+
     fn chan(&self, name: &str) -> &(&'static str, Option<Role>, VChan) {
         self.chans
             .iter()
@@ -349,9 +364,8 @@ impl CpuLayer {
                     self.numbers("stroke_width", &needed)?,
                 );
                 for s in spans {
-                    let e = &self.entries[s.chunk as usize];
                     for i in s.rows.clone() {
-                        let d = row(e.this, e.first + i);
+                        let d = self.own_row(s.chunk as usize, i);
                         if d >= n || !valid[d] {
                             continue;
                         }
@@ -398,9 +412,8 @@ impl CpuLayer {
                     }
                 };
                 for s in spans {
-                    let e = &self.entries[s.chunk as usize];
                     for i in s.rows.clone() {
-                        let d = row(e.this, e.first + i);
+                        let d = self.own_row(s.chunk as usize, i);
                         if d >= n || !valid[d] {
                             continue;
                         }
@@ -425,9 +438,8 @@ impl CpuLayer {
                 let (x, y, xe, ye, w) = (c("x")?, c("y")?, c("x_end")?, c("y_end")?, c("width")?);
                 let color = self.colors("color", &needed, &brush)?;
                 for s in spans {
-                    let e = &self.entries[s.chunk as usize];
                     for i in s.rows.clone() {
-                        let d = row(e.this, e.first + i);
+                        let d = self.own_row(s.chunk as usize, i);
                         if d >= n || !valid[d] {
                             continue;
                         }
