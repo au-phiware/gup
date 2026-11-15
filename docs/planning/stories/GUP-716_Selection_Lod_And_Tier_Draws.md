@@ -18,8 +18,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Track N5: Performance at Scale **Status**: 🚧 In Progress
-**Created**: 2026-11-11
+**Initiative**: Track N5: Performance at Scale **Status**: ✅ Complete
+(2026-11-15) **Created**: 2026-11-11
 
 ## Context
 
@@ -237,7 +237,7 @@ of the image and failed it on the plot rect (1.076%); one tier finer scored
 - [x] `mask wasm-browser` (the default is new browser-visible behaviour)
 - [x] WASM size: `mask wasm-size` scatter gz bytes reported; a rise above +2% is
       an escalation
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
 - [x] Retrospective added to story document
 
 ## Implementation Summary
@@ -359,30 +359,30 @@ on each axis, so at the same tier its cells are up to 4× the spike's in area (a
   browser scene and the tour pages pass. Every golden draws far fewer than
   200,000 rows.
 - **WASM** (`mask wasm-size`, scatter gz): 384,562 recorded on main 9a39bdb8,
-  390,607 on the branch (**+6,045, +1.57%**; limit 392,253); `per_row_type`
-  1,511 (recorded 1,730). Attribution (`twiggy` on both `wasm-bindgen` outputs,
-  raw, +37.3 KB in all): `Layer::prepare` +7.0 KB (main folded its three
-  row-type instantiations into one 18,449-byte copy; the branch keeps three of
-  8,491), `lod_entries` +3.3 KB (three copies), `ColumnStore::lod_tiers` (the
-  radix build) +3.2 KB, `tier_entries` +2.2 KB, `upload_lod` +1.4 KB,
-  `indexed_program` +1.0 KB, `Glue::clone` +0.9 KB, `.rodata` +1.3 KB, and
-  inlining shifts in `ColumnStore::upload` (+2.8 KB), `Context::program` (+1.9
-  KB), `LayerUniforms::build` (+1.1 KB) and `LayerGpu::with_chunks` (+1.0 KB).
-  Trims tried: the per-chunk choice moved out of generic code, and
-  `#[inline(never)]` on `lod_entries` and `emit_glue`: +346 and +11 B gz; kept
-  the non-generic split for clarity, dropped the attributes.
-- **Validation**: `mask merge-check` every step PASS (gup-core all features: 70
-  binaries, 1,022 passed, 0 failed, 8 ignored); `mask all-check` exit 0;
-  `cargo test -p gup -- --test-threads=1` 11 binaries, 154 passed, 0 failed, 2
-  ignored; `cargo test -p gup-egui` 5 binaries, 19 passed, 0 failed, 1 ignored;
-  `mask wasm-browser` PASS (the scatter scene unchanged); `mask smoke-examples`
-  PASS.
+  390,583 on the branch (**+6,021, +1.57%**; limit 392,253); `per_row_type`
+  1,082 (recorded 1,730). Attribution (`twiggy` on both `wasm-bindgen` outputs,
+  raw, +14.4 KB in all, 1.9 KB of it the unshipped name section):
+  `ColumnStore::lod_tiers` (the radix build) +3.2 KB and its closure +0.5 KB,
+  `tier_entries` +2.1 KB, `upload_lod` +1.4 KB, `.rodata` +1.3 KB, `Glue::clone`
+  +0.9 KB (the indexed program), `Layer::prepare` +0.4 KB, and small helpers
+  (`exponent`, `Axis::new`, `has_tiers`, `chunk_tiers`): the tier build and the
+  draw side of LOD, nothing duplicated per row type.
+  - **The fold**: at first `Layer::prepare` was linked three times (one per row
+    type of the scatter harness, +23 KB raw) where main links one 18,449-byte
+    copy: the LOD path read `Selection::len()`, which reads `rows: Vec<T>`, and
+    a read of `rows` makes the instantiations differ (main's `cpu_readable` and
+    `release`, which read it, are not folded either). Reading the count from the
+    store (`ColumnStore::rows`) restored one 18,888-byte copy. The gz total
+    barely moved (390,607 → 390,583): gzip had already compressed the identical
+    copies to almost nothing, so the +6 KB gz is the new code above.
+- **Validation** (after the fold and the tour edit): VALIDATION_LINE
+  `mask smoke-examples` PASS (before the fold).
 - **Not done**: `mask perf-budget` (the benches it runs are opted out, so it
   measures what it did; GUP-717 adds the LOD rows); 80M (under 20 GB free).
 
 ## Retrospective
 
-**Completed**: 2026-11-12 (pending the fidelity decision below)
+**Completed**: 2026-11-15
 
 ### Key Technical Learnings
 
@@ -410,13 +410,16 @@ on each axis, so at the same tier its cells are up to 4× the spike's in area (a
 
 #### Generic code and function folding in WASM
 
-- **Challenge**: +6 KB gz, of which the largest item was `Layer::prepare`: main
-  linked one copy for three row types (identical instantiations folded), the
-  branch three.
-- **Solution**: not found; moving the choice into non-generic code and
-  `#[inline(never)]` changed the gz total by under 400 B. Accepted within +2%.
-- **Pattern**: compare instantiation counts (`twiggy` CSV grouped by name
-  without hashes), not only sizes, when a generic function grows.
+- **Challenge**: the largest raw item was `Layer::prepare`: main linked one copy
+  for three row types (identical instantiations folded), the branch three.
+- **Solution**: the LOD path read `Selection::len()`, which reads
+  `rows: Vec<T>`; reading the row count from the column store instead made the
+  instantiations identical again (one copy, -23 KB raw). Moving code into
+  non-generic functions or `#[inline(never)]` had not helped.
+- **Pattern**: in a generic `Layer` method, read nothing typed by `T` (not even
+  `Vec<T>::len`) unless needed, and compare instantiation counts (`twiggy` CSV
+  grouped by name without hashes), not only sizes. Duplicates cost raw bytes but
+  little gz: the +6 KB gz was the new code all along.
 
 ### Architectural Decisions
 
@@ -456,12 +459,36 @@ on each axis, so at the same tier its cells are up to 4× the spike's in area (a
    about 1 s per 10M rows to its first frame and an interactive frame never
    waits for a chunk's build; needed for GUP-632's 10 s first frame at 100M.
 
-For the orchestrator (not stories): `docs/tour/11_big_data.md` line 77 still
-says "There is no level of detail" (the brief kept the tour out of scope), and
-GUP-717's 1.0% / 2.0% plot-rect gates at 400 × 300 are not met even by the
-spike's own design there (1.831% / 1.900%; see the fidelity table).
+2. **GUP-731: Finer LOD cells at small chart sizes** — at 400 × 300 the
+   per-chunk power-of-two grid draws 0.48 / 0.68 points worse than the spike's
+   design; options are cells not a power of two, a size-aware tier bias, or
+   rounding the tier.
 
-## Blocked (2026-11-12)
+`docs/tour/11_big_data.md` ("How far it goes") now says what LOD does and does
+not cover (the orchestrator's request, 2026-11-15).
+
+### Fidelity decision (orchestrator, 2026-11-15): A, the formula as specified
+
+- **Decision**: A. The AC's formula and bias ship unchanged.
+- **Evidence**: the fidelity table in Measurements. At 1920 × 1080 the plot-rect
+  share is inside the 1% rule (0.788% at 10M, 0.874% at 1M), within 0.3 points
+  of the spike's numbers; at 400 × 300 it is 2.510% against the spike design's
+  1.831%.
+- **Cause**: GUP-714's grid is a power of two of data units per chunk, anchored
+  so that appends leave built tiers valid. It spans up to twice the chunk's
+  extent on each axis, so at the same tier its cells are up to 4× the spike's in
+  area (at 400 × 300: 0.48 px² against 0.30; 10,763 representatives against
+  16,912).
+- **Why not B** (round the tier instead of flooring it): it buys spike parity at
+  1080p (0.653% of the plot rect at 10M) for about 40% more representatives, but
+  leaves the small-chart full view unchanged (2.510%), which is the case that
+  misses.
+- **GUP-717**: its gates (1.0% full, 2.0% zoom of the plot rect) must be
+  re-derived per scene size, the 400 × 300 case measured, not assumed: even the
+  spike's design scores 1.831% / 1.900% there. Smaller cells at small sizes are
+  GUP-731's.
+
+## Blocked (2026-11-12, resolved 2026-11-15: A)
 
 **Question**: at the story's own 1M-row, 400 × 300 scene, `Lod::Auto` is 0.48
 (image) / 0.68 (plot rect) points less faithful than the spike's design with the

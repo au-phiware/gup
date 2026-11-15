@@ -74,7 +74,13 @@ updated.
 - The scale benchmark (GUP-627) ran 80 million rows once without an error, with
   a peak of 3.1 GB. It was one run on one machine, not a gate.
 - 100 million rows was not run.
-- There is no level of detail: a frame at the full extent draws every row.
+- Level of detail (`Lod::Auto`, the default): a circle layer, or a rect layer of
+  constant size, whose visible chunks hold more than 200,000 rows draws a
+  bounded number of representatives (at most about four a pixel of area) instead
+  of every row; `.lod(Lod::Off)` on the layer, or on a `ScatterChart`, draws
+  every row. Lines, areas, layers sized by a column and the newest chunk of a
+  layer that is appended to always draw every row, and SVG output, CPU picks and
+  tooltips over CPU data still read every row.
 - Above 10 million visible rows at full extent, a layer that has dropped its CPU
   data cannot be walked by keyboard focus, and `pick_row` and the brush find
   nothing there until you zoom in below the limit. Pointer hover and click still
