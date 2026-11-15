@@ -639,7 +639,7 @@ GUP-628 and GUP-631 (shared `selection.rs`).
   `Selection::lod`, `ScatterChart::lod`, the 200,000-row threshold, per-chunk
   tier per frame (one tier finer than the spike), lazy builds. Opus. Deps:
   GUP-714 ✅, GUP-715 📋.
-- [GUP-717](GUP-717_LOD_Golden_Fidelity_And_Budgets.md) 📋 — A 1M-row LOD
+- [GUP-717](GUP-717_LOD_Golden_Fidelity_And_Budgets.md) ✅ — A 1M-row LOD
   golden, a ΔE00 share against `Lod::Off` (1.0% full, 2.0% zoom of the plot
   rect) and `zoom_bench --lod` with proposed `lod.*` budget rows. Deps: GUP-716
   📋.
@@ -664,7 +664,7 @@ GUP-628 and GUP-631 (shared `selection.rs`).
 - [GUP-731](GUP-731_Finer_LOD_Cells_At_Small_Chart_Sizes.md) 💡 — At 400 × 300
   the per-chunk power-of-two grid draws 0.48 / 0.68 points less faithfully than
   the spike's design: measure non-power-of-two cells, a size-aware bias and
-  rounding, ship one. Deps: GUP-716 ✅, GUP-717 📋.
+  rounding, ship one. Deps: GUP-716 ✅, GUP-717 ✅.
 - [GUP-724](GUP-724_Size_Ordered_Resolve_Cost.md) ✅ — A multi-chunk
   size-ordered layer's resolve costs about 12 ms a frame against 1.1 ms for a
   plain scatter: profile, then cache per epoch. Carries GUP-492's 4.0 ms CPU

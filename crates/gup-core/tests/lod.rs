@@ -7,6 +7,8 @@
 //! it. Set `GUP_LOD_PNG_DIR` to save the 1M-row scatter under `Auto` and
 //! `Off` for reading by eye.
 
+mod common;
+
 use gup_core::prelude::*;
 use gup_core::{ImageTarget, Renderer, Scene};
 
@@ -59,7 +61,11 @@ struct Drawn {
 }
 
 fn draw(cx: &Context, plot: &mut Plot) -> Drawn {
-    let scene: Scene = plot.resolve(cx, W as f32, H as f32).unwrap().scene.clone();
+    draw_at(cx, plot, W, H)
+}
+
+fn draw_at(cx: &Context, plot: &mut Plot, w: u32, h: u32) -> Drawn {
+    let scene: Scene = plot.resolve(cx, w as f32, h as f32).unwrap().scene.clone();
     let batch = scene
         .items
         .iter()
@@ -68,7 +74,7 @@ fn draw(cx: &Context, plot: &mut Plot) -> Drawn {
             _ => None,
         })
         .expect("a data layer");
-    let mut target = ImageTarget::new(cx, W, H).unwrap();
+    let mut target = ImageTarget::new(cx, w, h).unwrap();
     let desc = gup_core::RenderTarget::desc(&target);
     let draw_calls = Renderer::new()
         .prepare(cx, &scene, &desc)
@@ -124,34 +130,34 @@ fn at_the_threshold_nothing_changes_and_one_row_more_takes_lod() {
     assert_eq!(builds(&mut over), 1);
 }
 
-#[test]
-fn a_million_row_walk_draws_one_draw_per_chunk_and_at_most_four_per_pixel() {
-    let cx = Context::new_blocking().unwrap();
-    let rows = 1_000_000;
-    let mut auto = scatter(walk(rows), Lod::Auto);
-    let a = draw(&cx, &mut auto);
-    let pixels = plot_rect_pixels(&auto);
-    let mut off = scatter(walk(rows), Lod::Off);
-    let o = draw(&cx, &mut off);
-    save(&a.image, "lod-auto-1m.png");
-    save(&o.image, "lod-off-1m.png");
-    // The guides draw the same in both: the marks' draws are the
-    // difference, and the layer has one instanced draw per chunk in both.
-    assert_eq!(a.draw_calls, o.draw_calls);
-    assert_eq!(a.chunks, o.chunks);
-    assert!(a.chunks >= 1);
-    assert_eq!(o.instances, rows as u64);
-    assert!(
-        (a.instances as f64) <= pixels,
-        "{} instances over {pixels} plot pixels",
-        a.instances
-    );
-    // GUP-631's fidelity measure: pixels more than ΔE00 10 from the full
-    // draw, as a share of the image and of the plot rect.
-    let r = auto.layout().expect("resolved").plot;
+/// A scatter of `rows` over explicit scales, so a test can zoom.
+fn zoomable(rows: usize, lod: Lod) -> (Plot, ScaleRef<Linear>, ScaleRef<Linear>) {
+    let (mut plot, x, y) = plot();
+    plot.add(Selection::<Row, Circle>::new(walk(rows)))
+        .attr(Circle::X, x.encode(|r: &Row| r.0))
+        .attr(Circle::Y, y.encode(|r: &Row| r.1))
+        .attr(Circle::RADIUS, Px(1.5))
+        .lod(lod);
+    (plot, x, y)
+}
+
+/// Zoom both axes of a resolved plot to a tenth of their view, about the
+/// point `(cx, cy)`.
+fn zoom_ten(plot: &Plot, x: &ScaleRef<Linear>, y: &ScaleRef<Linear>, (cx, cy): (f64, f64)) {
+    let (x0, x1) = plot.x_view().expect("resolved");
+    let (y0, y1) = plot.y_view().expect("resolved");
+    let (hx, hy) = ((x1 - x0) / 20.0, (y1 - y0) / 20.0);
+    x.write().set_domain(cx - hx, cx + hx).unwrap();
+    y.write().set_domain(cy - hy, cy + hy).unwrap();
+}
+
+/// GUP-631's fidelity measure: the share of pixels more than ΔE00 10 from
+/// the full draw, of the image and of the plot rect.
+fn shares(auto: &image::RgbaImage, off: &image::RgbaImage, plot: &Plot) -> (f64, f64) {
+    let r = plot.layout().expect("resolved").plot;
     let (mut image, mut rect) = (0u32, 0u32);
-    for (x, y, p) in a.image.enumerate_pixels() {
-        let q = o.image.get_pixel(x, y);
+    for (x, y, p) in auto.enumerate_pixels() {
+        let q = off.get_pixel(x, y);
         let pa = gup_visual_regression::Rgba8::new(p[0], p[1], p[2], p[3]);
         let pb = gup_visual_regression::Rgba8::new(q[0], q[1], q[2], q[3]);
         if pa.delta_e(pb) > 10.0 {
@@ -162,13 +168,102 @@ fn a_million_row_walk_draws_one_draw_per_chunk_and_at_most_four_per_pixel() {
             }
         }
     }
-    let image_share = 100.0 * f64::from(image) / f64::from(W * H);
-    let rect_share = 100.0 * f64::from(rect) / pixels;
+    (
+        100.0 * f64::from(image) / f64::from(auto.width() * auto.height()),
+        100.0 * f64::from(rect) / plot_rect_pixels(plot),
+    )
+}
+
+/// Shares of the plot rect's pixels over ΔE00 10 from the exact draw.
+struct Fidelity {
+    full: f64,
+    zoom: f64,
+}
+
+/// `rows` rows at `w` x `h` under `Auto` against `Off`, in full view and
+/// zoomed ten times on both axes; prints both shares.
+fn fidelity(w: u32, h: u32, rows: usize) -> Fidelity {
+    let cx = Context::new_blocking().unwrap();
+    let (mut auto, ax, ay) = zoomable(rows, Lod::Auto);
+    let (mut off, ox, oy) = zoomable(rows, Lod::Off);
+    let (a, o) = (draw_at(&cx, &mut auto, w, h), draw_at(&cx, &mut off, w, h));
+    let pixels = plot_rect_pixels(&auto);
+    save(&a.image, &format!("lod-auto-{w}x{h}.png"));
+    save(&o.image, &format!("lod-off-{w}x{h}.png"));
+    // The guides draw the same in both, and the layer has one instanced
+    // draw per chunk in both.
+    assert_eq!(a.draw_calls, o.draw_calls);
+    assert_eq!(a.chunks, o.chunks);
+    assert!(a.chunks >= 1);
+    assert_eq!(o.instances, rows as u64);
+    assert!(
+        (a.instances as f64) < rows as f64 / 10.0,
+        "{} instances of {rows} rows",
+        a.instances
+    );
+    assert!(
+        (a.instances as f64) <= pixels,
+        "{} instances over {pixels} plot pixels",
+        a.instances
+    );
+    let (full_image, full) = shares(&a.image, &o.image, &auto);
     eprintln!(
-        "1M walk at {W} x {H}: {} representatives, {} chunks, {pixels} plot pixels; \
-         ΔE00 > 10: {image_share:.3}% of the image, {rect_share:.3}% of the plot rect",
+        "{rows} rows at {w} x {h}, full view: {} representatives, {} chunks, {pixels} plot \
+         pixels; ΔE00 > 10: {full_image:.3}% of the image, {full:.3}% of the plot rect",
         a.instances, a.chunks
     );
+
+    // About the walk's middle row, so the zoom shows marks.
+    let middle = walk(rows)[rows / 2];
+    zoom_ten(&auto, &ax, &ay, (middle.0, middle.1));
+    zoom_ten(&off, &ox, &oy, (middle.0, middle.1));
+    let (za, zo) = (draw_at(&cx, &mut auto, w, h), draw_at(&cx, &mut off, w, h));
+    save(&za.image, &format!("lod-auto-{w}x{h}-zoom.png"));
+    save(&zo.image, &format!("lod-off-{w}x{h}-zoom.png"));
+    assert_eq!(za.draw_calls, zo.draw_calls);
+    let (zoom_image, zoom) = shares(&za.image, &zo.image, &auto);
+    eprintln!(
+        "{rows} rows at {w} x {h}, 10x zoom: {} representatives of {} rows; \
+         ΔE00 > 10: {zoom_image:.3}% of the image, {zoom:.3}% of the plot rect",
+        za.instances, zo.instances
+    );
+    Fidelity { full, zoom }
+}
+
+/// The gates are per scene size, from measurements (GUP-717's story has the
+/// table and the margins): GUP-714's per-chunk power-of-two grid is coarser
+/// than the spike's, and a small chart has more rows per pixel.
+#[test]
+fn a_million_row_walk_matches_the_exact_draw_at_400_by_300() {
+    // Measured 1.566% / 2.287%; the gates are 1.28x / 1.31x those.
+    let f = fidelity(W, H, 1_000_000);
+    assert!(f.full <= 2.0, "full view {:.3}% of the plot rect", f.full);
+    assert!(f.zoom <= 3.0, "10x zoom {:.3}% of the plot rect", f.zoom);
+}
+
+#[test]
+fn a_million_row_walk_matches_the_exact_draw_at_1080p() {
+    // Measured 0.571% / 0.000% (every row draws: the tiers have run out);
+    // the full gate is 1.3x, the zoom gate allows a few antialiasing pixels.
+    let f = fidelity(1920, 1080, 1_000_000);
+    assert!(f.full <= 0.75, "full view {:.3}% of the plot rect", f.full);
+    assert!(f.zoom <= 0.1, "10x zoom {:.3}% of the plot rect", f.zoom);
+}
+
+/// The golden of the `Auto` full view (GUP-717): a continuous band, the
+/// axes and ticks, nothing outside the plot rect.
+#[test]
+fn a_million_row_lod_scatter_is_a_golden() {
+    let cx = Context::new_blocking().unwrap();
+    let (mut plot, _, _) = zoomable(1_000_000, Lod::Auto);
+    let (image, layout) = plot.render_resolved(&cx, W, H).unwrap();
+    let vr = gup_visual_regression::RgbaImage::new(W, H, image.into_raw()).unwrap();
+    common::vr::harness()
+        .run(
+            "gup_core/lod_scatter_1m",
+            Ok((vr, common::vr::layout_metadata(&layout))),
+        )
+        .assert_ok();
 }
 
 #[test]
