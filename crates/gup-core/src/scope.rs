@@ -212,6 +212,7 @@ impl GpuErrors {
     }
 
     /// Why the device was lost, if it was.
+    #[cfg(any(feature = "window", test))]
     pub(crate) fn lost(&self) -> Option<String> {
         lock(&self.lost).clone()
     }
