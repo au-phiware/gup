@@ -88,8 +88,8 @@ X) or `info` (printed, never fails).
 | `pipeline.link_create.cold_ms`     | 1.04      | <= 10     | `pipeline_timings`, its first run                                             |
 | `pipeline.link_create.max_ms`      | 1.06      | info      | `pipeline_timings`                                                            |
 | `wasm.wgpu.gz_bytes`               | 32,360    | info      | `scripts/wasm_size.sh`, bare wgpu                                             |
-| `wasm.scatter.gz_bytes`            | 384,562   | +2%       | `scripts/wasm_size.sh`, the reference scatter                                 |
-| `wasm.over_wgpu.gz_bytes`          | 352,202   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10                                   |
+| `wasm.scatter.gz_bytes`            | 391,766   | +2%       | `scripts/wasm_size.sh`, the reference scatter                                 |
+| `wasm.over_wgpu.gz_bytes`          | 359,406   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10                                   |
 | `wasm.per_row_type.gz_bytes`       | 1,730     | <= 2600   | `scripts/wasm_size.sh`, one more Selection row type                           |
 | `wasm.svg_export.gz_bytes`         | 4,057     | info      | `scripts/wasm_size.sh`, the scatter with `svg-export` minus without (GUP-557) |
 
@@ -611,3 +611,9 @@ seeded violation (GUP-417 retrospective).
   forced) take the scatter from 376,445 to 384,562 B gz. Re-recorded. Over bare
   wgpu 352,202 (48 KB of headroom under the 400,000 cap). GUP-716's `Lod::Auto`
   default will link the tier build.
+- **GUP-718 merged (2026-11-16, orchestrator)**: GUP-716 (`Lod::Auto` by
+  default, which links the tier build and the tier draw path, about +6,000) and
+  GUP-718 (LOD in pick, hover, tooltips and SVG, +1,270), with GUP-717 and the
+  docs stories at about 0, take the scatter from 384,562 to 391,766 B gz, 487 B
+  under the +2% limit. Re-recorded. Over bare wgpu 359,406 (41 KB of headroom
+  under the 400,000 cap).
