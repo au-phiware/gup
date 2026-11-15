@@ -220,6 +220,15 @@ what each release contains and what its version number promises.
   the GPU drivers, wgpu 27, the features, and how to depend on Gup from git
   before crates.io.
 
+### Fixed
+
+- A window that cannot get its next frame reports why. A GPU batch that runs for
+  about a second (10 million rows with `Lod::Off` at 1080p on an Intel HD 630)
+  makes the driver reset the device, and the window failed with "Acquiring a
+  texture failed with a generic error". The error now says the device was lost,
+  with the driver's reason, and a timed-out acquire is retried (a frame still on
+  the GPU) instead of failing at once.
+
 ### Known limitations
 
 - No CSV or serde input: rows enter through closures, `Columns` or Arrow record

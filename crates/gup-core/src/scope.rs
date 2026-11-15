@@ -180,6 +180,8 @@ impl Drop for Scope<'_> {
 pub(crate) struct GpuErrors {
     /// Shared with the uncaptured-error handler.
     late: Arc<Mutex<Vec<GpuFailure>>>,
+    /// Why the device was lost, once it was (a device Gup created).
+    lost: Arc<Mutex<Option<String>>>,
     /// Scopes whose errors have not arrived yet (wasm32 only; natively
     /// every scope resolves when it is popped). A spawned task drives
     /// each scope's promises and sends the result, so the context stays
@@ -199,6 +201,19 @@ impl GpuErrors {
                 &e,
             ));
         })
+    }
+}
+
+impl GpuErrors {
+    /// Record why the device is lost, from its device-lost callback.
+    pub(crate) fn lost_recorder(&self) -> impl Fn(wgpu::DeviceLostReason, String) + Send + 'static {
+        let lost = Arc::clone(&self.lost);
+        move |reason, message| *lock(&lost) = Some(format!("{reason:?}: {message}"))
+    }
+
+    /// Why the device was lost, if it was.
+    pub(crate) fn lost(&self) -> Option<String> {
+        lock(&self.lost).clone()
     }
 }
 
@@ -575,5 +590,23 @@ mod tests {
         eprintln!("GPU error in {what}: {message}");
         assert!(what.starts_with("drawing a scene into a 300×200"), "{what}");
         assert!(message.contains("RENDER_ATTACHMENT"), "{message}");
+    }
+
+    /// GUP-734: a device Gup created records why it was lost, so a window's
+    /// failed acquire (wgpu reports it as a generic error) can say so.
+    #[test]
+    fn a_lost_device_records_its_reason() {
+        let cx = Context::new_blocking().unwrap();
+        assert_eq!(cx.device_lost(), None);
+        cx.device().destroy();
+        for _ in 0..100 {
+            let _ = cx.device().poll(wgpu::PollType::Poll);
+            if cx.device_lost().is_some() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        let reason = cx.device_lost().expect("the callback ran");
+        assert!(reason.starts_with("Destroyed"), "{reason}");
     }
 }

@@ -162,8 +162,10 @@ too). The spike's figures at 10M (GUP-631, bias 1): GPU 3.34 / 3.89 ms, CPU 0.38
 Same-session A/B at 1M rows (three runs each, medians): `Off` draws the full
 view in 91.3 ms and the zoom cycle in 15.8 ms (GPU pass), `Auto` in 2.6 and 2.3
 ms; CPU 0.63 against 0.51 ms (full), 0.86 against 0.77 ms (zoom). `Off` at 10M
-rows did not run: the first frames failed with "Acquiring a texture failed" (six
-of six runs; not investigated), which is why the budget rows are `Auto` only.
+rows did not run: the device was lost on the second frame ("Acquiring a texture
+failed", six of six runs; GUP-734: one GPU pass of about 1.1 s is killed by the
+driver; 8M rows, 0.86 s, still run), which is why the budget rows are `Auto`
+only.
 
 The tiers' build is `scale_bench --lod --rows 10000000` (GUP-714): 515.7, 486.8,
 492.6 ms, so **493 ms per 10M rows** against GUP-714's 484 ms; it is not a
