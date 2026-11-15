@@ -707,7 +707,8 @@ struct ChunkGpu {
 
 /// A chunk's level-of-detail tiers (GUP-714), built for its rows at the
 /// time, and its gathered representatives on one context (GUP-715).
-/// Dropped when the chunk's rows change (an append or a rewrite).
+/// Dropped when a row is rewritten; an append leaves them standing for the
+/// rows they cover ([`Tiers::rows`]) until they are rebuilt (GUP-719).
 #[derive(Debug)]
 struct ChunkLod {
     /// The store columns of x and y the tiers were built from (`None`:
@@ -874,10 +875,16 @@ impl Chunk {
             .map(|g| &g.buffer)
     }
 
-    /// The chunk's tiers, if [`ColumnStore::lod_tiers`] built them for
-    /// its current rows.
+    /// The chunk's tiers, if [`ColumnStore::lod_tiers`] built them (for its
+    /// current rows, or, after an append, the [`Tiers::rows`] before it).
     pub(crate) fn tiers(&self) -> Option<&Arc<Tiers>> {
         self.lod.as_ref().map(|l| &l.tiers)
+    }
+
+    /// The rows past the chunk's tiers, which draw in full: `0..` of these
+    /// are the tiers' (GUP-719).
+    pub(crate) fn tier_rows(&self) -> Option<u32> {
+        self.lod.as_ref().map(|l| l.tiers.rows)
     }
 
     /// The chunk's representatives on `cx`, if
@@ -928,8 +935,8 @@ impl Chunk {
     /// shared columns, only their origins and stats.
     fn write(&mut self, columns: &[ColumnSlice<'_>], range: std::ops::Range<usize>, planes: usize) {
         let at = self.len;
-        // New rows: the tiers would leave them out (GUP-719 rebuilds).
-        self.lod = None;
+        // The tiers keep standing for the rows they were built over; the new
+        // rows draw in full until they are rebuilt (GUP-719).
         let mut cpu = (!self.shared)
             .then(|| Arc::make_mut(self.cpu.as_mut().expect("only full chunks are released")));
         let mut plane = 0;
@@ -1788,9 +1795,19 @@ impl ColumnStore {
     }
 
     /// Whether chunk `k` has [`lod_tiers`](Self::lod_tiers) over `xy` for
-    /// its current rows.
+    /// all of its current rows.
     pub(crate) fn has_tiers(&self, k: usize, xy: [Option<usize>; 2]) -> bool {
-        self.chunks[k].lod.as_ref().is_some_and(|l| l.xy == xy)
+        self.tier_rows(k, xy) == Some(self.chunks[k].len)
+    }
+
+    /// The rows chunk `k`'s tiers over `xy` were built for (fewer than its
+    /// rows when it has been appended to since), if it has any.
+    pub(crate) fn tier_rows(&self, k: usize, xy: [Option<usize>; 2]) -> Option<u32> {
+        self.chunks[k]
+            .lod
+            .as_ref()
+            .filter(|l| l.xy == xy)
+            .map(|l| l.tiers.rows)
     }
 
     /// Whether chunk `k` holds as many rows as a chunk can: appends no

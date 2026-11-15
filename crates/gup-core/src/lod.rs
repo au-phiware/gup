@@ -28,6 +28,10 @@
 //! Each frame, a visible chunk draws the prefix of the tier [`tier`]
 //! chooses for the view (GUP-716) through the indexed-rows glue (GUP-715).
 
+/// Rows an appended chunk holds before it builds tiers (GUP-719): below
+/// this a full draw is cheap. It rebuilds each time its rows have doubled.
+pub(crate) const TAIL_MIN_ROWS: u32 = 65_536;
+
 /// The finest tier: `2^16` cells a side, 16 bits of each axis in a key.
 pub(crate) const TMAX: u32 = 16;
 
@@ -47,6 +51,9 @@ const BUCKETS: usize = 1 << DIGIT_BITS;
 /// The tiers of one chunk: see the [module docs](self).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Tiers {
+    /// The rows of the chunk when the tiers were built: `order` holds rows
+    /// below it only (an appended chunk's later rows draw in full, GUP-719).
+    pub rows: u32,
     /// Cell width at the finest tier, as a power of two: `2^ex` data units.
     pub ex: i32,
     /// Cell height at the finest tier, as a power of two: `2^ey` data units.
@@ -83,6 +90,7 @@ impl Tiers {
         }
         if finite == 0 {
             return Tiers {
+                rows,
                 ex: 0,
                 ey: 0,
                 stored: 0,
@@ -145,6 +153,7 @@ impl Tiers {
             }
         }
         Tiers {
+            rows,
             ex,
             ey,
             stored,
