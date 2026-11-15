@@ -933,6 +933,11 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         self.lod_builds
     }
 
+    /// Bytes of representatives on the GPU, over every chunk (a test seam).
+    pub(crate) fn lod_gpu_bytes(&self) -> u64 {
+        self.columns.as_ref().map_or(0, ColumnStore::lod_bytes)
+    }
+
     /// Draw each chunk's tier-`t` representatives (the prefix of its
     /// [`Tiers`](crate::lod::Tiers)) through the indexed-rows glue, or, for
     /// a chunk that stores no tier `t`, every row, in place of the

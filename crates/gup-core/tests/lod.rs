@@ -842,22 +842,27 @@ fn appended_over(
     first: usize,
     chunk: u32,
     lod: Lod,
-    (xmax, ymax): (f64, f64),
+    extent: (f64, f64),
 ) -> (Plot, gup_core::Appender<Row>) {
-    let mut plot = Plot::new();
-    let x = plot.x(Linear::new().domain(0.0, xmax));
-    let y = plot.y(Linear::new().domain(0.0, ymax));
-    plot.add(Selection::<Row, Circle>::new(
-        (0..first).map(streamed).collect::<Vec<_>>(),
-    ))
-    .attr(Circle::X, x.encode(|r: &Row| r.0))
-    .attr(Circle::Y, y.encode(|r: &Row| r.1))
-    .attr(Circle::RADIUS, Px(1.5))
-    .lod(lod);
+    let rows = (0..first).map(streamed).collect();
+    let mut plot = fixed(rows, lod, extent);
     let layer = plot.layer_mut::<Row, Circle>().unwrap();
     layer.max_chunk_rows(chunk);
     let feed = layer.appender();
     (plot, feed)
+}
+
+/// A scatter of `rows` over x 0..`xmax` and y 0..`ymax`.
+fn fixed(rows: Vec<Row>, lod: Lod, (xmax, ymax): (f64, f64)) -> Plot {
+    let mut plot = Plot::new();
+    let x = plot.x(Linear::new().domain(0.0, xmax));
+    let y = plot.y(Linear::new().domain(0.0, ymax));
+    plot.add(Selection::<Row, Circle>::new(rows))
+        .attr(Circle::X, x.encode(|r: &Row| r.0))
+        .attr(Circle::Y, y.encode(|r: &Row| r.1))
+        .attr(Circle::RADIUS, Px(1.5))
+        .lod(lod);
+    plot
 }
 
 fn push(feed: &gup_core::Appender<Row>, from: usize, to: usize) {
@@ -1036,4 +1041,191 @@ fn a_rebuild_drops_a_pending_gpu_pick() {
     let picks = plot.poll_picks(&cx);
     let row_of = |t| picks.iter().find(|p| p.ticket == t).expect("polled").row;
     assert_eq!(row_of(dropped), None, "a pick across a rebuild is dropped");
+}
+
+// GUP-719: windows. `RowWindow::LastRows` drops whole chunks with their
+// tiers and representatives; the row ids of what is held stay the data
+// rows'.
+
+/// A layer fed through an appender under `RowWindow::LastRows(window)`,
+/// over x 0..6000 and y 0..100 (a row is 0.001 of x).
+fn windowed(window: usize, lod: Lod) -> (Plot, gup_core::Appender<Row>) {
+    let (mut plot, tx) = appended_over(1, 1 << 20, lod, (6000.0, 100.0));
+    plot.layer_mut::<Row, Circle>()
+        .unwrap()
+        .window(RowWindow::LastRows(window));
+    (plot, tx)
+}
+
+fn held(plot: &mut Plot) -> usize {
+    plot.layer_mut::<Row, Circle>().unwrap().len()
+}
+
+fn lod_bytes(plot: &mut Plot) -> u64 {
+    gup_core::__private::lod_gpu_bytes(plot.layer_mut::<Row, Circle>().unwrap())
+}
+
+/// AC3: a 2,000,000-row window fed 100,000 rows at a time to 6,000,000:
+/// eviction writes no column bytes, the representatives held are bounded by
+/// the chunks held, the picture equals a fresh layer of the held rows
+/// (exactly under `Off`, by ΔE00 under `Auto`), and the oldest held chunk's
+/// representatives keep their data rows' ids.
+#[test]
+fn a_rolling_window_keeps_tiers_for_its_chunks_only() {
+    let cx = Context::new_blocking().unwrap();
+    const WINDOW: usize = 2_000_000;
+    const TOTAL: usize = 6_000_000;
+    const BATCH: usize = 100_000;
+
+    // Exact: the stream under `Off` against a fresh plot of the held rows,
+    // and the columns written are the rows appended, none for eviction.
+    let (mut off, tx) = windowed(WINDOW, Lod::Off);
+    let start = cx.upload_stats();
+    draw(&cx, &mut off);
+    let mut total = 1;
+    while total < TOTAL {
+        let n = BATCH.min(TOTAL - total);
+        push(&tx, total, total + n);
+        total += n;
+        off.resolve(&cx, W as f32, H as f32).unwrap();
+    }
+    let kept = held(&mut off);
+    assert!(
+        (WINDOW..=WINDOW + WINDOW / 4).contains(&kept),
+        "{kept} held"
+    );
+    let written = cx.upload_stats() - start;
+    // x and y are 4 bytes each, every row uploaded once.
+    assert_eq!(
+        written.columns.bytes,
+        8 * TOTAL as u64,
+        "eviction wrote column bytes: {written:?}"
+    );
+    let first = total - kept;
+    let exact = draw(&cx, &mut off);
+    let rows = (first..total).map(streamed).collect();
+    let mut reference = fixed(rows, Lod::Off, (6000.0, 100.0));
+    let expected = draw(&cx, &mut reference);
+    let tol = gup_visual_regression::DiffTolerance::default();
+    let vr = |i: &image::RgbaImage| {
+        gup_visual_regression::RgbaImage::new(i.width(), i.height(), i.as_raw().clone()).unwrap()
+    };
+    let stats =
+        gup_visual_regression::diff::perceptual_diff(&vr(&expected.image), &vr(&exact.image), &tol)
+            .unwrap();
+    eprintln!("Off, windowed vs fresh: {stats}");
+    assert!(
+        stats.within(&tol),
+        "windowed Off differs from fresh: {stats}"
+    );
+    drop(off);
+
+    // The same stream under `Auto`.
+    let (mut auto, tx) = windowed(WINDOW, Lod::Auto);
+    draw(&cx, &mut auto);
+    let mut total = 1;
+    let (mut most, mut chunks_before) = (0, 0);
+    while total < TOTAL {
+        let n = BATCH.min(TOTAL - total);
+        push(&tx, total, total + n);
+        total += n;
+        let d = draw_at(&cx, &mut auto, W, H);
+        let (bytes, rows) = (lod_bytes(&mut auto), held(&mut auto));
+        // At most 6 bytes a held row: 12 per representative (x, y and the
+        // row), at most half a chunk's rows.
+        assert!(bytes <= 6 * rows as u64, "{bytes} B of tiers, {rows} rows");
+        most = most.max(bytes);
+        chunks_before = chunks_before.max(d.chunks);
+    }
+    assert!(most > 0, "no tiers were built");
+    let kept = held(&mut auto);
+    let first = total - kept;
+    let d = draw(&cx, &mut auto);
+    eprintln!(
+        "Auto: {kept} rows held in {} chunks (at most {chunks_before}), {} instances, tiers \
+         {} B (at most {most} B)",
+        d.chunks,
+        d.instances,
+        lod_bytes(&mut auto)
+    );
+    assert!(d.instances < kept as u64 / 10, "{} instances", d.instances);
+    let (image, rect) = shares(&d.image, &expected.image, &auto);
+    eprintln!("Auto windowed vs fresh Off: {image:.3}% of the image, {rect:.3}% of the plot rect");
+    assert!(rect < 1.0, "{rect:.3}% of the plot rect over ΔE00 10");
+    save(&d.image, "lod-window-auto.png");
+    save(&expected.image, "lod-window-fresh.png");
+
+    // The oldest held chunk's first row represents its cell at every tier:
+    // its id is the data row, the evicted rows counted.
+    let id = gup_core::RowId {
+        layer: 0,
+        row: first,
+    };
+    let at = auto.pick_anchor(id).expect("the oldest held row is drawn");
+    let hit = auto.pick_row(at).expect("a mark at the anchor");
+    assert!(
+        (first..first + 500_000).contains(&hit.row),
+        "row {} picked at the oldest chunk (first row {first})",
+        hit.row
+    );
+    let hit_gpu = auto.pick_row_gpu(&cx, at).unwrap().expect("GPU pick");
+    assert!((first..first + 500_000).contains(&hit_gpu.row));
+}
+
+/// AC4: the CPU frame (resolve, which prepares the layer, and the
+/// renderer's prepare) of a full 2,000,000-row window fed 100,000 rows a
+/// frame. A frame that builds tiers takes the build's time (about 0.1 s per
+/// 1,000,000 rows in release, once per chunk per frame): the p95 of ten
+/// frames is such a frame, so the 8 ms bound is asserted on the frames that
+/// build nothing (release builds only); every frame is printed.
+#[test]
+fn a_rolling_window_frame_is_cheap() {
+    let cx = Context::new_blocking().unwrap();
+    let (mut plot, tx) = windowed(2_000_000, Lod::Auto);
+    draw(&cx, &mut plot);
+    let mut total = 1;
+    while total < 3_000_000 {
+        push(&tx, total, total + 100_000);
+        total += 100_000;
+        plot.resolve(&cx, W as f32, H as f32).unwrap();
+    }
+    // The CPU's frame: resolve (which prepares the layer), the renderer's
+    // prepare and the recording and submission of the draw, not waiting
+    // for the device.
+    let mut target = ImageTarget::new(&cx, W, H).unwrap();
+    let mut times = Vec::new();
+    let mut rebuilds = 0;
+    for _ in 0..10 {
+        push(&tx, total, total + 100_000);
+        total += 100_000;
+        let before = builds(&mut plot);
+        let t = std::time::Instant::now();
+        let scene: Scene = plot.resolve(&cx, W as f32, H as f32).unwrap().scene.clone();
+        let resolved = t.elapsed();
+        let desc = gup_core::RenderTarget::desc(&target);
+        Renderer::new().prepare(&cx, &scene, &desc).unwrap();
+        let prepared = t.elapsed();
+        target.render_blocking(&cx, &scene).unwrap();
+        eprintln!(
+            "  resolve {resolved:?}, + prepare {prepared:?}, + draw and wait {:?}",
+            t.elapsed()
+        );
+        let built = builds(&mut plot) - before;
+        rebuilds += built;
+        times.push((prepared, built));
+    }
+    let p95 = |mut t: Vec<std::time::Duration>| {
+        t.sort();
+        t[(t.len() * 95).div_ceil(100) - 1]
+    };
+    let all = p95(times.iter().map(|t| t.0).collect());
+    let quiet = p95(times.iter().filter(|t| t.1 == 0).map(|t| t.0).collect());
+    eprintln!(
+        "10 frames of 100,000 rows: {rebuilds} builds in {} frames; p95 {all:?}, of the frames \
+         without a build {quiet:?}",
+        times.iter().filter(|t| t.1 > 0).count()
+    );
+    if !cfg!(debug_assertions) {
+        assert!(quiet.as_secs_f64() < 0.008, "p95 {quiet:?}");
+    }
 }

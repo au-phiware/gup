@@ -1810,6 +1810,16 @@ impl ColumnStore {
             .map(|l| l.tiers.rows)
     }
 
+    /// Bytes of representatives the chunks hold on the GPU (a test seam:
+    /// an evicted chunk takes its representatives with it).
+    pub(crate) fn lod_bytes(&self) -> u64 {
+        self.chunks
+            .iter()
+            .filter_map(|c| c.lod.as_ref()?.gpu.as_ref())
+            .map(|g| g.buffer.size())
+            .sum()
+    }
+
     /// Whether chunk `k` holds as many rows as a chunk can: appends no
     /// longer change it.
     pub(crate) fn chunk_full(&self, k: usize) -> bool {
