@@ -76,6 +76,14 @@ X) or `info` (printed, never fails).
 | `zoom_culled.gpu_pass.median_ms`   | 9.90      | +20%      | `zoom_bench` on 4M sorted rows, 64 chunks                                     |
 | `zoom_culled.cpu.median_ms`        | 1.07      | +20%      | `zoom_bench` on 4M sorted rows, 64 chunks                                     |
 | `zoom_culled.columns.bytes`        | 0         | exact     | `zoom_bench` on 4M sorted rows, 64 chunks                                     |
+| `lod.gpu_pass.median_ms`           | 2.27      | +25%      | `zoom_bench --columns --lod auto` on 10M sorted rows, zoomed (GUP-717)        |
+| `lod.cpu.median_ms`                | 0.58      | +20%      | `zoom_bench --columns --lod auto`, zoomed                                     |
+| `lod.draws.median`                 | 4         | exact     | `zoom_bench --columns --lod auto`, zoomed                                     |
+| `lod.instances.median`             | 28,430    | exact     | `zoom_bench --columns --lod auto`, zoomed: instances drawn of 10M rows        |
+| `lod_full.gpu_pass.median_ms`      | 3.20      | +25%      | `zoom_bench --columns --lod auto --static` on 10M sorted rows, full view      |
+| `lod_full.cpu.median_ms`           | 0.62      | +20%      | `zoom_bench --columns --lod auto --static`, full view                         |
+| `lod_full.draws.median`            | 13        | exact     | `zoom_bench --columns --lod auto --static`, full view                         |
+| `lod_full.instances.median`        | 26,954    | exact     | `zoom_bench --columns --lod auto --static`: instances drawn of 10M rows       |
 | `pipeline.link_create.median_ms`   | 1.11      | +20%      | `pipeline_timings`, 20 runs, fresh cache each                                 |
 | `pipeline.link_create.cold_ms`     | 1.04      | <= 10     | `pipeline_timings`, its first run                                             |
 | `pipeline.link_create.max_ms`      | 1.06      | info      | `pipeline_timings`                                                            |
@@ -131,6 +139,35 @@ writes, before the zoom); **136 uniform bytes in 3 writes per frame**
 frame**, 5,629,476 B in all (axis rules and glyph quads, rebuilt because the
 ticks move; exact at 1920×1080, other sizes differ); 0 texture bytes (every
 glyph is in the atlas after warm-up). Deterministic, so checked exactly.
+
+### Level of detail (GUP-717)
+
+```bash
+cargo run -p gup-core --release --example zoom_bench -- --present mailbox \
+  --uncapped --columns --lod auto --points 10000000 --metric-prefix lod [--static]
+```
+
+10M rows from `Columns` (sorted x over 0..1000, a log-scale y random walk, `f32`
+columns, radius 3 px), `Lod::Auto`, 1920x1080, the `zoom` cycle (`lod`) or the
+full view with `--static` (`lod_full`); 300 measured frames. Recorded 2026-11-16
+on the machine above (Mailbox, uncapped, load 1.4-1.5): the median of three
+runs' medians. GPU pass: zoomed 2.59 / 2.27 / 2.08 ms, full view 3.20 / 2.94 /
+3.39 ms, so +25% on the GPU rows (the runs spread by 22%); CPU 0.58 and 0.62 ms.
+Draw calls and instances are deterministic, checked exactly: 4 and 28,430 zoomed
+(most frames see few chunks), 13 and 26,954 in the full view (the 10 chunks, the
+guides). The GPU clock was not sampled (`perf-budget` samples it for these runs
+too). The spike's figures at 10M (GUP-631, bias 1): GPU 3.34 / 3.89 ms, CPU 0.38
+/ 0.63 ms.
+
+Same-session A/B at 1M rows (three runs each, medians): `Off` draws the full
+view in 91.3 ms and the zoom cycle in 15.8 ms (GPU pass), `Auto` in 2.6 and 2.3
+ms; CPU 0.63 against 0.51 ms (full), 0.86 against 0.77 ms (zoom). `Off` at 10M
+rows did not run: the first frames failed with "Acquiring a texture failed" (six
+of six runs; not investigated), which is why the budget rows are `Auto` only.
+
+The tiers' build is `scale_bench --lod --rows 10000000` (GUP-714): 515.7, 486.8,
+492.6 ms, so **493 ms per 10M rows** against GUP-714's 484 ms; it is not a
+`perf-budget` row (`scale_bench` is not run by it).
 
 ### Pipeline creation time
 

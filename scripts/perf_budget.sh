@@ -113,6 +113,11 @@ if [[ -z $metrics ]]; then
     # Chunk culling (GUP-457): 4M x-sorted rows in 64 chunks, zoomed.
     echo "perf-budget: zoom_bench (4M sorted points, 64 chunks, culling on)" >&2
     run_zoom zoom_culled --points 4194304 --chunk-rows 65536 --sorted
+    # Level of detail (GUP-717): 10M rows from columns, zoomed and in the
+    # full view.
+    echo "perf-budget: zoom_bench (10M columns, Lod::Auto, zoomed and full view)" >&2
+    run_zoom lod --columns --lod auto --points 10000000 --frames 300
+    run_zoom lod_full --columns --lod auto --static --points 10000000 --frames 300
 
     echo "perf-budget: pipeline_timings (release)" >&2
     cargo test --quiet -p gup-core --release --lib pipeline_timings \
