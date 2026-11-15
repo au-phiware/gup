@@ -363,6 +363,11 @@ impl Context {
         if adapter.is_some() {
             device.on_uncaptured_error(gpu_errors.handler());
         }
+        // Without a callback a lost device only surfaces as a failed
+        // acquire or submit with no reason; keep the reason for those errors.
+        if adapter.is_some() {
+            device.set_device_lost_callback(gpu_errors.lost_recorder());
+        }
         Self {
             inner: Arc::new(Inner {
                 id: ContextId::next(),
@@ -581,6 +586,12 @@ impl Context {
     /// GPU errors that arrived late (see [`crate::scope`]).
     pub(crate) fn gpu_errors(&self) -> &GpuErrors {
         &self.inner.gpu_errors
+    }
+
+    /// Why the GPU device was lost, if it was and Gup created the device
+    /// (a host's device keeps the host's callback).
+    pub(crate) fn device_lost(&self) -> Option<String> {
+        self.inner.gpu_errors.lost()
     }
 
     /// Drop every cached pipeline and glue program (`gup-core`'s and the

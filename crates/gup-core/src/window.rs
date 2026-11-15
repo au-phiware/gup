@@ -221,6 +221,60 @@ impl WindowTarget {
     }
 }
 
+/// How many times a timed-out acquire is retried. Each try already waited
+/// wgpu's own timeout (about a second) for an image, so a frame that is
+/// still on the GPU gets several seconds.
+const ACQUIRE_RETRIES: usize = 4;
+
+impl WindowTarget {
+    /// The next surface texture. Reconfigures once on `Outdated`/`Lost`
+    /// (the window changed), retries on `Timeout` (earlier frames are still
+    /// on the GPU) and reports a lost device with its reason.
+    fn acquire_texture(&mut self, cx: &Context) -> Result<wgpu::SurfaceTexture> {
+        let mut reconfigured = false;
+        let mut timeouts = 0;
+        loop {
+            let error = match self.surface.get_current_texture() {
+                Ok(t) => return Ok(t),
+                Err(e) => e,
+            };
+            match error {
+                wgpu::SurfaceError::Outdated | wgpu::SurfaceError::Lost if !reconfigured => {
+                    reconfigured = true;
+                    let size = self.window.inner_size();
+                    self.config.width = size.width.max(1);
+                    self.config.height = size.height.max(1);
+                    self.configure(cx)?;
+                }
+                wgpu::SurfaceError::Timeout if timeouts < ACQUIRE_RETRIES => {
+                    timeouts += 1;
+                    static ONCE: std::sync::Once = std::sync::Once::new();
+                    ONCE.call_once(|| {
+                        eprintln!(
+                            "gup: the window's next frame is late (slow GPU frames); waiting"
+                        );
+                    });
+                }
+                // wgpu reports every failure of its own, a lost device
+                // included, as `Other`; the device-lost callback knows why.
+                error => {
+                    return Err(match cx.device_lost() {
+                        Some(reason) => Error::Gpu {
+                            what: "window target".to_owned(),
+                            message: format!(
+                                "the GPU device was lost ({reason}); a GPU batch that runs for \
+                                 seconds is killed by the driver, so draw fewer rows per frame \
+                                 (see `Lod`)"
+                            ),
+                        },
+                        None => Error::config("window target", format!("no frame: {error}")),
+                    });
+                }
+            }
+        }
+    }
+}
+
 impl RenderTarget for WindowTarget {
     fn desc(&self) -> TargetDesc {
         TargetDesc {
@@ -233,20 +287,7 @@ impl RenderTarget for WindowTarget {
     }
 
     fn acquire(&mut self, cx: &Context) -> Result<Frame> {
-        let texture = match self.surface.get_current_texture() {
-            Ok(t) => t,
-            // The window changed under us: reconfigure and try once more.
-            Err(wgpu::SurfaceError::Outdated | wgpu::SurfaceError::Lost) => {
-                let size = self.window.inner_size();
-                self.config.width = size.width.max(1);
-                self.config.height = size.height.max(1);
-                self.configure(cx)?;
-                self.surface
-                    .get_current_texture()
-                    .map_err(|e| Error::config("window target", format!("no frame: {e}")))?
-            }
-            Err(e) => return Err(Error::config("window target", format!("no frame: {e}"))),
-        };
+        let texture = self.acquire_texture(cx)?;
         let view = texture.texture.create_view(&wgpu::TextureViewDescriptor {
             format: Some(self.view_format()),
             ..Default::default()
