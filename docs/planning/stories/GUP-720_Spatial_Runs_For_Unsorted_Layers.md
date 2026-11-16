@@ -204,7 +204,8 @@ reorders each block to Morton order and adds the runs.
 
 ## Success Metrics
 
-- [ ] Shuffled 10M zoom GPU pass from 65.4 ms to under 16.7 ms.
+- [x] Shuffled 10M zoom GPU pass from 65.4 ms to under 16.7 ms. _`Auto`: 141.35
+      -> 16.29 ms (median of 3; the 65.4 was the spike's own pyramid)._
 
 ## Risk Assessment
 
@@ -218,17 +219,22 @@ reorders each block to Morton order and adds the runs.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified by eye (the shuffled zoom PNG)
-- [ ] `mask wasm-browser`: not needed, no layout, input or wasm scene changes
-- [ ] WASM size: `mask wasm-size` scatter gz bytes reported
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1` _(gup-core with all
+      features in `mask merge-check`, `cargo test -p gup`, and `tests/lod.rs` on
+      the HD 630 and under lavapipe)_
+- [x] Lint and format clean: `mask all-fix` (and `mask all-check`)
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified by eye (the shuffled zoom PNG: the 10M zoom at
+      1080p and the 1M zoom at 400 x 300 show the walk, no gaps)
+- [x] `mask wasm-browser`: not needed, no layout, input or wasm scene changes
+      (passed in `mask merge-check`)
+- [x] WASM size: `mask wasm-size` scatter gz bytes reported (395,572 B; main
+      392,836 B)
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
 
 ## Blocked (2026-11-16)
 
