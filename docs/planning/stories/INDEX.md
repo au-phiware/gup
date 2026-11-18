@@ -686,7 +686,7 @@ GUP-628 and GUP-631 (shared `selection.rs`).
 - [GUP-738](GUP-738_Long_Draws_Split_Across_Submits.md) 💡 — A ~1.1 s full draw
   makes the HD 630 driver reset the device (GUP-734): split very long draws
   across submits without changing the picture. Opus. Deps: GUP-734 ✅.
-- [GUP-744](GUP-744_Browser_Build_Stays_Under_Size_Cap.md) 📋 — Re-attribute the
+- [GUP-744](GUP-744_Browser_Build_Stays_Under_Size_Cap.md) 🚧 — Re-attribute the
   363,801 B gz over-wgpu browser build (cap 400,000), cut at least 25 KB with no
   behaviour change, and record a headroom policy (360,000 soft, 380,000 hard).
   Opus. Deps: GUP-721 ✅.
