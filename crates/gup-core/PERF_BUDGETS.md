@@ -78,8 +78,8 @@ X) or `info` (printed, never fails).
 | `zoom_culled.columns.bytes`        | 0         | exact     | `zoom_bench` on 4M sorted rows, 64 chunks                                     |
 | `lod.gpu_pass.median_ms`           | 2.27      | +25%      | `zoom_bench --columns --lod auto` on 10M sorted rows, zoomed (GUP-717)        |
 | `lod.cpu.median_ms`                | 0.58      | +20%      | `zoom_bench --columns --lod auto`, zoomed                                     |
-| `lod.draws.median`                 | 4         | exact     | `zoom_bench --columns --lod auto`, zoomed                                     |
-| `lod.instances.median`             | 28,430    | exact     | `zoom_bench --columns --lod auto`, zoomed: instances drawn of 10M rows        |
+| `lod.draws.median`                 | 7         | exact     | `zoom_bench --columns --lod auto`, zoomed                                     |
+| `lod.instances.median`             | 26,954    | exact     | `zoom_bench --columns --lod auto`, zoomed: instances drawn of 10M rows        |
 | `lod_full.gpu_pass.median_ms`      | 3.20      | +25%      | `zoom_bench --columns --lod auto --static` on 10M sorted rows, full view      |
 | `lod_full.cpu.median_ms`           | 0.62      | +20%      | `zoom_bench --columns --lod auto --static`, full view                         |
 | `lod_full.draws.median`            | 13        | exact     | `zoom_bench --columns --lod auto --static`, full view                         |
@@ -619,3 +619,9 @@ seeded violation (GUP-417 retrospective).
   docs stories at about 0, take the scatter from 384,562 to 391,766 B gz, 487 B
   under the +2% limit. Re-recorded. Over bare wgpu 359,406 (41 KB of headroom
   under the 400,000 cap).
+- **GUP-720 merged (2026-11-19, orchestrator)**: spatial runs cull each tier
+  block per frame, so the sorted 10M zoom draws 7 ranges (was 4) and 26,954
+  instances (was 28,430); GPU 2.39–2.48 ms. Re-recorded from GUP-720's two runs.
+  The WASM scatter reads 396,161 B gz (+4,395 over the GUP-718 recording, within
+  +2%), over bare wgpu 363,801 (36 KB of headroom under the 400,000 cap); not
+  re-recorded.
