@@ -219,3 +219,190 @@ what a browser scatter does not need, and writes the headroom policy.
 - [ ] WASM size: `mask wasm-size` before and after pasted
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
+
+## AC1: Attribution (2026-11-19)
+
+Measured at `e7dad2d4` (current `main`) in this worktree, rustc 1.93.1,
+wasm-bindgen 0.2.113. `mask wasm-size`: scatter **397,397 B gz**, bare wgpu
+32,360, **over bare wgpu 365,037** (the orchestrator's main checkout read
+397,618 / 365,258; the 221 B difference is the checkout path inside panic
+locations, see below). `mask wasm-attrib` (raw bytes, name section excluded):
+file 1,357,534 B raw, name section 339,793 B.
+
+Ten largest crates:
+
+| Crate                  | Raw B   | Share of file |
+| ---------------------- | ------- | ------------- |
+| `gup_core`             | 382,629 | 28.19%        |
+| `data`                 | 183,339 | 13.51%        |
+| `core`                 | 138,131 | 10.18%        |
+| `other`                | 66,876  | 4.93%         |
+| `ttf_parser`           | 46,373  | 3.42%         |
+| `wasm_bindgen_futures` | 43,803  | 3.23%         |
+| `alloc`                | 34,608  | 2.55%         |
+| `wgpu`                 | 21,519  | 1.59%         |
+| `compiler_builtins`    | 17,629  | 1.30%         |
+| `hashbrown`            | 15,101  | 1.11%         |
+
+Twenty largest monomorphised groups:
+
+| Group                                                                                               | Instantiations | Raw B  |
+| --------------------------------------------------------------------------------------------------- | -------------- | ------ |
+| `wasm_bindgen_futures::future_to_promise::{{closure}}::{{closure}}`                                 | 9              | 39,647 |
+| `<gup_core::selection::Selection<T,M> as gup_core::selection::Layer>::fit_domains`                  | 6              | 22,236 |
+| `<gup_core::selection::Selection<T,M> as gup_core::selection::Layer>::hit_items`                    | 3              | 19,278 |
+| `<gup_core::selection::Selection<T,M> as gup_core::selection::Layer>::drain_feed`                   | 7              | 16,405 |
+| `core::slice::sort::unstable::quicksort::quicksort`                                                 | 6              | 15,114 |
+| `core::slice::sort::stable::quicksort::quicksort`                                                   | 5              | 8,692  |
+| `<&T as core::fmt::Debug>::fmt`                                                                     | 35             | 8,022  |
+| `<gup_core::selection::Selection<T,M> as gup_core::selection::Layer>::bind_axes`                    | 6              | 7,740  |
+| `hashbrown::raw::RawTable<T,A>::reserve_rehash`                                                     | 11             | 7,277  |
+| `core::slice::sort::stable::drift::sort`                                                            | 5              | 6,600  |
+| `<gup_core::selection::Selection<T,M> as gup_core::selection::Layer>::row_fields`                   | 6              | 5,430  |
+| `<S as gup_core::encoding::DynShaderFn>::params_bytes`                                              | 14             | 4,942  |
+| `alloc::sync::Arc<T,A>::drop_slow`                                                                  | 36             | 4,401  |
+| `<S as gup_core::encoding::DynShaderFn>::signature`                                                 | 14             | 3,282  |
+| `alloc::raw_vec::RawVec<T,A>::grow_one`                                                             | 39             | 3,070  |
+| `gup_core::plot::Plot::resolve_full::{{closure}}`                                                   | 9              | 2,927  |
+| `alloc::vec::Vec<T,A>::push`                                                                        | 38             | 2,814  |
+| `<gup_core::encoding::ColumnEncoding<A,S,D> as gup_core::encoding::DynColumnEncoding<T>>::evaluate` | 15             | 2,589  |
+| `core::slice::sort::unstable::ipnsort`                                                              | 6              | 2,581  |
+| `wasm_bindgen_futures::future_to_promise::{{closure}}`                                              | 9              | 2,531  |
+
+Thirty largest functions and data segments:
+
+| Item                                                                              | Raw B   | Share of file |
+| --------------------------------------------------------------------------------- | ------- | ------------- |
+| `data segment ".rodata"`                                                          | 183,202 | 13.50%        |
+| `gup_core::plot::Plot::resolve_full`                                              | 31,346  | 2.31%         |
+| `gup_core::render::Renderer::prepare`                                             | 14,997  | 1.10%         |
+| `ttf_parser::Face::parse`                                                         | 13,194  | 0.97%         |
+| `gup_core::shader::glue::emit`                                                    | 11,800  | 0.87%         |
+| `<gup_core::selection::Selection<T,M> as gup_core::selection::Layer>::prepare`    | 10,362  | 0.76%         |
+| `<gup_core::selection::Selection<T,M> as gup_core::selection::Layer>::edge_marks` | 10,142  | 0.75%         |
+| `fontdue::font::Font::from_bytes`                                                 | 9,494   | 0.70%         |
+| `gup_core::web::show::{{closure}}`                                                | 8,189   | 0.60%         |
+| `gup_core::plot::Plot::resolve`                                                   | 7,842   | 0.58%         |
+| `wasm_bindgen_futures::future_to_promise::{{closure}}::{{closure}}`               | 7,772   | 0.57%         |
+| `gup_core::context::Context::new::{{closure}}`                                    | 7,631   | 0.56%         |
+| `ttf_parser::tables::cff::cff1::_parse_char_string`                               | 6,873   | 0.51%         |
+| `wasm_bindgen_futures::future_to_promise::{{closure}}::{{closure}}`               | 6,457   | 0.48%         |
+| `<gup_core::selection::Selection<T,M> as gup_core::selection::Layer>::hit_items`  | 6,426   | 0.47%         |
+| `<gup_core::selection::Selection<T,M> as gup_core::selection::Layer>::hit_items`  | 6,426   | 0.47%         |
+| `<gup_core::selection::Selection<T,M> as gup_core::selection::Layer>::hit_items`  | 6,426   | 0.47%         |
+| `gup_core::gpu_pick::<impl gup_core::plot::Plot>::request_pick`                   | 6,260   | 0.46%         |
+| `gup_text::opentype::OtLayout::kern`                                              | 6,234   | 0.46%         |
+| `gup_core::shader::link`                                                          | 5,828   | 0.43%         |
+| `wasm_bindgen_futures::future_to_promise::{{closure}}::{{closure}}`               | 5,653   | 0.42%         |
+| `wasm_bindgen_futures::future_to_promise::{{closure}}::{{closure}}`               | 5,281   | 0.39%         |
+| `gup_core::column::ColumnStore::lod_tiers`                                        | 4,629   | 0.34%         |
+| `dlmalloc::dlmalloc::Dlmalloc<A>::malloc`                                         | 4,586   | 0.34%         |
+| `wasm_bindgen_futures::future_to_promise::{{closure}}::{{closure}}`               | 4,539   | 0.33%         |
+| `<gup_core::plot::Plot as gup_core::chart::Chart>::handle`                        | 4,523   | 0.33%         |
+| `wasm_bindgen_futures::future_to_promise::{{closure}}::{{closure}}`               | 4,093   | 0.30%         |
+| `core::num::flt2dec::strategy::dragon::format_shortest`                           | 4,082   | 0.30%         |
+| `compiler_builtins::math::libm_math::rem_pio2_large::rem_pio2_large`              | 3,988   | 0.29%         |
+| `core::num::dec2flt::<impl core::str::traits::FromStr for f64>::from_str`         | 3,821   | 0.28%         |
+
+Raw bytes find targets but do not rank them: repeated instantiations compress to
+almost nothing. To rank by gz, each function body was compressed in file order
+with a sync flush after it, and its share of the output attributed to it (a
+deflate-window-aware estimate; the totals run about 13% over the real gz). By
+that estimate the code section is 297,857 B gz and the data section 86,184, of
+which the two Inter subsets are 40,213, the `f64::from_str` table
+(`core::num::dec2flt`, 651 powers of five, 10,416 B of incompressible bytes)
+10,135, the WGSL text 4,140, and vtables, panic locations and message strings
+the rest.
+
+`gup_core` by module (gz estimate, function names; inlined callees count toward
+their caller): `selection` 32,248, `plot` 31,639, `scale` 18,074, `render`
+16,386, `column` 11,774 (of which LOD's `lod_tiers` 2,333), `encoding` 10,012,
+`shader` 9,575, `web` 7,603, `context` 4,435, `gpu_pick` 3,983, `target` 3,201,
+`order` 3,005, `scope` 2,700, `pick` 2,202, `lod` 927 (all LOD-named functions
+together, 5,726), `describe` 584, `input` 78; `tooltip` and `text_layer` have no
+function of their own (inlined into `plot`). Of `selection`, the copies per row
+type are cheap: the six `fit_domains` cost 2,048 together, 1,817 of it the first
+copy, so moving `Selection`'s generic methods behind a T-free core would save
+about 1–2 KB.
+
+Debug, Display and panics: `core::fmt` 7,520 gz, float formatting (`flt2dec`)
+4,915, `Debug` impls 4,611 (63 functions; the largest is wgpu's `TextureFormat`,
+reached from gup-core's error messages and from wgpu), `Display` impls 2,261,
+panic entry points 1,098. Panic locations name each source file by its absolute
+path; dropping every path prefix would save 259 B gz, and the checkout path
+moves the total by about 200 B. Neither is a cut, and the measurement is sound.
+
+Features: `wgpu`'s `wgsl` and default features link no naga (no `naga` crate in
+the file); gup-core requests only `TIMESTAMP_QUERY` as optional. The harness's
+`web-sys` feature (`HtmlCanvasElement`) and gup-core's fifteen are all called by
+`web.rs`. `ttf-parser` is already built without default features
+(`opentype-layout` only). No unused feature pulls in code.
+
+Build flags: `panic = "abort"` is already the wasm32-unknown-unknown default
+(`rustc --print cfg`), and `wasm-bindgen --remove-name-section` already strips
+names. `wasm-opt -Oz` (binaryen 129) takes the scatter 401 B gz down but bare
+wgpu 1,432 down, so over bare wgpu rises by 1,031: not a cut.
+
+Candidates, each measured alone with `mask wasm-size`'s default build (over bare
+wgpu, B gz):
+
+| Candidate                                                                              | Saving  | Verdict                                                                                   |
+| -------------------------------------------------------------------------------------- | ------- | ----------------------------------------------------------------------------------------- |
+| One unstable `u64` sort and one stable index sort for the crate (11 sort copies to 3)  | 8,767   | **Cut** (`85eab6c4`)                                                                      |
+| `ttf-parser`'s CFF real-number parse without `f64::from_str` (its table and `dec2flt`) | ~15,865 | Needs a patched or forked dependency: **escalated**                                       |
+| The edge solve's reach index (GUP-724), scan instead                                   | 3,061   | Not a cut: a sized layer's frame CPU goes back from 0.9 to 11.6 ms                        |
+| wgpu `TextureFormat` names out of gup-core's error messages                            | 448     | Below the 1,000 B floor for a cut; changes messages                                       |
+| `wasm-opt -Oz` on both harnesses                                                       | -1,031  | Not a cut                                                                                 |
+| WGSL minified (comments, indentation)                                                  | ~400    | Below the floor                                                                           |
+| `Selection` generic methods behind a T-free core                                       | ~1–2 KB | Below or at the floor; touches every `Layer` method and the public `DynColumnEncoding<T>` |
+
+## Blocked (2026-11-19)
+
+**Question**: the safe cuts sum to 8,767 B gz, under the 15,000 floor; the one
+large remaining win, about 15,900 B gz, needs `ttf-parser` to stop calling
+`f64::from_str`. Which route, if any, should this story take?
+
+Where it stands: `85eab6c4` (the shared sorts) takes over bare wgpu from 365,037
+to **356,270** B gz (scatter 388,630), under the 360,000 line of the headroom
+policy. gup-core lib tests pass (339, 3 ignored, as before). AC1's attribution
+is above; AC3 (the policy in `PERF_BUDGETS.md`) is not written yet.
+
+The finding: `core::num::dec2flt` (the `f64::from_str` code, 3,024 B gz, and its
+10,416 B table of powers of five, 10,135 B gz) is linked only by
+`ttf_parser::tables::cff::dict::parse_float` (CFF DICT real numbers,
+`s.parse()`), reached from `Face::parse`, which both fontdue and gup-text call.
+The bundled Inter subsets are TrueType (`glyf`, no CFF table), so the path never
+runs for them, but gup-text takes user fonts (`TextSystem::with_font`,
+`add_fallback`), so CFF support is a feature. ttf-parser 0.25.1 (fontdue
+0.9.5's) has the same `s.parse()`. Measured with a scratch `[patch]` of the
+harness (reverted, never committed) replacing the parse with a crude
+digit-and-exponent loop: over bare wgpu 356,270 to **340,405** (-15,865).
+
+Options:
+
+1. **Fork `ttf-parser` 0.21.1** into the workspace with an exact small parser
+   for CFF reals (the nibble string is at most 64 characters: integer mantissa
+   and power of ten, exact whenever the mantissa fits 2^53 and the power is
+   within ±22, which covers CFF's DICT values; something exact for the rest),
+   applied with `[patch.crates-io]` in the workspace and both harnesses. About
+   -15,500 after the parser's own bytes. Caveat: `[patch]` does not reach users
+   who build gup from crates.io, so the harness would measure a binary users do
+   not get unless gup-text (and fontdue) depend on a published fork. A
+   dependency decision, not mine.
+2. **Upstream**: a PR to ttf-parser replacing `s.parse()`, taken when released
+   (fontdue would need the bump too). Right for users, slow, lands nothing in
+   this story.
+3. **Stop here**: keep the 8,767 (over bare wgpu 356,270, inside the 360,000
+   policy line, 43.7 KB under the cap), write the headroom policy and the
+   attribution into `PERF_BUDGETS.md`, and file the CFF parse as GUP-745 (option
+   2, with option 1 as its fallback if upstream stalls).
+
+Not options: the reach index (-3,061, but a sized layer's CPU per frame goes
+from 0.9 back to 11.6 ms), message edits for `TextureFormat` (-448), WGSL
+minification (~-400), `wasm-opt -Oz` (+1,031 over bare wgpu), and a T-free
+`Selection` core (~1–2 KB for a rewrite of every `Layer` method). Each other
+candidate I can see is under the 1,000 B floor for a cut.
+
+**Recommendation**: option 3 now, with GUP-745 for the upstream fix; option 1
+only if the owner wants the bytes before upstream moves and accepts that the
+harness then measures a patched dependency.
