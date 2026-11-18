@@ -1443,3 +1443,185 @@ fn a_rolling_window_frame_is_cheap() {
         assert!(quiet.as_secs_f64() < 0.008, "p95 {quiet:?}");
     }
 }
+
+/// A bubble layer over fixed scales (so appends move no mark), with an
+/// appender and chunks of `chunk` rows.
+fn bubbles_appended(first: &[Row], chunk: u32, lod: Lod) -> (Plot, gup_core::Appender<Row>) {
+    let mut plot = Plot::new();
+    let x = plot.x(Linear::new().domain(-50.0, 1050.0));
+    let y = plot.y(Linear::new().domain(-250.0, 50.0));
+    let colour = ScaleRef::new(Sequential::viridis().domain(0.0, 15.0));
+    plot.add(Selection::<Row, Circle>::new(first.to_vec()))
+        .attr(Circle::X, x.encode(|r: &Row| r.0))
+        .attr(Circle::Y, y.encode(|r: &Row| r.1))
+        .attr(
+            Circle::RADIUS,
+            Linear::new()
+                .domain(0.0, 15.0)
+                .range(Px(1.0), Px(9.0))
+                .encode(|r: &Row| r.2),
+        )
+        .attr(Circle::FILL, colour.encode(|r: &Row| r.2))
+        .lod(lod);
+    let layer = plot.layer_mut::<Row, Circle>().unwrap();
+    layer.max_chunk_rows(chunk);
+    let feed = layer.appender();
+    (plot, feed)
+}
+
+/// GUP-721 with GUP-719: appends to a size-ordered layer. The newest chunk
+/// builds tiers over `TAIL` rows and its rows past them draw in full, each
+/// through its own entry among the layer's size-ordered spans; the picture
+/// stays that of every row.
+#[test]
+fn appends_to_a_size_ordered_layer_draw_the_tiers_and_the_rows_past_them() {
+    let cx = Context::new_blocking().unwrap();
+    const CHUNK: usize = 300_000;
+    let rows = bubbles(CHUNK + 2 * TAIL);
+    let (mut auto, tx) = bubbles_appended(&rows[..CHUNK], CHUNK as u32, Lod::Auto);
+    let (mut off, ox) = bubbles_appended(&rows[..CHUNK], CHUNK as u32, Lod::Off);
+    let first = draw(&cx, &mut auto);
+    assert_eq!(builds(&mut auto), 1);
+    let mid = CHUNK + TAIL + 1_000;
+    for feed in [&tx, &ox] {
+        feed.extend(rows[CHUNK..mid].iter().copied()).unwrap();
+    }
+    let a = draw(&cx, &mut auto);
+    let o = draw(&cx, &mut off);
+    assert_eq!(builds(&mut auto), 2, "the tail builds over {TAIL} rows");
+    assert_eq!(o.instances, mid as u64);
+    assert!(
+        a.instances < first.instances * 2,
+        "{} instances",
+        a.instances
+    );
+    // Rows past the tail's tiers draw in full.
+    for feed in [&tx, &ox] {
+        feed.extend(rows[mid..mid + 2_000].iter().copied()).unwrap();
+    }
+    let b = draw(&cx, &mut auto);
+    let ob = draw(&cx, &mut off);
+    assert_eq!(builds(&mut auto), 2, "no rebuild for 2,000 rows");
+    assert_eq!(
+        b.instances,
+        a.instances + 2_000,
+        "the new rows draw in full"
+    );
+    for (name, x, y) in [("tiers", &a, &o), ("past the tiers", &b, &ob)] {
+        let (_, rect) = shares(&x.image, &y.image, &auto);
+        eprintln!("appended bubbles, {name}: {rect:.3}% of the plot rect");
+        // Measured 3.258% and 3.363%; the same scene built at once (a
+        // smaller picture of the same rows, so more rows a pixel) differs
+        // 2.927%.
+        assert!(rect <= 4.5, "{name}: {rect:.3}% of the plot rect differs");
+    }
+}
+
+/// SVG of a size-ordered layer under LOD writes the circles it draws.
+#[test]
+fn svg_of_a_size_ordered_layer_writes_the_representatives() {
+    let cx = Context::new_blocking().unwrap();
+    let rows = bubbles(300_000);
+    let mut plot = bubble_plot(rows, Lod::Auto);
+    let drawn = draw(&cx, &mut plot).instances as usize;
+    let svg = svg_of(&cx, &mut plot, W, H);
+    assert_eq!(svg.matches("<circle ").count(), drawn);
+}
+
+/// Row `i` of a stream of bubbles: x climbs 0.001 a row, y is a wavy curve
+/// with a little noise, the size one of 16 levels drawn at random for each
+/// stretch of 50,000 rows.
+fn streamed_bubble(i: usize) -> Row {
+    let h = |k: u64| k.wrapping_mul(0x9e37_79b9_7f4a_7c15) >> 40;
+    let x = i as f64 * 0.001;
+    let noise = (h(i as u64) % 1000) as f64 / 250.0;
+    let level = h((i / 50_000) as u64 + 7) % 16;
+    (x, 50.0 + 30.0 * (x / 40.0).sin() + noise, level as f64)
+}
+
+/// A bubble layer of `rows` over fixed scales (x 0..2100, y 0..100).
+fn fixed_bubbles(rows: Vec<Row>, lod: Lod) -> Plot {
+    let mut plot = Plot::new();
+    let x = plot.x(Linear::new().domain(0.0, 2100.0));
+    let y = plot.y(Linear::new().domain(0.0, 100.0));
+    let colour = ScaleRef::new(Sequential::viridis().domain(0.0, 15.0));
+    plot.add(Selection::<Row, Circle>::new(rows))
+        .attr(Circle::X, x.encode(|r: &Row| r.0))
+        .attr(Circle::Y, y.encode(|r: &Row| r.1))
+        .attr(
+            Circle::RADIUS,
+            Linear::new()
+                .domain(0.0, 15.0)
+                .range(Px(1.0), Px(7.0))
+                .encode(|r: &Row| r.2),
+        )
+        .attr(Circle::FILL, colour.encode(|r: &Row| r.2))
+        .lod(lod);
+    plot
+}
+
+/// GUP-721, GUP-492: a rolling window over a size-ordered layer takes a
+/// level of detail: each chunk is sorted on its own (bucketed keys), and the
+/// ranks of its rows, read from the draw order after evictions renumber it,
+/// pick the representatives. The picture is that of a fresh plot of the held
+/// rows, and a pick names the data row, evicted rows counted.
+#[test]
+fn a_rolling_window_over_a_size_ordered_layer_takes_lod() {
+    let cx = Context::new_blocking().unwrap();
+    const WINDOW: usize = 1_000_000;
+    const TOTAL: usize = 2_000_000;
+    const BATCH: usize = 100_000;
+    let mut auto = fixed_bubbles((0..1).map(streamed_bubble).collect(), Lod::Auto);
+    let layer = auto.layer_mut::<Row, Circle>().unwrap();
+    layer.max_chunk_rows(1 << 20);
+    layer.window(RowWindow::LastRows(WINDOW));
+    let tx = layer.appender();
+    draw(&cx, &mut auto);
+    let mut total = 1;
+    while total < TOTAL {
+        let n = BATCH.min(TOTAL - total);
+        tx.extend((total..total + n).map(streamed_bubble)).unwrap();
+        total += n;
+        draw(&cx, &mut auto);
+    }
+    let kept = auto.layer_mut::<Row, Circle>().unwrap().len();
+    let first = total - kept;
+    assert!(kept >= WINDOW, "{kept} held");
+    let a = draw(&cx, &mut auto);
+    assert!(
+        a.instances < kept as u64 / 10,
+        "{} instances of {kept} rows",
+        a.instances
+    );
+    let mut fresh = fixed_bubbles((first..total).map(streamed_bubble).collect(), Lod::Off);
+    let o = draw(&cx, &mut fresh);
+    assert_eq!(o.instances, kept as u64);
+    let (image, rect) = shares(&a.image, &o.image, &auto);
+    eprintln!(
+        "windowed bubbles: {kept} held, {} instances; ΔE00 > 10: {image:.3}% of the image, \
+         {rect:.3}% of the plot rect",
+        a.instances
+    );
+    save(&a.image, "lod-window-bubbles-auto.png");
+    save(&o.image, "lod-window-bubbles-fresh.png");
+    // Measured 2.437%; the gate is 1.3x.
+    assert!(rect <= 3.2, "{rect:.3}% of the plot rect differs");
+
+    // A pick names a held data row drawn where its data says.
+    let (mut hits, mut near) = (0, 0);
+    for at in grid(&auto, 9.0) {
+        let Some(id) = auto.pick_row_gpu(&cx, at).unwrap() else {
+            continue;
+        };
+        hits += 1;
+        let (x, y, size) = streamed_bubble(id.row);
+        let p = auto.pixel(x, y).unwrap();
+        let radius = 1.0 + 6.0 * size as f32 / 15.0;
+        near += usize::from(
+            id.row >= first
+                && (p.x - at.x).hypot(p.y - at.y) <= radius + gup_core::PICK_TOLERANCE.0 + 1.0,
+        );
+    }
+    assert!(hits > 100, "{hits} grid points hit a bubble");
+    assert_eq!(near, hits, "a picked row is not a held row under the pixel");
+}
