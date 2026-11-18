@@ -20,8 +20,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Track N5: Performance at Scale **Status**: 🚧 In Progress
-**Created**: 2026-11-19
+**Initiative**: Track N5: Performance at Scale **Status**: ✅ Complete
+(2026-11-19; AC2's floor not met, see Resolution) **Created**: 2026-11-19
 
 ## Context
 
@@ -64,42 +64,43 @@ what a browser scatter does not need, and writes the headroom policy.
 
 ### AC1: Attribute the current scatter
 
-- [ ] Run `mask wasm-size` and `mask wasm-attrib` on current `main`; paste into
+- [x] Run `mask wasm-size` and `mask wasm-attrib` on current `main`; paste into
       the story: the crate table (top ten, raw B and share), the 20 largest
       monomorphised groups with instantiation counts, and the 30 largest
       functions and data segments.
-- [ ] Group `gup_core`'s bytes by module (`lod`, `selection`, `plot`, `scale`,
+- [x] Group `gup_core`'s bytes by module (`lod`, `selection`, `plot`, `scale`,
       `shader`, `describe`, `tooltip`, `gpu_pick`, `text_layer`, `input`, `web`,
       others) using the function names, and list each cut candidate with its
       measured gz saving (build with the candidate removed, `mask wasm-size`
       before and after, one candidate at a time).
-- [ ] Record the Debug/Display/panic-string share (`core::fmt`, `Debug` impls,
+- [x] Record the Debug/Display/panic-string share (`core::fmt`, `Debug` impls,
       `unwrap`/`expect` messages) and whether `wgpu` features or the harness's
       `wasm-bindgen`/`web-sys` features pull in unused code.
 
 ### AC2: Cut
 
-- [ ] Over bare wgpu falls by at least **25,000 B gz** from the AC1 baseline
-      (about 363,801 to at most 338,800). If AC1 shows safe candidates sum to
-      less, the target is their sum with a **floor of 15,000 B**; below the
-      floor, stop and report (Escalation).
-- [ ] No behaviour change: every native golden is byte-identical (no `BLESS`),
+- [ ] **Not met** (8,767 B gz; see Resolution and GUP-745). Over bare wgpu falls
+      by at least **25,000 B gz** from the AC1 baseline (about 363,801 to at
+      most 338,800). If AC1 shows safe candidates sum to less, the target is
+      their sum with a **floor of 15,000 B**; below the floor, stop and report
+      (Escalation).
+- [x] No behaviour change: every native golden is byte-identical (no `BLESS`),
       `cargo test -- --test-threads=1` passes without test edits, and
       `mask wasm-browser` passes with identical pixel counts.
-- [ ] Public API unchanged: `cargo check --examples` and the doctests pass
+- [x] Public API unchanged: `cargo check --examples` and the doctests pass
       without edits, and `cargo public-api`-style diff, or a read of the `pub`
       items in the diff, shows no signature change.
-- [ ] A cut that makes code unreachable by default but available by a feature or
+- [x] A cut that makes code unreachable by default but available by a feature or
       by an opt-in is not allowed unless the default behaviour is unchanged for
       the scatter and for `Lod::Auto` on 10M rows (the LOD tests pass unedited).
 
 ### AC3: Headroom policy
 
-- [ ] `PERF_BUDGETS.md` gains a "Headroom policy" paragraph under "WASM size"
+- [x] `PERF_BUDGETS.md` gains a "Headroom policy" paragraph under "WASM size"
       with the rule in Decisions, the AC1 attribution (condensed, dated, with
       commit) replacing or sitting beside the GUP-450 table, and the cuts made
       with their measured gz.
-- [ ] `scripts/perf_budget.sh` still parses the file (`mask perf-budget` runs
+- [x] `scripts/perf_budget.sh` still parses the file (`mask perf-budget` runs
       and prints the WASM rows), and no budget row value is edited by the worker
       (the orchestrator re-records).
 
@@ -158,13 +159,13 @@ what a browser scatter does not need, and writes the headroom policy.
 
 ## Technical Tasks
 
-- [ ] Baseline `mask wasm-size` and `mask wasm-attrib`; paste (AC1).
-- [ ] Group by module and measure each candidate alone (AC1).
-- [ ] Apply cuts, largest first, measuring after each; keep a cut only if it
+- [x] Baseline `mask wasm-size` and `mask wasm-attrib`; paste (AC1).
+- [x] Group by module and measure each candidate alone (AC1).
+- [x] Apply cuts, largest first, measuring after each; keep a cut only if it
       saves at least 1,000 B gz.
-- [ ] Run tests, goldens, `mask wasm-browser` (AC2).
-- [ ] Write the policy and the attribution into `PERF_BUDGETS.md` (AC3).
-- [ ] Propose the new re-record values in the retrospective for the
+- [x] Run tests, goldens, `mask wasm-browser` (AC2).
+- [x] Write the policy and the attribution into `PERF_BUDGETS.md` (AC3).
+- [x] Propose the new re-record values in the retrospective for the
       orchestrator.
 
 ## Dependencies
@@ -189,9 +190,9 @@ what a browser scatter does not need, and writes the headroom policy.
 
 ## Success Metrics
 
-- [ ] `wasm.over_wgpu.gz_bytes` at most 338,800 (or the AC1-justified target,
-      never above 348,800).
-- [ ] Headroom policy present in `PERF_BUDGETS.md` and followed by this story.
+- [ ] **Not met** (356,270). `wasm.over_wgpu.gz_bytes` at most 338,800 (or the
+      AC1-justified target, never above 348,800).
+- [x] Headroom policy present in `PERF_BUDGETS.md` and followed by this story.
 
 ## Risk Assessment
 
@@ -207,18 +208,18 @@ what a browser scatter does not need, and writes the headroom policy.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] Rendered output verified: goldens byte-identical, `mask wasm-browser`
+- [x] All Acceptance Criteria are checked (AC2's floor not met, recorded)
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] Rendered output verified: goldens byte-identical, `mask wasm-browser`
       pixel counts identical to before
-- [ ] `mask wasm-browser` passes (wasm code is touched)
-- [ ] WASM size: `mask wasm-size` before and after pasted
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] `mask wasm-browser` passes (wasm code is touched)
+- [x] WASM size: `mask wasm-size` before and after pasted
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
 
 ## AC1: Attribution (2026-11-19)
 
@@ -406,3 +407,148 @@ candidate I can see is under the 1,000 B floor for a cut.
 **Recommendation**: option 3 now, with GUP-745 for the upstream fix; option 1
 only if the owner wants the bytes before upstream moves and accepts that the
 harness then measures a patched dependency.
+
+## Resolution (2026-11-19)
+
+The orchestrator chose option 3: no dependency is forked or patched for the
+harness, because the harness would then measure a build users do not get.
+
+**AC2's floor was not met.** The safe cuts total **8,767 B gz** (over bare wgpu
+365,037 to 356,270), against a floor of 15,000. The rest of the target is not in
+gup's code: about 15,900 B gz is `f64::from_str` (`core::num::dec2flt`, its code
+and its 10,416 B table of powers of five), linked only by ttf-parser's CFF DICT
+real-number parse. That was measured with a scratch `[patch]` of the harness
+(356,270 to 340,405), reverted and never committed. GUP-745 takes it on, in a
+dependency that users get.
+
+The rejected candidates and their measured costs are in the AC1 table above. The
+reach index (GUP-724) costs 3,061 B gz and holds a sized layer's frame CPU at
+0.9 ms instead of 11.6 ms, so it stays.
+
+## Implementation Summary
+
+- `crates/gup-core/src/sort.rs` (new, `pub(crate)`): `sort_u64` (the crate's one
+  unstable sort), `sort_f64` (by `total_cmp`, through order-preserving `u64`
+  bits), `sort_dedup_usize`, `sort_indices_by` (the crate's one stable sort,
+  over indices with a `dyn` comparator) and `sort_by` on top of it. Three unit
+  tests: keys order as `total_cmp` (both zeros, infinities, NaNs), `sort_by` is
+  stable, and dedup.
+- Call sites moved to it: `order.rs` and `lod.rs` (the packed `u64` sorts),
+  `transform::box_stats`, `scale/symlog.rs`, `scale/legend.rs`,
+  `builder/area.rs` and the edge cache in `selection.rs` (`f64`s),
+  `Layer::write_brush` (brushed rows), `pick.rs` (`RowId`s, packed into `u64`
+  while both halves fit 32 bits, else the stable sort), `gpu_pick.rs` (pick draw
+  order, polled picks), `plot.rs` (focus order, tick-label boxes). `gup-text`'s
+  kern lookups are inserted in place (a font has a handful). Each gives exactly
+  the order of the sort it replaced; the reach index keeps its own unstable
+  sort, whose tie order among equal positions it may depend on.
+- `PERF_BUDGETS.md`: "Headroom policy (GUP-744)" under "WASM size", and "Where
+  the bytes go (GUP-744)" beside GUP-450's tables. No budget row was edited.
+- GUP-745 written.
+
+Proposed re-record values for the orchestrator (this worktree, rustc 1.93.1):
+`wasm.scatter.gz_bytes` 388,630, `wasm.over_wgpu.gz_bytes` 356,270,
+`wasm.per_row_type.gz_bytes` 707, `wasm.svg_export.gz_bytes` 4,668
+(`wasm.wgpu.gz_bytes` 32,360 unchanged).
+
+### Definition-of-Done evidence
+
+- `mask wasm-size`, before (`e7dad2d4`): scatter 397,397, over bare wgpu
+  365,037. After: scatter 388,630, over bare wgpu 356,270, per row type 707, SVG
+  export 4,668; the WASM rows pass `perf_budget.sh --wasm-only`.
+- `mask wasm-browser`, before and after, identical pixel counts:
+  `white=36795 grey=9607 coloured=17598`, `chunked-diff=0px/0`,
+  `dict=798,797,806,852,320`, `dict-null-row-diff=0px`, `scales=2785`,
+  `band=3059`, `diverging=3747`, `user=4148`, `interactive=ok`. The frame counts
+  of the asynchronous steps vary from run to run (`gpu-pick-frames` 3 before, 4
+  after; `gpu-hover-frames` 7 and 5); they count frames waited, not pixels.
+- `mask merge-check`: every step PASS (story-ids, doc, docs-rs, gup-core 1,054
+  passed and 8 ignored, tour-pages, tour-app, wasm-size, wasm-browser; dogfood
+  skipped by default).
+- No golden was blessed; `git diff --stat e7dad2d4 -- tests/golden` is empty.
+- Public API: the diff adds only `pub(crate)` items and a private function; no
+  `pub` signature changed.
+- `mask all-check`: exit 0. `mask feature-matrix`: all 7 rows ok (483 s).
+  `cargo test -p gup -- --test-threads=1`: 11 result lines, all ok, 154 passed,
+  0 failed, 2 ignored. `cargo test -p gup-core --test lod` under lavapipe: 37
+  passed, 0 failed. All of it was run at `240d0d02`.
+- `mask perf-budget` was not run (it needs the display GPU's timing runs). The
+  sorts this story moved are not on a per-frame path, and the zoom and LOD rows'
+  sorts (`order.rs`, `lod.rs`) still call the same `sort_unstable` on the same
+  `u64`s, now through a function marked `#[inline(never)]`.
+
+## Retrospective
+
+**Completed**: 2026-11-19
+
+### Key Technical Learnings
+
+#### Rank WASM bytes by gz, not raw
+
+- **Challenge**: `twiggy`'s raw sizes pointed at `Selection<T, M>`'s copies per
+  row type (six `fit_domains` of 3.7 KB each, 127 KB raw for the module), but
+  `wasm.per_row_type.gz_bytes` said a row type costs about 1 KB gz.
+- **Solution**: compress the code section function by function in file order,
+  with a sync flush after each, and attribute each flush's output to its
+  function. Repeated instantiations then show what they really cost: the five
+  extra `fit_domains` copies, 230 B gz together. Sorts, whose copies differ by
+  element type and comparator, cost about 1.5 KB gz each.
+- **Pattern**: a monomorphised copy is cheap when it is nearly identical to
+  another within deflate's 32 KB window, and dear when its code differs. Rank by
+  that estimate; judge by `mask wasm-size`.
+
+#### Look at the data segment's entropy
+
+- **Challenge**: the data section was 86 KB gz, half of it not fonts.
+- **Solution**: scan `.rodata` in 512 B blocks for high entropy. One 10 KB block
+  was `core::num::dec2flt`'s table of powers of five, and `twiggy paths` showed
+  that only ttf-parser's CFF reader calls `f64::from_str`. That single call is
+  worth about 15.9 KB gz, more than every safe cut together.
+- **Pattern**: an incompressible static table counts in full in the gz total.
+  Find them by entropy, then find who links them.
+
+#### Sorts that give exactly the same order
+
+- **Pattern**: an unstable sort can replace another sort only where equal
+  elements are indistinguishable (integers; `f64`s by `total_cmp`, where equal
+  keys are equal bits). Any stable sort gives the stable order. Packing a key
+  and an index into a `u64` (as `order.rs` already did) turns a stable sort by
+  key into the shared unstable one.
+
+### Architectural Decisions
+
+#### One unstable and one stable sort for the crate
+
+- **Decision**: `crate::sort` holds the crate's sorts; new code sorts through
+  it.
+- **Reasoning**: each new element type or comparator compiled a whole sort (11
+  instantiations, about 15 KB gz).
+- **Trade-off**: the cold stable sorts compare through a `dyn` closure, and
+  `f64` sorts make an extra pass to convert to keys and back. Neither is on a
+  per-frame path: focus order, pick draw order, polled picks, tick-label boxes,
+  the edge cache (once per chunk and epoch), and brushes.
+- **Future**: `clippy` cannot enforce it. A new `sort_by` in gup-core costs
+  about 1.5 KB gz, and the policy's 5,000 B rule will not catch one.
+
+#### No dependency patch for the harness
+
+- **Decision** (orchestrator): the harness measures what crates.io users get, so
+  `[patch]` is not a cut.
+- **Future**: GUP-745 removes the float parser in a dependency users get.
+
+### Development Workflow Insights
+
+- Scratch measurements (the ttf-parser patch, the reach index stubbed, the
+  `TextureFormat` names removed) were made in the worktree and reverted with
+  `git checkout`. Each took one incremental LTO build, about 25 s with two jobs.
+- `wasm-bindgen --out-name` changes import module names and so the size: a quick
+  measuring script must use the same name as `wasm_size.sh`
+  (`gup-core-scatter`), or its numbers are about 1 KB gz off.
+- The `--test-threads=1` lib suite (339 tests) took 63 s; `mask merge-check`
+  took about 20 minutes with two jobs.
+
+### Follow-up Stories
+
+1. **GUP-745: Fonts Without a Float Parser in the Browser Build**: remove
+   ttf-parser's `f64::from_str` from the browser build (about 15,900 B gz) in a
+   dependency that users get. An upstream PR needs the owner's approval.
