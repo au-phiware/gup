@@ -173,7 +173,11 @@ impl Retain {
 /// GUP-721) takes a level of detail too: a cell's representative is its
 /// largest mark (in buckets of 12.5% of size, then the lowest row), and a
 /// tier draws each of its blocks of representatives largest first, so large
-/// marks lie beneath small ones as in the full draw.
+/// marks lie beneath small ones as in the full draw. Where every cell holds
+/// marks of many sizes (sizes drawn at random for each row of a dense
+/// layer) the full draw shows the smallest marks on top and the thinned one
+/// only its largest, so the picture differs (23% of a 400 x 300 plot rect for
+/// 300,000 such rows): use [`Off`](Lod::Off) there.
 ///
 /// A layer that grows by appends (GUP-719): its full chunks keep their
 /// tiers whatever the new rows' extent. Its newest chunk draws every row
