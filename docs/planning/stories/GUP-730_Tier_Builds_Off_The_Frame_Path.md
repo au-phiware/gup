@@ -16,8 +16,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Track N5: Performance at Scale **Status**: 🚧 In Progress
-**Created**: 2026-11-12
+**Initiative**: Track N5: Performance at Scale **Status**: ✅ Complete
+(2026-11-19) **Created**: 2026-11-12
 
 ## Context
 
@@ -65,13 +65,16 @@ tiers are not built draws in full").
       every missing chunk before its one frame (in parallel).
 - [x] WASM (no threads) keeps GUP-716's one-chunk-a-frame build;
       `mask     wasm-size` unchanged within 1%. _+278 B gz (+0.07%)._
-- [ ] Every frame of GUP-719's append loop (a 2,000,000-row window, 100,000 rows
+- [x] Every frame of GUP-719's append loop (a 2,000,000-row window, 100,000 rows
       a frame, release) is at most 8 ms at p95, building frames included:
       GUP-719 measured 8-54 ms for the frames that rebuild the newest chunk's
       tiers (about 0.1 s per million rows) and asserts the bound only on frames
       that build nothing; `a_rolling_window_frame_is_cheap` then asserts all
-      frames. _Blocked: met for every frame that evicts nothing; the frames that
-      evict a chunk cost 16-21 ms (18-33 ms under `Lod::Off`). See Blocked._
+      frames. _Met for the level of detail (orchestrator, 2026-11-19, option A):
+      every frame that evicts nothing, building and installing frames included,
+      p95 4.1-4.4 ms. The frames that evict a chunk cost 16-21 ms (18-33 ms
+      under `Lod::Off`: the rows' drain, about 5.5 ms, and the filled chunk's
+      GPU growth, about 9.7 ms); GUP-747 owns them._
 - [x] `tests/lod.rs` gains a test that a hosted plot's frames never block on a
       build (a build seam that sleeps) and that the image converges to the
       headless one.
@@ -128,20 +131,20 @@ tiers are not built draws in full").
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] All examples compile: `cargo check --examples`
-- [ ] `mask wasm-size` scatter gz bytes reported
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] All examples compile: `cargo check --examples`
+- [x] `mask wasm-size` scatter gz bytes reported
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
 
 ## Implementation Summary
 
-Branch `worktree-agent-abc086026268b678c`, Start commit `86dc730c`. AC5 is
-blocked (see Blocked); everything else is done.
+Branch `worktree-agent-abc086026268b678c`, Start commit `86dc730c`. AC5 is met
+for the level of detail; the evicting frames are GUP-747's (the AC's note).
 
 - **Pool** (`crates/gup-core/src/lod/pool.rs`, native only): one process-wide
   pool of `available_parallelism() - 1` std threads (at least 1, at most 8),
@@ -247,38 +250,10 @@ sandbox).
 `cells_of`/`build_tiers`/`gather` split and the phased `tier_entries` are the
 change there.
 
-## Blocked (2026-11-19)
-
-**Question**: AC5 asks every frame of GUP-719's append loop to be at most 8 ms
-at p95. With the builds off the frame, every frame that evicts nothing is (p95
-4.1-4.4 ms, building and installing frames included), but the frames that evict
-a chunk take 16-21 ms under `Auto` and 18-33 ms under `Lod::Off`: the cost is
-the window's, not the level of detail's. Accept AC5 as met for the level of
-detail (with GUP-747 for the evicting frames), or fix eviction here?
-
-**Evidence**: the loop's table above. Traced in one evicting frame (temporary
-instrumentation, removed): `Selection::evict`'s `self.rows.drain(..n)` took
-5.3-5.7 ms (a memmove of about 48 MB of held rows), and `ColumnStore::upload`
-9.7 ms, growing the filled chunk's GPU buffer from 400,128 to 500,000 rows (the
-growth from 200,064 to 400,128 the frame before took 0.1 ms; whether the cost is
-the allocation or the submit is not measured). GUP-719's "building frames" of
-8-54 ms included these: a chunk fills, builds and evicts in one frame.
-
-**Options**:
-
-- **A. Accept** (as implemented): `a_rolling_window_frame_is_cheap` asserts the
-  p95 of the frames that evict nothing under 8 ms and prints both modes'
-  evicting frames; GUP-747 brings eviction under 8 ms (row storage that drops
-  its front without a memmove, the growth cost explained and removed).
-- **B. Fix here**: replace `Selection`'s `rows: Vec<T>` (17 readers) with
-  storage that drops whole chunks, and fix the growth path; appends are out of
-  this story's scope (GUP-719's).
-
-**Recommendation**: A.
-
 ## Retrospective
 
-**Completed**: pending the AC5 decision (Blocked, 2026-11-19)
+**Completed**: 2026-11-19 (AC5 by option A: the evicting frames, traced to the
+rows' drain and the chunk growth, went to GUP-747)
 
 ### Key Technical Learnings
 

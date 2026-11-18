@@ -37,8 +37,8 @@ GUP-730 traced one such frame:
   submit, not measured further.
 
 GUP-730's AC5 asked every frame of the loop to be at most 8 ms at p95; these
-frames are why it was met only for the frames that evict nothing (see GUP-730's
-Blocked section).
+frames are why it was met only for the frames that evict nothing (the
+orchestrator's option A, 2026-11-19), and this story owns the every-frame bound.
 
 ## User Story
 
