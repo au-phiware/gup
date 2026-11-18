@@ -292,3 +292,13 @@ this story reuses.
 2. **GUP-743: Rank-Ordered Tier Ranges Across Chunks** — draw the ranges of a
    tier in global rank order across blocks and chunks, so an appended
    size-ordered layer draws as the exact order does.
+
+### Amendment (2026-11-19, coordinator): opt-in
+
+- **Decision**: size-ordered LOD is opt-in through a new `Lod::AutoSized`
+  variant; `Lod::Auto` keeps drawing every row of a size-ordered layer (the
+  GUP-716 behaviour, test `a_layer_drawn_by_size_ignores_auto`). A variant, not
+  a flag, because `Selection::lod` takes one value and the choice is a level of
+  detail like the others; `Lod` is `non_exhaustive`, so adding it breaks no one.
+  The tests of this story use `AutoSized`. GUP-742 makes it the default and
+  removes the variant. The ACs above hold under `AutoSized`.

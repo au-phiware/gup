@@ -40,6 +40,9 @@ representative per cell cannot show both.
       size drawn at random for each row over the walk's curve) differs from the
       exact draw by at most a gate set from the measurement (the one-winner
       draw: 23.0%).
+- [ ] Size-ordered LOD becomes the default: `Lod::Auto` applies to layers drawn
+      largest first (GUP-721 made it opt-in through `Lod::AutoSized` because of
+      the 23% mixed-size picture); `AutoSized` is then removed.
 - [ ] Tiers still nest (the brute-force test of GUP-721, extended).
 
 ## Decisions

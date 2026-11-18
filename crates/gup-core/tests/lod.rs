@@ -479,6 +479,16 @@ fn unchanged(rows: usize, add: impl Fn(&mut Plot, &ScaleRef<Linear>, &ScaleRef<L
     );
 }
 
+/// A size-ordered layer takes a level of detail under `Lod::AutoSized`
+/// only (GUP-721): `Auto` still draws every row.
+fn sized(lod: Lod) -> Lod {
+    if lod == Lod::Auto {
+        Lod::AutoSized
+    } else {
+        lod
+    }
+}
+
 /// `n` bubbles (GUP-721): the walk's positions (a thin curve, so marks
 /// overlap heavily) in 100 clumps of 16 sizes (the third value, 0..16), a
 /// clump's size drawn at random. A cell of the thinned draw holds one size
@@ -518,12 +528,26 @@ fn bubble_plot(rows: Vec<Row>, lod: Lod) -> Plot {
             Linear::new().range(Px(1.0), Px(9.0)).encode(|r: &Row| r.2),
         )
         .attr(Circle::FILL, colour.encode(|r: &Row| r.2))
-        .lod(lod);
+        .lod(sized(lod));
     plot
 }
 
 #[test]
-fn a_layer_drawn_by_size_takes_lod() {
+fn a_layer_drawn_by_size_ignores_auto() {
+    unchanged(1_000_000, |plot, x, y, lod| {
+        plot.add(Selection::<Row, Circle>::new(walk(1_000_000)))
+            .attr(Circle::X, x.encode(|r: &Row| r.0))
+            .attr(Circle::Y, y.encode(|r: &Row| r.1))
+            .attr(
+                Circle::RADIUS,
+                Linear::new().range(Px(1.0), Px(3.0)).encode(|r: &Row| r.2),
+            )
+            .lod(lod);
+    });
+}
+
+#[test]
+fn a_layer_drawn_by_size_takes_lod_under_auto_sized() {
     let cx = Context::new_blocking().unwrap();
     let rows = bubbles(300_000);
     let (mut auto, mut off) = (
@@ -568,7 +592,7 @@ fn a_layer_drawn_by_size_in_one_colour_matches_the_exact_draw() {
                 Circle::RADIUS,
                 Linear::new().range(Px(1.0), Px(9.0)).encode(|r: &Row| r.2),
             )
-            .lod(lod);
+            .lod(sized(lod));
         plot
     };
     let (mut auto, mut off) = (one(Lod::Auto), one(Lod::Off));
@@ -1462,7 +1486,7 @@ fn bubbles_appended(first: &[Row], chunk: u32, lod: Lod) -> (Plot, gup_core::App
                 .encode(|r: &Row| r.2),
         )
         .attr(Circle::FILL, colour.encode(|r: &Row| r.2))
-        .lod(lod);
+        .lod(sized(lod));
     let layer = plot.layer_mut::<Row, Circle>().unwrap();
     layer.max_chunk_rows(chunk);
     let feed = layer.appender();
@@ -1556,7 +1580,7 @@ fn fixed_bubbles(rows: Vec<Row>, lod: Lod) -> Plot {
                 .encode(|r: &Row| r.2),
         )
         .attr(Circle::FILL, colour.encode(|r: &Row| r.2))
-        .lod(lod);
+        .lod(sized(lod));
     plot
 }
 
