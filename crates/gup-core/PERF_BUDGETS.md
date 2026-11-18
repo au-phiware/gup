@@ -88,8 +88,8 @@ X) or `info` (printed, never fails).
 | `pipeline.link_create.cold_ms`     | 1.04      | <= 10     | `pipeline_timings`, its first run                                             |
 | `pipeline.link_create.max_ms`      | 1.06      | info      | `pipeline_timings`                                                            |
 | `wasm.wgpu.gz_bytes`               | 32,360    | info      | `scripts/wasm_size.sh`, bare wgpu                                             |
-| `wasm.scatter.gz_bytes`            | 391,766   | +2%       | `scripts/wasm_size.sh`, the reference scatter                                 |
-| `wasm.over_wgpu.gz_bytes`          | 359,406   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10                                   |
+| `wasm.scatter.gz_bytes`            | 388,517   | +2%       | `scripts/wasm_size.sh`, the reference scatter                                 |
+| `wasm.over_wgpu.gz_bytes`          | 356,157   | <= 400000 | `scripts/wasm_size.sh`, RFC-001 §12 risk 10                                   |
 | `wasm.per_row_type.gz_bytes`       | 1,730     | <= 2600   | `scripts/wasm_size.sh`, one more Selection row type                           |
 | `wasm.svg_export.gz_bytes`         | 4,057     | info      | `scripts/wasm_size.sh`, the scatter with `svg-export` minus without (GUP-557) |
 
@@ -684,3 +684,8 @@ seeded violation (GUP-417 retrospective).
   The WASM scatter reads 396,161 B gz (+4,395 over the GUP-718 recording, within
   +2%), over bare wgpu 363,801 (36 KB of headroom under the 400,000 cap); not
   re-recorded.
+- **GUP-744 merged (2026-11-19, orchestrator)**: shared sorts (11 copies to 3)
+  take the scatter from 397,618 (GUP-721) to 388,517 B gz and over bare wgpu
+  from 365,258 to 356,157, under the 360,000 soft line of the headroom policy
+  above. Re-recorded down so the +2% tolerance tightens. The next large saving
+  is ttf-parser's CFF `f64::from_str` (about 15,900 B gz, GUP-745).
