@@ -454,7 +454,7 @@ pub mod __private {
     /// Build one chunk's level-of-detail tiers (GUP-714) and return the
     /// representatives of each stored tier, for `scale_bench --lod`.
     pub fn lod_tier_counts(rows: u32, xy: impl Fn(u32) -> (f64, f64)) -> Vec<u32> {
-        let tiers = crate::lod::Tiers::build(rows, xy);
+        let tiers = crate::lod::Tiers::build(rows, xy, None);
         (0..).map_while(|t| tiers.prefix(t)).collect()
     }
 
@@ -462,7 +462,7 @@ pub mod __private {
     /// draw order (every row past the stored tiers), for `lod_spike`'s
     /// gathered twin of the indexed draw.
     pub fn lod_tier_rows(rows: u32, xy: impl Fn(u32) -> (f64, f64), t: u32) -> Vec<u32> {
-        let tiers = crate::lod::Tiers::build(rows, xy);
+        let tiers = crate::lod::Tiers::build(rows, xy, None);
         match tiers.prefix(t) {
             Some(n) => tiers.order[..n as usize].to_vec(),
             None => (0..rows).collect(),

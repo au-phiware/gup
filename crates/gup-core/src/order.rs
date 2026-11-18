@@ -181,6 +181,17 @@ impl DrawOrder {
         self.bucketed
     }
 
+    /// Stored row `stored`'s rank for a level of detail (GUP-721): lower
+    /// draws first, equal within a size bucket (12.5%, whether or not the
+    /// layer's own keys are bucketed), so a tier's blocks can keep their
+    /// spatial order within a bucket.
+    pub(crate) fn lod_rank(&self, stored: u64) -> u32 {
+        let k = self.keys[stored as usize];
+        // Clearing low mantissa bits is monotone for either sign.
+        let q = f32::from_bits(k.to_bits() & !((1 << (23 - BUCKET_BITS)) - 1));
+        !ordered_bits(q)
+    }
+
     fn key(&self, v: f64) -> f32 {
         if v.is_finite() {
             // `+ 0.0` makes -0 equal to 0 under `total_cmp`.
