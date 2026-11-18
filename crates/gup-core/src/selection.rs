@@ -155,6 +155,15 @@ impl Retain {
 /// At or under the threshold every row draws, exactly as with
 /// [`Off`](Lod::Off).
 ///
+/// Zoomed in, a chunk draws only the representatives near the plot rect
+/// (in compact stretches with their own boxes, GUP-720), so a zoom into
+/// unsorted rows, whose every chunk spans the whole extent, costs about
+/// what its visible region costs. A chunk keeps cells down to the size at
+/// which they hold half its rows; zoomed one step past that, it draws its
+/// finest cells if more than [`Lod::AUTO_MIN_ROWS`] rows are in view
+/// (estimated from the stretches in view), else every row, which is exact
+/// and cheap there; and further in, every row.
+///
 /// Only [`Circle`](crate::Circle) layers and [`Rect`](crate::Rect)
 /// layers with constant `width` and `height` take a level of detail.
 /// Lines, areas, segments, rects with per-row extents and layers drawn
@@ -314,11 +323,13 @@ pub struct Selection<T, M: Mark> {
     /// because its tiers were not built yet (one chunk builds a frame):
     /// the plot draws again.
     lod_pending: bool,
-    /// The chunks the last prepare drew as representatives, with how many
-    /// each (a tier's prefix of its [`Tiers::order`](crate::lod::Tiers)),
-    /// in chunk order: what the CPU pick index holds of them (GUP-718).
-    /// Empty when no chunk drew a tier.
-    lod_drawn: Vec<(usize, u32)>,
+    /// The chunks the last prepare drew as representatives, with the
+    /// ranges of their [`Tiers::order`](crate::lod::Tiers) each drew (the
+    /// runs of a tier's prefix that the plot rect can see, GUP-720; none
+    /// when no run can be seen), in chunk order: the layer's spans, and what
+    /// the CPU pick index holds of them (GUP-718). A chunk's entry is its
+    /// draw entry's index. Empty when no chunk drew a tier.
+    lod_drawn: Vec<(usize, Vec<std::ops::Range<u32>>)>,
     /// What the CPU pick index holds for the layer while `lod_drawn` is not
     /// empty: the representatives and the rows of the visible chunks that
     /// drew every row.
@@ -1096,8 +1107,28 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
                 scale.push(k);
             }
         }
+        // The pixels of a data interval on each axis, for the runs' boxes
+        // (a constant axis, or no image: every pixel).
+        let image = |a: usize, v: cull::Interval| -> cull::Interval {
+            enc[a]
+                .filter(|_| xy[a].is_some())
+                .and_then(|e| e.image(v))
+                .map_or((f64::NEG_INFINITY, f64::INFINITY), |(p, q)| {
+                    (p.min(q), p.max(q))
+                })
+        };
+        let margin = f64::from(self.cull_margin() + PICK_TOLERANCE.0 + 1.0);
         let store = self.columns.as_mut().expect("checked above");
-        let done = tier_entries(store, cx, &ask, frame, &scale, &mut entries)?;
+        let share = |run: &lod::Run| {
+            frame.plot.map_or(1.0, |plot| {
+                PixelBox {
+                    x: image(0, run.x),
+                    y: image(1, run.y),
+                }
+                .share(margin, plot)
+            })
+        };
+        let done = tier_entries(store, cx, &ask, frame, &scale, &share, &mut entries)?;
         self.lod_builds += done.builds;
         if done.rebuilds > 0 {
             // Which instance draws which row changed: a GPU pick drawn
@@ -1105,13 +1136,18 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             self.epoch = self.epoch.wrapping_add(1);
         }
         self.lod_pending = done.pending;
+        let store = self.columns.as_ref().expect("checked above");
+        self.lod_drawn = lod_ranges(store, &entries, frame.plot, margin, &image);
         // What the pick index holds (GUP-718): the representatives drawn
         // and every row of the other visible chunks.
         let shown = |i: usize| frame.visible.get(i).copied().unwrap_or(true);
+        let mut drawn = self.lod_drawn.iter().peekable();
         for (i, e) in entries.iter().enumerate() {
-            if let Some(n) = e.lod {
-                self.lod_drawn.push((e.this, n));
-                self.lod_items += u64::from(n);
+            if let Some(ranges) = drawn.next_if(|d| d.0 == i).map(|d| &d.1) {
+                self.lod_items += ranges
+                    .iter()
+                    .map(|r| u64::from(r.end - r.start))
+                    .sum::<u64>();
             } else if shown(i) {
                 self.lod_items += u64::from(e.instances);
             }
@@ -1961,9 +1997,11 @@ fn chunk_tiers(
 ///   tiers of every chunk it drops (nothing could build them later; RFC-001
 ///   "GUP-631 findings", GUP-716 Decisions). Then, when the visible chunks
 ///   hold more than [`Lod::AUTO_MIN_ROWS`] rows, each visible chunk draws
-///   the prefix of [`lod::tier`] at its scale; a chunk past its stored
-///   tiers, or whose tiers are not built and over the prepare's build
-///   budget (`pending`), draws every row.
+///   the prefix of [`lod::tier`] at its scale, or, one tier past its
+///   stored tiers, its finest stored tier's ([`Tiers::cap`](lod::Tiers::cap),
+///   GUP-720) when more than [`Lod::AUTO_MIN_ROWS`] rows are in view; a chunk further past its stored tiers, or whose tiers are
+///   not built and over the prepare's build budget (`pending`), draws
+///   every row.
 ///
 /// Not generic: one copy serves every row type.
 #[inline(never)]
@@ -1973,9 +2011,10 @@ fn tier_entries(
     ask: &TierAsk,
     frame: &lod::Frame<'_>,
     scale: &[[Option<f64>; 2]],
+    share: &dyn Fn(&lod::Run) -> f64,
     entries: &mut Vec<DrawEntry>,
 ) -> Result<TierDone> {
-    let done = choose_tiers(store, cx, ask, frame, scale, entries)?;
+    let done = choose_tiers(store, cx, ask, frame, scale, share, entries)?;
     // Tiers built for all of the newest chunk's rows leave no rows past
     // them: its draw is one entry again.
     if let Some(last) = store.chunks().len().checked_sub(1)
@@ -2000,6 +2039,7 @@ fn choose_tiers(
     ask: &TierAsk,
     frame: &lod::Frame<'_>,
     scale: &[[Option<f64>; 2]],
+    share: &dyn Fn(&lod::Run) -> f64,
     entries: &mut [DrawEntry],
 ) -> Result<TierDone> {
     let mut done = TierDone::default();
@@ -2046,6 +2086,7 @@ fn choose_tiers(
         return Ok(done);
     }
     let last = store.chunks().len().saturating_sub(1);
+    let (mut capped, mut seen) = (Vec::new(), 0.0);
     let mut budget = if frame.spread { 1 } else { usize::MAX };
     for (i, e) in entries.iter_mut().enumerate() {
         // The rows past an appended chunk's tiers draw in full.
@@ -2088,9 +2129,58 @@ fn choose_tiers(
             store.upload_lod(cx, e.this)?;
             e.instances = n;
             e.lod = Some(n);
+        } else if let Some(n) = tiers.cap(t) {
+            // One tier past the stored tiers: the finest stored tier's
+            // prefix instead of every row, if the rows in view are many.
+            let rows = store.chunks()[e.this].rows();
+            seen += lod::in_view(&tiers.runs, n, rows, &mut |run| share(run));
+            capped.push((i, n));
+        }
+    }
+    // GUP-720: drawing every row of a chunk past its tiers costs its rows,
+    // seen or not; it is the exact draw and cheap while the rows in view
+    // are few, so only many rows in view (more than `Lod::AUTO_MIN_ROWS`,
+    // the threshold under which the layer draws every row at all) take the
+    // cap.
+    if seen > Lod::AUTO_MIN_ROWS as f64 {
+        for (i, n) in capped {
+            store.upload_lod(cx, entries[i].this)?;
+            entries[i].instances = n;
+            entries[i].lod = Some(n);
         }
     }
     Ok(done)
+}
+
+/// The ranges of representatives each of `entries` drawing a tier draws
+/// (GUP-720): of its prefix, the runs whose boxes, through `image` (data
+/// to pixels by axis) and grown by `margin` pixels, meet `plot` (as the
+/// chunk rule does), merged ([`lod::ranges`]); every run without a `plot`.
+/// By entry index, in order. Not generic: one copy serves every row type.
+#[inline(never)]
+fn lod_ranges(
+    store: &ColumnStore,
+    entries: &[DrawEntry],
+    plot: Option<Rect>,
+    margin: f64,
+    image: &dyn Fn(usize, cull::Interval) -> cull::Interval,
+) -> Vec<(usize, Vec<std::ops::Range<u32>>)> {
+    let mut out = Vec::new();
+    for (i, e) in entries.iter().enumerate() {
+        let Some(n) = e.lod else { continue };
+        let tiers = store.chunks()[e.this].tiers().expect("a tier draws");
+        let ranges = lod::ranges(&tiers.runs, n, &mut |run| {
+            plot.is_none_or(|plot| {
+                PixelBox {
+                    x: image(0, run.x),
+                    y: image(1, run.y),
+                }
+                .visible(margin, plot)
+            })
+        });
+        out.push((i, ranges));
+    }
+    out
 }
 
 /// A polyline's level-of-detail error: it reads each row's successor.
@@ -2339,14 +2429,22 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         let mut rows: Vec<u64> = Vec::with_capacity(self.lod_items as usize);
         let mut drawn = self.lod_drawn.iter().peekable();
         for (k, c) in store.chunks().iter().enumerate() {
-            let lod = drawn.next_if(|&&(d, _)| d == k).map(|&(_, n)| n as usize);
+            let lod = drawn.next_if(|d| d.0 == k).map(|d| &d.1);
             if !visible.get(k).copied().unwrap_or(true) {
                 continue;
             }
             let base = c.row_base();
             match lod.zip(c.tiers()) {
-                Some((n, tiers)) if n <= tiers.order.len() => {
-                    rows.extend(tiers.order[..n].iter().map(|&r| base + u64::from(r)));
+                Some((ranges, tiers))
+                    if ranges.iter().all(|r| r.end as usize <= tiers.order.len()) =>
+                {
+                    for r in ranges {
+                        rows.extend(
+                            tiers.order[r.start as usize..r.end as usize]
+                                .iter()
+                                .map(|&r| base + u64::from(r)),
+                        );
+                    }
                     // The rows past the tiers (an appended chunk's) draw
                     // in full (GUP-719).
                     rows.extend(base + u64::from(tiers.rows)..base + u64::from(c.rows()));
@@ -3237,8 +3335,9 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
             _ if glue.polyline => polyline_spans(stored),
             Some(order) => order.spans(stored),
             // A quad layer in upload order, one span per entry: a chunk's
-            // rows, its tier prefix (GUP-715) or the rows past its tiers.
-            None => entry_spans(&entries),
+            // rows, the runs of its tier prefix it can see (GUP-715,
+            // GUP-720) or the rows past its tiers.
+            None => entry_spans(&entries, &self.lod_drawn),
         };
         let chunk_draws = || -> Vec<ChunkDraw> {
             entries

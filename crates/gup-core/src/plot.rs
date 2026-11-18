@@ -3394,6 +3394,7 @@ impl Plot {
             let frame = crate::lod::Frame {
                 visible: &mask,
                 spread,
+                plot: self.cull.then_some(plot),
             };
             let batch = cx.scoped(
                 || "layer resolution (column upload, uniforms)".to_owned(),

@@ -99,6 +99,12 @@ of the image and failed it on the plot rect (1.076%); one tier finer scored
   `scales_png::time_zoomed_to_a_millisecond_draws_within_a_quarter_pixel`
   checks._
 
+  _Note (GUP-720, 2026-11-16, orchestrator): one tier past the stored tiers now
+  draws the finest stored tier (`Tiers::drawn_prefix`), not every row; further
+  past, every row as here. A shuffled 10M chunk stores tier 13 and a 10x zoom
+  asks 14, which drew every row (135 ms); now 15.9 ms at 0.306% of the plot rect
+  over ΔE00 10. See GUP-720's Decisions._
+
 - [x] A unit test of the formula against `View::tier` of the spike on its own
       example (full view of a 10M-row layer 1920 x 1080 gives the spike's tier).
       _`lod::tests`: on a chunk whose grid is the spike's, `tier` is the spike's

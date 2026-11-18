@@ -52,6 +52,9 @@
 //!                                      (sorted x over 0..1000, a log-scale y
 //!                                      random walk, `f32` columns): no row
 //!                                      vector, so 10M rows fit (GUP-717)
+//!   --shuffle                          with --columns: permute the rows by a
+//!                                      fixed seed, so every chunk spans the
+//!                                      whole extent (GUP-720)
 //!   --lod auto|off                     the layer's `Lod` (default off, every
 //!                                      row drawn, as every recorded budget);
 //!                                      `auto` also prints
@@ -109,6 +112,7 @@ struct Options {
     bubbles: bool,
     window: Option<usize>,
     columns: bool,
+    shuffle: bool,
     lod: Lod,
     fixed_view: bool,
     prefix: String,
@@ -134,6 +138,7 @@ fn options() -> Options {
         bubbles: false,
         window: None,
         columns: false,
+        shuffle: false,
         lod: Lod::Off,
         fixed_view: false,
         prefix: "zoom".to_owned(),
@@ -175,6 +180,7 @@ fn options() -> Options {
             "--bubbles" => o.bubbles = true,
             "--window" => o.window = Some(value().parse().expect("--window N")),
             "--columns" => o.columns = true,
+            "--shuffle" => o.shuffle = true,
             "--lod" => {
                 o.lod = match value().as_str() {
                     "auto" => Lod::Auto,
@@ -743,7 +749,7 @@ fn main() {
         feed = rest;
         (plot, XScale::Linear(x), y)
     } else if o.columns {
-        let (plot, x, y) = columns_plot(o.points, Px(o.radius), o.lod, o.chunk_rows);
+        let (plot, x, y) = columns_plot(o.points, Px(o.radius), o.lod, o.chunk_rows, o.shuffle);
         (plot, XScale::Linear(x), y)
     } else if let Some(curve) = o.line {
         let (plot, x, y) = line_plot(o.points, curve, o.translucent, o.chunk_rows);
@@ -863,12 +869,14 @@ fn time_plot(
 /// `--line`: a random walk of `n` rows drawn as one line, 1.5 px wide, x
 /// the row index and y (positive) on the log scale, with `curve`.
 /// `--columns`: `n` circles from `f32` columns, x sorted over 0..1000 and
-/// y (log scale) a random walk in 1e6 * e^v, the walk of `--line`.
+/// y (log scale) a random walk in 1e6 * e^v, the walk of `--line`; with
+/// `shuffle`, the rows permuted (Fisher-Yates, a fixed seed).
 fn columns_plot(
     n: usize,
     radius: Px,
     lod: Lod,
     max_chunk_rows: Option<u32>,
+    shuffle: bool,
 ) -> (Plot, ScaleRef<Linear>, ScaleRef<Log>) {
     use gup_core::Columns;
     let mut seed = 0x2545_f491_4f6c_dd1d_u64;
@@ -876,7 +884,7 @@ fn columns_plot(
     let xs: Arc<[f32]> = (0..n)
         .map(|i| (1000.0 * i as f64 / n as f64) as f32)
         .collect();
-    let ys: Arc<[f32]> = (0..n)
+    let mut ys: Vec<f32> = (0..n)
         .map(|_| {
             seed ^= seed << 13;
             seed ^= seed >> 7;
@@ -885,6 +893,22 @@ fn columns_plot(
             (1e6 * v.exp()) as f32
         })
         .collect();
+    let xs = if shuffle {
+        let mut xs = xs.to_vec();
+        let mut s = 0x9e37_79b9_7f4a_7c15_u64;
+        for i in (1..n).rev() {
+            s ^= s << 13;
+            s ^= s >> 7;
+            s ^= s << 17;
+            let j = (s % (i as u64 + 1)) as usize;
+            xs.swap(i, j);
+            ys.swap(i, j);
+        }
+        xs.into()
+    } else {
+        xs
+    };
+    let ys: Arc<[f32]> = ys.into();
     let cols = Columns::new()
         .with("x", xs)
         .and_then(|c| c.with("y", ys))

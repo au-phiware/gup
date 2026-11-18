@@ -650,10 +650,11 @@ GUP-628 and GUP-631 (shared `selection.rs`).
 - [GUP-719](GUP-719_LOD_With_Appends_And_Windows.md) 📋 — The tail chunk draws
   in full below 65,536 rows then rebuilds at doublings; eviction drops tiers; a
   rebuild bumps the pick epoch. Deps: GUP-716 📋, GUP-482 ✅.
-- [GUP-720](GUP-720_Spatial_Runs_For_Unsorted_Layers.md) 📋 — Tier blocks in
+- [GUP-720](GUP-720_Spatial_Runs_For_Unsorted_Layers.md) ✅ — Tier blocks in
   Morton order split into 4,096-representative runs with boxes, culled per
-  frame: shuffled 10M zoom from 65.4 ms to under 16.7 ms. Opus. Deps: GUP-716
-  📋, GUP-719 📋 (sequencing).
+  frame, each run drawn spread (bit-reversed); one tier past the stored tiers
+  draws the finest stored tier: shuffled 10M `Auto` zoom 141 -> 16.3 ms, full
+  view unchanged (14.0 ms). Opus. Deps: GUP-716 📋, GUP-719 📋 (sequencing).
 - [GUP-721](GUP-721_LOD_For_Size_Ordered_Layers.md) 📋 — Largest-first tier
   blocks and the largest mark as a cell's representative for size-ordered
   layers. Deps: GUP-492 ✅, GUP-716 📋, GUP-720 📋 (sequencing), GUP-724 📋.
