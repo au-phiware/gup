@@ -78,7 +78,10 @@ updated.
   constant size, whose visible chunks hold more than 200,000 rows draws a
   bounded number of representatives (at most about four a pixel of area) instead
   of every row; `.lod(Lod::Off)` on the layer, or on a `ScatterChart`, draws
-  every row. Lines, areas and layers sized by a column always draw every row. A
+  every row. The tiers it draws from build on worker threads (in the browser,
+  one chunk a frame), so a window shows every row at once and switches each
+  chunk to its representatives as its build finishes; a headless render waits
+  for them. Lines, areas and layers sized by a column always draw every row. A
   layer that grows by appends keeps its tiers for its full chunks; its newest
   chunk draws every row under 65,536 rows, then builds tiers and builds them
   again each time its rows double, drawing the rows past them in full. A

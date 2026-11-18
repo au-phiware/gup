@@ -148,7 +148,12 @@ impl Retain {
 /// hold more than [`Lod::AUTO_MIN_ROWS`] rows draws, per visible chunk, the
 /// lowest row of each occupied cell of a grid of about a quarter pixel
 /// (at most four marks per pixel of area): its rows grouped by position,
-/// built once per chunk on the first frame that needs them. A scatter of
+/// built once per chunk when a frame first needs them. On native targets
+/// they build on worker threads: in a window (any host that set a waker)
+/// a frame never waits for them, and a chunk draws every row until its
+/// build is done and the next frame takes it up; a headless render builds
+/// every chunk it draws before it returns, in parallel. On `wasm32` (no
+/// threads) a hosted frame builds one chunk. A scatter of
 /// tens of millions of rows then draws tens of thousands of marks per
 /// frame. The picture is the full draw with edges up to about a pixel
 /// narrower; marks keep their data rows' colours, brush and GPU pick ids.
@@ -349,8 +354,8 @@ pub struct Selection<T, M: Mark> {
     /// threshold and the lazy build are asserted through it).
     lod_builds: u64,
     /// Whether the last prepare left a visible chunk drawing every row
-    /// because its tiers were not built yet (one chunk builds a frame):
-    /// the plot draws again.
+    /// because its tiers were not built yet (`wasm32`: one chunk builds a
+    /// frame): the plot draws again.
     lod_pending: bool,
     /// The chunks the last prepare drew as representatives, with the
     /// ranges of their [`Tiers::order`](crate::lod::Tiers) each drew (the

@@ -3178,6 +3178,53 @@ mod tests {
         assert_eq!(cx.upload_stats(), before);
     }
 
+    /// GUP-730: a worker's build equals the frame thread's (the tiers and
+    /// the gathered representatives), and holds a released chunk's CPU
+    /// copy until it is done, which then frees it.
+    #[test]
+    fn a_worker_build_equals_the_frame_threads_and_holds_the_copy() {
+        let cx = Context::new_blocking().unwrap();
+        let n = 50_000u32;
+        let xs: Vec<f64> = (0..n).map(f64::from).collect();
+        let ys: Vec<f64> = (0..n).map(|i| f64::from(i % 97) * 0.5).collect();
+        let make = || {
+            let mut store = ColumnStore::from_columns(
+                vec![
+                    (ColumnFormat::F32Relative, xs.clone()),
+                    (ColumnFormat::F32Relative, ys.clone()),
+                ],
+                25_000,
+            )
+            .unwrap();
+            store.upload(&cx).unwrap();
+            store
+        };
+        let xy = [Some(0), Some(1)];
+        let mut sync = make();
+        let tiers = sync.lod_tiers(0, xy, None).unwrap().clone();
+        sync.upload_lod(&cx, 0).unwrap();
+
+        let mut worker = make();
+        let copy = Arc::downgrade(worker.chunks[0].cpu.as_ref().unwrap());
+        LOD_BUILD_DELAY_MS.store(200, std::sync::atomic::Ordering::Relaxed);
+        worker.spawn_lod(0, xy, None, None).unwrap();
+        LOD_BUILD_DELAY_MS.store(0, std::sync::atomic::Ordering::Relaxed);
+        assert!(worker.lod_building(0) && !worker.has_tiers(0, xy));
+        assert_eq!(worker.release(), 2);
+        assert!(worker.chunks()[0].bytes().is_none(), "released at once");
+        assert!(copy.upgrade().is_some(), "the build holds the copy");
+        assert_eq!(worker.install_lod(&cx, 0, true).unwrap(), (true, false));
+        assert!(copy.upgrade().is_none(), "freed once the build is done");
+        assert!(!worker.lod_building(0) && worker.has_tiers(0, xy));
+        assert_eq!(worker.chunks()[0].tiers().map(|t| &**t), Some(&tiers));
+        let bytes =
+            |s: &ColumnStore| read_buffer(&cx, s.chunks()[0].lod_gpu(&cx).unwrap().buffer());
+        assert_eq!(bytes(&worker), bytes(&sync));
+        // A released chunk without tiers or a build cannot start one.
+        let err = worker.spawn_lod(1, xy, None, None).unwrap_err().to_string();
+        assert!(err.contains("chunk 1 (rows 25000..50000)"), "{err}");
+    }
+
     /// GUP-715: a released chunk of owned columns has no source for its
     /// tiers; the error names the chunk.
     #[test]
