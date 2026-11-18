@@ -655,7 +655,7 @@ GUP-628 and GUP-631 (shared `selection.rs`).
   frame, each run drawn spread (bit-reversed); one tier past the stored tiers
   draws the finest stored tier: shuffled 10M `Auto` zoom 141 -> 16.3 ms, full
   view unchanged (14.0 ms). Opus. Deps: GUP-716 📋, GUP-719 📋 (sequencing).
-- [GUP-721](GUP-721_LOD_For_Size_Ordered_Layers.md) 📋 — Largest-first tier
+- [GUP-721](GUP-721_LOD_For_Size_Ordered_Layers.md) 🚧 — Largest-first tier
   blocks and the largest mark as a cell's representative for size-ordered
   layers. Deps: GUP-492 ✅, GUP-716 📋, GUP-720 📋 (sequencing), GUP-724 📋.
 - [GUP-730](GUP-730_Tier_Builds_Off_The_Frame_Path.md) 💡 — Build tiers on
