@@ -242,6 +242,65 @@ Merging GUP-426 (legends, +10,242 B on its own) with GUP-431 gives 316,565 B
 (over bare wgpu 274,852), measured with `mask wasm-size` on the merge
 (2026-10-17). That is the recorded figure.
 
+#### Headroom policy (GUP-744)
+
+Until release 0.1 ships, `wasm.over_wgpu.gz_bytes` stays at most **360,000** (40
+KB under the 400,000 cap). A story may re-record the scatter row while over bare
+wgpu is at most 360,000. A story whose change takes it above 360,000 trims at
+least its own growth in the same story, or records an owner-approved exception
+in its retrospective. Above **380,000** no story merges without a trim story
+ahead of it; above the 400,000 cap CI fails, as before. A story that adds more
+than 5,000 B gz states in its retrospective what linking it costs a scatter that
+does not use it. Judge a story's growth with `mask wasm-size` on its base commit
+and on its head, on one toolchain and in one checkout (the checkout path in
+panic locations moves the total by about 200 B).
+
+GUP-744's cut, measured that way at `e7dad2d4` (rustc 1.93.1): the crate sorts
+through one unstable `u64` sort and one stable index sort (11 sort
+instantiations down to 3), over bare wgpu 365,037 to 356,270 B gz (−8,767).
+
+### Where the bytes go (GUP-744)
+
+Measured 2026-11-19 at `e7dad2d4` with `mask wasm-attrib` (raw) and a
+per-function gz estimate (each body compressed in file order with a sync flush;
+the totals run about 13% over the real gz). Raw bytes find targets; repeated
+instantiations compress to almost nothing, so rank by gz. File 1,357,534 B raw
+(name section 339,793 B, not shipped). Code section 297,857 B gz, data 86,184,
+of which the two Inter subsets 40,213, the `f64::from_str` table 10,135 and the
+WGSL text 4,140.
+
+| Crate                  | Raw B   | Share of file |
+| ---------------------- | ------- | ------------- |
+| `gup_core`             | 382,629 | 28.19%        |
+| `data`                 | 183,339 | 13.51%        |
+| `core`                 | 138,131 | 10.18%        |
+| `other`                | 66,876  | 4.93%         |
+| `ttf_parser`           | 46,373  | 3.42%         |
+| `wasm_bindgen_futures` | 43,803  | 3.23%         |
+| `alloc`                | 34,608  | 2.55%         |
+| `wgpu`                 | 21,519  | 1.59%         |
+| `compiler_builtins`    | 17,629  | 1.30%         |
+| `hashbrown`            | 15,101  | 1.11%         |
+
+`gup_core` by module (gz estimate; inlined callees count toward their caller):
+`selection` 32,248, `plot` 31,639, `scale` 18,074, `render` 16,386, `column`
+11,774, `encoding` 10,012, `shader` 9,575, `web` 7,603, `context` 4,435,
+`gpu_pick` 3,983; every LOD-named function together 5,726. The `Selection`
+copies per row type are cheap (six `fit_domains`, 2,048 together, 1,817 of it
+the first). `wasm_bindgen_futures` is the harness's scenes, inlined into their
+futures.
+
+The largest single finding: `core::num::dec2flt` (`f64::from_str`, 3,024 B gz,
+and its 10,416 B table of powers of five, 10,135 B gz) is linked only by
+ttf-parser's CFF DICT real-number parse, reached from `Face::parse` (fontdue and
+gup-text). The bundled fonts are TrueType and never take that path; removing it
+would save about 15,900 B gz (GUP-745). Measured and not cut: the reach index
+(GUP-724) costs 3,061 B gz and keeps a sized layer's frame CPU at 0.9 ms instead
+of 11.6; wgpu `TextureFormat` names in error messages 448; WGSL comments and
+indentation about 400. `wasm-opt -Oz` saves 401 on the scatter but 1,432 on bare
+wgpu, so over bare wgpu rises by 1,031. `panic = "abort"` is already the
+target's default.
+
 ### Where the bytes go (GUP-450)
 
 Measured 2026-10-18 at commit bf9e8b8 plus this story's harness feature (the
