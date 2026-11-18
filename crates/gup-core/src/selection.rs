@@ -2511,7 +2511,11 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         let start = out.len();
         build_items(M::HIT, layer, self.z, first, &slots, &chans, out);
         for item in &mut out[start..] {
-            item.row.row = first + rows[item.row.row - first] as usize;
+            // A stored row (largest first for a sized layer, GUP-721) is
+            // named by its data row.
+            let stored = rows[item.row.row - first];
+            item.row.row =
+                first + self.order.as_ref().map_or(stored, |o| o.row_of(stored)) as usize;
         }
     }
 
@@ -3323,7 +3327,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         // upload order.
         let spans = match &self.order {
             _ if glue.polyline => polyline_spans(stored),
-            Some(order) => order.spans(stored),
+            Some(order) => order.spans(stored, &entries, &self.lod_drawn),
             // A quad layer in upload order, one span per entry: a chunk's
             // rows, the runs of its tier prefix it can see (GUP-715,
             // GUP-720) or the rows past its tiers.

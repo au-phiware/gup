@@ -479,18 +479,131 @@ fn unchanged(rows: usize, add: impl Fn(&mut Plot, &ScaleRef<Linear>, &ScaleRef<L
     );
 }
 
+/// `n` bubbles (GUP-721): the walk's positions (a thin curve, so marks
+/// overlap heavily) in 100 clumps of 16 sizes (the third value, 0..16), a
+/// clump's size drawn at random. A cell of the thinned draw holds one size
+/// but at a clump's edge, as a bubble chart's sizes follow its data; a size
+/// drawn at random for every row would make every cell hold all 16, and
+/// the full draw shows its smallest marks on top where a thinned one can
+/// only show its largest (see the story's retrospective).
+fn bubbles(n: usize) -> Vec<Row> {
+    let mut s = 0x9e37_79b9_7f4a_7c15u64;
+    let mut level = 0.0;
+    walk(n)
+        .into_iter()
+        .enumerate()
+        .map(|(i, (x, y, _))| {
+            if i % (n / 100) == 0 {
+                s ^= s << 13;
+                s ^= s >> 7;
+                s ^= s << 17;
+                level = f64::from(((s >> 11) % 16) as u32);
+            }
+            (x, y, level)
+        })
+        .collect()
+}
+
+/// A bubble layer: radius 1..9 px and a colour by the size level, so a
+/// small bubble hidden under a large one, or a large one drawn over a small
+/// one, shows.
+fn bubble_plot(rows: Vec<Row>, lod: Lod) -> Plot {
+    let (mut plot, x, y) = plot();
+    let colour = Sequential::viridis();
+    plot.add(Selection::<Row, Circle>::new(rows))
+        .attr(Circle::X, x.encode(|r: &Row| r.0))
+        .attr(Circle::Y, y.encode(|r: &Row| r.1))
+        .attr(
+            Circle::RADIUS,
+            Linear::new().range(Px(1.0), Px(9.0)).encode(|r: &Row| r.2),
+        )
+        .attr(Circle::FILL, colour.encode(|r: &Row| r.2))
+        .lod(lod);
+    plot
+}
+
 #[test]
-fn a_layer_drawn_by_size_ignores_lod() {
-    unchanged(1_000_000, |plot, x, y, lod| {
-        plot.add(Selection::<Row, Circle>::new(walk(1_000_000)))
+fn a_layer_drawn_by_size_takes_lod() {
+    let cx = Context::new_blocking().unwrap();
+    let rows = bubbles(300_000);
+    let (mut auto, mut off) = (
+        bubble_plot(rows.clone(), Lod::Auto),
+        bubble_plot(rows.clone(), Lod::Off),
+    );
+    let (a, o) = (draw(&cx, &mut auto), draw(&cx, &mut off));
+    save(&a.image, "lod-bubbles-auto.png");
+    save(&o.image, "lod-bubbles-off.png");
+    assert_eq!(o.instances, rows.len() as u64);
+    assert!(
+        (a.instances as f64) < rows.len() as f64 / 10.0,
+        "{} instances of {} rows",
+        a.instances,
+        rows.len()
+    );
+    let (image, rect) = shares(&a.image, &o.image, &auto);
+    eprintln!(
+        "300000 bubbles: {} representatives; ΔE00 > 10: {image:.3}% of the image, \
+         {rect:.3}% of the plot rect",
+        a.instances
+    );
+    // Measured 2.303%: the outlines of bubbles of 16 viridis colours, whose
+    // thinned edges are up to a pixel narrower (the same marks in one colour
+    // differ 0.884%, `a_layer_drawn_by_size_in_one_colour_...`); the gate
+    // is 1.3x as GUP-717's are.
+    assert!(rect <= 3.0, "{rect:.3}% of the plot rect differs");
+}
+
+/// The bubbles of [`a_layer_drawn_by_size_takes_lod`] in one colour: the
+/// thinned picture is within the 2.0% of the plot rect of the scatters.
+#[test]
+fn a_layer_drawn_by_size_in_one_colour_matches_the_exact_draw() {
+    let cx = Context::new_blocking().unwrap();
+    let rows = bubbles(300_000);
+    let one = |lod| {
+        let (mut plot, x, y) = plot();
+        plot.add(Selection::<Row, Circle>::new(rows.clone()))
             .attr(Circle::X, x.encode(|r: &Row| r.0))
             .attr(Circle::Y, y.encode(|r: &Row| r.1))
             .attr(
                 Circle::RADIUS,
-                Linear::new().range(Px(1.0), Px(3.0)).encode(|r: &Row| r.2),
+                Linear::new().range(Px(1.0), Px(9.0)).encode(|r: &Row| r.2),
             )
             .lod(lod);
-    });
+        plot
+    };
+    let (mut auto, mut off) = (one(Lod::Auto), one(Lod::Off));
+    let (a, o) = (draw(&cx, &mut auto), draw(&cx, &mut off));
+    assert!((a.instances as f64) < rows.len() as f64 / 10.0);
+    let (_, rect) = shares(&a.image, &o.image, &auto);
+    // Measured 0.884%.
+    assert!(rect <= 2.0, "{rect:.3}% of the plot rect differs");
+}
+
+/// A GPU pick over a bubble layer under LOD returns the data row of the
+/// representative drawn at the pixel, through the draw order's row map.
+#[test]
+fn a_pick_over_a_size_ordered_layer_returns_the_representatives_data_row() {
+    let cx = Context::new_blocking().unwrap();
+    let rows = bubbles(300_000);
+    let mut plot = bubble_plot(rows.clone(), Lod::Auto);
+    let d = draw(&cx, &mut plot);
+    assert!(d.instances < 30_000, "{} drawn", d.instances);
+    let (mut hits, mut near, mut disagree) = (0, 0, 0);
+    for at in grid(&plot, 9.0) {
+        let (cpu, gpu) = (plot.pick_row(at), plot.pick_row_gpu(&cx, at).unwrap());
+        disagree += usize::from(cpu != gpu);
+        let Some(id) = gpu else { continue };
+        hits += 1;
+        let (x, y, size) = rows[id.row];
+        let p = plot.pixel(x, y).unwrap();
+        let radius = 1.0 + 8.0 * size as f32 / 15.0;
+        near += usize::from(
+            (p.x - at.x).hypot(p.y - at.y) <= radius + gup_core::PICK_TOLERANCE.0 + 1.0,
+        );
+    }
+    assert!(hits > 100, "{hits} grid points hit a bubble");
+    assert_eq!(near, hits, "a picked row is not under the pixel");
+    assert!(disagree * 20 <= hits, "{disagree} of {hits} picks differ");
 }
 
 #[test]
