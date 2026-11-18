@@ -342,12 +342,13 @@ fn a_zoomed_shuffled_layer_draws_the_runs_it_can_see() {
 
 #[test]
 fn a_million_row_walk_matches_the_exact_draw_at_1080p() {
-    // Measured 0.571% / 1.380%; the gates are 1.3x those. The zoom asks
-    // one tier past the chunk's finest stored tier, which it draws
-    // (GUP-720; before, every row drew there and it measured 0.000%).
+    // Measured 0.571% / 0.000%. The zoom asks one tier past the chunk's
+    // finest stored tier; few rows are in view (an estimated 35,000, under
+    // `Lod::AUTO_MIN_ROWS`), so it draws every row, exact (GUP-720's cap
+    // applies only above that).
     let f = fidelity(1920, 1080, 1_000_000);
     assert!(f.full <= 0.75, "full view {:.3}% of the plot rect", f.full);
-    assert!(f.zoom <= 1.8, "10x zoom {:.3}% of the plot rect", f.zoom);
+    assert!(f.zoom <= 0.1, "10x zoom {:.3}% of the plot rect", f.zoom);
 }
 
 /// The golden of the `Auto` full view (GUP-717): a continuous band, the

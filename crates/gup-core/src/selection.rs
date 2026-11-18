@@ -1117,7 +1117,16 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         };
         let margin = f64::from(self.cull_margin() + PICK_TOLERANCE.0 + 1.0);
         let store = self.columns.as_mut().expect("checked above");
-        let done = tier_entries(store, cx, &ask, frame, &scale, &mut entries)?;
+        let share = |run: &lod::Run| {
+            frame.plot.map_or(1.0, |plot| {
+                PixelBox {
+                    x: image(0, run.x),
+                    y: image(1, run.y),
+                }
+                .share(margin, plot)
+            })
+        };
+        let done = tier_entries(store, cx, &ask, frame, &scale, &share, &mut entries)?;
         self.lod_builds += done.builds;
         if done.rebuilds > 0 {
             // Which instance draws which row changed: a GPU pick drawn
@@ -1986,9 +1995,9 @@ fn chunk_tiers(
 ///   tiers of every chunk it drops (nothing could build them later; RFC-001
 ///   "GUP-631 findings", GUP-716 Decisions). Then, when the visible chunks
 ///   hold more than [`Lod::AUTO_MIN_ROWS`] rows, each visible chunk draws
-///   the prefix of [`lod::tier`] at its scale, or one tier past its stored
-///   tiers its finest stored tier's ([`Tiers::drawn_prefix`](lod::Tiers::drawn_prefix),
-///   GUP-720); a chunk further past its stored tiers, or whose tiers are
+///   the prefix of [`lod::tier`] at its scale, or, one tier past its
+///   stored tiers, its finest stored tier's ([`Tiers::cap`](lod::Tiers::cap),
+///   GUP-720) when more than [`Lod::AUTO_MIN_ROWS`] rows are in view; a chunk further past its stored tiers, or whose tiers are
 ///   not built and over the prepare's build budget (`pending`), draws
 ///   every row.
 ///
@@ -2000,9 +2009,10 @@ fn tier_entries(
     ask: &TierAsk,
     frame: &lod::Frame<'_>,
     scale: &[[Option<f64>; 2]],
+    share: &dyn Fn(&lod::Run) -> f64,
     entries: &mut Vec<DrawEntry>,
 ) -> Result<TierDone> {
-    let done = choose_tiers(store, cx, ask, frame, scale, entries)?;
+    let done = choose_tiers(store, cx, ask, frame, scale, share, entries)?;
     // Tiers built for all of the newest chunk's rows leave no rows past
     // them: its draw is one entry again.
     if let Some(last) = store.chunks().len().checked_sub(1)
@@ -2027,6 +2037,7 @@ fn choose_tiers(
     ask: &TierAsk,
     frame: &lod::Frame<'_>,
     scale: &[[Option<f64>; 2]],
+    share: &dyn Fn(&lod::Run) -> f64,
     entries: &mut [DrawEntry],
 ) -> Result<TierDone> {
     let mut done = TierDone::default();
@@ -2073,6 +2084,7 @@ fn choose_tiers(
         return Ok(done);
     }
     let last = store.chunks().len().saturating_sub(1);
+    let (mut capped, mut seen) = (Vec::new(), 0.0);
     let mut budget = if frame.spread { 1 } else { usize::MAX };
     for (i, e) in entries.iter_mut().enumerate() {
         // The rows past an appended chunk's tiers draw in full.
@@ -2111,10 +2123,28 @@ fn choose_tiers(
         let Some(t) = lod::tier(tiers.ex, tiers.ey, kx, ky) else {
             continue;
         };
-        if let Some(n) = tiers.drawn_prefix(t) {
+        if let Some(n) = tiers.prefix(t) {
             store.upload_lod(cx, e.this)?;
             e.instances = n;
             e.lod = Some(n);
+        } else if let Some(n) = tiers.cap(t) {
+            // One tier past the stored tiers: the finest stored tier's
+            // prefix instead of every row, if the rows in view are many.
+            let rows = store.chunks()[e.this].rows();
+            seen += lod::in_view(&tiers.runs, n, rows, &mut |run| share(run));
+            capped.push((i, n));
+        }
+    }
+    // GUP-720: drawing every row of a chunk past its tiers costs its rows,
+    // seen or not; it is the exact draw and cheap while the rows in view
+    // are few, so only many rows in view (more than `Lod::AUTO_MIN_ROWS`,
+    // the threshold under which the layer draws every row at all) take the
+    // cap.
+    if seen > Lod::AUTO_MIN_ROWS as f64 {
+        for (i, n) in capped {
+            store.upload_lod(cx, entries[i].this)?;
+            entries[i].instances = n;
+            entries[i].lod = Some(n);
         }
     }
     Ok(done)

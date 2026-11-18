@@ -46,6 +46,26 @@ impl PixelBox {
         }
     }
 
+    /// The share of the box inside `plot` grown by `margin`, per axis
+    /// multiplied: on an axis, the overlap over the box's length, or for a
+    /// box of no length (or an unbounded one), 1 when it meets the rect and
+    /// else 0.
+    pub(crate) fn share(self, margin: f64, plot: Rect) -> f64 {
+        if !self.visible(margin, plot) {
+            return 0.0;
+        }
+        let along = |(a, b): Interval, lo: f32, hi: f32| {
+            let (lo, hi) = (f64::from(lo) - margin, f64::from(hi) + margin);
+            let len = b - a;
+            if len > 0.0 && len.is_finite() {
+                ((b.min(hi) - a.max(lo)) / len).clamp(0.0, 1.0)
+            } else {
+                1.0
+            }
+        };
+        along(self.x, plot.left(), plot.right()) * along(self.y, plot.top(), plot.bottom())
+    }
+
     /// Whether the box, grown by `margin` on every side, meets `plot`.
     pub(crate) fn visible(self, margin: f64, plot: Rect) -> bool {
         let (l, r) = (f64::from(plot.left()), f64::from(plot.right()));

@@ -216,16 +216,16 @@ impl Tiers {
         self.counts.get(t as usize).copied()
     }
 
-    /// The prefix a frame drawing tier `t` (as [`tier`] chooses it) draws:
-    /// [`prefix`](Self::prefix), or one tier past the stored tiers the
-    /// finest stored tier's, at most one tier coarser than asked (GUP-720:
+    /// For tier `t` one past the stored tiers, the finest stored tier's
+    /// prefix, which a frame may draw in its place (at most one tier coarser
+    /// than asked) instead of every row; `None` for any other `t`. GUP-720:
     /// a chunk spanning the extent of 10M unsorted rows stores tier 13 and a
     /// 10x zoom asks 14, so it drew every row, 135 ms, against 15.9 ms and
-    /// 0.31% of the plot rect over ΔE00 10 for tier 13). Further past,
-    /// `None`: every row.
-    pub fn drawn_prefix(&self, t: u32) -> Option<u32> {
-        self.prefix(t)
-            .or_else(|| (t == self.stored + 1).then(|| self.counts[self.stored as usize]))
+    /// 0.31% of the plot rect over ΔE00 10 for tier 13. The frame takes it
+    /// only when drawing every row would cost more than the threshold
+    /// ([`in_view`]).
+    pub fn cap(&self, t: u32) -> Option<u32> {
+        (t == self.stored + 1).then(|| self.counts[self.stored as usize])
     }
 }
 
@@ -280,6 +280,28 @@ fn spread(order: &mut [u32], runs: &[Run]) {
             }
         }
     }
+}
+
+/// An estimate of the rows of a chunk inside a view, from the runs of its
+/// prefix `order[..count]` (`count` one of the tiers' `counts`): each run's
+/// representatives weighted by `share`, the share of its box the view holds
+/// (as if its representatives were spread evenly over it), scaled from
+/// representatives to the `rows` they stand for.
+pub(crate) fn in_view(
+    runs: &[Run],
+    count: u32,
+    rows: u32,
+    share: &mut dyn FnMut(&Run) -> f64,
+) -> f64 {
+    if count == 0 {
+        return 0.0;
+    }
+    let reps: f64 = runs
+        .iter()
+        .take_while(|r| r.start < count)
+        .map(|r| f64::from(r.end - r.start) * share(r))
+        .sum();
+    reps * f64::from(rows) / f64::from(count)
 }
 
 /// The ranges of `order[..count]` (a tier's prefix: `count` is one of the
@@ -857,11 +879,15 @@ mod tests {
         assert_eq!((tiers.ex, tiers.ey), (-12, -12));
         assert_eq!(tiers.counts, [1, 4, 16, 64]);
         assert_eq!(tiers.prefix(4), None);
-        // One tier past the stored tiers draws the finest stored tier;
-        // further, every row (GUP-720).
-        assert_eq!(tiers.drawn_prefix(2), Some(16));
-        assert_eq!(tiers.drawn_prefix(4), Some(64));
-        assert_eq!(tiers.drawn_prefix(5), None);
+        // One tier past the stored tiers may draw the finest stored tier;
+        // no other tier (GUP-720).
+        assert_eq!(tiers.cap(2), None);
+        assert_eq!(tiers.cap(4), Some(64));
+        assert_eq!(tiers.cap(5), None);
+        // The estimate scales the representatives seen to the rows.
+        let seen = in_view(&tiers.runs, 64, 256, &mut |_| 0.5);
+        assert!((seen - 128.0).abs() < 1e-9, "{seen}");
+        assert_eq!(in_view(&tiers.runs, 0, 256, &mut |_| 1.0), 0.0);
         // 1,000 rows, one per cell of a 32 × 32 grid: tier 4 (256) is the
         // finest at most half the rows.
         let grid: Vec<(f64, f64)> = (0..1000)
