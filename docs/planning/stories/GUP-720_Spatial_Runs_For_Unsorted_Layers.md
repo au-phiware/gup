@@ -142,13 +142,20 @@ reorders each block to Morton order and adds the runs.
   order, forced tier 13 208 ms against 86.7. Spread: 13.9 and 86 ms, and the
   runs' sets and boxes, so the culling, are unchanged._
 - **One tier past the stored tiers draws the finest stored tier** (_added
-  2026-11-16, option A_): `Tiers::drawn_prefix`. GUP-716 drew every row past a
-  chunk's stored tiers; for that one-tier case (the bias tier) `Auto` now draws
-  the finest stored tier, at most one tier coarser than asked; further past,
-  every row as before (GUP-716's "zoomed far in" rule). A shuffled 10M chunk
-  stores tier 13 and a 10x zoom asks 14: every row drew (135 ms), runs could not
-  help. Fidelity cost: the 1M walk's 1080p zoom, exact before, is 1.380% of the
-  plot rect (gate re-derived at 1.8%); 10M shuffled zoom 0.306%.
+  2026-11-16, option A_): `Tiers::cap`. GUP-716 drew every row past a chunk's
+  stored tiers; for that one-tier case (the bias tier) `Auto` now draws the
+  finest stored tier, at most one tier coarser than asked; further past, every
+  row as before (GUP-716's "zoomed far in" rule). A shuffled 10M chunk stores
+  tier 13 and a 10x zoom asks 14: every row drew (135 ms), runs could not help.
+  _Narrowed 2026-11-18 (orchestrator):_ the cap applies only when the rows in
+  view, estimated from the runs of the finest stored tier (each run's
+  representatives weighted by the share of its box in the plot rect, scaled to
+  the chunk's rows: `lod::in_view`, summed over the capped chunks), exceed
+  `Lod::AUTO_MIN_ROWS`; otherwise every row draws as before. Unconditional, the
+  1M walk's 1080p zoom (exact before) measured 1.380% of the plot rect; now the
+  estimate is 35,304 rows, it draws every row and measures 0.000%, its 0.1% gate
+  restored. The shuffled 10M zoom estimates 267,108 rows, so it caps: 0.306% of
+  the plot rect.
 - **Instances bound** (_2026-11-16_): the shuffled 10M zoom draws 1,143,533
   instances, not under 500,000: 580,717 from the runs of the 9 full chunks and
   562,816 from the partial last chunk, which stores only coarser tiers (its
@@ -323,8 +330,9 @@ brute-force check).
   run (bit-reversed order of Morton positions). `lod::ranges` keeps the runs a
   predicate sees, merges adjacent ones and, past `MAX_RANGES = 64`, merges
   across every gap narrower than a width found by binary search (no sort).
-  `Tiers::drawn_prefix`: one tier past the stored tiers draws the finest stored
-  one.
+  `Tiers::cap`: the finest stored tier's prefix, drawn in place of every row one
+  tier past the stored tiers when more than `Lod::AUTO_MIN_ROWS` rows are in
+  view (`lod::in_view`, `PixelBox::share`).
 - `selection.rs`: `lod_ranges` maps each run's box through the x and y
   encodings' `image` and keeps those meeting the plot rect grown by the chunk
   rule's margin; `lod_drawn` holds each LOD entry's ranges, which become its
@@ -381,7 +389,7 @@ core +0.6 KB: new code on the default `Auto` path.
 **Images**: not byte-identical. The 1M golden scene differs from main's in 807
 of 120,000 pixels by at most 2/255 a channel (antialiased edges blended in
 another order); the golden passes unchanged and was not re-blessed. The 1080p 1M
-zoom changed with the cap (exact before, 1.380% of the plot rect now).
+zoom is exact again after the cap was narrowed (2026-11-18: 0.000%, gate 0.1%).
 
 ## Retrospective
 
@@ -440,8 +448,9 @@ zoom changed with the cap (exact before, 1.380% of the plot rect now).
 
 #### The cap is one tier only
 
-- **Decision**: `Tiers::drawn_prefix` draws the finest stored tier for the bias
-  tier; further past, every row (GUP-716's "zoomed far in").
+- **Decision**: `Tiers::cap` draws the finest stored tier for the bias tier,
+  when more than `Lod::AUTO_MIN_ROWS` rows are in view; else, and further past,
+  every row (GUP-716's "zoomed far in").
 - **Reasoning**: at most one tier coarser than asked is what the bias bought
   (0.306% at 10M); more would bring back GUP-716's lost time-series burst.
 - **Trade-off**: a chunk whose finest stored tier is two below the ask (the
@@ -465,3 +474,18 @@ zoom changed with the cap (exact before, 1.380% of the plot rect now).
 None written. Noted: the partial last chunk at 10M draws every row in the
 shuffled zoom (option C, a full Morton gather, would fix it at up to 12 B a row
 of GPU memory); a spans-only reuse path for `LayerGpu`.
+
+### Narrowing the cap (2026-11-18)
+
+Measured same session after the change (release, HD 630, 1920 x 1080, 2 build
+jobs, load about 2.3):
+
+| run                                             | result                                             |
+| ----------------------------------------------- | -------------------------------------------------- |
+| `lod_spike --rows 10000000 --shuffle` auto full | 12.87 ms (629,602)                                 |
+| same, zoom                                      | 14.29 ms (1,143,533), 67 draws (main: 138.8-141.5) |
+| 1080p 1M walk zoom (`tests/lod.rs`)             | 0.000% (gate 0.1%), 1M instances                   |
+| `zoom_bench --columns --lod auto` 10M, 2 runs   | draws 7, instances 26,954, GPU 2.39-2.48 ms        |
+
+`lod_scatter_1m.png` passes unchanged. Budget proposal (orchestrator records):
+`lod.draws.median` 4 -> **7**, `lod.instances.median` 28,430 -> **26,954**.

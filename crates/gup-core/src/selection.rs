@@ -160,7 +160,9 @@ impl Retain {
 /// unsorted rows, whose every chunk spans the whole extent, costs about
 /// what its visible region costs. A chunk keeps cells down to the size at
 /// which they hold half its rows; zoomed one step past that, it draws its
-/// finest cells, and further in, every row.
+/// finest cells if more than [`Lod::AUTO_MIN_ROWS`] rows are in view
+/// (estimated from the stretches in view), else every row, which is exact
+/// and cheap there; and further in, every row.
 ///
 /// Only [`Circle`](crate::Circle) layers and [`Rect`](crate::Rect)
 /// layers with constant `width` and `height` take a level of detail.
