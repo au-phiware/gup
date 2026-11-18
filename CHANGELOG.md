@@ -186,7 +186,10 @@ what each release contains and what its version number promises.
   while the brush still selects every data row. A layer that grows by appends or
   under `RowWindow::LastRows` keeps it: full chunks keep their tiers, the newest
   chunk builds them from 65,536 rows and again each time its rows double (the
-  rows past them draw in full), and an evicted chunk takes its tiers with it.
+  rows past them draw in full), and an evicted chunk takes its tiers with it. A
+  layer drawn largest first (a size channel read from a column) takes it too: a
+  cell's representative is its largest mark (in buckets of 12.5%), and each tier
+  block draws its largest marks first.
 
 ### Changed
 
@@ -234,10 +237,12 @@ what each release contains and what its version number promises.
 - No CSV or serde input: rows enter through closures, `Columns` or Arrow record
   batches (feature `arrow`).
 - Nothing above 30M rows is measured. The level of detail covers circles and
-  constant-size rects drawn in data order only (not lines, areas or layers sized
-  by a column; the newest chunk of a layer that is appended to draws in full
-  under 65,536 rows); under `Lod::Off`, lines and areas, SVG output and CPU
-  picks still read every row.
+  constant-size rects (not lines, areas or rects with per-row extents; the
+  newest chunk of a layer that is appended to draws in full under 65,536 rows).
+  Where every cell holds marks of many sizes, a layer drawn largest first shows
+  its smallest marks on top in the full draw and only its largest in the thinned
+  one: use `Lod::Off` there. Lines and areas, and, under `Lod::Off`, SVG output
+  and CPU picks, still read every row.
 - No PDF export.
 - Accessibility: no screen reader has been tested by hand, nothing outside the
   browser speaks `focus_text`, and keyboard focus skips a layer that dropped its

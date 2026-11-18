@@ -181,6 +181,17 @@ impl DrawOrder {
         self.bucketed
     }
 
+    /// Stored row `stored`'s rank for a level of detail (GUP-721): lower
+    /// draws first, equal within a size bucket (12.5%, whether or not the
+    /// layer's own keys are bucketed), so a tier's blocks can keep their
+    /// spatial order within a bucket.
+    pub(crate) fn lod_rank(&self, stored: u64) -> u32 {
+        let k = self.keys[stored as usize];
+        // Clearing low mantissa bits is monotone for either sign.
+        let q = f32::from_bits(k.to_bits() & !((1 << (23 - BUCKET_BITS)) - 1));
+        !ordered_bits(q)
+    }
+
     fn key(&self, v: f64) -> f32 {
         if v.is_finite() {
             // `+ 0.0` makes -0 equal to 0 under `total_cmp`.
@@ -287,8 +298,32 @@ impl DrawOrder {
     }
 
     /// The instanced draws over `chunks`, in draw order: each segment
-    /// split at chunk boundaries.
-    pub(crate) fn spans(&self, chunks: &[Chunk]) -> Vec<Span> {
+    /// split at chunk boundaries. `entries` are the layer's draw entries
+    /// (one per chunk, then the rows past an appended chunk's tiers) and
+    /// `lod` the ranges of representatives the chunks drawing a tier draw
+    /// (GUP-721): such a chunk draws them where its first segment is (the
+    /// representatives are in size order within each block of its tiers),
+    /// instead of its rows; rows past its tiers draw in place, through
+    /// their own entry.
+    pub(crate) fn spans(
+        &self,
+        chunks: &[Chunk],
+        entries: &[DrawEntry],
+        lod: &[(usize, Vec<Range<u32>>)],
+    ) -> Vec<Span> {
+        let n = chunks.len();
+        let mut lod_at: Vec<Option<&[Range<u32>]>> = vec![None; n];
+        for (i, ranges) in lod {
+            if *i < n {
+                lod_at[*i] = Some(ranges);
+            }
+        }
+        // The entry that draws the rows from `first` on, by chunk.
+        let mut tail: Vec<Option<(usize, u32)>> = vec![None; n];
+        for (i, e) in entries.iter().enumerate().skip(n) {
+            tail[e.this] = Some((i, e.first));
+        }
+        let mut placed = vec![false; n];
         let mut spans = Vec::with_capacity(self.segments.len() + chunks.len());
         for seg in &self.segments {
             let mut s = seg.start;
@@ -296,11 +331,38 @@ impl DrawOrder {
                 let k = chunks.partition_point(|c| c.row_base() + u64::from(c.rows()) <= s);
                 let chunk = &chunks[k];
                 let end = seg.end.min(chunk.row_base() + u64::from(chunk.rows()));
-                spans.push(Span {
-                    chunk: k as u32,
-                    rows: (s - chunk.row_base()) as u32..(end - chunk.row_base()) as u32,
-                });
+                let (a, b) = (
+                    (s - chunk.row_base()) as u32,
+                    (end - chunk.row_base()) as u32,
+                );
                 s = end;
+                let (head, rest) = match tail[k] {
+                    Some((i, first)) => ((a, b.min(first)), Some((i, a.max(first), b, first))),
+                    None => ((a, b), None),
+                };
+                match lod_at[k] {
+                    Some(ranges) => {
+                        if !std::mem::replace(&mut placed[k], true) {
+                            spans.extend(ranges.iter().map(|r| Span {
+                                chunk: k as u32,
+                                rows: r.clone(),
+                            }));
+                        }
+                    }
+                    None if head.0 < head.1 => spans.push(Span {
+                        chunk: k as u32,
+                        rows: head.0..head.1,
+                    }),
+                    None => {}
+                }
+                if let Some((i, a, b, first)) = rest
+                    && a < b
+                {
+                    spans.push(Span {
+                        chunk: i as u32,
+                        rows: a - first..b - first,
+                    });
+                }
             }
         }
         spans

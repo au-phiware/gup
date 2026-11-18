@@ -14,7 +14,10 @@
 //! bits.
 //!
 //! A cell's representative at a tier is its lowest row, so tiers nest: a
-//! cell's representative is one of its four children's. One stable radix
+//! cell's representative is one of its four children's. A layer drawn
+//! largest first (GUP-721) gives each row a rank (its size bucket, larger
+//! first) and a cell's representative is its best `(rank, row)`: any total
+//! order nests alike, as the best of a union is the best of the bests. One stable radix
 //! sort of `(key, row)` pairs puts every tier's cells in runs of keys, and
 //! a row represents its cell at every tier from its `first_tier` on (see
 //! [`first_tiers`]). Rows are kept in **progressive order**, by
@@ -32,6 +35,10 @@
 //! overlap and the GPU serialises their blending: a shuffled 10M-row full
 //! view took 20.3 ms against 13.9 in row order (GUP-720), as a sorted x
 //! costs more than a shuffled one (RFC-001 "GUP-631 findings").
+//!
+//! A ranked block is ordered by rank first (a stable sort, so Morton order
+//! within one rank), so a tier draws its largest marks first, and its runs
+//! never cross a change of rank.
 //!
 //! Tiers are stored while they hold at most half the chunk's rows; past
 //! the finest stored tier a chunk draws every row ([`Tiers::prefix`] is
@@ -111,7 +118,15 @@ impl Tiers {
     /// at `xy(r)`. Rows with a non-finite x or y are skipped: they
     /// represent nothing. Reads every row twice (once for the extent, once
     /// for the keys); the peak scratch is 16 B a finite row.
-    pub fn build(rows: u32, xy: impl Fn(u32) -> (f64, f64)) -> Tiers {
+    ///
+    /// `rank` (GUP-721), for a layer drawn largest first, gives each row's
+    /// draw rank, lower first: a cell's representative is its lowest
+    /// `(rank, row)` and each tier block draws in rank order.
+    pub fn build(
+        rows: u32,
+        xy: impl Fn(u32) -> (f64, f64),
+        rank: Option<&dyn Fn(u32) -> u32>,
+    ) -> Tiers {
         // The extent of the finite rows.
         let (mut x0, mut x1, mut y0, mut y1) = (f64::MAX, f64::MIN, f64::MAX, f64::MIN);
         let mut finite = 0usize;
@@ -157,13 +172,16 @@ impl Tiers {
             }
         }
         let mut sorted = radix_sort(pairs, &mut hist);
+        if let Some(rank) = rank {
+            best_first(&mut sorted, rank);
+        }
         // The rows in key order, for the blocks' Morton order (`first_tiers`
         // consumes the pairs).
         let morton: Vec<u32> = sorted.iter().map(|&p| p as u32).collect();
 
         // Each row's first tier, by row, and how many rows start at each.
         let mut first = vec![NEVER; rows as usize];
-        first_tiers(&mut sorted, &mut first);
+        first_tiers(&mut sorted, &mut first, rank);
         drop(sorted);
         let mut starts = [0u32; NEVER as usize + 1];
         for &t in &first {
@@ -196,7 +214,10 @@ impl Tiers {
             }
         }
         drop(first);
-        let runs = runs(&order, &counts, &xy);
+        if let Some(rank) = rank {
+            by_rank(&mut order, &counts, rank);
+        }
+        let runs = runs(&order, &counts, &xy, rank);
         spread(&mut order, &runs);
         Tiers {
             rows,
@@ -229,14 +250,84 @@ impl Tiers {
     }
 }
 
+/// Move the lowest `(rank, row)` of each run of equal keys of the sorted
+/// pairs to the run's front (the rows of a run are in increasing order).
+fn best_first(sorted: &mut [u64], rank: &dyn Fn(u32) -> u32) {
+    let mut i = 0;
+    while i < sorted.len() {
+        let key = sorted[i] >> 32;
+        let mut j = i + 1;
+        let mut best = i;
+        let mut best_rank = rank(sorted[i] as u32);
+        while j < sorted.len() && sorted[j] >> 32 == key {
+            let r = rank(sorted[j] as u32);
+            if r < best_rank {
+                (best, best_rank) = (j, r);
+            }
+            j += 1;
+        }
+        sorted.swap(i, best);
+        // Only the head of a run can represent anything: the rest's order
+        // is never read as a head's.
+        i = j;
+    }
+}
+
+/// Order each tier block of `order` (blocks end at `counts`) by rank,
+/// keeping the block's order within a rank.
+fn by_rank(order: &mut [u32], counts: &[u32], rank: &dyn Fn(u32) -> u32) {
+    let mut start = 0;
+    let mut packed: Vec<u64> = Vec::new();
+    for &end in counts {
+        let block = &mut order[start as usize..end as usize];
+        packed.clear();
+        packed.extend(
+            block
+                .iter()
+                .enumerate()
+                .map(|(i, &r)| u64::from(rank(r)) << 32 | i as u64),
+        );
+        packed.sort_unstable();
+        let old = block.to_vec();
+        for (b, p) in block.iter_mut().zip(&packed) {
+            *b = old[*p as u32 as usize];
+        }
+        start = end;
+    }
+}
+
 /// Each tier block of `order` (blocks end at `counts`) cut into runs of at
-/// most [`RUN_LEN`], with the boxes of their rows' positions `xy`.
-fn runs(order: &[u32], counts: &[u32], xy: &impl Fn(u32) -> (f64, f64)) -> Vec<Run> {
+/// most [`RUN_LEN`] (and at changes of `rank`), with the boxes of their
+/// rows' positions `xy`.
+fn runs(
+    order: &[u32],
+    counts: &[u32],
+    xy: &impl Fn(u32) -> (f64, f64),
+    rank: Option<&dyn Fn(u32) -> u32>,
+) -> Vec<Run> {
     let mut runs = Vec::with_capacity(order.len().div_ceil(RUN_LEN as usize) + counts.len());
     let mut start = 0;
     for &end in counts {
-        for s in (start..end).step_by(RUN_LEN as usize) {
-            let e = end.min(s + RUN_LEN);
+        // The block's stretches of one rank (all of it unranked).
+        let mut stretches = Vec::new();
+        let mut at = start;
+        while at < end {
+            let mut to = end;
+            if let Some(rank) = rank {
+                let r = rank(order[at as usize]);
+                to = at + 1;
+                while to < end && rank(order[to as usize]) == r {
+                    to += 1;
+                }
+            }
+            stretches.push(at..to);
+            at = to;
+        }
+        let cuts = stretches
+            .into_iter()
+            .flat_map(|s| s.clone().step_by(RUN_LEN as usize).map(move |a| (a, s.end)));
+        for (s, stretch_end) in cuts {
+            let e = stretch_end.min(s + RUN_LEN);
             let mut run = Run {
                 start: s,
                 end: e,
@@ -582,10 +673,11 @@ fn split_tier(a: u32, b: u32) -> u8 {
 /// on its right, shares the cell (any lower head in the run is at least
 /// that far). So its first tier is the larger of its split tiers with
 /// those two neighbours (0 for a missing one): one pass with a stack of
-/// heads in increasing row order. The stack lives in the pairs already
+/// heads in increasing row order (increasing `(rank, row)`, GUP-721). The stack lives in the pairs already
 /// read (it never holds more heads than were read), and a head's split
 /// tier with its left neighbour waits in `first`.
-fn first_tiers(sorted: &mut [u64], first: &mut [u8]) {
+fn first_tiers(sorted: &mut [u64], first: &mut [u8], rank: Option<&dyn Fn(u32) -> u32>) {
+    let rk = |r: u32| rank.map_or(0, |f| f(r));
     let mut top = 0;
     let mut prev = None;
     for i in 0..sorted.len() {
@@ -599,7 +691,7 @@ fn first_tiers(sorted: &mut [u64], first: &mut [u8]) {
         let mut left = 0;
         while let Some(&other) = sorted[..top].last() {
             let split = split_tier(key, (other >> 32) as u32);
-            if (other as u32) < row {
+            if (rk(other as u32), other as u32) < (rk(row), row) {
                 left = split;
                 break;
             }
@@ -666,7 +758,7 @@ mod tests {
     }
 
     fn build(rows: &[(f64, f64)]) -> Tiers {
-        Tiers::build(rows.len() as u32, |r| rows[r as usize])
+        Tiers::build(rows.len() as u32, |r| rows[r as usize], None)
     }
 
     /// The cell of every finite row at tier 16, computed independently of
@@ -864,7 +956,7 @@ mod tests {
             (none.stored, &none.counts[..], none.order.len()),
             (0, &[0][..], 0)
         );
-        let empty = Tiers::build(0, |_| unreachable!());
+        let empty = Tiers::build(0, |_| unreachable!(), None);
         assert_eq!((empty.stored, &empty.counts[..]), (0, &[0][..]));
     }
 
@@ -940,7 +1032,7 @@ mod tests {
         );
         layer.extend(clustered(chunk, 8));
         let alone = build(&layer[..chunk]);
-        let first = Tiers::build(chunk as u32, |r| layer[r as usize]);
+        let first = Tiers::build(chunk as u32, |r| layer[r as usize], None);
         assert_eq!(first, alone);
         let first_of_three = check("chunk 0 of 3", &layer[..chunk]);
         assert_eq!(first_of_three, alone);
@@ -1185,7 +1277,7 @@ mod tests {
         let (w, h) = (1850.0, 1035.0);
         assert_eq!(spike_tier(ext, dom, w, h), 10);
         let rows: Vec<(f64, f64)> = vec![(ext[0].0, ext[1].0), (ext[0].1, ext[1].1)];
-        let tiers = Tiers::build(2, |r| rows[r as usize]);
+        let tiers = Tiers::build(2, |r| rows[r as usize], None);
         assert_eq!((tiers.ex, tiers.ey), (-6, -5));
         let (kx, ky) = (k(dom[0], w), k(dom[1], h));
         assert_eq!(tier(tiers.ex, tiers.ey, kx, ky), Some(11));
@@ -1207,5 +1299,90 @@ mod tests {
         // Zoomed in past the finest tier: every row; out: tier 0.
         assert_eq!(tier(0, 0, 1e9, 1e9), None);
         assert_eq!(tier(0, 0, 1e-12, 1e-12), Some(0));
+    }
+
+    /// GUP-721: ranked tiers. A rank of 16 levels at random: every tier's
+    /// representatives are the best `(rank, row)` of each occupied cell
+    /// (nesting follows: each tier's set is the prefix of the next), each
+    /// block is in rank order, and runs tile blocks without crossing a rank
+    /// change.
+    #[test]
+    fn ranked_tiers_keep_each_cells_best_row_and_nest() {
+        for (name, rows) in [
+            ("uniform", uniform(60_000, 3)),
+            ("walk", walk(60_000, 4)),
+            ("clustered", clustered(60_000, 5)),
+        ] {
+            let mut rng = Lcg(77);
+            let ranks: Vec<u32> = rows.iter().map(|_| (rng.unit() * 16.0) as u32).collect();
+            let rank = |r: u32| ranks[r as usize];
+            let tiers = Tiers::build(rows.len() as u32, |r| rows[r as usize], Some(&rank));
+            let cells = cells(&rows, &tiers);
+            let mut best_of_prev: Option<Vec<u32>> = None;
+            for t in 0..=tiers.stored {
+                let mut best: HashMap<(u32, u32), u32> = HashMap::new();
+                for (r, c) in cells.iter().enumerate() {
+                    if let Some((cx, cy)) = *c {
+                        let s = TMAX - t;
+                        let e = best.entry((cx >> s, cy >> s)).or_insert(r as u32);
+                        if (ranks[r], r as u32) < (ranks[*e as usize], *e) {
+                            *e = r as u32;
+                        }
+                    }
+                }
+                let mut want: Vec<u32> = best.into_values().collect();
+                want.sort_unstable();
+                let mut got = tiers.order[..tiers.counts[t as usize] as usize].to_vec();
+                got.sort_unstable();
+                assert_eq!(got, want, "{name}: tier {t}");
+                if let Some(prev) = &best_of_prev {
+                    // Nesting: every coarser representative is finer too.
+                    assert!(
+                        prev.iter().all(|r| got.binary_search(r).is_ok()),
+                        "{name}: tier {t} does not contain tier {}",
+                        t - 1
+                    );
+                }
+                best_of_prev = Some(got);
+                // The block is in rank order.
+                let start = if t == 0 {
+                    0
+                } else {
+                    tiers.counts[t as usize - 1]
+                };
+                let block = &tiers.order[start as usize..tiers.counts[t as usize] as usize];
+                assert!(
+                    block.windows(2).all(|w| rank(w[0]) <= rank(w[1])),
+                    "{name}: tier {t} block is not in rank order"
+                );
+            }
+            // Runs tile the order, hold one rank and stay in a block.
+            let mut at = 0;
+            for run in &tiers.runs {
+                assert_eq!(run.start, at, "{name}");
+                at = run.end;
+                let rs: Vec<u32> = tiers.order[run.start as usize..run.end as usize]
+                    .iter()
+                    .map(|&r| rank(r))
+                    .collect();
+                assert!(rs.iter().all(|&r| r == rs[0]), "{name}: a run mixes ranks");
+                assert!(run.end - run.start <= RUN_LEN);
+                assert!(
+                    tiers.counts.iter().all(|&c| c <= run.start || c >= run.end),
+                    "{name}: a run crosses a block"
+                );
+            }
+            assert_eq!(at as usize, tiers.order.len(), "{name}");
+        }
+    }
+
+    /// Without ranks, and with a rank equal for every row, the tiers are
+    /// the same.
+    #[test]
+    fn a_constant_rank_changes_nothing() {
+        let rows = uniform(30_000, 9);
+        let rank = |_: u32| 5;
+        let ranked = Tiers::build(rows.len() as u32, |r| rows[r as usize], Some(&rank));
+        assert_eq!(ranked, build(&rows));
     }
 }

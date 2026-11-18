@@ -166,9 +166,19 @@ impl Retain {
 ///
 /// Only [`Circle`](crate::Circle) layers and [`Rect`](crate::Rect)
 /// layers with constant `width` and `height` take a level of detail.
-/// Lines, areas, segments, rects with per-row extents and layers drawn
-/// largest first (a size channel read from a column) draw every row
+/// Lines, areas, segments and rects with per-row extents draw every row
 /// whatever the setting.
+///
+/// A layer drawn largest first (a size channel read from a column,
+/// GUP-721) draws every row under `Auto`: opt in with
+/// [`AutoSized`](Lod::AutoSized), where a cell's representative is its
+/// largest mark (in buckets of 12.5% of size, then the lowest row) and a
+/// tier draws each of its blocks of representatives largest first, so large
+/// marks lie beneath small ones as in the full draw. Where every cell holds
+/// marks of many sizes (sizes drawn at random for each row of a dense
+/// layer) the full draw shows the smallest marks on top and the thinned one
+/// only its largest, so the picture differs (about 23% of a 400 x 300 plot
+/// rect for 300,000 such rows; 1% to 2.5% when sizes follow the data).
 ///
 /// A layer that grows by appends (GUP-719): its full chunks keep their
 /// tiers whatever the new rows' extent. Its newest chunk draws every row
@@ -211,6 +221,18 @@ pub enum Lod {
     /// Draw representatives above [`Lod::AUTO_MIN_ROWS`] visible rows.
     #[default]
     Auto,
+    /// As [`Auto`](Lod::Auto), and also for a layer drawn largest first (a
+    /// size channel read from a column, GUP-721): a cell's representative is
+    /// its largest mark and each tier draws its largest marks first. Opt-in,
+    /// because one mark per cell cannot show a cell of many sizes as the full
+    /// draw does (it shows the smallest marks on top, the thinned draw its
+    /// largest): 300,000 rows with a size drawn at random for each row differ
+    /// from the full draw in about 23% of a 400 x 300 plot rect (pixels over
+    /// ΔE00 10), against 1% to 2.5% when sizes follow the data (nearby rows
+    /// share a size, as in a bubble chart of regions). Until GUP-742 keeps a
+    /// second representative for mixed cells, `Auto` draws every row of such
+    /// a layer.
+    AutoSized,
     /// Draw every row (the exact output).
     Off,
 }
@@ -965,7 +987,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
     /// a chunk that stores no tier `t`, every row, in place of the
     /// per-frame choice of [`Lod::Auto`]; `None` returns to the layer's
     /// [`Lod`] (GUP-715's seam for tests and `lod_spike`). Prepare fails
-    /// for a polyline or a layer drawn by size.
+    /// for a polyline.
     pub(crate) fn force_lod_tier(&mut self, t: Option<u32>) -> &mut Self {
         self.forced_tier = t;
         self
@@ -1048,11 +1070,8 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         self.lod_pending = false;
         self.lod_drawn.clear();
         self.lod_items = 0;
-        // A layer drawn largest first keeps every row until GUP-721 orders
-        // its representatives by size.
-        let auto = self.lod == Lod::Auto
+        let auto = (self.lod == Lod::AutoSized || (self.lod == Lod::Auto && self.order.is_none()))
             && self.lod_mark()
-            && self.order.is_none()
             && rows > Lod::AUTO_MIN_ROWS;
         if self.forced_tier.is_none() && !auto {
             return Ok(entries);
@@ -1081,7 +1100,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             xy,
             mark: M::NAME,
             polyline: M::GEOMETRY == Geometry::Polyline,
-            sized: self.order.is_some(),
+            order: self.order.as_ref(),
         };
         // Pixels per data unit of each chunk along x and y over its extent
         // (0: no span; `None`: not known, so the chunk draws every row). A
@@ -1938,7 +1957,7 @@ pub(crate) trait Layer: wgpu::WasmNotSendSync {
 }
 
 /// What [`tier_entries`] needs of a layer.
-struct TierAsk {
+struct TierAsk<'a> {
     /// The forced tier ([`Selection::force_lod_tier`]), else
     /// [`Lod::Auto`]'s choice.
     forced: Option<u32>,
@@ -1954,7 +1973,7 @@ struct TierAsk {
     mark: &'static str,
     polyline: bool,
     /// Whether the layer draws by size.
-    sized: bool,
+    order: Option<&'a DrawOrder>,
 }
 
 /// What [`tier_entries`] did.
@@ -1975,6 +1994,7 @@ fn chunk_tiers(
     store: &mut ColumnStore,
     k: usize,
     xy: [Option<usize>; 2],
+    order: Option<&DrawOrder>,
     done: &mut TierDone,
 ) -> Result<(i32, i32)> {
     if !store.has_tiers(k, xy) {
@@ -1983,7 +2003,7 @@ fn chunk_tiers(
             done.rebuilds += 1;
         }
     }
-    store.lod_tiers(k, xy).map(|t| (t.ex, t.ey))
+    store.lod_tiers(k, xy, order).map(|t| (t.ex, t.ey))
 }
 
 /// Point a layer's `entries` at their chunks' representatives as
@@ -1991,8 +2011,7 @@ fn chunk_tiers(
 /// representatives to `cx` on first use:
 ///
 /// - **Forced** tier `t` (GUP-715's seam): every chunk that stores `t`
-///   draws its prefix, any other every row. An error for a polyline or a
-///   layer drawn by size.
+///   draws its prefix, any other every row. An error for a polyline.
 /// - **Auto**: first, when the prepare's release drops CPU copies, the
 ///   tiers of every chunk it drops (nothing could build them later; RFC-001
 ///   "GUP-631 findings", GUP-716 Decisions). Then, when the visible chunks
@@ -2008,7 +2027,7 @@ fn chunk_tiers(
 fn tier_entries(
     store: &mut ColumnStore,
     cx: &Context,
-    ask: &TierAsk,
+    ask: &TierAsk<'_>,
     frame: &lod::Frame<'_>,
     scale: &[[Option<f64>; 2]],
     share: &dyn Fn(&lod::Run) -> f64,
@@ -2036,7 +2055,7 @@ fn tier_entries(
 fn choose_tiers(
     store: &mut ColumnStore,
     cx: &Context,
-    ask: &TierAsk,
+    ask: &TierAsk<'_>,
     frame: &lod::Frame<'_>,
     scale: &[[Option<f64>; 2]],
     share: &dyn Fn(&lod::Run) -> f64,
@@ -2047,19 +2066,9 @@ fn choose_tiers(
         if ask.polyline {
             return Err(no_lod(ask.mark));
         }
-        if ask.sized {
-            return Err(Error::config(
-                "lod",
-                format!(
-                    "{}: a layer drawn by size has no level of detail yet (its \
-                         representatives must draw largest first)",
-                    ask.mark
-                ),
-            ));
-        }
         for e in entries.iter_mut().filter(|e| e.first == 0) {
-            chunk_tiers(store, e.this, ask.xy, &mut done)?;
-            if let Some(n) = store.lod_tiers(e.this, ask.xy)?.prefix(t) {
+            chunk_tiers(store, e.this, ask.xy, ask.order, &mut done)?;
+            if let Some(n) = store.lod_tiers(e.this, ask.xy, ask.order)?.prefix(t) {
                 store.upload_lod(cx, e.this)?;
                 e.instances = n;
                 e.lod = Some(n);
@@ -2070,7 +2079,7 @@ fn choose_tiers(
     if ask.release {
         for k in 0..store.chunks().len() {
             if store.releasable(k) {
-                chunk_tiers(store, k, ask.xy, &mut done)?;
+                chunk_tiers(store, k, ask.xy, ask.order, &mut done)?;
                 store.upload_lod(cx, k)?;
             }
         }
@@ -2116,7 +2125,7 @@ fn choose_tiers(
                 }
             } else {
                 budget -= 1;
-                chunk_tiers(store, e.this, ask.xy, &mut done)?;
+                chunk_tiers(store, e.this, ask.xy, ask.order, &mut done)?;
             }
         } else if built.is_none() {
             continue;
@@ -2521,7 +2530,11 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         let start = out.len();
         build_items(M::HIT, layer, self.z, first, &slots, &chans, out);
         for item in &mut out[start..] {
-            item.row.row = first + rows[item.row.row - first] as usize;
+            // A stored row (largest first for a sized layer, GUP-721) is
+            // named by its data row.
+            let stored = rows[item.row.row - first];
+            item.row.row =
+                first + self.order.as_ref().map_or(stored, |o| o.row_of(stored)) as usize;
         }
     }
 
@@ -3333,7 +3346,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         // upload order.
         let spans = match &self.order {
             _ if glue.polyline => polyline_spans(stored),
-            Some(order) => order.spans(stored),
+            Some(order) => order.spans(stored, &entries, &self.lod_drawn),
             // A quad layer in upload order, one span per entry: a chunk's
             // rows, the runs of its tier prefix it can see (GUP-715,
             // GUP-720) or the rows past its tiers.

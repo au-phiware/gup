@@ -52,6 +52,7 @@
 use crate::context::{Context, ContextId, Upload};
 use crate::error::{Error, Result};
 use crate::lod::Tiers;
+use crate::order::DrawOrder;
 use std::borrow::{Borrow, Cow};
 use std::collections::HashMap;
 use std::fmt::Display;
@@ -1839,7 +1840,15 @@ impl ColumnStore {
     /// values are read as the GPU sees them. An error when the chunk's CPU
     /// copy was released and its columns are not shared (GUP-716 builds
     /// before release).
-    pub(crate) fn lod_tiers(&mut self, k: usize, xy: [Option<usize>; 2]) -> Result<&Tiers> {
+    ///
+    /// `order` (a layer drawn largest first, GUP-721) ranks rows by size
+    /// bucket: see [`Tiers::build`].
+    pub(crate) fn lod_tiers(
+        &mut self,
+        k: usize,
+        xy: [Option<usize>; 2],
+        order: Option<&DrawOrder>,
+    ) -> Result<&Tiers> {
         let fresh = self.has_tiers(k, xy);
         if !fresh {
             let read = |c: Option<usize>| -> Result<Option<(Cells<'_>, &ChunkColumn)>> {
@@ -1852,7 +1861,13 @@ impl ColumnStore {
                 a.as_ref()
                     .map_or(0.0, |(cells, col)| cells.get(col, r as usize))
             };
-            let tiers = Arc::new(Tiers::build(self.chunks[k].len, |r| (at(&x, r), at(&y, r))));
+            let base = self.chunks[k].row_base;
+            let rank = |r: u32| order.map_or(0, |o| o.lod_rank(base + u64::from(r)));
+            let tiers = Arc::new(Tiers::build(
+                self.chunks[k].len,
+                |r| (at(&x, r), at(&y, r)),
+                order.is_some().then_some(&rank),
+            ));
             self.chunks[k].lod = Some(Box::new(ChunkLod {
                 xy,
                 tiers,
@@ -2886,7 +2901,10 @@ mod tests {
         for store in [&mut owned, &mut shared] {
             store.upload(&cx).unwrap();
             for k in 0..store.chunks().len() {
-                let tiers = store.lod_tiers(k, [Some(0), Some(1)]).unwrap().clone();
+                let tiers = store
+                    .lod_tiers(k, [Some(0), Some(1)], None)
+                    .unwrap()
+                    .clone();
                 assert!(tiers.stored > 2, "chunk {k}: {tiers:?}");
                 store.upload_lod(&cx, k).unwrap();
                 let chunk = &store.chunks()[k];
@@ -2938,7 +2956,7 @@ mod tests {
         store.upload(&cx).unwrap();
         assert_eq!(store.release(), 2);
         let err = store
-            .lod_tiers(1, [Some(0), Some(1)])
+            .lod_tiers(1, [Some(0), Some(1)], None)
             .unwrap_err()
             .to_string();
         assert!(err.contains("chunk 1 (rows 2..4)"), "{err}");
@@ -2972,7 +2990,11 @@ mod tests {
         )
         .unwrap();
         store.upload(&cx).unwrap();
-        let reps = store.lod_tiers(0, [Some(0), Some(1)]).unwrap().order.len() as u64;
+        let reps = store
+            .lod_tiers(0, [Some(0), Some(1)], None)
+            .unwrap()
+            .order
+            .len() as u64;
         store.upload_lod(&cx, 0).unwrap();
         let size = store.chunks()[0].lod_gpu(&cx).unwrap().size();
         println!(
