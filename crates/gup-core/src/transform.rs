@@ -205,7 +205,7 @@ pub fn box_stats(values: impl IntoIterator<Item = f64>) -> Option<BoxStats> {
     if v.is_empty() {
         return None;
     }
-    v.sort_by(f64::total_cmp);
+    crate::sort::sort_f64(&mut v);
     let (q1, median, q3) = (quantile(&v, 0.25), quantile(&v, 0.5), quantile(&v, 0.75));
     let iqr = q3 - q1;
     let (fence_lo, fence_hi) = (q1 - 1.5 * iqr, q3 + 1.5 * iqr);

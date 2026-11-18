@@ -50,16 +50,21 @@ impl OtLayout {
                 }
             }
         }
-        let mut kern_lookups = Vec::new();
+        // Ascending and distinct. A font has a handful, so each is
+        // inserted in place rather than sorted (a sort would compile a
+        // whole sort for `u16`s into every binary, GUP-744).
+        let mut kern_lookups: Vec<u16> = Vec::new();
         if let Some(gpos) = face.tables().gpos {
             let wanted = Tag::from_bytes(b"kern");
             for feature in gpos.features {
                 if feature.tag == wanted {
-                    kern_lookups.extend(feature.lookup_indices);
+                    for index in feature.lookup_indices {
+                        if let Err(at) = kern_lookups.binary_search(&index) {
+                            kern_lookups.insert(at, index);
+                        }
+                    }
                 }
             }
-            kern_lookups.sort_unstable();
-            kern_lookups.dedup();
         }
         Self {
             units_per_em: f32::from(face.units_per_em()),

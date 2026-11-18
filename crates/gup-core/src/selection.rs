@@ -3431,8 +3431,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         let had = self.brush.is_some();
         self.brush = rows.map(|r| {
             let mut r = r.to_vec();
-            r.sort_unstable();
-            r.dedup();
+            crate::sort::sort_dedup_usize(&mut r);
             r
         });
         #[cfg(feature = "svg")]
@@ -3993,7 +3992,7 @@ impl EdgeCache {
             None => {
                 let mut values = decode()?;
                 values.retain(|v| v.is_finite());
-                values.sort_unstable_by(f64::total_cmp);
+                crate::sort::sort_f64(&mut values);
                 self.entries
                     .retain(|e| !(e.chunk == chunk && e.column == column));
                 // Drop the oldest entries until the new one fits.

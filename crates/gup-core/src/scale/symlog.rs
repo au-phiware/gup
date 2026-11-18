@@ -264,7 +264,7 @@ impl PositionScale for Symlog {
                 .chain(std::iter::once(0.0))
                 .filter(|&v| in_domain(v))
                 .collect();
-            v.sort_by(f64::total_cmp);
+            crate::sort::sort_f64(&mut v);
             v.dedup();
             v
         };

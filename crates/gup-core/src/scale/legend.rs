@@ -216,7 +216,7 @@ impl Ramp {
             && (lo..=hi).contains(&mid)
         {
             values.push(mid);
-            values.sort_by(f64::total_cmp);
+            crate::sort::sort_f64(&mut values);
         }
         let grouped = super::groups_thousands(&values);
         ramp.ticks = values

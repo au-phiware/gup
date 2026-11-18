@@ -686,10 +686,15 @@ GUP-628 and GUP-631 (shared `selection.rs`).
 - [GUP-738](GUP-738_Long_Draws_Split_Across_Submits.md) 💡 — A ~1.1 s full draw
   makes the HD 630 driver reset the device (GUP-734): split very long draws
   across submits without changing the picture. Opus. Deps: GUP-734 ✅.
-- [GUP-744](GUP-744_Browser_Build_Stays_Under_Size_Cap.md) 📋 — Re-attribute the
+- [GUP-744](GUP-744_Browser_Build_Stays_Under_Size_Cap.md) ✅ — Re-attribute the
   363,801 B gz over-wgpu browser build (cap 400,000), cut at least 25 KB with no
   behaviour change, and record a headroom policy (360,000 soft, 380,000 hard).
   Opus. Deps: GUP-721 ✅.
+- [GUP-745](GUP-745_Fonts_Without_A_Float_Parser_In_The_Browser_Build.md) 💡 —
+  ttf-parser's CFF reader links `f64::from_str` (about 15,900 B gz) into every
+  browser build: remove it in a dependency users get (upstream change, a version
+  without it, or gup-text bypassing `Face::parse`). Upstream PRs need the
+  owner's approval. Opus. Deps: GUP-744 ✅.
 
 ## Polish after 0.1
 

@@ -127,7 +127,7 @@ impl DrawOrder {
                 .enumerate()
                 .map(|(i, &k)| (u64::from(!ordered_bits(k)) << 32) | i as u64)
                 .collect();
-            packed.sort_unstable();
+            crate::sort::sort_u64(&mut packed);
             let perm: Vec<u32> = packed.into_iter().map(|p| p as u32).collect();
             if perm.iter().enumerate().any(|(i, &p)| i as u32 != p) {
                 for column in columns.iter_mut() {
