@@ -287,7 +287,7 @@ fn by_rank(order: &mut [u32], counts: &[u32], rank: &dyn Fn(u32) -> u32) {
                 .enumerate()
                 .map(|(i, &r)| u64::from(rank(r)) << 32 | i as u64),
         );
-        packed.sort_unstable();
+        crate::sort::sort_u64(&mut packed);
         let old = block.to_vec();
         for (b, p) in block.iter_mut().zip(&packed) {
             *b = old[*p as u32 as usize];

@@ -209,7 +209,7 @@ fn stack_areas(series: &[Vec<(f64, f64, usize)>]) -> Vec<Vec<AreaPoint>> {
         .filter(|p| !p.0.is_nan())
         .map(|p| if p.0 == 0.0 { 0.0 } else { p.0 })
         .collect();
-    xs.sort_by(f64::total_cmp);
+    crate::sort::sort_f64(&mut xs);
     xs.dedup_by_key(|x| bits(*x));
     let slot: HashMap<u64, usize> = xs.iter().enumerate().map(|(i, &x)| (bits(x), i)).collect();
 

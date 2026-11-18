@@ -459,6 +459,28 @@ pub(crate) struct Hit {
 }
 
 /// A uniform grid of 32 × 32 px cells over the plot rectangle.
+/// Sort `rows` ascending and drop repeats, through the crate's one sort of
+/// `u64`s while every layer and row fits in 32 bits (GUP-744).
+fn sort_dedup_rows(rows: &mut Vec<RowId>) {
+    let narrow = |r: &RowId| u32::try_from(r.layer).is_ok() && u32::try_from(r.row).is_ok();
+    if rows.iter().all(narrow) {
+        let mut keys: Vec<u64> = rows
+            .iter()
+            .map(|r| (r.layer as u64) << 32 | r.row as u64)
+            .collect();
+        crate::sort::sort_u64(&mut keys);
+        keys.dedup();
+        rows.clear();
+        rows.extend(keys.into_iter().map(|k| RowId {
+            layer: (k >> 32) as usize,
+            row: (k & u64::from(u32::MAX)) as usize,
+        }));
+    } else {
+        crate::sort::sort_by(rows, RowId::cmp);
+        rows.dedup();
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct PickIndex {
     plot: Rect,
@@ -604,8 +626,7 @@ impl PickIndex {
                 }
             }
         }
-        out.sort_unstable();
-        out.dedup();
+        sort_dedup_rows(&mut out);
         out
     }
 

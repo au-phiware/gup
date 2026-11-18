@@ -285,7 +285,9 @@ impl Plot {
 
         // The draw order of the colour pass: z, then layer index.
         let mut order: Vec<usize> = (0..self.drawn.len()).collect();
-        order.sort_by_key(|&i| self.drawn[i].0);
+        crate::sort::sort_indices_by(&mut order, &mut |a, b| {
+            self.drawn[a].0.cmp(&self.drawn[b].0)
+        });
         let mut draws = Vec::with_capacity(order.len());
         for &i in &order {
             let gpu = &self.drawn[i].1;
@@ -412,7 +414,7 @@ impl Plot {
             return Vec::new();
         };
         let mut done = std::mem::take(&mut picker.done);
-        done.sort_by_key(|p| p.ticket.0);
+        crate::sort::sort_by(&mut done, |a, b| a.ticket.0.cmp(&b.ticket.0));
         done
     }
 

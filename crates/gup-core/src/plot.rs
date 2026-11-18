@@ -2338,7 +2338,7 @@ impl Plot {
                 }
             }
             for rows in &mut layers {
-                rows.sort_by(|a, b| {
+                crate::sort::sort_by(rows, |a, b| {
                     a.1.x
                         .total_cmp(&b.1.x)
                         .then(a.1.y.total_cmp(&b.1.y))
@@ -3319,7 +3319,7 @@ impl Plot {
                         (c - h, c + h)
                     })
                     .collect();
-                boxes.sort_by(|a, b| a.0.total_cmp(&b.0));
+                crate::sort::sort_by(&mut boxes, |a, b| a.0.total_cmp(&b.0));
                 boxes.windows(2).any(|w| w[1].0 - w[0].1 < gap)
             };
             while counts.0 > 1 && collides(&lay.x_ticks, &**x, false) {

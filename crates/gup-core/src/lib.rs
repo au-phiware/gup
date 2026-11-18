@@ -165,6 +165,7 @@ pub mod scene;
 mod scope;
 mod selection;
 mod shader;
+mod sort;
 #[cfg(any(feature = "window", all(feature = "web", target_arch = "wasm32")))]
 mod surface;
 mod svg;
