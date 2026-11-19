@@ -15,8 +15,8 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Track N5: Performance at Scale **Status**: 🚧 In Progress
-**Created**: 2026-11-19
+**Initiative**: Track N5: Performance at Scale **Status**: ✅ Complete
+(2026-11-20) **Created**: 2026-11-19
 
 ## Context
 
@@ -147,14 +147,14 @@ orchestrator's option A, 2026-11-19), and this story owns the every-frame bound.
 
 ## Definition of Done
 
-- [ ] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
+- [x] First commit within 30 minutes, then `scripts/checkpoint.sh` every 20-30
       minutes between commits
-- [ ] All Acceptance Criteria are satisfied and checked
-- [ ] All tests pass: `cargo test -- --test-threads=1`
-- [ ] Lint and format clean: `mask all-fix`
-- [ ] `mask wasm-size` scatter gz bytes reported
-- [ ] Story status updated to ✅ Complete in story file and INDEX.md
-- [ ] Retrospective added to story document
+- [x] All Acceptance Criteria are satisfied and checked
+- [x] All tests pass: `cargo test -- --test-threads=1`
+- [x] Lint and format clean: `mask all-fix`
+- [x] `mask wasm-size` scatter gz bytes reported
+- [x] Story status updated to ✅ Complete in story file and INDEX.md
+- [x] Retrospective added to story document
 
 ## Implementation Summary
 
@@ -182,6 +182,16 @@ acceptance criterion is met as written; no public API changed.
   row to its last, unwindowed stores unchanged); `tests/lod.rs`
   `a_rolling_window_frame_is_cheap` asserts the p95 of every frame under 8 ms in
   release under `Off` and `Auto`.
+
+### Validation
+
+2 build jobs, 2-4 GB available. `tests/lod.rs` (37) and `tests/window.rs` (12)
+pass on the default device (HD 630) and under lavapipe; `mask merge-check` PASS
+(story-ids, doc, docs-rs, gup-core with all features: 1,060 tests, tour-pages,
+tour-app, wasm-size, wasm-browser; dogfood skipped); `mask all-check` and
+`mask all-fix` clean; `mask feature-matrix` ok in all 7 combinations;
+`cargo test -p gup -- --test-threads=1`: 154 passed, 2 ignored (as before). The
+other workspace crates, which this story does not touch, were not run.
 
 ### Results
 

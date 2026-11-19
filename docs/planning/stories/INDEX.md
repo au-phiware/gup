@@ -695,7 +695,7 @@ GUP-628 and GUP-631 (shared `selection.rs`).
   browser build: remove it in a dependency users get (upstream change, a version
   without it, or gup-text bypassing `Face::parse`). Upstream PRs need the
   owner's approval. Opus. Deps: GUP-744 ✅.
-- [GUP-747](GUP-747_Window_Eviction_Frames_Under_Eight_Ms.md) 🚧 — A rolling
+- [GUP-747](GUP-747_Window_Eviction_Frames_Under_Eight_Ms.md) ✅ — A rolling
   window's evicting frame costs 16-33 ms (the rows' front drain, about 5 ms, and
   the filled chunk's GPU growth, about 10 ms), with or without LOD: bring every
   frame of GUP-719's loop under 8 ms. Opus. Deps: GUP-730.
