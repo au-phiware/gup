@@ -659,7 +659,7 @@ GUP-628 and GUP-631 (shared `selection.rs`).
   blocks and the largest mark as a cell's representative for size-ordered
   layers; 10M bubbles draw 7,679 marks. Deps: GUP-492 ✅, GUP-716 📋, GUP-720 📋
   (sequencing), GUP-724 📋.
-- [GUP-742](GUP-742_Mixed_Size_Cells_Under_LOD.md) 💡 — A cell of many sizes
+- [GUP-742](GUP-742_Mixed_Size_Cells_Under_LOD.md) 🚧 — A cell of many sizes
   shows only its largest mark under LOD; add a second representative. Deps:
   GUP-721 ✅.
 - [GUP-743](GUP-743_Rank_Ordered_Tier_Ranges_Across_Chunks.md) 💡 — Draw a

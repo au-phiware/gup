@@ -10,8 +10,8 @@ touches: [crates/gup-core/src/lod.rs, crates/gup-core/tests/lod.rs]
 
 ## Story Overview
 
-**Initiative**: Track N5: Performance at Scale **Status**: 💡 New **Created**:
-2026-11-19
+**Initiative**: Track N5: Performance at Scale **Status**: 🚧 In Progress
+**Created**: 2026-11-19
 
 ## Context
 
