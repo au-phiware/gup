@@ -256,7 +256,9 @@ impl Lod {
 /// A windowed layer caps its chunks at `max(1024, n / 4)` rows (or the
 /// device's cap, if smaller), so whole chunks can leave: between `n` and
 /// about `1.25 × n` rows are held, plus up to one chunk the last append
-/// has not filled.
+/// has not filled. Once the layer holds a full chunk, each new chunk is
+/// laid out for all its rows at once (it never grows), and evicting drops
+/// rows from the front of a ring, so an evicting frame copies no rows.
 ///
 /// ```
 /// use gup_core::prelude::*;
