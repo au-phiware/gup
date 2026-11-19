@@ -328,6 +328,11 @@ pub struct Selection<T, M: Mark> {
     /// what runs an accessor over a range of it runs over its contiguous
     /// parts ([`parts`]).
     rows: VecDeque<T>,
+    /// [`parts`] for `T`, called through this field: a direct call would
+    /// make the code around it differ by row type, and this way the methods
+    /// that read `rows` by range (`hit_items` above all) stay the same for
+    /// every row type, so their copies fold into one (WASM size, GUP-747).
+    parts: fn(&VecDeque<T>, usize) -> [&[T]; 2],
     /// How many leading rows are not in `rows`: dropped after upload
     /// ([`Retain`]) or evicted ([`RowWindow`]). At least `evicted`.
     released: usize,
@@ -656,6 +661,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
     pub fn new(rows: impl Into<Vec<T>>) -> Self {
         Self {
             rows: VecDeque::from(rows.into()),
+            parts,
             released: 0,
             evicted: 0,
             epoch: 0,
@@ -753,7 +759,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             None => None,
         };
         if let Some(store) = &mut self.columns {
-            let new = parts(&self.rows, start);
+            let new = (self.parts)(&self.rows, start);
             let len = new[0].len() + new[1].len();
             // The same columns, in the same order, as `column_encodings`.
             let mut values = self
@@ -1423,7 +1429,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
     /// error naming its channel.
     fn column_inputs(&mut self) -> Result<Vec<Input>> {
         let len = self.len();
-        let rows = parts(&self.rows, 0);
+        let rows = (self.parts)(&self.rows, 0);
         let mut inputs = Vec::new();
         for (slot, e) in self.encodings.iter_mut().enumerate() {
             let Some(Encoding::Column(c)) = e else {
@@ -3725,7 +3731,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
                 });
             }
         } else if self.all_rows_held() && self.rows.len() == n {
-            let rows = parts(&self.rows, 0);
+            let rows = (self.parts)(&self.rows, 0);
             for &(slot, _) in &needed {
                 let Some(Encoding::Column(c)) = &mut self.encodings[slot] else {
                     unreachable!("a column slot")
