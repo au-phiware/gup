@@ -303,6 +303,16 @@ impl ColumnData {
             Self::Codes(c) => c.len(),
         }
     }
+
+    /// Append `more`'s rows, which must be of the same kind (one
+    /// accessor's output over the next rows).
+    pub(crate) fn join(&mut self, more: ColumnData) {
+        match (self, more) {
+            (Self::Values(v), Self::Values(more)) => v.extend(more),
+            (Self::Codes(c), Self::Codes(more)) => c.extend(more),
+            _ => unreachable!("one accessor gives one kind of column"),
+        }
+    }
 }
 
 impl From<Vec<f64>> for ColumnData {
@@ -1029,15 +1039,7 @@ impl Chunk {
                             });
                     for (col, from) in self.columns.iter().zip(old) {
                         let n = u64::from(gpu.rows) * col.format.stride();
-                        if n > 0 {
-                            encoder.copy_buffer_to_buffer(
-                                &gpu.buffer,
-                                from,
-                                &buffer,
-                                col.offset,
-                                n,
-                            );
-                        }
+                        copy_in_pieces(&mut encoder, &gpu.buffer, from, &buffer, col.offset, n);
                     }
                     cx.submit([encoder.finish()]);
                     gpu.buffer = buffer;
@@ -1148,6 +1150,30 @@ impl Chunk {
             return true;
         }
         false
+    }
+}
+
+/// Copy `len` bytes of `src` at `from` to `dst` at `to` as at most two
+/// copies: a multiple of 64 KiB, then the rest. Some drivers take
+/// milliseconds of CPU to record one copy of certain lengths (Mesa on an
+/// Intel HD 630: 9-17 ms for 1,600,004 bytes, 0.1 ms for 1,600,008; the
+/// slow lengths in words have a prime factor over 16,384), which a growing
+/// chunk hit once per chunk; split, every length measured copies in about
+/// 0.1 ms (GUP-747).
+fn copy_in_pieces(
+    encoder: &mut wgpu::CommandEncoder,
+    src: &wgpu::Buffer,
+    from: u64,
+    dst: &wgpu::Buffer,
+    to: u64,
+    len: u64,
+) {
+    const PIECE: u64 = 1 << 16;
+    let whole = len / PIECE * PIECE;
+    for (at, n) in [(0, whole), (whole, len - whole)] {
+        if n > 0 {
+            encoder.copy_buffer_to_buffer(src, from + at, dst, to + at, n);
+        }
     }
 }
 
@@ -1456,6 +1482,9 @@ pub struct ColumnStore {
     /// The shared columns every column reads, if the store was filled by
     /// [`append_shared`](Self::append_shared).
     shared: Option<SharedColumns>,
+    /// Whether a chunk after the first starts at full capacity, so it
+    /// never grows ([`start_chunks_full`](Self::start_chunks_full)).
+    start_full: bool,
 }
 
 /// The validity plane of numeric column `column` of `formats` (the
@@ -1524,7 +1553,19 @@ impl ColumnStore {
             formats,
             chunks: Vec::new(),
             shared: None,
+            start_full: false,
         })
+    }
+
+    /// Create every chunk after the first at full capacity
+    /// (`chunk_rows`), so it never grows: no CPU copy and no GPU copy on
+    /// the frame that fills it. For a windowed layer (GUP-747), whose
+    /// chunks are a quarter of its window: the unused capacity is at most
+    /// one chunk while the store holds at least one full chunk. The first
+    /// chunk still grows by doubling, so a layer that never fills one
+    /// allocates no more than before.
+    pub(crate) fn start_chunks_full(&mut self) {
+        self.start_full = true;
     }
 
     /// Build a store from evaluated accessor outputs, one
@@ -1640,7 +1681,11 @@ impl ColumnStore {
                 .is_none_or(|last| last.len == self.chunk_rows)
             {
                 let take = (n - done).min(self.chunk_rows as usize) as u32;
-                let capacity = take.next_multiple_of(ROW_BLOCK).min(self.chunk_rows);
+                let capacity = if self.start_full && !shared && !self.chunks.is_empty() {
+                    self.chunk_rows
+                } else {
+                    take.next_multiple_of(ROW_BLOCK).min(self.chunk_rows)
+                };
                 self.chunks.push(Chunk::new(
                     &self.formats,
                     planes,
@@ -2560,6 +2605,64 @@ mod tests {
             .map_async(wgpu::MapMode::Read, |r| r.unwrap());
         cx.wait_idle().unwrap();
         readback.slice(..).get_mapped_range().to_vec()
+    }
+
+    /// GUP-747: a growth copy over 64 KiB is two copies and moves every
+    /// uploaded row; a store that starts chunks full grows only its first,
+    /// and a later chunk keeps one buffer from its first row to its last.
+    #[test]
+    fn growth_copies_in_pieces_and_later_chunks_start_full() {
+        const CHUNK: u32 = 40_000;
+        let cx = Context::new_blocking().unwrap();
+        let formats = vec![ColumnFormat::F32Relative, ColumnFormat::F32];
+        let mut store = ColumnStore::new(formats, CHUNK).unwrap();
+        store.start_chunks_full();
+        let mut total = 0usize;
+        let mut append = |store: &mut ColumnStore, n: usize| {
+            let x: Vec<f64> = (total..total + n).map(|i| i as f64 * 0.5).collect();
+            let y: Vec<f64> = (total..total + n).map(|i| (i % 1009) as f64).collect();
+            store
+                .append(n, &[ColumnData::Values(x), ColumnData::Values(y)])
+                .unwrap();
+            total += n;
+        };
+        // The first chunk grows 64 -> 20,032 -> 40,000 rows; the last
+        // growth copies 20,001 rows (80,004 bytes) a column.
+        for n in [1, 20_000, 19_999] {
+            append(&mut store, n);
+            store.upload(&cx).unwrap();
+        }
+        let first = &store.chunks()[0];
+        assert_eq!((first.rows(), first.capacity()), (CHUNK, CHUNK));
+        let bytes = read_buffer(&cx, first.buffer(&cx).unwrap());
+        for c in 0..2 {
+            let range = first.column_range(c);
+            let range = range.start as usize..range.end as usize;
+            assert_eq!(
+                bytes[range.clone()],
+                first.bytes().unwrap()[range],
+                "column {c}"
+            );
+        }
+        // The second chunk is laid out for every row from its first.
+        append(&mut store, 1);
+        store.upload(&cx).unwrap();
+        assert_eq!(store.chunks()[1].capacity(), CHUNK);
+        let buffer = store.chunks()[1].buffer(&cx).unwrap().clone();
+        for n in [15_000, 24_999] {
+            append(&mut store, n);
+            store.upload(&cx).unwrap();
+            assert_eq!(store.chunks()[1].buffer(&cx), Some(&buffer), "never grown");
+        }
+        assert_eq!(store.chunks()[1].rows(), CHUNK);
+        let x = store.cpu_values(0).unwrap();
+        assert!(x.iter().enumerate().all(|(i, &v)| v == i as f64 * 0.5));
+        // Without it, a second chunk grows from its first rows.
+        let mut store = ColumnStore::new(vec![ColumnFormat::F32], 256).unwrap();
+        store
+            .append(257, &[ColumnData::Values(vec![1.0; 257])])
+            .unwrap();
+        assert_eq!(store.chunks()[1].capacity(), ROW_BLOCK);
     }
 
     #[test]

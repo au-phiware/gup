@@ -31,6 +31,7 @@ use crate::theme::{Theme, Unbrushed};
 #[cfg(feature = "svg")]
 use crate::vector::{BrushMirror, CpuLayer, LayerVector, MarkKind, VChan};
 use std::any::Any;
+use std::collections::VecDeque;
 use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
 use std::task::Waker;
@@ -255,7 +256,9 @@ impl Lod {
 /// A windowed layer caps its chunks at `max(1024, n / 4)` rows (or the
 /// device's cap, if smaller), so whole chunks can leave: between `n` and
 /// about `1.25 × n` rows are held, plus up to one chunk the last append
-/// has not filled.
+/// has not filled. Once the layer holds a full chunk, each new chunk is
+/// laid out for all its rows at once (it never grows), and evicting drops
+/// rows from the front of a ring, so an evicting frame copies no rows.
 ///
 /// ```
 /// use gup_core::prelude::*;
@@ -319,8 +322,17 @@ impl RowWindow {
 ///     .attr(Circle::RADIUS, Px(2.5));
 /// ```
 pub struct Selection<T, M: Mark> {
-    /// The rows not yet released: rows `released..` of the selection.
-    rows: Vec<T>,
+    /// The rows not yet released: rows `released..` of the selection. A
+    /// ring, so a [`RowWindow`]'s eviction drops rows from the front and
+    /// moves none of the rest (GUP-747: a 2M-row `Vec`'s drain took 5-9 ms);
+    /// what runs an accessor over a range of it runs over its contiguous
+    /// parts ([`parts`]).
+    rows: VecDeque<T>,
+    /// [`parts`] for `T`, called through this field: a direct call would
+    /// make the code around it differ by row type, and this way the methods
+    /// that read `rows` by range (`hit_items` above all) stay the same for
+    /// every row type, so their copies fold into one (WASM size, GUP-747).
+    parts: fn(&VecDeque<T>, usize) -> [&[T]; 2],
     /// How many leading rows are not in `rows`: dropped after upload
     /// ([`Retain`]) or evicted ([`RowWindow`]). At least `evicted`.
     released: usize,
@@ -506,6 +518,31 @@ fn fill(store: &mut ColumnStore, len: usize, inputs: Vec<Input>) -> Result<()> {
     store.append_slices(len, &slices)
 }
 
+/// Rows `from..` of the ring `rows` as its contiguous parts, in order (the
+/// second is empty unless the range wraps).
+fn parts<T>(rows: &VecDeque<T>, from: usize) -> [&[T]; 2] {
+    let (a, b) = rows.as_slices();
+    match from.checked_sub(a.len()) {
+        Some(skip) => [&b[skip..], &[]],
+        None => [&a[from..], b],
+    }
+}
+
+/// Run `c` over `parts` in turn, joined: its column over their rows, as
+/// one call over one slice of them gives (the accessor runs row by row,
+/// and a key's dictionary grows in row order either way). One call when
+/// the second part is empty.
+fn evaluate_parts<T>(
+    c: &mut dyn crate::DynColumnEncoding<T>,
+    parts: [&[T]; 2],
+) -> Result<ColumnData> {
+    let mut data = c.evaluate(parts[0])?;
+    if !parts[1].is_empty() {
+        data.join(c.evaluate(parts[1])?);
+    }
+    Ok(data)
+}
+
 /// The last three of `x`, `y`'s rows, after `tail`'s.
 fn tail_of(tail: &[[f64; 2]], x: &[f64], y: &[f64]) -> Vec<[f64; 2]> {
     let rows: Vec<[f64; 2]> = tail
@@ -623,7 +660,8 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
     /// use the mark's defaults.
     pub fn new(rows: impl Into<Vec<T>>) -> Self {
         Self {
-            rows: rows.into(),
+            rows: VecDeque::from(rows.into()),
+            parts,
             released: 0,
             evicted: 0,
             epoch: 0,
@@ -721,18 +759,19 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             None => None,
         };
         if let Some(store) = &mut self.columns {
-            let new = &self.rows[start..];
+            let new = (self.parts)(&self.rows, start);
+            let len = new[0].len() + new[1].len();
             // The same columns, in the same order, as `column_encodings`.
             let mut values = self
                 .encodings
                 .iter_mut()
                 .filter_map(|e| match e {
-                    Some(Encoding::Column(c)) => Some(c.evaluate(new)),
+                    Some(Encoding::Column(c)) => Some(evaluate_parts(c.as_mut(), new)),
                     _ => None,
                 })
                 .collect::<Result<Vec<_>>>()?;
             if let Some(order) = &mut self.order {
-                let runs = runs(self.window, store, new.len());
+                let runs = runs(self.window, store, len);
                 order.push_runs(&mut values, &runs);
             }
             // A monotone line's control values: the new rows', computed
@@ -766,7 +805,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
                 values.push(ColumnData::Values(c1[t..].to_vec()));
                 values.push(ColumnData::Values(c2[t..].to_vec()));
             }
-            store.append(new.len(), &values)?;
+            store.append(len, &values)?;
             let k = store.formats().len() - 2;
             for (row, c1, c2) in rewrite {
                 store.rewrite(row, k, c1);
@@ -1350,6 +1389,9 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             let mut inputs = self.column_inputs()?;
             self.order = self.size_order(&inputs);
             let mut store = ColumnStore::new(formats, chunk_rows)?;
+            if self.window != RowWindow::All {
+                store.start_chunks_full();
+            }
             if self.order.is_some() || controls.is_some() {
                 // Sorting by size permutes the columns, and control values
                 // read x and y as f64: both work on owned columns.
@@ -1387,7 +1429,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
     /// error naming its channel.
     fn column_inputs(&mut self) -> Result<Vec<Input>> {
         let len = self.len();
-        let rows = &self.rows;
+        let rows = (self.parts)(&self.rows, 0);
         let mut inputs = Vec::new();
         for (slot, e) in self.encodings.iter_mut().enumerate() {
             let Some(Encoding::Column(c)) = e else {
@@ -1406,7 +1448,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             }
             let input = match c.shared() {
                 Some(column) => Input::Shared(column.clone()),
-                None => Input::Owned(c.evaluate(rows)?),
+                None => Input::Owned(evaluate_parts(c.as_mut(), rows)?),
             };
             if input.len() != len {
                 return Err(Error::config(
@@ -3566,7 +3608,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
         if !self.retain.keeps_rows(rows) {
             // Drops every `T`: the store holds what the GPU needs.
             self.released += self.rows.len();
-            self.rows = Vec::new();
+            self.rows = VecDeque::new();
         }
     }
 
@@ -3689,12 +3731,12 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
                 });
             }
         } else if self.all_rows_held() && self.rows.len() == n {
-            let rows = &self.rows;
+            let rows = (self.parts)(&self.rows, 0);
             for &(slot, _) in &needed {
                 let Some(Encoding::Column(c)) = &mut self.encodings[slot] else {
                     unreachable!("a column slot")
                 };
-                raw.push(match c.evaluate(rows)? {
+                raw.push(match evaluate_parts(c.as_mut(), rows)? {
                     crate::column::ColumnData::Values(v) => v,
                     crate::column::ColumnData::Codes(codes) => codes
                         .into_iter()
@@ -4577,6 +4619,75 @@ mod tests {
             steady / 900,
             uniforms_bytes / 1_000
         );
+    }
+
+    /// GUP-747: a window's rows are a ring. After evictions it wraps, and an
+    /// append whose rows straddle the wrap, an evaluation of every held row
+    /// again, and the readers of one row (tooltips, `holds`) see the held
+    /// rows in order, as a `Vec` of them did.
+    #[test]
+    fn a_wrapped_ring_of_rows_reads_like_a_vec() {
+        const N: usize = 4_096;
+        let cx = Context::new_blocking().unwrap();
+        let row = |i: usize| Row {
+            x: i as f64,
+            y: (i % 97) as f64,
+            v: 0.0,
+        };
+        let mut sel = Selection::<Row, Circle>::new((0..N).map(row).collect::<Vec<_>>());
+        sel.attr(
+            Circle::X,
+            ScaleRef::new(Linear::new()).encode(|r: &Row| r.x),
+        )
+        .attr(
+            Circle::Y,
+            ScaleRef::new(Linear::new()).encode(|r: &Row| r.y),
+        )
+        .attr(Circle::RADIUS, Px(1.0))
+        .tooltip(|r: &Row| format!("{}", r.x))
+        .window(RowWindow::LastRows(N));
+        sel.fit_domains(&cx).unwrap();
+        let (mut total, mut straddled) = (N, 0);
+        let check = |sel: &Selection<Row, Circle>, total: usize, when: &str| {
+            let first = sel.evicted as usize;
+            assert_eq!(first + sel.len(), total, "{when}");
+            let store = sel.columns.as_ref().unwrap();
+            let want: Vec<f64> = (first..total).map(|i| i as f64).collect();
+            assert_eq!(store.cpu_values(0).unwrap(), want, "{when}: x");
+            let want: Vec<f64> = (first..total).map(|i| (i % 97) as f64).collect();
+            assert_eq!(store.cpu_values(1).unwrap(), want, "{when}: y");
+            for i in [first, first + 1, (first + total) / 2, total - 1] {
+                assert!(sel.holds(i), "{when}: row {i}");
+                assert_eq!(sel.tooltip_text(i), Some(format!("{i}")), "{when}");
+            }
+            if let Some(gone) = first.checked_sub(1) {
+                assert!(!sel.holds(gone), "{when}");
+                assert_eq!(sel.tooltip_text(gone), None, "{when}");
+            }
+        };
+        for batch in [700, 1_100, 1_300, 900, 1_700, 2_100, 500, 1_500, 800] {
+            sel.append((total..total + batch).map(row)).unwrap();
+            total += batch;
+            let (_, b) = sel.rows.as_slices();
+            if !b.is_empty() && b.len() < batch {
+                straddled += 1;
+            }
+            check(&sel, total, &format!("after {total} rows"));
+        }
+        assert!(sel.evicted > 0);
+        assert!(straddled > 0, "an append's rows straddled the wrap");
+        // Every held row evaluated again, over the wrapped ring.
+        for _ in 0..64 {
+            if !sel.rows.as_slices().1.is_empty() {
+                break;
+            }
+            sel.append((total..total + 300).map(row)).unwrap();
+            total += 300;
+        }
+        assert!(!sel.rows.as_slices().1.is_empty(), "the ring wraps");
+        sel.columns = None;
+        sel.fit_domains(&cx).unwrap();
+        check(&sel, total, "evaluated again");
     }
 
     /// AC2: one `Chunk` entry per chunk, 256 bytes apart, holding the
