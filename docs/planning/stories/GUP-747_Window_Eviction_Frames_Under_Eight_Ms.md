@@ -65,6 +65,38 @@ orchestrator's option A, 2026-11-19), and this story owns the every-frame bound.
 
 - Keep `RowWindow`'s semantics and row ids; this is a storage change only.
 
+### Design (recorded 2026-11-20, after the measurements below)
+
+- **Rows: a ring (`VecDeque<T>`) in place of `Vec<T>`.** An eviction drains the
+  front, which only advances the ring's head (the drained rows are dropped,
+  `O(evicted)`; no held row moves). Every reader that takes one row (`get`,
+  tooltips, row fields, events, `len`, `holds`) is unchanged. The three that run
+  an accessor over a slice (an append's new rows, the full evaluation in
+  `column_inputs`, the CPU values of a released layer's vector output) run it
+  over the ring's contiguous parts (`as_slices`, at most two) and join the
+  columns: the same values, and only when the range wraps does anything differ
+  from the slice of today (the escalation trigger does not fire: no row is
+  copied). `make_contiguous` is never called (it would move the rows).
+  - Rejected: per-chunk row blocks (the blocks would have to follow the store's
+    chunk boundaries before the first evaluation and after each re-evaluation,
+    and a row read becomes a search); a lazy front offset into the `Vec` (keeps
+    evicted rows alive and only makes the memmove rarer, so the spike remains).
+- **GPU growth: split every growth copy at a 64 KiB multiple.** The 9.7 ms is
+  neither the allocation nor the submit's bookkeeping but the driver's handling
+  of one `copy_buffer_to_buffer` of a pathological length (measurements below):
+  a copy of `big = len / 65,536 × 65,536` bytes then one of the rest costs about
+  0.1 ms for every length measured. This fixes the class: every appended layer's
+  chunk growth, windowed or not.
+- **Windowed stores create every chunk after their first at full capacity.** A
+  windowed chunk is `n / 4` rows, so once a store holds a full chunk, its next
+  chunks start at `chunk_rows`: no CPU copy (`Chunk::grow`, about 1.5 ms for
+  400,128 to 500,000 rows) and no GPU copy at all. The unused capacity is at
+  most one chunk while the store holds at least one full chunk (at most 25% of a
+  full window's columns, transiently); a windowed layer that never fills its
+  first chunk keeps growing by doubling and allocates nothing more. Unwindowed
+  stores keep doubling (their chunks are the device's maximum, often millions of
+  rows).
+
 ## Escalation Triggers
 
 - A reader of `rows` needs a contiguous slice that a ring cannot give without
@@ -115,3 +147,33 @@ orchestrator's option A, 2026-11-19), and this story owns the every-frame bound.
 - [ ] `mask wasm-size` scatter gz bytes reported
 - [ ] Story status updated to ✅ Complete in story file and INDEX.md
 - [ ] Retrospective added to story document
+
+## Measurements
+
+Release, Intel HD 630 (Mesa, Vulkan), 2 build jobs, 2-4 GB available.
+
+**Baseline** (`a_rolling_window_frame_is_cheap`, main's code, 2026-11-19):
+evicting frames 18.0-25.9 ms under `Off`, 17.1-21.1 ms under `Auto`; p95 of
+every frame 24.8 ms (`Off`) and 19.7 ms (`Auto`); frames that evict nothing
+1.5-5.1 ms.
+
+**The evicting frame, traced** (temporary timers, removed): the rows' drain
+5.6-8.8 ms; `store.append` 2.4-2.9 ms against about 1.0 ms on other frames (the
+CPU `Chunk::grow` of 400,128 to 500,000 rows and the new chunk); the GPU growth
+400,128 to 500,000 rows: `create_buffer` 6-26 µs, encoding 10-30 µs, an empty
+submit just before it 0.06-0.14 ms (so not the submit's bookkeeping or the
+evicted chunk's frees), and the submit of the copy 8.7-18 ms. Each earlier
+growth (64 to 100,032, to 200,064, to 400,128) submits in 0.1-0.3 ms.
+
+**The growth copy, isolated** (a temporary wgpu probe, removed): the same chain
+of buffers outside gup reproduces it (400,128 to 500,000: 8.7-10.5 ms; every
+other step 0.05-0.11 ms). The cost follows the copy's length, not the buffer
+sizes: copying 400,001 rows of a 4-byte column (1,600,004 B) costs 8.8-16.6 ms
+into a 400,128-, 500,000-, 800,000- or 1,000,000-row buffer, and 400,000,
+400,002, 400,003, 400,004 or 399,999 rows cost 0.1 ms (1.7-2.0 ms when the
+source buffer is new). Slow lengths (in 4-byte words): 400,001, 400,009,
+400,011, 330,001, 800,002, 1,050,304 (a 256-byte multiple), 57,143 (1.9-4.4 ms);
+each has a prime factor over 16,384, which suggests the driver lays a copy out
+as a 2D surface of at most 16,384 texels a side. A `write_buffer` of the same
+lengths costs 0.03-0.10 ms. Split at a 64 KiB multiple plus the rest, every slow
+length copies in 0.04-0.13 ms.
