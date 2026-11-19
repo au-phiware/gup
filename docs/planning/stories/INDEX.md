@@ -659,11 +659,19 @@ GUP-628 and GUP-631 (shared `selection.rs`).
   blocks and the largest mark as a cell's representative for size-ordered
   layers; 10M bubbles draw 7,679 marks. Deps: GUP-492 ✅, GUP-716 📋, GUP-720 📋
   (sequencing), GUP-724 📋.
-- [GUP-742](GUP-742_Mixed_Size_Cells_Under_LOD.md) 🚧 — A cell of many sizes
-  shows only its largest mark under LOD; add a second representative. Deps:
+- [GUP-742](GUP-742_Mixed_Size_Cells_Under_LOD.md) ✅ — Investigation: a second
+  (smallest) representative brings random sizes from 23.0% to 12.7% of the plot
+  rect (gate 5%) for +97% instances; not shipped. No change shipped; size-aware
+  tiers are GUP-749; size-ordered LOD stays opt-in (`Lod::AutoSized`). Deps:
   GUP-721 ✅.
+- [GUP-749](GUP-749_Size_Aware_Tiers_For_Size_Ordered_Layers.md) 📋 — Each size
+  bucket keeps representatives on cells scaled by its pixel radius, drawn in
+  rank order within a chunk (prototype: random sizes 3.0%, 41k instances of
+  300k); flips size-ordered LOD to the default and removes `Lod::AutoSized` at
+  random ≤ 5%, data-following ≤ 3%. Opus. Deps: GUP-742 ✅, GUP-721 ✅.
 - [GUP-743](GUP-743_Rank_Ordered_Tier_Ranges_Across_Chunks.md) 💡 — Draw a
-  tier's ranges in global rank order across blocks and chunks. Deps: GUP-721 ✅.
+  tier's ranges in global rank order across chunks (within a chunk: GUP-749).
+  Deps: GUP-721 ✅, GUP-749 📋.
 - [GUP-730](GUP-730_Tier_Builds_Off_The_Frame_Path.md) ✅ — Build tiers on
   worker threads (native) so an owned layer above 10M rows does not add about 1
   s per 10M rows to its first frame and hosted frames never wait for a build.

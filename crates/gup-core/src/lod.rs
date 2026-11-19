@@ -172,79 +172,17 @@ impl Tiers {
             }
         }
         let mut sorted = radix_sort(pairs, &mut hist);
+        if let Some(rank) = rank {
+            best_first(&mut sorted, rank);
+        }
         // The rows in key order, for the blocks' Morton order (`first_tiers`
         // consumes the pairs).
         let morton: Vec<u32> = sorted.iter().map(|&p| p as u32).collect();
-        let rule = std::env::var("GUP742_RULE").unwrap_or_default();
-        let inv = |r: u32| !rank.map_or(0, |f| f(r));
-        let pass1: Option<&dyn Fn(u32) -> u32> = if rule == "smallest" { Some(&inv) } else { rank };
-        if let Some(rank) = pass1 {
-            best_first(&mut sorted, rank);
-        }
 
         // Each row's first tier, by row, and how many rows start at each.
         let mut first = vec![NEVER; rows as usize];
-        first_tiers(&mut sorted, &mut first, pass1);
+        first_tiers(&mut sorted, &mut first, rank);
         drop(sorted);
-        if let (Some(rank), true) = (rank, rule == "all" || rule == "aware") {
-            let mut levels: Vec<u32> = morton.iter().map(|&r| rank(r)).collect();
-            levels.sort_unstable();
-            levels.dedup();
-            levels.reverse(); // smallest mark first: level 0 is the smallest
-            first.fill(NEVER);
-            for (li, &lv) in levels.iter().enumerate() {
-                let mut sorted: Vec<u64> = morton
-                    .iter()
-                    .filter(|&&r| rank(r) == lv)
-                    .map(|&r| {
-                        let (x, y) = xy(r);
-                        let key = part1by1(gx.cell(x)) | part1by1(gy.cell(y)) << 1;
-                        u64::from(key) << 32 | u64::from(r)
-                    })
-                    .collect();
-                let mut f = vec![NEVER; rows as usize];
-                first_tiers(&mut sorted, &mut f, None);
-                let shift = if rule == "aware" {
-                    let radius = 1.0 + 8.0 * li as f64 / 15.0;
-                    let div: f64 = std::env::var("GUP742_DIV")
-                        .ok()
-                        .and_then(|v| v.parse().ok())
-                        .unwrap_or(1.0);
-                    (radius / div).log2().floor().max(0.0) as u8
-                } else {
-                    0
-                };
-                for (a, b) in first.iter_mut().zip(f) {
-                    if b != NEVER {
-                        let b = (b + shift).min(NEVER);
-                        *a = (*a).min(b);
-                    }
-                }
-            }
-        }
-        if rank.is_some() && rule == "both" {
-            let mut sorted: Vec<u64> = morton
-                .iter()
-                .map(|&r| {
-                    let (x, y) = xy(r);
-                    let key = part1by1(gx.cell(x)) | part1by1(gy.cell(y)) << 1;
-                    u64::from(key) << 32 | u64::from(r)
-                })
-                .collect();
-            best_first(&mut sorted, &inv);
-            let mut second = vec![NEVER; rows as usize];
-            first_tiers(&mut sorted, &mut second, Some(&inv));
-            let mut mixed = [0u32; NEVER as usize + 1];
-            for (f, s) in first.iter_mut().zip(second) {
-                if s < *f {
-                    mixed[usize::from(s)] += 1;
-                }
-                *f = (*f).min(s);
-            }
-            if std::env::var_os("GUP742_DEBUG").is_some() {
-                eprintln!("gup742 rows {rows} extra-by-first-tier {mixed:?}");
-            }
-        }
         let mut starts = [0u32; NEVER as usize + 1];
         for &t in &first {
             starts[usize::from(t)] += 1;
@@ -278,15 +216,6 @@ impl Tiers {
         drop(first);
         if let Some(rank) = rank {
             by_rank(&mut order, &counts, rank);
-            if std::env::var_os("GUP742_DEBUG").is_some() {
-                eprintln!("gup742 counts {counts:?}");
-            }
-            let global = std::env::var("GUP742_GLOBAL")
-                .ok()
-                .and_then(|v| v.parse::<usize>().ok());
-            if let Some(&c) = global.and_then(|n| counts.get(n)) {
-                order[..c as usize].sort_by_key(|&r| rank(r));
-            }
         }
         let runs = runs(&order, &counts, &xy, rank);
         spread(&mut order, &runs);
@@ -555,11 +484,7 @@ pub(crate) fn tier(ex: i32, ey: i32, kx: f64, ky: f64) -> Option<u32> {
         (false, true) => f64::from(TMAX) + f64::from(ey) + ky.log2(),
         (false, false) => 0.0,
     };
-    let bias = std::env::var("GUP742_BIAS")
-        .ok()
-        .and_then(|b| b.parse().ok())
-        .unwrap_or(LOD_TIER_BIAS);
-    let t = t.floor() + f64::from(bias);
+    let t = t.floor() + f64::from(LOD_TIER_BIAS);
     (t <= f64::from(TMAX)).then(|| t.max(0.0) as u32)
 }
 

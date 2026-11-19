@@ -28,6 +28,11 @@ large marks draw over a coarser block's small ones. An appended bubble layer
 differs from the exact draw by 3.26% of the plot rect against 2.93% for the same
 scene built at once; a 1M-row window 2.44%.
 
+_Narrowed 2026-11-20 (GUP-742)_: rank order across the blocks of one chunk moved
+to GUP-749 (size-aware tiers draw a chunk's prefix largest first across its
+blocks). What remains here is the order across chunks: a frame's ranges of
+several chunks issued in global rank order, for appended and windowed layers.
+
 ## User Story
 
 > "As a developer streaming bubbles, I want the thinned draw to layer marks as
@@ -58,13 +63,14 @@ scene built at once; a 1M-row window 2.44%.
 
 ## Out of Scope
 
-- Mixed-size cells (GUP-742).
+- Mixed-size cells (GUP-742, GUP-749); rank order within one chunk (GUP-749).
 
 ## Dependencies
 
 ### Prerequisite Stories
 
 - GUP-721 ✅
+- GUP-749 📋 (the within-chunk order this story extends across chunks)
 
 ## Testing Strategy
 
