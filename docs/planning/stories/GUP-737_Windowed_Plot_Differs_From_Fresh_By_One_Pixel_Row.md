@@ -8,8 +8,8 @@ touches: [crates/gup-core/tests/lod.rs, crates/gup-core/src/plot.rs]
 
 ## Story Overview
 
-**Initiative**: Track N5: Performance at Scale **Status**: 💡 New **Created**:
-2026-11-16
+**Initiative**: Track N5: Performance at Scale **Status**: ✅ Closed (explained,
+no change) **Created**: 2026-11-16
 
 ## Context
 
@@ -91,3 +91,13 @@ sub-pixel amount. GUP-719's test now keeps its rows clear of the ends.
 - [ ] All Acceptance Criteria are satisfied and checked
 - [ ] `mask all-fix` and `mask all-check` pass
 - [ ] Story status updated in the file and INDEX.md
+
+## Resolution
+
+Closed by the orchestrator on 2026-11-19 without a code change. GUP-741 traced
+the cause: the appended rows reached the scale domain's ends, so the edge solve
+(GUP-567) inset the scale ranges to keep those marks inside the plot, and every
+existing mark and tick label moved by a sub-pixel amount. That is deliberate
+behaviour, not a level-of-detail or windowing bug. The HD 630 shows it on about
+98 antialiased edge pixels; lavapipe on about 697. GUP-741's test now keeps its
+new rows off the domain ends and asserts the old corner byte for byte.
