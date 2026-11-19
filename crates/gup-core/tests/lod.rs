@@ -1547,32 +1547,39 @@ fn p95(mut t: Vec<std::time::Duration>) -> std::time::Duration {
     t[(t.len() * 95).div_ceil(100) - 1]
 }
 
-/// AC4 (GUP-719), every frame (GUP-730): the tail's tier builds (about
-/// 0.1 s per 1,000,000 rows in release) run on worker threads, so the
-/// frames of a rolling window take no longer for them: the p95 of every
-/// frame that evicts nothing, those that start or install a build
-/// included, is under 8 ms (release builds only). A frame that evicts a
-/// chunk costs as much under `Off` (the rows' and the grown chunk's
-/// copies, not the level of detail): printed beside it.
+/// AC4 (GUP-719), every frame (GUP-730, GUP-747): the tail's tier builds
+/// (about 0.1 s per 1,000,000 rows in release) run on worker threads, and
+/// the frame that evicts a chunk moves no held row (the rows are a ring)
+/// and grows no chunk (a windowed store's later chunks start full), so the
+/// p95 of every frame, under `Off` and `Auto`, those that start or install
+/// a build and those that evict included, is under 8 ms (release builds
+/// only).
 #[test]
 fn a_rolling_window_frame_is_cheap() {
     let cx = Context::new_blocking().unwrap();
     let off = window_frames(&cx, Lod::Off);
     let auto = window_frames(&cx, Lod::Auto);
     let installs: u64 = auto.iter().map(|f| f.built).sum();
-    let quiet = p95(auto.iter().filter(|f| !f.evicted).map(|f| f.cpu).collect());
-    let worst = |frames: &[WindowFrame]| frames.iter().filter(|f| f.evicted).map(|f| f.cpu).max();
+    let every = |frames: &[WindowFrame]| p95(frames.iter().map(|f| f.cpu).collect());
+    let evicting = |frames: &[WindowFrame]| {
+        let t: Vec<_> = frames.iter().filter(|f| f.evicted).map(|f| f.cpu).collect();
+        (t.len(), t.iter().max().copied())
+    };
+    let (auto_p95, off_p95) = (every(&auto), every(&off));
     eprintln!(
-        "30 frames of 100,000 rows: {installs} builds installed; p95 {:?} ({:?} under Off), of \
-         the frames that evict nothing {quiet:?}; evicting frames at most {:?} ({:?} under Off)",
-        p95(auto.iter().map(|f| f.cpu).collect()),
-        p95(off.iter().map(|f| f.cpu).collect()),
-        worst(&auto),
-        worst(&off),
+        "30 frames of 100,000 rows: {installs} builds installed; p95 {auto_p95:?} ({off_p95:?} \
+         under Off); evicting frames (count, max) {:?} ({:?} under Off)",
+        evicting(&auto),
+        evicting(&off),
     );
     assert!(installs > 0, "the tail's builds were installed");
+    assert!(
+        evicting(&auto).0 > 0 && evicting(&off).0 > 0,
+        "frames evict"
+    );
     if !cfg!(debug_assertions) {
-        assert!(quiet.as_secs_f64() < 0.008, "p95 {quiet:?}");
+        assert!(auto_p95.as_secs_f64() < 0.008, "Auto: p95 {auto_p95:?}");
+        assert!(off_p95.as_secs_f64() < 0.008, "Off: p95 {off_p95:?}");
     }
 }
 

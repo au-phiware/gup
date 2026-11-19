@@ -2607,6 +2607,64 @@ mod tests {
         readback.slice(..).get_mapped_range().to_vec()
     }
 
+    /// GUP-747: a growth copy over 64 KiB is two copies and moves every
+    /// uploaded row; a store that starts chunks full grows only its first,
+    /// and a later chunk keeps one buffer from its first row to its last.
+    #[test]
+    fn growth_copies_in_pieces_and_later_chunks_start_full() {
+        const CHUNK: u32 = 40_000;
+        let cx = Context::new_blocking().unwrap();
+        let formats = vec![ColumnFormat::F32Relative, ColumnFormat::F32];
+        let mut store = ColumnStore::new(formats, CHUNK).unwrap();
+        store.start_chunks_full();
+        let mut total = 0usize;
+        let mut append = |store: &mut ColumnStore, n: usize| {
+            let x: Vec<f64> = (total..total + n).map(|i| i as f64 * 0.5).collect();
+            let y: Vec<f64> = (total..total + n).map(|i| (i % 1009) as f64).collect();
+            store
+                .append(n, &[ColumnData::Values(x), ColumnData::Values(y)])
+                .unwrap();
+            total += n;
+        };
+        // The first chunk grows 64 -> 20,032 -> 40,000 rows; the last
+        // growth copies 20,001 rows (80,004 bytes) a column.
+        for n in [1, 20_000, 19_999] {
+            append(&mut store, n);
+            store.upload(&cx).unwrap();
+        }
+        let first = &store.chunks()[0];
+        assert_eq!((first.rows(), first.capacity()), (CHUNK, CHUNK));
+        let bytes = read_buffer(&cx, first.buffer(&cx).unwrap());
+        for c in 0..2 {
+            let range = first.column_range(c);
+            let range = range.start as usize..range.end as usize;
+            assert_eq!(
+                bytes[range.clone()],
+                first.bytes().unwrap()[range],
+                "column {c}"
+            );
+        }
+        // The second chunk is laid out for every row from its first.
+        append(&mut store, 1);
+        store.upload(&cx).unwrap();
+        assert_eq!(store.chunks()[1].capacity(), CHUNK);
+        let buffer = store.chunks()[1].buffer(&cx).unwrap().clone();
+        for n in [15_000, 24_999] {
+            append(&mut store, n);
+            store.upload(&cx).unwrap();
+            assert_eq!(store.chunks()[1].buffer(&cx), Some(&buffer), "never grown");
+        }
+        assert_eq!(store.chunks()[1].rows(), CHUNK);
+        let x = store.cpu_values(0).unwrap();
+        assert!(x.iter().enumerate().all(|(i, &v)| v == i as f64 * 0.5));
+        // Without it, a second chunk grows from its first rows.
+        let mut store = ColumnStore::new(vec![ColumnFormat::F32], 256).unwrap();
+        store
+            .append(257, &[ColumnData::Values(vec![1.0; 257])])
+            .unwrap();
+        assert_eq!(store.chunks()[1].capacity(), ROW_BLOCK);
+    }
+
     #[test]
     fn upload_writes_the_chunk_once_per_context() {
         let cx = Context::new_blocking().unwrap();

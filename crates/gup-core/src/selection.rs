@@ -4613,6 +4613,75 @@ mod tests {
         );
     }
 
+    /// GUP-747: a window's rows are a ring. After evictions it wraps, and an
+    /// append whose rows straddle the wrap, an evaluation of every held row
+    /// again, and the readers of one row (tooltips, `holds`) see the held
+    /// rows in order, as a `Vec` of them did.
+    #[test]
+    fn a_wrapped_ring_of_rows_reads_like_a_vec() {
+        const N: usize = 4_096;
+        let cx = Context::new_blocking().unwrap();
+        let row = |i: usize| Row {
+            x: i as f64,
+            y: (i % 97) as f64,
+            v: 0.0,
+        };
+        let mut sel = Selection::<Row, Circle>::new((0..N).map(row).collect::<Vec<_>>());
+        sel.attr(
+            Circle::X,
+            ScaleRef::new(Linear::new()).encode(|r: &Row| r.x),
+        )
+        .attr(
+            Circle::Y,
+            ScaleRef::new(Linear::new()).encode(|r: &Row| r.y),
+        )
+        .attr(Circle::RADIUS, Px(1.0))
+        .tooltip(|r: &Row| format!("{}", r.x))
+        .window(RowWindow::LastRows(N));
+        sel.fit_domains(&cx).unwrap();
+        let (mut total, mut straddled) = (N, 0);
+        let check = |sel: &Selection<Row, Circle>, total: usize, when: &str| {
+            let first = sel.evicted as usize;
+            assert_eq!(first + sel.len(), total, "{when}");
+            let store = sel.columns.as_ref().unwrap();
+            let want: Vec<f64> = (first..total).map(|i| i as f64).collect();
+            assert_eq!(store.cpu_values(0).unwrap(), want, "{when}: x");
+            let want: Vec<f64> = (first..total).map(|i| (i % 97) as f64).collect();
+            assert_eq!(store.cpu_values(1).unwrap(), want, "{when}: y");
+            for i in [first, first + 1, (first + total) / 2, total - 1] {
+                assert!(sel.holds(i), "{when}: row {i}");
+                assert_eq!(sel.tooltip_text(i), Some(format!("{i}")), "{when}");
+            }
+            if let Some(gone) = first.checked_sub(1) {
+                assert!(!sel.holds(gone), "{when}");
+                assert_eq!(sel.tooltip_text(gone), None, "{when}");
+            }
+        };
+        for batch in [700, 1_100, 1_300, 900, 1_700, 2_100, 500, 1_500, 800] {
+            sel.append((total..total + batch).map(row)).unwrap();
+            total += batch;
+            let (_, b) = sel.rows.as_slices();
+            if !b.is_empty() && b.len() < batch {
+                straddled += 1;
+            }
+            check(&sel, total, &format!("after {total} rows"));
+        }
+        assert!(sel.evicted > 0);
+        assert!(straddled > 0, "an append's rows straddled the wrap");
+        // Every held row evaluated again, over the wrapped ring.
+        for _ in 0..64 {
+            if !sel.rows.as_slices().1.is_empty() {
+                break;
+            }
+            sel.append((total..total + 300).map(row)).unwrap();
+            total += 300;
+        }
+        assert!(!sel.rows.as_slices().1.is_empty(), "the ring wraps");
+        sel.columns = None;
+        sel.fit_domains(&cx).unwrap();
+        check(&sel, total, "evaluated again");
+    }
+
     /// AC2: one `Chunk` entry per chunk, 256 bytes apart, holding the
     /// chunk's first row and the x base from the chunk's own origin; one
     /// draw per chunk at that entry's dynamic offset.
