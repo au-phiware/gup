@@ -303,6 +303,16 @@ impl ColumnData {
             Self::Codes(c) => c.len(),
         }
     }
+
+    /// Append `more`'s rows, which must be of the same kind (one
+    /// accessor's output over the next rows).
+    pub(crate) fn join(&mut self, more: ColumnData) {
+        match (self, more) {
+            (Self::Values(v), Self::Values(more)) => v.extend(more),
+            (Self::Codes(c), Self::Codes(more)) => c.extend(more),
+            _ => unreachable!("one accessor gives one kind of column"),
+        }
+    }
 }
 
 impl From<Vec<f64>> for ColumnData {
@@ -1019,10 +1029,8 @@ impl Chunk {
         let gpu = match &mut self.gpu {
             Some(gpu) if gpu.context == cx.id() => {
                 if gpu.capacity != self.capacity {
-                    let t0 = std::time::Instant::now();
                     let size = layout(formats, self.capacity).1;
                     let buffer = chunk_buffer(cx, size);
-                    let t1 = t0.elapsed();
                     let (old, _) = layout(formats, gpu.capacity);
                     let mut encoder =
                         cx.device()
@@ -1031,25 +1039,10 @@ impl Chunk {
                             });
                     for (col, from) in self.columns.iter().zip(old) {
                         let n = u64::from(gpu.rows) * col.format.stride();
-                        if n > 0 {
-                            encoder.copy_buffer_to_buffer(
-                                &gpu.buffer,
-                                from,
-                                &buffer,
-                                col.offset,
-                                n,
-                            );
-                        }
+                        copy_in_pieces(&mut encoder, &gpu.buffer, from, &buffer, col.offset, n);
                     }
-                    let t2 = t0.elapsed();
                     cx.submit([encoder.finish()]);
-                    let t3 = t0.elapsed();
                     gpu.buffer = buffer;
-                    let t4 = t0.elapsed();
-                    eprintln!(
-                        "GUP747 grow {}->{} create {t1:?} encode {t2:?} submit {t3:?} drop-old {t4:?}",
-                        gpu.capacity, self.capacity
-                    );
                     gpu.capacity = self.capacity;
                 }
                 gpu
@@ -1075,8 +1068,6 @@ impl Chunk {
                 &cell[..stride as usize],
             );
         }
-        let tw = std::time::Instant::now();
-        let wrote = self.len - gpu.rows;
         if gpu.rows < self.len {
             for (c, col) in self.columns.iter().enumerate() {
                 let stride = col.format.stride();
@@ -1106,7 +1097,6 @@ impl Chunk {
                 }
             }
             gpu.rows = self.len;
-            eprintln!("GUP747 write {wrote} rows {:?}", tw.elapsed());
         }
         let Some(planes) = planes else {
             return Ok(());
@@ -1160,6 +1150,30 @@ impl Chunk {
             return true;
         }
         false
+    }
+}
+
+/// Copy `len` bytes of `src` at `from` to `dst` at `to` as at most two
+/// copies: a multiple of 64 KiB, then the rest. Some drivers take
+/// milliseconds of CPU to record one copy of certain lengths (Mesa on an
+/// Intel HD 630: 9-17 ms for 1,600,004 bytes, 0.1 ms for 1,600,008; the
+/// slow lengths in words have a prime factor over 16,384), which a growing
+/// chunk hit once per chunk; split, every length measured copies in about
+/// 0.1 ms (GUP-747).
+fn copy_in_pieces(
+    encoder: &mut wgpu::CommandEncoder,
+    src: &wgpu::Buffer,
+    from: u64,
+    dst: &wgpu::Buffer,
+    to: u64,
+    len: u64,
+) {
+    const PIECE: u64 = 1 << 16;
+    let whole = len / PIECE * PIECE;
+    for (at, n) in [(0, whole), (whole, len - whole)] {
+        if n > 0 {
+            encoder.copy_buffer_to_buffer(src, from + at, dst, to + at, n);
+        }
     }
 }
 
@@ -1468,6 +1482,9 @@ pub struct ColumnStore {
     /// The shared columns every column reads, if the store was filled by
     /// [`append_shared`](Self::append_shared).
     shared: Option<SharedColumns>,
+    /// Whether a chunk after the first starts at full capacity, so it
+    /// never grows ([`start_chunks_full`](Self::start_chunks_full)).
+    start_full: bool,
 }
 
 /// The validity plane of numeric column `column` of `formats` (the
@@ -1536,7 +1553,19 @@ impl ColumnStore {
             formats,
             chunks: Vec::new(),
             shared: None,
+            start_full: false,
         })
+    }
+
+    /// Create every chunk after the first at full capacity
+    /// (`chunk_rows`), so it never grows: no CPU copy and no GPU copy on
+    /// the frame that fills it. For a windowed layer (GUP-747), whose
+    /// chunks are a quarter of its window: the unused capacity is at most
+    /// one chunk while the store holds at least one full chunk. The first
+    /// chunk still grows by doubling, so a layer that never fills one
+    /// allocates no more than before.
+    pub(crate) fn start_chunks_full(&mut self) {
+        self.start_full = true;
     }
 
     /// Build a store from evaluated accessor outputs, one
@@ -1652,7 +1681,11 @@ impl ColumnStore {
                 .is_none_or(|last| last.len == self.chunk_rows)
             {
                 let take = (n - done).min(self.chunk_rows as usize) as u32;
-                let capacity = take.next_multiple_of(ROW_BLOCK).min(self.chunk_rows);
+                let capacity = if self.start_full && !shared && !self.chunks.is_empty() {
+                    self.chunk_rows
+                } else {
+                    take.next_multiple_of(ROW_BLOCK).min(self.chunk_rows)
+                };
                 self.chunks.push(Chunk::new(
                     &self.formats,
                     planes,
