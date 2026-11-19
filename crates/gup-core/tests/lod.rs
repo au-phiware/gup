@@ -1764,3 +1764,46 @@ fn a_rolling_window_over_a_size_ordered_layer_takes_lod() {
     assert!(hits > 100, "{hits} grid points hit a bubble");
     assert_eq!(near, hits, "a picked row is not a held row under the pixel");
 }
+
+/// PROBE (GUP-742, temporary).
+#[test]
+fn probe_gup742() {
+    let cx = Context::new_blocking().unwrap();
+    let mut s = 0x1234_5678_9abc_def1u64;
+    let random: Vec<Row> = walk(300_000)
+        .into_iter()
+        .map(|(x, y, _)| {
+            s ^= s << 13;
+            s ^= s >> 7;
+            s ^= s << 17;
+            (x, y, f64::from(((s >> 11) % 16) as u32))
+        })
+        .collect();
+    let tag = std::env::var("GUP742_TAG").unwrap_or_default();
+    for (name, rows) in [("random", random), ("clumps", bubbles(300_000))] {
+        let (mut auto, mut off) = (
+            bubble_plot(rows.clone(), Lod::Auto),
+            bubble_plot(rows.clone(), Lod::Off),
+        );
+        let (a, o) = (draw(&cx, &mut auto), draw(&cx, &mut off));
+        save(&a.image, &format!("p742-{name}-auto{tag}.png"));
+        save(&o.image, &format!("p742-{name}-off.png"));
+        let (_, rect) = shares(&a.image, &o.image, &auto);
+        let mut diff = a.image.clone();
+        for (x, y, p) in diff.enumerate_pixels_mut() {
+            let q = o.image.get_pixel(x, y);
+            let pa = gup_visual_regression::Rgba8::new(p[0], p[1], p[2], p[3]);
+            let pb = gup_visual_regression::Rgba8::new(q[0], q[1], q[2], q[3]);
+            *p = if pa.delta_e(pb) > 10.0 {
+                image::Rgba([255, 0, 0, 255])
+            } else {
+                image::Rgba([q[0] / 3 + 170, q[1] / 3 + 170, q[2] / 3 + 170, 255])
+            };
+        }
+        save(&diff, &format!("p742-{name}-diff{tag}.png"));
+        eprintln!(
+            "PROBE {tag} {name}: {} instances; {rect:.3}% of the plot rect",
+            a.instances
+        );
+    }
+}
