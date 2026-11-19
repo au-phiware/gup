@@ -766,7 +766,9 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
                 values.push(ColumnData::Values(c1[t..].to_vec()));
                 values.push(ColumnData::Values(c2[t..].to_vec()));
             }
+            let ta = std::time::Instant::now();
             store.append(new.len(), &values)?;
+            eprintln!("GUP747 store.append {:?}", ta.elapsed());
             let k = store.formats().len() - 2;
             for (row, c1, c2) in rewrite {
                 store.rewrite(row, k, c1);
@@ -844,13 +846,16 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         if chunks == 0 {
             return;
         }
+        let t0 = std::time::Instant::now();
         let rows = store.evict_front(chunks);
+        let t1 = t0.elapsed();
         if let Some(order) = &mut self.order {
             order.evict(rows);
         }
         self.evicted += rows;
         let drop = (self.evicted as usize).saturating_sub(self.released);
         self.rows.drain(..drop.min(self.rows.len()));
+        eprintln!("GUP747 evict store {t1:?} rows {:?}", t0.elapsed());
         self.released = self.released.max(self.evicted as usize);
         self.epoch = self.epoch.wrapping_add(1);
         self.bits_stale = true;

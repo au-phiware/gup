@@ -1019,8 +1019,10 @@ impl Chunk {
         let gpu = match &mut self.gpu {
             Some(gpu) if gpu.context == cx.id() => {
                 if gpu.capacity != self.capacity {
+                    let t0 = std::time::Instant::now();
                     let size = layout(formats, self.capacity).1;
                     let buffer = chunk_buffer(cx, size);
+                    let t1 = t0.elapsed();
                     let (old, _) = layout(formats, gpu.capacity);
                     let mut encoder =
                         cx.device()
@@ -1039,8 +1041,15 @@ impl Chunk {
                             );
                         }
                     }
+                    let t2 = t0.elapsed();
                     cx.submit([encoder.finish()]);
+                    let t3 = t0.elapsed();
                     gpu.buffer = buffer;
+                    let t4 = t0.elapsed();
+                    eprintln!(
+                        "GUP747 grow {}->{} create {t1:?} encode {t2:?} submit {t3:?} drop-old {t4:?}",
+                        gpu.capacity, self.capacity
+                    );
                     gpu.capacity = self.capacity;
                 }
                 gpu
@@ -1066,6 +1075,8 @@ impl Chunk {
                 &cell[..stride as usize],
             );
         }
+        let tw = std::time::Instant::now();
+        let wrote = self.len - gpu.rows;
         if gpu.rows < self.len {
             for (c, col) in self.columns.iter().enumerate() {
                 let stride = col.format.stride();
@@ -1095,6 +1106,7 @@ impl Chunk {
                 }
             }
             gpu.rows = self.len;
+            eprintln!("GUP747 write {wrote} rows {:?}", tw.elapsed());
         }
         let Some(planes) = planes else {
             return Ok(());
