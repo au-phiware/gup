@@ -664,7 +664,7 @@ GUP-628 and GUP-631 (shared `selection.rs`).
   GUP-721 ✅.
 - [GUP-743](GUP-743_Rank_Ordered_Tier_Ranges_Across_Chunks.md) 💡 — Draw a
   tier's ranges in global rank order across blocks and chunks. Deps: GUP-721 ✅.
-- [GUP-730](GUP-730_Tier_Builds_Off_The_Frame_Path.md) 💡 — Build tiers on
+- [GUP-730](GUP-730_Tier_Builds_Off_The_Frame_Path.md) ✅ — Build tiers on
   worker threads (native) so an owned layer above 10M rows does not add about 1
   s per 10M rows to its first frame and hosted frames never wait for a build.
   Deps: GUP-716 ✅. Enables GUP-632, GUP-719's every-frame bound.
@@ -695,6 +695,14 @@ GUP-628 and GUP-631 (shared `selection.rs`).
   browser build: remove it in a dependency users get (upstream change, a version
   without it, or gup-text bypassing `Face::parse`). Upstream PRs need the
   owner's approval. Opus. Deps: GUP-744 ✅.
+- [GUP-747](GUP-747_Window_Eviction_Frames_Under_Eight_Ms.md) 💡 — A rolling
+  window's evicting frame costs 16-33 ms (the rows' front drain, about 5 ms, and
+  the filled chunk's GPU growth, about 10 ms), with or without LOD: bring every
+  frame of GUP-719's loop under 8 ms. Opus. Deps: GUP-730.
+- [GUP-748](GUP-748_Parallel_Tier_Builds_That_Scale.md) 💡 — Parallel tier
+  builds speed up 2.4x on 8 threads (headless 11M: +424 ms over `Lod::Off`):
+  measure, and keep per-worker scratch if allocation is the cost. Sonnet. Deps:
+  GUP-730 ✅.
 
 ## Polish after 0.1
 

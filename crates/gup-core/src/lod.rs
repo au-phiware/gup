@@ -494,12 +494,15 @@ pub(crate) struct Frame<'a> {
     /// Whether the plot shows each of the layer's draw entries
     /// (`cull::visible_entries`; empty: every entry).
     pub visible: &'a [bool],
-    /// Whether to spread lazy tier builds over frames, one chunk a
-    /// prepare: the plot has a host that draws again when asked
-    /// ([`Chart::needs_frame`](crate::Chart::needs_frame)). Otherwise (a
-    /// headless render, a host that never set a waker) every missing chunk
-    /// builds in the one prepare, so a single frame is complete.
-    pub spread: bool,
+    /// The host's waker, when the plot has a host that draws again when
+    /// asked ([`Chart::set_waker`](crate::Chart::set_waker)): lazy tier
+    /// builds then never hold up a frame. On native targets they run on
+    /// worker threads, which wake it when done, and a later prepare
+    /// installs them (GUP-730); on `wasm32` one chunk builds a prepare
+    /// (GUP-716). Without one (a headless render, a host that never set a
+    /// waker) every missing chunk builds before the one prepare returns
+    /// (in parallel on native targets), so a single frame is complete.
+    pub waker: Option<&'a std::task::Waker>,
     /// The plot rect when the plot culls (as `visible` is computed): a
     /// chunk drawing a tier draws only the [`Run`]s that can reach it
     /// (GUP-720). `None`: every run.
@@ -707,6 +710,9 @@ fn first_tiers(sorted: &mut [u64], first: &mut [u8], rank: Option<&dyn Fn(u32) -
 
 #[cfg(test)]
 mod draw_tests;
+
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) mod pool;
 
 #[cfg(test)]
 mod tests {

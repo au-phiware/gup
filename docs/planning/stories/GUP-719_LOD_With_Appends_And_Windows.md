@@ -244,6 +244,13 @@ recorded.
   +2% limit); over wgpu 359,846 B (budget 400,000). The info row
   `wasm.svg_export` reads 5,198 against 4,057 recorded; not measured on main.
 
+_Note (GUP-730, 2026-11-19):_ the 8-54 ms "building frames" above included the
+frames that evict a chunk (a chunk fills, builds and evicts in one frame). With
+the builds on worker threads, a frame that evicts nothing takes at most 4.4 ms
+at p95; an evicting frame still takes 16-21 ms (18-33 ms under `Lod::Off`): the
+rows' front drain (about 5.5 ms) and the filled chunk's GPU growth (about 9.7
+ms), owned by GUP-747.
+
 ## Retrospective
 
 **Completed**: 2026-11-16

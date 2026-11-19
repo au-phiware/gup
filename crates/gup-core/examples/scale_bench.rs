@@ -32,7 +32,14 @@
 //!   --lod-draw auto|off   the layer's `Lod` (default off, every row drawn,
 //!                         as the phases were first recorded); `auto` adds
 //!                         the tier build of every visible chunk to
-//!                         `first_resolve` (GUP-716)
+//!                         `first_resolve` (GUP-716), on worker threads
+//!                         (GUP-730)
+//!   --hosted              set a waker, as a window does (GUP-730): the first
+//!                         resolve does not wait for tier builds; then
+//!                         `tiers` times resolves as builds wake it until
+//!                         every chunk's tiers are installed (rows path)
+//!   --no-render           skip `first_frame` and `zoom` (a full draw of
+//!                         many rows can reset a small GPU)
 //! ```
 //!
 //! Phases: `build` (generate the rows; not a cost of Gup), `accessor` (the
@@ -105,6 +112,10 @@ struct Options {
     lod: bool,
     /// The layer's level of detail.
     lod_draw: Lod,
+    /// A waker is set before the first resolve.
+    hosted: bool,
+    /// Skip the render and zoom phases.
+    no_render: bool,
 }
 
 fn parse() -> Options {
@@ -122,6 +133,8 @@ fn parse() -> Options {
         key_string: false,
         lod: false,
         lod_draw: Lod::Off,
+        hosted: false,
+        no_render: false,
     };
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
@@ -154,6 +167,8 @@ fn parse() -> Options {
             }
             "--zoom-frames" => o.zoom_frames = value().parse().expect("--zoom-frames N"),
             "--resolve-only" => o.resolve_only = true,
+            "--hosted" => o.hosted = true,
+            "--no-render" => o.no_render = true,
             "--columns" => {
                 let v = value();
                 assert!(v == "f64" || v == "f32", "--columns f64|f32");
@@ -225,6 +240,61 @@ fn rss(phase: &str) {
         Some(mb) => metric(&format!("rss.{phase}.mb"), format!("{mb:.0}")),
         None => metric(&format!("rss.{phase}.mb"), "n/a"),
     }
+}
+
+/// A host's waker that counts its wakes.
+struct Wakes(AtomicUsize);
+
+impl std::task::Wake for Wakes {
+    fn wake(self: Arc<Self>) {
+        self.0.fetch_add(1, Ordering::SeqCst);
+    }
+}
+
+/// Phase `tiers` of `--hosted`: resolve as tier builds wake the plot, until
+/// every chunk of the rows layer has its tiers; the scene then.
+fn install_tiers(
+    plot: &mut Plot,
+    cx: &Context,
+    (w, h): (u32, u32),
+    scene: &gup_core::Scene,
+    wakes: &Wakes,
+) -> gup_core::Result<gup_core::Scene> {
+    let chunks = scene
+        .items
+        .iter()
+        .find_map(|i| match &i.kind {
+            gup_core::scene::ItemKind::Marks(b) => Some(b.chunks() as u64),
+            _ => None,
+        })
+        .unwrap_or(0);
+    let builds = |plot: &mut Plot| {
+        plot.layer_mut::<(f64, f64), Circle>()
+            .map(|l| gup_core::__private::lod_tier_builds(l))
+    };
+    if builds(plot).is_none() {
+        println!("tiers: not timed (the rows path only)");
+        return Ok(scene.clone());
+    }
+    let t = Instant::now();
+    let mut resolves = 0;
+    let mut scene = scene.clone();
+    while builds(plot) < Some(chunks) {
+        assert!(t.elapsed().as_secs() < 120, "tiers not installed in 2 min");
+        let seen = wakes.0.load(Ordering::SeqCst);
+        if Chart::needs_frame(plot) {
+            scene = plot.resolve(cx, w as f32, h as f32)?.scene.clone();
+            resolves += 1;
+        } else {
+            while wakes.0.load(Ordering::SeqCst) == seen && t.elapsed().as_secs() < 120 {
+                std::thread::sleep(std::time::Duration::from_micros(200));
+            }
+        }
+    }
+    metric("tiers.ms", format!("{:.1}", ms(t)));
+    metric("tiers.resolves", resolves);
+    rss("tiers");
+    Ok(scene)
 }
 
 fn ms(t: Instant) -> f64 {
@@ -530,15 +600,25 @@ fn first_resolve_and_after(
     let mut plot = Plot::new();
     plot.legends(false);
     add(&mut plot);
+    let wakes = Arc::new(Wakes(AtomicUsize::new(0)));
+    if o.hosted {
+        Chart::set_waker(&mut plot, std::task::Waker::from(Arc::clone(&wakes)));
+    }
     let before = cx.upload_stats();
     let t = Instant::now();
-    let scene = plot.resolve(cx, w as f32, h as f32)?.scene.clone();
+    let mut scene = plot.resolve(cx, w as f32, h as f32)?.scene.clone();
     metric("first_resolve.ms", format!("{:.1}", ms(t)));
     metric(
         "first_resolve.columns.bytes",
         (cx.upload_stats() - before).columns.bytes,
     );
     rss("first_resolve");
+    if o.hosted && o.lod_draw != Lod::Off {
+        scene = install_tiers(&mut plot, cx, (w, h), &scene, &wakes)?;
+    }
+    if o.no_render {
+        return Ok(());
+    }
 
     // 5. first frame
     let t = Instant::now();

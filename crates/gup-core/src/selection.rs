@@ -148,7 +148,12 @@ impl Retain {
 /// hold more than [`Lod::AUTO_MIN_ROWS`] rows draws, per visible chunk, the
 /// lowest row of each occupied cell of a grid of about a quarter pixel
 /// (at most four marks per pixel of area): its rows grouped by position,
-/// built once per chunk on the first frame that needs them. A scatter of
+/// built once per chunk when a frame first needs them. On native targets
+/// they build on worker threads: in a window (any host that set a waker)
+/// a frame never waits for them, and a chunk draws every row until its
+/// build is done and the next frame takes it up; a headless render builds
+/// every chunk it draws before it returns, in parallel. On `wasm32` (no
+/// threads) a hosted frame builds one chunk. A scatter of
 /// tens of millions of rows then draws tens of thousands of marks per
 /// frame. The picture is the full draw with edges up to about a pixel
 /// narrower; marks keep their data rows' colours, brush and GPU pick ids.
@@ -324,8 +329,15 @@ pub struct Selection<T, M: Mark> {
     /// leaves; the column store numbers the kept rows from 0.
     evicted: u64,
     /// Bumped whenever stored rows are renumbered (an eviction, or the
-    /// columns evaluated again), so a GPU pick drawn before it is dropped.
+    /// columns evaluated again), so a GPU pick drawn before it is dropped
+    /// and the edge cache is cleared.
     epoch: u64,
+    /// Bumped when a chunk's tiers are replaced: which instance draws which
+    /// row changed (GUP-719), so a GPU pick drawn before is dropped too
+    /// ([`Layer::epoch`] is the sum), but no stored value did, so the edge
+    /// cache stands (GUP-730: re-sorting it took a 2M-row window's frame
+    /// from 2 to 20 ms).
+    lod_epoch: u64,
     /// Finite values of decoded chunk columns, sorted ascending, for the
     /// edge solve (GUP-567). Keyed by (epoch, chunk, column, chunk rows).
     edge_cache: Mutex<EdgeCache>,
@@ -342,8 +354,8 @@ pub struct Selection<T, M: Mark> {
     /// threshold and the lazy build are asserted through it).
     lod_builds: u64,
     /// Whether the last prepare left a visible chunk drawing every row
-    /// because its tiers were not built yet (one chunk builds a frame):
-    /// the plot draws again.
+    /// because its tiers were not built yet (`wasm32`: one chunk builds a
+    /// frame): the plot draws again.
     lod_pending: bool,
     /// The chunks the last prepare drew as representatives, with the
     /// ranges of their [`Tiers::order`](crate::lod::Tiers) each drew (the
@@ -615,6 +627,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             released: 0,
             evicted: 0,
             epoch: 0,
+            lod_epoch: 0,
             edge_cache: Mutex::new(EdgeCache::default()),
             bits_stale: false,
             lod: Lod::Auto,
@@ -1059,6 +1072,17 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
     /// ([`force_lod_tier`](Self::force_lod_tier)), each chunk that stores
     /// it (GUP-715).
     fn lod_entries(&mut self, cx: &Context, frame: &lod::Frame<'_>) -> Result<Vec<DrawEntry>> {
+        // Builds a worker finished since the last prepare (GUP-730), first,
+        // so the entries see their tiers.
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(store) = self.columns.as_mut() {
+            let installed = install_ready(store, cx)?;
+            self.lod_builds += installed.builds;
+            if installed.rebuilds > 0 {
+                // As below (GUP-719).
+                self.lod_epoch = self.lod_epoch.wrapping_add(1);
+            }
+        }
         let store = self.columns.as_ref().ok_or_else(|| {
             Error::config("layer", "prepare called before the columns were evaluated")
         })?;
@@ -1152,7 +1176,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         if done.rebuilds > 0 {
             // Which instance draws which row changed: a GPU pick drawn
             // before is dropped (GUP-719).
-            self.epoch = self.epoch.wrapping_add(1);
+            self.lod_epoch = self.lod_epoch.wrapping_add(1);
         }
         self.lod_pending = done.pending;
         let store = self.columns.as_ref().expect("checked above");
@@ -1869,9 +1893,11 @@ pub(crate) trait Layer: wgpu::WasmNotSendSync {
         brushable: bool,
         frame: &lod::Frame<'_>,
     ) -> Result<MarkBatch>;
-    /// Whether the last [`prepare`](Self::prepare) drew a visible chunk in
-    /// full only because its level-of-detail tiers were not built yet: the
-    /// plot draws again to build the next.
+    /// Whether the plot should prepare again for the layer's level of
+    /// detail: a worker's tier build is done and waits to be installed
+    /// (native, GUP-730), or the last [`prepare`](Self::prepare) drew a
+    /// visible chunk in full because its tiers were not built yet and
+    /// another frame builds the next (`wasm32`, GUP-716).
     fn lod_pending(&self) -> bool;
     /// Set the layer's brushed data rows (`None`: no brush) and write them,
     /// as one bit per stored row, into the prepared GPU state. A layer
@@ -1984,8 +2010,19 @@ struct TierDone {
     /// Of those, tiers that replaced tiers: which instance draws which row
     /// changed (an appended chunk's, GUP-719).
     rebuilds: u64,
-    /// Whether a visible chunk drew every row for want of its tiers.
+    /// Whether a visible chunk drew every row for want of its tiers, and
+    /// another frame should build it (`wasm32`; native targets ask when a
+    /// worker's build is done, `ColumnStore::lod_ready`).
     pending: bool,
+}
+
+impl TierDone {
+    /// Count what [`ColumnStore::install_lod`] did.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn count(&mut self, (built, replaced): (bool, bool)) {
+        self.builds += u64::from(built);
+        self.rebuilds += u64::from(replaced);
+    }
 }
 
 /// Chunk `k`'s tiers' cell exponents, built on first use (counted in
@@ -2018,9 +2055,12 @@ fn chunk_tiers(
 ///   hold more than [`Lod::AUTO_MIN_ROWS`] rows, each visible chunk draws
 ///   the prefix of [`lod::tier`] at its scale, or, one tier past its
 ///   stored tiers, its finest stored tier's ([`Tiers::cap`](lod::Tiers::cap),
-///   GUP-720) when more than [`Lod::AUTO_MIN_ROWS`] rows are in view; a chunk further past its stored tiers, or whose tiers are
-///   not built and over the prepare's build budget (`pending`), draws
-///   every row.
+///   GUP-720) when more than [`Lod::AUTO_MIN_ROWS`] rows are in view; a
+///   chunk further past its stored tiers, or whose tiers are not built
+///   yet, draws every row.
+///
+/// Builds ([`build_wanted`]) never hold up a frame of a hosted plot
+/// (`frame.waker`); a headless frame waits for those it draws.
 ///
 /// Not generic: one copy serves every row type.
 #[inline(never)]
@@ -2032,34 +2072,6 @@ fn tier_entries(
     scale: &[[Option<f64>; 2]],
     share: &dyn Fn(&lod::Run) -> f64,
     entries: &mut Vec<DrawEntry>,
-) -> Result<TierDone> {
-    let done = choose_tiers(store, cx, ask, frame, scale, share, entries)?;
-    // Tiers built for all of the newest chunk's rows leave no rows past
-    // them: its draw is one entry again.
-    if let Some(last) = store.chunks().len().checked_sub(1)
-        && entries
-            .last()
-            .is_some_and(|e| e.this == last && e.first > 0)
-        && store.chunks()[last].tier_rows() == Some(store.chunks()[last].rows())
-    {
-        entries.pop();
-        if let Some(main) = entries.last_mut()
-            && main.lod.is_none()
-        {
-            main.instances = store.chunks()[last].rows();
-        }
-    }
-    Ok(done)
-}
-
-fn choose_tiers(
-    store: &mut ColumnStore,
-    cx: &Context,
-    ask: &TierAsk<'_>,
-    frame: &lod::Frame<'_>,
-    scale: &[[Option<f64>; 2]],
-    share: &dyn Fn(&lod::Run) -> f64,
-    entries: &mut [DrawEntry],
 ) -> Result<TierDone> {
     let mut done = TierDone::default();
     if let Some(t) = ask.forced {
@@ -2076,14 +2088,6 @@ fn choose_tiers(
         }
         return Ok(done);
     }
-    if ask.release {
-        for k in 0..store.chunks().len() {
-            if store.releasable(k) {
-                chunk_tiers(store, k, ask.xy, ask.order, &mut done)?;
-                store.upload_lod(cx, k)?;
-            }
-        }
-    }
     let shown = |i: usize| frame.visible.get(i).copied().unwrap_or(true);
     let visible_rows: u64 = entries
         .iter()
@@ -2091,44 +2095,55 @@ fn choose_tiers(
         .filter(|&(i, _)| shown(i))
         .map(|(_, e)| u64::from(store.chunks()[e.this].rows()))
         .sum();
+    let last = store.chunks().len().saturating_sub(1);
+    // The visible chunks whose tiers this frame wants: missing, or, for
+    // the newest chunk of an appended layer (which changes with every
+    // append), once it holds `TAIL_MIN_ROWS` rows and again each time its
+    // rows have doubled (amortised `O(n log n)`), the rows past its tiers
+    // drawing in full meanwhile (GUP-719).
+    let mut wanted = Vec::new();
+    if visible_rows > Lod::AUTO_MIN_ROWS {
+        for (i, e) in entries.iter().enumerate() {
+            // The rows past an appended chunk's tiers draw in full.
+            if e.first > 0 || !shown(i) || scale[e.this].contains(&None) {
+                continue;
+            }
+            let rows = store.chunks()[e.this].rows();
+            let tail = ask.appended && e.this == last && !store.chunk_full(last);
+            let want = match store.tier_rows(e.this, ask.xy) {
+                Some(b) if b == rows => false,
+                Some(b) => !tail || rows >= b.saturating_mul(2),
+                None => !tail || rows >= lod::TAIL_MIN_ROWS,
+            };
+            if want {
+                wanted.push(e.this);
+            }
+        }
+    }
+    build_wanted(store, cx, ask, frame, &wanted, &mut done)?;
+    if done.builds > 0 {
+        // Tiers for more of the newest chunk's rows leave fewer rows past
+        // them (or none: its draw is one entry again).
+        *entries = draw_entries(Geometry::Quad, store.chunks());
+    }
     if visible_rows <= Lod::AUTO_MIN_ROWS {
         return Ok(done);
     }
-    let last = store.chunks().len().saturating_sub(1);
     let (mut capped, mut seen) = (Vec::new(), 0.0);
-    let mut budget = if frame.spread { 1 } else { usize::MAX };
     for (i, e) in entries.iter_mut().enumerate() {
-        // The rows past an appended chunk's tiers draw in full.
         if e.first > 0 || !shown(i) {
             continue;
         }
         let [Some(kx), Some(ky)] = scale[e.this] else {
             continue;
         };
-        // The newest chunk of an appended layer changes with every append:
-        // it builds tiers once it holds `TAIL_MIN_ROWS` rows and again each
-        // time its rows have doubled (amortised `O(n log n)`), the rows
-        // past its tiers drawing in full meanwhile (GUP-719).
+        // Tiers for fewer rows than the chunk holds draw only for the
+        // newest chunk, whose rows past them have an entry of their own.
         let rows = store.chunks()[e.this].rows();
-        let tail = ask.appended && e.this == last && !store.chunk_full(last);
-        let built = store.tier_rows(e.this, ask.xy);
-        let wanted = match built {
-            Some(b) if b == rows => false,
-            Some(b) => !tail || rows >= b.saturating_mul(2),
-            None => !tail || rows >= lod::TAIL_MIN_ROWS,
-        };
-        if wanted {
-            if budget == 0 {
-                done.pending = true;
-                if built.is_none() || e.this != last {
-                    continue;
-                }
-            } else {
-                budget -= 1;
-                chunk_tiers(store, e.this, ask.xy, ask.order, &mut done)?;
-            }
-        } else if built.is_none() {
-            continue;
+        match store.tier_rows(e.this, ask.xy) {
+            None => continue,
+            Some(b) if b != rows && e.this != last => continue,
+            Some(_) => {}
         }
         let tiers = store.chunks()[e.this].tiers().expect("built above");
         let Some(t) = lod::tier(tiers.ex, tiers.ey, kx, ky) else {
@@ -2141,7 +2156,6 @@ fn choose_tiers(
         } else if let Some(n) = tiers.cap(t) {
             // One tier past the stored tiers: the finest stored tier's
             // prefix instead of every row, if the rows in view are many.
-            let rows = store.chunks()[e.this].rows();
             seen += lod::in_view(&tiers.runs, n, rows, &mut |run| share(run));
             capped.push((i, n));
         }
@@ -2156,6 +2170,82 @@ fn choose_tiers(
             store.upload_lod(cx, entries[i].this)?;
             entries[i].instances = n;
             entries[i].lod = Some(n);
+        }
+    }
+    Ok(done)
+}
+
+/// Build the tiers of the chunks `wanted` by this frame and, when the
+/// prepare's release drops CPU copies, of every chunk it drops (counted in
+/// `done`).
+///
+/// Native targets build on worker threads (GUP-730): a hosted frame
+/// (`frame.waker`) starts the builds and draws on, and the prepare after
+/// they are done installs them ([`install_ready`]); a headless frame waits
+/// for the chunks it draws (its thread building too). A released chunk's
+/// build holds its CPU copy until it is done.
+#[cfg(not(target_arch = "wasm32"))]
+fn build_wanted(
+    store: &mut ColumnStore,
+    cx: &Context,
+    ask: &TierAsk<'_>,
+    frame: &lod::Frame<'_>,
+    wanted: &[usize],
+    done: &mut TierDone,
+) -> Result<()> {
+    for &k in wanted {
+        store.spawn_lod(k, ask.xy, ask.order, frame.waker)?;
+    }
+    if ask.release {
+        for k in 0..store.chunks().len() {
+            if store.releasable(k) {
+                store.spawn_lod(k, ask.xy, ask.order, frame.waker)?;
+            }
+        }
+    }
+    if frame.waker.is_none() {
+        for &k in wanted {
+            done.count(store.install_lod(cx, k, true)?);
+        }
+    }
+    Ok(())
+}
+
+/// `wasm32` has no threads: a hosted frame builds one chunk (GUP-716) and
+/// asks for another frame while any is missing; a headless frame builds
+/// them all.
+#[cfg(target_arch = "wasm32")]
+fn build_wanted(
+    store: &mut ColumnStore,
+    cx: &Context,
+    ask: &TierAsk<'_>,
+    frame: &lod::Frame<'_>,
+    wanted: &[usize],
+    done: &mut TierDone,
+) -> Result<()> {
+    if ask.release {
+        for k in 0..store.chunks().len() {
+            if store.releasable(k) {
+                chunk_tiers(store, k, ask.xy, ask.order, done)?;
+                store.upload_lod(cx, k)?;
+            }
+        }
+    }
+    let budget = if frame.waker.is_some() { 1 } else { usize::MAX };
+    for &k in wanted.iter().take(budget) {
+        chunk_tiers(store, k, ask.xy, ask.order, done)?;
+    }
+    done.pending = wanted.len() > budget;
+    Ok(())
+}
+
+/// Install every finished worker build of `store` on `cx` (GUP-730).
+#[cfg(not(target_arch = "wasm32"))]
+fn install_ready(store: &mut ColumnStore, cx: &Context) -> Result<TierDone> {
+    let mut done = TierDone::default();
+    for k in 0..store.chunks().len() {
+        if store.lod_building(k) {
+            done.count(store.install_lod(cx, k, false)?);
         }
     }
     Ok(done)
@@ -3458,6 +3548,10 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
     }
 
     fn lod_pending(&self) -> bool {
+        #[cfg(not(target_arch = "wasm32"))]
+        if self.columns.as_ref().is_some_and(|s| s.lod_ready()) {
+            return true;
+        }
         self.lod_pending
     }
 
@@ -3732,7 +3826,7 @@ impl<T: Send + Sync + 'static, M: Mark> Layer for Selection<T, M> {
     }
 
     fn epoch(&self) -> u64 {
-        self.epoch
+        self.epoch.wrapping_add(self.lod_epoch)
     }
 
     fn holds(&self, row: usize) -> bool {

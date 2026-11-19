@@ -384,8 +384,60 @@ fn zoomed_far_in_every_row_draws() {
     assert_eq!(d.instances, rows as u64);
 }
 
+/// A host's waker that counts its wakes: a worker's tier build wakes it
+/// when done (GUP-730).
+struct Wakes(std::sync::atomic::AtomicUsize);
+
+impl std::task::Wake for Wakes {
+    fn wake(self: std::sync::Arc<Self>) {
+        self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+    }
+}
+
+impl Wakes {
+    fn waker() -> (std::sync::Arc<Self>, std::task::Waker) {
+        let w = std::sync::Arc::new(Self(0.into()));
+        (w.clone(), std::task::Waker::from(w))
+    }
+
+    /// Wait (up to a minute) until woken `n` times.
+    fn until(&self, n: usize) {
+        let t = std::time::Instant::now();
+        while self.0.load(std::sync::atomic::Ordering::SeqCst) < n {
+            assert!(
+                t.elapsed() < std::time::Duration::from_secs(60),
+                "woken {} of {n} times",
+                self.0.load(std::sync::atomic::Ordering::SeqCst)
+            );
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+    }
+}
+
+/// Every worker build sleeps `ms` first while this lives (the build
+/// seam), so a test can see a frame that does not wait for one.
+struct SlowBuilds;
+
+impl SlowBuilds {
+    fn new(ms: u64) -> Self {
+        gup_core::__private::set_lod_build_delay(ms);
+        Self
+    }
+}
+
+impl Drop for SlowBuilds {
+    fn drop(&mut self) {
+        gup_core::__private::set_lod_build_delay(0);
+    }
+}
+
+/// GUP-730: a headless frame builds every visible chunk's tiers before it
+/// returns (on worker threads); a hosted frame never waits for a build. Its
+/// chunks draw in full while their builds run (and no redraw is asked for
+/// meanwhile), each finished build wakes the host, the next frame installs
+/// it, and the picture converges to the headless one.
 #[test]
-fn tiers_build_one_chunk_a_frame_with_a_host_and_all_at_once_without() {
+fn hosted_frames_never_wait_for_a_build_and_converge_to_the_headless_frame() {
     let cx = Context::new_blocking().unwrap();
     let make = || {
         let (mut plot, x, y) = plot();
@@ -398,33 +450,50 @@ fn tiers_build_one_chunk_a_frame_with_a_host_and_all_at_once_without() {
     };
     // Headless: the first frame is complete.
     let mut headless = make();
-    let d = draw(&cx, &mut headless);
-    assert_eq!(d.chunks, 3);
+    let complete = draw(&cx, &mut headless);
+    assert_eq!(complete.chunks, 3);
     assert_eq!(builds(&mut headless), 3);
     assert!(!Chart::needs_frame(&headless));
 
-    // Under a host that draws again when asked: one chunk a frame, and a
-    // redraw is asked for until every visible chunk has its tiers.
+    // Hosted, each build taking at least 1.5 s: the first frame returns
+    // without one.
+    const SLOW: u64 = 1_500;
+    let slow = SlowBuilds::new(SLOW);
+    let (wakes, waker) = Wakes::waker();
     let mut hosted = make();
-    Chart::set_waker(&mut hosted, std::task::Waker::noop().clone());
-    let mut seen = Vec::new();
-    for _ in 0..4 {
-        let d = draw(&cx, &mut hosted);
-        seen.push((
-            builds(&mut hosted),
-            Chart::needs_frame(&hosted),
-            d.instances,
-        ));
-    }
-    assert_eq!(
-        seen.iter().map(|s| (s.0, s.1)).collect::<Vec<_>>(),
-        [(1, true), (2, true), (3, false), (3, false)]
+    Chart::set_waker(&mut hosted, waker);
+    let t = std::time::Instant::now();
+    let first = draw(&cx, &mut hosted);
+    let took = t.elapsed();
+    assert!(
+        took < std::time::Duration::from_millis(SLOW),
+        "the first frame took {took:?}, as long as a build"
     );
-    // Unbuilt chunks draw in full, so each frame draws fewer instances.
-    assert!(seen[0].2 > seen[1].2 && seen[1].2 > seen[2].2, "{seen:?}");
-    assert_eq!(seen[2].2, seen[3].2);
-    // The complete frame is the headless one.
-    assert_eq!(seen[3].2, d.instances);
+    assert_eq!(builds(&mut hosted), 0, "no build waited for");
+    assert_eq!(first.instances, 300_000, "every row draws meanwhile");
+    assert!(
+        !Chart::needs_frame(&hosted),
+        "no redraw while the builds run: they wake the host"
+    );
+    // A frame while they run draws the same, again without waiting.
+    let t = std::time::Instant::now();
+    let again = draw(&cx, &mut hosted);
+    assert!(t.elapsed() < std::time::Duration::from_millis(SLOW));
+    assert_eq!((builds(&mut hosted), again.instances), (0, 300_000));
+    drop(slow);
+
+    // Each build wakes the host when done; the frame then installs it.
+    wakes.until(3);
+    assert!(Chart::needs_frame(&hosted), "finished builds await a frame");
+    let done = draw(&cx, &mut hosted);
+    assert_eq!(builds(&mut hosted), 3);
+    assert!(!Chart::needs_frame(&hosted));
+    assert_eq!(done.instances, complete.instances);
+    assert_eq!(done.draw_calls, complete.draw_calls);
+    assert!(
+        done.image == complete.image,
+        "the hosted picture converges to the headless one"
+    );
 }
 
 #[test]
@@ -437,14 +506,21 @@ fn a_released_layer_builds_its_full_chunks_before_release() {
         .attr(Circle::RADIUS, Px(1.5))
         .retain(Retain::GpuOnly)
         .max_chunk_rows(100_000);
-    Chart::set_waker(&mut plot, std::task::Waker::noop().clone());
+    let (wakes, waker) = Wakes::waker();
+    Chart::set_waker(&mut plot, waker);
     // Zoomed in so far that no chunk takes a tier, and fewer rows than the
     // threshold visible: yet the three full chunks build, since release
-    // drops their CPU copies.
+    // drops their CPU copies. The builds hold the copies until they are
+    // done (GUP-730), so the layer releases at once.
     x.write().set_domain(10.0, 10.001).unwrap();
+    let slow = SlowBuilds::new(300);
+    draw(&cx, &mut plot);
+    assert!(plot.layer_mut::<Row, Circle>().unwrap().rows_released());
+    assert_eq!(builds(&mut plot), 0, "built off the frame");
+    drop(slow);
+    wakes.until(3);
     draw(&cx, &mut plot);
     assert_eq!(builds(&mut plot), 3);
-    assert!(plot.layer_mut::<Row, Circle>().unwrap().rows_released());
     // Zoomed out, the released chunks draw their representatives.
     x.write().set_domain(0.0, 1000.0).unwrap();
     let d = draw(&cx, &mut plot);
@@ -1158,13 +1234,14 @@ fn the_tail_builds_at_doubling_sizes() {
         assert!((2 * w[0]..2 * w[0] + 1_000).contains(&w[1]), "{at:?}");
     }
 
-    // One build of the chunk: a two-chunk layer's first frame with tiers,
-    // less the same frame without, over its two builds.
+    // One build of the chunk: a one-chunk layer's first frame with tiers,
+    // less the same frame without (one chunk: builds run in parallel,
+    // GUP-730).
     let frame = |lod| {
-        let (mut p, _tx) = appended(2 * CHUNK, CHUNK as u32, lod);
+        let (mut p, _tx) = appended(CHUNK, CHUNK as u32, lod);
         resolve_time(&cx, &mut p)
     };
-    let one = frame(Lod::Auto).saturating_sub(frame(Lod::Off)) / 2;
+    let one = frame(Lod::Auto).saturating_sub(frame(Lod::Off));
     quiet.sort();
     let typical = quiet[quiet.len() / 2];
     let spent = build_time.saturating_sub(typical * 5);
@@ -1410,59 +1487,90 @@ fn a_rolling_window_keeps_tiers_for_its_chunks_only() {
     assert!((first..first + 500_000).contains(&hit_gpu.row));
 }
 
-/// AC4: the CPU frame (resolve, which prepares the layer, and the
-/// renderer's prepare) of a full 2,000,000-row window fed 100,000 rows a
-/// frame. A frame that builds tiers takes the build's time (about 0.1 s per
-/// 1,000,000 rows in release, once per chunk per frame): the p95 of ten
-/// frames is such a frame, so the 8 ms bound is asserted on the frames that
-/// build nothing (release builds only); every frame is printed.
-#[test]
-fn a_rolling_window_frame_is_cheap() {
-    let cx = Context::new_blocking().unwrap();
-    let (mut plot, tx) = windowed(2_000_000, Lod::Auto);
-    draw(&cx, &mut plot);
+/// One frame of [`window_frames`]: its CPU time, the tier builds it
+/// installed, and whether it evicted a chunk.
+struct WindowFrame {
+    cpu: std::time::Duration,
+    built: u64,
+    evicted: bool,
+}
+
+/// Thirty frames of a full 2,000,000-row window fed 100,000 rows a frame,
+/// under a host (a waker set): the CPU's frame is resolve (which prepares
+/// the layer), the renderer's prepare and the recording and submission of
+/// the draw, not waiting for the device. Each is printed.
+fn window_frames(cx: &Context, lod: Lod) -> Vec<WindowFrame> {
+    let (mut plot, tx) = windowed(2_000_000, lod);
+    let (_wakes, waker) = Wakes::waker();
+    Chart::set_waker(&mut plot, waker);
+    draw(cx, &mut plot);
     let mut total = 1;
     while total < 3_000_000 {
         push(&tx, total, total + 100_000);
         total += 100_000;
-        plot.resolve(&cx, W as f32, H as f32).unwrap();
+        plot.resolve(cx, W as f32, H as f32).unwrap();
     }
-    // The CPU's frame: resolve (which prepares the layer), the renderer's
-    // prepare and the recording and submission of the draw, not waiting
-    // for the device.
-    let mut target = ImageTarget::new(&cx, W, H).unwrap();
-    let mut times = Vec::new();
-    let mut rebuilds = 0;
-    for _ in 0..10 {
+    let mut target = ImageTarget::new(cx, W, H).unwrap();
+    let mut frames = Vec::new();
+    eprintln!("{lod:?}:");
+    for _ in 0..30 {
+        let rows = held(&mut plot);
         push(&tx, total, total + 100_000);
         total += 100_000;
         let before = builds(&mut plot);
         let t = std::time::Instant::now();
-        let scene: Scene = plot.resolve(&cx, W as f32, H as f32).unwrap().scene.clone();
+        let scene: Scene = plot.resolve(cx, W as f32, H as f32).unwrap().scene.clone();
         let resolved = t.elapsed();
         let desc = gup_core::RenderTarget::desc(&target);
-        Renderer::new().prepare(&cx, &scene, &desc).unwrap();
-        let prepared = t.elapsed();
-        target.render_blocking(&cx, &scene).unwrap();
-        eprintln!(
-            "  resolve {resolved:?}, + prepare {prepared:?}, + draw and wait {:?}",
-            t.elapsed()
-        );
+        Renderer::new().prepare(cx, &scene, &desc).unwrap();
+        let cpu = t.elapsed();
+        target.render_blocking(cx, &scene).unwrap();
         let built = builds(&mut plot) - before;
-        rebuilds += built;
-        times.push((prepared, built));
+        let evicted = held(&mut plot) < rows + 100_000;
+        eprintln!(
+            "  resolve {resolved:?}, + prepare {cpu:?}, + draw and wait {:?}{}{}",
+            t.elapsed(),
+            if built > 0 { ", installs a build" } else { "" },
+            if evicted { ", evicts a chunk" } else { "" },
+        );
+        frames.push(WindowFrame {
+            cpu,
+            built,
+            evicted,
+        });
     }
-    let p95 = |mut t: Vec<std::time::Duration>| {
-        t.sort();
-        t[(t.len() * 95).div_ceil(100) - 1]
-    };
-    let all = p95(times.iter().map(|t| t.0).collect());
-    let quiet = p95(times.iter().filter(|t| t.1 == 0).map(|t| t.0).collect());
+    frames
+}
+
+fn p95(mut t: Vec<std::time::Duration>) -> std::time::Duration {
+    t.sort();
+    t[(t.len() * 95).div_ceil(100) - 1]
+}
+
+/// AC4 (GUP-719), every frame (GUP-730): the tail's tier builds (about
+/// 0.1 s per 1,000,000 rows in release) run on worker threads, so the
+/// frames of a rolling window take no longer for them: the p95 of every
+/// frame that evicts nothing, those that start or install a build
+/// included, is under 8 ms (release builds only). A frame that evicts a
+/// chunk costs as much under `Off` (the rows' and the grown chunk's
+/// copies, not the level of detail): printed beside it.
+#[test]
+fn a_rolling_window_frame_is_cheap() {
+    let cx = Context::new_blocking().unwrap();
+    let off = window_frames(&cx, Lod::Off);
+    let auto = window_frames(&cx, Lod::Auto);
+    let installs: u64 = auto.iter().map(|f| f.built).sum();
+    let quiet = p95(auto.iter().filter(|f| !f.evicted).map(|f| f.cpu).collect());
+    let worst = |frames: &[WindowFrame]| frames.iter().filter(|f| f.evicted).map(|f| f.cpu).max();
     eprintln!(
-        "10 frames of 100,000 rows: {rebuilds} builds in {} frames; p95 {all:?}, of the frames \
-         without a build {quiet:?}",
-        times.iter().filter(|t| t.1 > 0).count()
+        "30 frames of 100,000 rows: {installs} builds installed; p95 {:?} ({:?} under Off), of \
+         the frames that evict nothing {quiet:?}; evicting frames at most {:?} ({:?} under Off)",
+        p95(auto.iter().map(|f| f.cpu).collect()),
+        p95(off.iter().map(|f| f.cpu).collect()),
+        worst(&auto),
+        worst(&off),
     );
+    assert!(installs > 0, "the tail's builds were installed");
     if !cfg!(debug_assertions) {
         assert!(quiet.as_secs_f64() < 0.008, "p95 {quiet:?}");
     }

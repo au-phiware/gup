@@ -737,6 +737,22 @@ pub(crate) struct LodGpu {
 }
 
 impl LodGpu {
+    /// Gathered `bytes` (see [`gather`]) on `cx`, counted as
+    /// [`Upload::Column`].
+    fn upload(cx: &Context, bytes: &[u8], ranges: Vec<std::ops::Range<u64>>) -> Self {
+        let buffer = cx.buffer_with_data(
+            Upload::Column,
+            "gup lod representatives",
+            wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_SRC,
+            bytes,
+        );
+        Self {
+            context: cx.id(),
+            buffer,
+            ranges,
+        }
+    }
+
     /// The gathered columns and rows.
     pub(crate) fn buffer(&self) -> &wgpu::Buffer {
         &self.buffer
@@ -783,6 +799,10 @@ pub struct Chunk {
     /// Tiers and representatives, once a level-of-detail draw asked for
     /// them (GUP-715).
     lod: Option<Box<ChunkLod>>,
+    /// Tiers building on a worker, installed into `lod` by a later
+    /// prepare (GUP-730).
+    #[cfg(not(target_arch = "wasm32"))]
+    building: Option<Box<Building>>,
 }
 
 impl Chunk {
@@ -817,6 +837,8 @@ impl Chunk {
             shared,
             gpu: None,
             lod: None,
+            #[cfg(not(target_arch = "wasm32"))]
+            building: None,
         }
     }
 
@@ -1236,6 +1258,78 @@ impl Cells<'_> {
     }
 }
 
+/// Where column `column` (of `formats`) of a chunk holding stored rows
+/// `rows` is read from: its CPU copy `cpu`, or the store's `shared`
+/// columns. `None` without either, or past the columns.
+fn cells_of<'a>(
+    cpu: Option<&'a ChunkCpu>,
+    shared: Option<&'a SharedColumns>,
+    formats: &[ColumnFormat],
+    rows: std::ops::Range<u64>,
+    column: usize,
+) -> Option<Cells<'a>> {
+    formats.get(column)?;
+    match (cpu, shared) {
+        (_, Some(shared)) => Some(Cells::Shared(shared.rows(column, rows))),
+        (Some(cpu), None) => Some(Cells::Bytes {
+            cpu,
+            plane: plane_of(formats, column),
+            planes: formats.iter().filter(|f| f.has_validity()).count(),
+        }),
+        (None, None) => None,
+    }
+}
+
+/// A chunk's x and y columns to build tiers over: each read as the GPU
+/// sees it, or `None` for a constant axis (read as 0).
+type TierAxes<'a> = [Option<(Cells<'a>, &'a ChunkColumn)>; 2];
+
+/// The tiers (GUP-714) of a chunk's rows `0..len` over `xy`; `rank`: see
+/// [`Tiers::build`].
+fn build_tiers(len: u32, xy: &TierAxes<'_>, rank: Option<&dyn Fn(u32) -> u32>) -> Tiers {
+    let at = |a: usize, r: u32| {
+        xy[a]
+            .as_ref()
+            .map_or(0.0, |(cells, col)| cells.get(col, r as usize))
+    };
+    Tiers::build(len, |r| (at(0, r), at(1, r)), rank)
+}
+
+/// Every column's cells of a chunk's rows `order` (GUP-715), packed one
+/// column after another, then the rows as `u32`s: a [`LodGpu`]'s bytes and
+/// byte ranges. `None` when a column cannot be read (`cells`).
+fn gather<'a>(
+    formats: &[ColumnFormat],
+    columns: &[ChunkColumn],
+    cells: &dyn Fn(usize) -> Option<Cells<'a>>,
+    order: &[u32],
+) -> Option<(Vec<u8>, Vec<std::ops::Range<u64>>)> {
+    let reps = order.len();
+    let mut ranges = Vec::with_capacity(formats.len() + 1);
+    let mut size = 0;
+    for f in formats {
+        let end = size + reps as u64 * f.stride();
+        ranges.push(size..end);
+        size = end;
+    }
+    ranges.push(size..size + 4 * reps as u64);
+    let mut bytes = vec![0u8; ranges.last().map_or(0, |r| r.end) as usize];
+    for (c, range) in ranges.iter().take(formats.len()).enumerate() {
+        let cells = cells(c)?;
+        let col = &columns[c];
+        let dst = &mut bytes[range.start as usize..range.end as usize];
+        for (cell, &r) in dst
+            .chunks_exact_mut(col.format.stride() as usize)
+            .zip(order)
+        {
+            cells.cell(col, r as usize, cell);
+        }
+    }
+    let rows = ranges.last().expect("the row column").clone();
+    bytes[rows.start as usize..].copy_from_slice(bytemuck::cast_slice(order));
+    Some((bytes, ranges))
+}
+
 /// A store's shared columns (GUP-664): the columns of a columnar layer,
 /// which the store reads rather than copies.
 #[derive(Clone, Debug)]
@@ -1599,6 +1693,10 @@ impl ColumnStore {
         // A moved row may represent another cell, and its gathered bytes
         // are stale.
         chunk.lod = None;
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            chunk.building = None;
+        }
         let col = &mut chunk.columns[column];
         debug_assert!(col.format.has_validity(), "a numeric column");
         let (cell, stride) = col.encode_one(value);
@@ -1780,19 +1878,14 @@ impl ColumnStore {
     /// released its CPU copy, or `k` or `column` is out of range.
     fn cells(&self, k: usize, column: usize) -> Option<Cells<'_>> {
         let chunk = self.chunks.get(k)?;
-        self.formats.get(column)?;
-        match (&chunk.cpu, &self.shared) {
-            (_, Some(shared)) => {
-                let end = chunk.row_base + u64::from(chunk.len);
-                Some(Cells::Shared(shared.rows(column, chunk.row_base..end)))
-            }
-            (Some(cpu), None) => Some(Cells::Bytes {
-                cpu,
-                plane: plane_of(&self.formats, column),
-                planes: self.validity_planes(),
-            }),
-            (None, None) => None,
-        }
+        let end = chunk.row_base + u64::from(chunk.len);
+        cells_of(
+            chunk.cpu.as_deref(),
+            self.shared.as_ref(),
+            &self.formats,
+            chunk.row_base..end,
+            column,
+        )
     }
 
     /// Whether chunk `k` has [`lod_tiers`](Self::lod_tiers) over `xy` for
@@ -1856,16 +1949,12 @@ impl ColumnStore {
                 let cells = self.cells(k, c).ok_or_else(|| self.released(k, "tiers"))?;
                 Ok(Some((cells, &self.chunks[k].columns[c])))
             };
-            let (x, y) = (read(xy[0])?, read(xy[1])?);
-            let at = |a: &Option<(Cells<'_>, &ChunkColumn)>, r: u32| {
-                a.as_ref()
-                    .map_or(0.0, |(cells, col)| cells.get(col, r as usize))
-            };
+            let axes = [read(xy[0])?, read(xy[1])?];
             let base = self.chunks[k].row_base;
             let rank = |r: u32| order.map_or(0, |o| o.lod_rank(base + u64::from(r)));
-            let tiers = Arc::new(Tiers::build(
+            let tiers = Arc::new(build_tiers(
                 self.chunks[k].len,
-                |r| (at(&x, r), at(&y, r)),
+                &axes,
                 order.is_some().then_some(&rank),
             ));
             self.chunks[k].lod = Some(Box::new(ChunkLod {
@@ -1892,44 +1981,15 @@ impl ColumnStore {
         if lod.gpu.as_ref().is_some_and(|g| g.context == cx.id()) {
             return Ok(());
         }
-        let order = &lod.tiers.order;
-        let reps = order.len();
-        let chunk = &self.chunks[k];
-        let mut ranges = Vec::with_capacity(self.formats.len() + 1);
-        let mut size = 0;
-        for f in &self.formats {
-            let end = size + reps as u64 * f.stride();
-            ranges.push(size..end);
-            size = end;
-        }
-        ranges.push(size..size + 4 * reps as u64);
-        let mut bytes = vec![0u8; ranges.last().map_or(0, |r| r.end) as usize];
-        for (c, range) in ranges.iter().take(self.formats.len()).enumerate() {
-            let cells = self
-                .cells(k, c)
-                .ok_or_else(|| self.released(k, "representatives"))?;
-            let col = &chunk.columns[c];
-            let dst = &mut bytes[range.start as usize..range.end as usize];
-            for (cell, &r) in dst
-                .chunks_exact_mut(col.format.stride() as usize)
-                .zip(order)
-            {
-                cells.cell(col, r as usize, cell);
-            }
-        }
-        let rows = ranges.last().expect("the row column").clone();
-        bytes[rows.start as usize..].copy_from_slice(bytemuck::cast_slice(order));
-        let buffer = cx.buffer_with_data(
-            Upload::Column,
-            "gup lod representatives",
-            wgpu::BufferUsages::VERTEX | wgpu::BufferUsages::COPY_SRC,
-            &bytes,
-        );
-        self.chunks[k].lod.as_mut().expect("checked above").gpu = Some(LodGpu {
-            context: cx.id(),
-            buffer,
-            ranges,
-        });
+        let (bytes, ranges) = gather(
+            &self.formats,
+            &self.chunks[k].columns,
+            &|c| self.cells(k, c),
+            &lod.tiers.order,
+        )
+        .ok_or_else(|| self.released(k, "representatives"))?;
+        let gpu = LodGpu::upload(cx, &bytes, ranges);
+        self.chunks[k].lod.as_mut().expect("checked above").gpu = Some(gpu);
         Ok(())
     }
 
@@ -2020,6 +2080,184 @@ impl ColumnStore {
         if let Some(v) = chunk.gpu.as_mut().and_then(|g| g.validity.as_mut()) {
             v.rows = 0;
         }
+    }
+}
+
+/// A chunk's level-of-detail build on a worker (GUP-730).
+#[cfg(not(target_arch = "wasm32"))]
+#[derive(Debug)]
+struct Building {
+    /// The store columns of x and y it builds over.
+    xy: [Option<usize>; 2],
+    task: crate::lod::pool::Task<Built>,
+}
+
+/// What a worker's build makes: the tiers and their gathered
+/// representatives, uploaded when installed.
+#[cfg(not(target_arch = "wasm32"))]
+struct Built {
+    tiers: Tiers,
+    bytes: Vec<u8>,
+    ranges: Vec<std::ops::Range<u64>>,
+}
+
+/// Everything one chunk's build reads, owned so a worker can read it while
+/// the store moves on (GUP-730): the chunk's CPU copy shares its bytes (an
+/// append copies them first, a release drops only the chunk's reference,
+/// so the copy is freed when the build is done), shared columns their
+/// arrays.
+#[cfg(not(target_arch = "wasm32"))]
+struct BuildSource {
+    len: u32,
+    row_base: u64,
+    formats: Vec<ColumnFormat>,
+    columns: Vec<ChunkColumn>,
+    cpu: Option<Arc<ChunkCpu>>,
+    shared: Option<SharedColumns>,
+    xy: [Option<usize>; 2],
+    /// The rows' size keys, for a layer drawn by size (GUP-721).
+    keys: Option<Vec<f32>>,
+}
+
+/// A test seam: milliseconds each worker build sleeps before it starts
+/// (`__private::set_lod_build_delay`).
+#[cfg(not(target_arch = "wasm32"))]
+pub(crate) static LOD_BUILD_DELAY_MS: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
+
+#[cfg(not(target_arch = "wasm32"))]
+impl BuildSource {
+    fn build(self) -> Built {
+        let delay = LOD_BUILD_DELAY_MS.load(std::sync::atomic::Ordering::Relaxed);
+        if delay > 0 {
+            std::thread::sleep(std::time::Duration::from_millis(delay));
+        }
+        let rows = self.row_base..self.row_base + u64::from(self.len);
+        let cells = |c: usize| {
+            cells_of(
+                self.cpu.as_deref(),
+                self.shared.as_ref(),
+                &self.formats,
+                rows.clone(),
+                c,
+            )
+        };
+        let axis = |a: Option<usize>| a.and_then(|c| Some((cells(c)?, &self.columns[c])));
+        let axes = [axis(self.xy[0]), axis(self.xy[1])];
+        let keys = self.keys.as_deref();
+        let rank = |r: u32| keys.map_or(0, |k| crate::order::lod_rank_of(k[r as usize]));
+        let tiers = build_tiers(self.len, &axes, keys.is_some().then_some(&rank));
+        let (bytes, ranges) = gather(&self.formats, &self.columns, &cells, &tiers.order)
+            .expect("a build's source has every column");
+        Built {
+            tiers,
+            bytes,
+            ranges,
+        }
+    }
+}
+
+/// Level-of-detail builds off the frame's thread (GUP-730).
+#[cfg(not(target_arch = "wasm32"))]
+impl ColumnStore {
+    /// Start building chunk `k`'s tiers over `xy` (see
+    /// [`lod_tiers`](Self::lod_tiers)) and gathering its representatives
+    /// on a worker, unless they are built for its rows or building; wake
+    /// `waker` when done. The build holds the chunk's CPU copy (or shared
+    /// columns) until it is done. An error when the chunk's CPU copy was
+    /// released and its columns are not shared.
+    pub(crate) fn spawn_lod(
+        &mut self,
+        k: usize,
+        xy: [Option<usize>; 2],
+        order: Option<&DrawOrder>,
+        waker: Option<&std::task::Waker>,
+    ) -> Result<()> {
+        if self.has_tiers(k, xy) || self.chunks[k].building.as_ref().is_some_and(|b| b.xy == xy) {
+            return Ok(());
+        }
+        let c = &self.chunks[k];
+        if c.cpu.is_none() && self.shared.is_none() {
+            return Err(self.released(k, "tiers"));
+        }
+        let source = BuildSource {
+            len: c.len,
+            row_base: c.row_base,
+            formats: self.formats.clone(),
+            columns: c.columns.clone(),
+            cpu: c.cpu.clone(),
+            shared: self.shared.clone(),
+            xy,
+            keys: order.map(|o| o.lod_keys(c.row_base..c.row_base + u64::from(c.len))),
+        };
+        let task = crate::lod::pool::Task::spawn(move || source.build(), waker.cloned());
+        self.chunks[k].building = Some(Box::new(Building { xy, task }));
+        Ok(())
+    }
+
+    /// Whether chunk `k` is building (or has built, not yet installed)
+    /// tiers.
+    pub(crate) fn lod_building(&self, k: usize) -> bool {
+        self.chunks[k].building.is_some()
+    }
+
+    /// Whether any chunk's build is done and waits to be installed.
+    pub(crate) fn lod_ready(&self) -> bool {
+        self.chunks
+            .iter()
+            .any(|c| c.building.as_ref().is_some_and(|b| b.task.finished()))
+    }
+
+    /// Install chunk `k`'s build: its tiers and, uploaded to `cx`, its
+    /// representatives. `wait`: wait for the build (the calling thread
+    /// builds meanwhile); else only a finished one. Returns whether it
+    /// installed tiers and whether they replaced tiers.
+    pub(crate) fn install_lod(
+        &mut self,
+        cx: &Context,
+        k: usize,
+        wait: bool,
+    ) -> Result<(bool, bool)> {
+        let Some(building) = &self.chunks[k].building else {
+            return Ok((false, false));
+        };
+        let out = if wait {
+            Some(building.task.wait())
+        } else {
+            building.task.try_take()
+        };
+        let Some(out) = out else {
+            return Ok((false, false));
+        };
+        let xy = building.xy;
+        let chunk = &mut self.chunks[k];
+        chunk.building = None;
+        let built = out.map_err(|_| {
+            Error::config(
+                "column store",
+                format!(
+                    "chunk {k} (rows {}..{}): its level-of-detail build panicked",
+                    chunk.row_base,
+                    chunk.row_base + u64::from(chunk.len)
+                ),
+            )
+        })?;
+        // Tiers built since on this thread (a forced tier) are newer.
+        if chunk
+            .lod
+            .as_ref()
+            .is_some_and(|l| l.xy == xy && l.tiers.rows >= built.tiers.rows)
+        {
+            return Ok((false, false));
+        }
+        let replaced = chunk.lod.is_some();
+        let gpu = LodGpu::upload(cx, &built.bytes, built.ranges);
+        chunk.lod = Some(Box::new(ChunkLod {
+            xy,
+            tiers: Arc::new(built.tiers),
+            gpu: Some(gpu),
+        }));
+        Ok((true, replaced))
     }
 }
 
@@ -2938,6 +3176,53 @@ mod tests {
         let before = cx.upload_stats();
         owned.upload_lod(&cx, 0).unwrap();
         assert_eq!(cx.upload_stats(), before);
+    }
+
+    /// GUP-730: a worker's build equals the frame thread's (the tiers and
+    /// the gathered representatives), and holds a released chunk's CPU
+    /// copy until it is done, which then frees it.
+    #[test]
+    fn a_worker_build_equals_the_frame_threads_and_holds_the_copy() {
+        let cx = Context::new_blocking().unwrap();
+        let n = 50_000u32;
+        let xs: Vec<f64> = (0..n).map(f64::from).collect();
+        let ys: Vec<f64> = (0..n).map(|i| f64::from(i % 97) * 0.5).collect();
+        let make = || {
+            let mut store = ColumnStore::from_columns(
+                vec![
+                    (ColumnFormat::F32Relative, xs.clone()),
+                    (ColumnFormat::F32Relative, ys.clone()),
+                ],
+                25_000,
+            )
+            .unwrap();
+            store.upload(&cx).unwrap();
+            store
+        };
+        let xy = [Some(0), Some(1)];
+        let mut sync = make();
+        let tiers = sync.lod_tiers(0, xy, None).unwrap().clone();
+        sync.upload_lod(&cx, 0).unwrap();
+
+        let mut worker = make();
+        let copy = Arc::downgrade(worker.chunks[0].cpu.as_ref().unwrap());
+        LOD_BUILD_DELAY_MS.store(200, std::sync::atomic::Ordering::Relaxed);
+        worker.spawn_lod(0, xy, None, None).unwrap();
+        LOD_BUILD_DELAY_MS.store(0, std::sync::atomic::Ordering::Relaxed);
+        assert!(worker.lod_building(0) && !worker.has_tiers(0, xy));
+        assert_eq!(worker.release(), 2);
+        assert!(worker.chunks()[0].bytes().is_none(), "released at once");
+        assert!(copy.upgrade().is_some(), "the build holds the copy");
+        assert_eq!(worker.install_lod(&cx, 0, true).unwrap(), (true, false));
+        assert!(copy.upgrade().is_none(), "freed once the build is done");
+        assert!(!worker.lod_building(0) && worker.has_tiers(0, xy));
+        assert_eq!(worker.chunks()[0].tiers().map(|t| &**t), Some(&tiers));
+        let bytes =
+            |s: &ColumnStore| read_buffer(&cx, s.chunks()[0].lod_gpu(&cx).unwrap().buffer());
+        assert_eq!(bytes(&worker), bytes(&sync));
+        // A released chunk without tiers or a build cannot start one.
+        let err = worker.spawn_lod(1, xy, None, None).unwrap_err().to_string();
+        assert!(err.contains("chunk 1 (rows 25000..50000)"), "{err}");
     }
 
     /// GUP-715: a released chunk of owned columns has no source for its

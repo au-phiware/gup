@@ -186,10 +186,14 @@ impl DrawOrder {
     /// layer's own keys are bucketed), so a tier's blocks can keep their
     /// spatial order within a bucket.
     pub(crate) fn lod_rank(&self, stored: u64) -> u32 {
-        let k = self.keys[stored as usize];
-        // Clearing low mantissa bits is monotone for either sign.
-        let q = f32::from_bits(k.to_bits() & !((1 << (23 - BUCKET_BITS)) - 1));
-        !ordered_bits(q)
+        lod_rank_of(self.keys[stored as usize])
+    }
+
+    /// The sort keys of stored rows `stored`, for a level-of-detail build
+    /// on a worker ([`lod_rank_of`] ranks each, GUP-730).
+    #[cfg(not(target_arch = "wasm32"))]
+    pub(crate) fn lod_keys(&self, stored: Range<u64>) -> Vec<f32> {
+        self.keys[stored.start as usize..stored.end as usize].to_vec()
     }
 
     fn key(&self, v: f64) -> f32 {
@@ -513,6 +517,14 @@ fn permute(column: &mut ColumnData, run: Range<usize>, perm: &[u32]) {
         ColumnData::Values(v) => apply(&mut v[run], perm),
         ColumnData::Codes(c) => apply(&mut c[run], perm),
     }
+}
+
+/// A sort key's rank for a level of detail ([`DrawOrder::lod_rank`]).
+#[inline]
+pub(crate) fn lod_rank_of(k: f32) -> u32 {
+    // Clearing low mantissa bits is monotone for either sign.
+    let q = f32::from_bits(k.to_bits() & !((1 << (23 - BUCKET_BITS)) - 1));
+    !ordered_bits(q)
 }
 
 #[cfg(test)]

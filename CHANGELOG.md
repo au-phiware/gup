@@ -179,17 +179,21 @@ what each release contains and what its version number promises.
   (200,000) rows draws per chunk the lowest row of each occupied cell of a grid
   of about a quarter pixel: about 80,000 marks for a 10M- or 30M-row walk at
   1920 × 1080, 2.8-4.2 ms of GPU time on an integrated GPU instead of 0.9-2.9 s.
-  Tiers are built per chunk on first need (about 1 s per 10M rows). `Lod::Off`
-  draws every row. What you see is what you pick: the CPU pick index, hover
-  outline, tooltips and SVG output hold the marks drawn (each with its data row;
-  tens of thousands at any row count, so such a scatter picks above 10M rows),
-  while the brush still selects every data row. A layer that grows by appends or
-  under `RowWindow::LastRows` keeps it: full chunks keep their tiers, the newest
-  chunk builds them from 65,536 rows and again each time its rows double (the
-  rows past them draw in full), and an evicted chunk takes its tiers with it. A
-  layer drawn largest first (a size channel read from a column) takes it too: a
-  cell's representative is its largest mark (in buckets of 12.5%), and each tier
-  block draws its largest marks first.
+  Tiers are built per chunk on first need (about 1 s per 10M rows on one
+  thread), on worker threads on native targets: a window's frames never wait for
+  them (a chunk draws every row until its build is done), a layer that drops its
+  CPU data above 10M rows keeps each chunk's copy until its build is done, and a
+  headless render builds the chunks it draws in parallel. `Lod::Off` draws every
+  row. What you see is what you pick: the CPU pick index, hover outline,
+  tooltips and SVG output hold the marks drawn (each with its data row; tens of
+  thousands at any row count, so such a scatter picks above 10M rows), while the
+  brush still selects every data row. A layer that grows by appends or under
+  `RowWindow::LastRows` keeps it: full chunks keep their tiers, the newest chunk
+  builds them from 65,536 rows and again each time its rows double (the rows
+  past them draw in full), and an evicted chunk takes its tiers with it. A layer
+  drawn largest first (a size channel read from a column) takes it too: a cell's
+  representative is its largest mark (in buckets of 12.5%), and each tier block
+  draws its largest marks first.
 
 ### Changed
 

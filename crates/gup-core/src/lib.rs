@@ -487,6 +487,14 @@ pub mod __private {
         layer.lod_tier_builds()
     }
 
+    /// Make every level-of-detail build on a worker thread sleep `ms`
+    /// milliseconds before it starts (GUP-730's tests: a hosted frame
+    /// never waits for one); 0, the default, for none.
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn set_lod_build_delay(ms: u64) {
+        crate::column::LOD_BUILD_DELAY_MS.store(ms, std::sync::atomic::Ordering::Relaxed);
+    }
+
     /// Bytes of level-of-detail representatives `layer` holds on the GPU
     /// (GUP-719: an evicted chunk's go with it).
     pub fn lod_gpu_bytes<T: Send + Sync + 'static, M: crate::Mark>(

@@ -3380,9 +3380,9 @@ impl Plot {
         let brushable = self.drag == Drag::Brush && th.unbrushed.dims();
         let mut batches = Vec::with_capacity(self.layers.len());
         let mut visible = Vec::with_capacity(self.layers.len());
-        // A host that draws again when asked spreads tier builds over
-        // frames (GUP-716); a headless render builds them all at once.
-        let spread = self.waker.is_some();
+        // A host that draws again when asked never waits for a tier build
+        // (GUP-716, GUP-730); a headless render builds them all at once.
+        let waker = self.waker.as_ref();
         for layer in &mut self.layers {
             // Chunks that cannot reach the plot rect are neither drawn nor
             // picked (RFC-001 S9f), nor count towards the level of detail.
@@ -3393,7 +3393,7 @@ impl Plot {
             };
             let frame = crate::lod::Frame {
                 visible: &mask,
-                spread,
+                waker,
                 plot: self.cull.then_some(plot),
             };
             let batch = cx.scoped(
@@ -3404,6 +3404,19 @@ impl Plot {
             // `Retain` policy does not keep.
             layer.release();
             let mut batch = batch;
+            // Tiers a worker built for fewer rows than the newest chunk now
+            // holds (GUP-730), installed by the prepare, give it an entry
+            // for the rows past them that the mask did not have.
+            let mut mask = mask;
+            if self.cull
+                && batch
+                    .gpu
+                    .spans
+                    .iter()
+                    .any(|s| s.chunk as usize >= mask.len())
+            {
+                mask = layer.visible_entries(plot);
+            }
             if !mask.is_empty() {
                 batch.visible = cull::visible_spans(&batch.gpu.spans, &mask).into();
             }
