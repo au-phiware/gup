@@ -29,6 +29,9 @@
 //!   --lod                 only the `lod_build` phase (GUP-714): build the
 //!                         level-of-detail tiers of every chunk of the rows
 //!                         as `f64` columns, on one thread
+//!   --sized               with `--lod`: the rows drawn largest first, a
+//!                         size of 16 levels at random per row, half of
+//!                         them on coarser cells (GUP-749)
 //!   --lod-draw auto|off   the layer's `Lod` (default off, every row drawn,
 //!                         as the phases were first recorded); `auto` adds
 //!                         the tier build of every visible chunk to
@@ -110,6 +113,8 @@ struct Options {
     key_string: bool,
     /// Only the `lod_build` phase.
     lod: bool,
+    /// The `lod_build` phase ranks rows by a random size (GUP-749).
+    sized: bool,
     /// The layer's level of detail.
     lod_draw: Lod,
     /// A waker is set before the first resolve.
@@ -132,6 +137,7 @@ fn parse() -> Options {
         keys: None,
         key_string: false,
         lod: false,
+        sized: false,
         lod_draw: Lod::Off,
         hosted: false,
         no_render: false,
@@ -184,6 +190,7 @@ fn parse() -> Options {
             }
             "--seed" => o.seed = value().parse().expect("--seed N"),
             "--lod" => o.lod = true,
+            "--sized" => o.sized = true,
             other => panic!("unknown option {other}"),
         }
     }
@@ -519,8 +526,13 @@ fn lod_run(o: &Options, cx: &Context) {
         LIVE.store(0, Ordering::Relaxed);
         COUNTING.store(true, Ordering::Relaxed);
         let t = Instant::now();
-        let counts =
-            gup_core::__private::lod_tier_counts(rows as u32, |r| (cx[r as usize], cy[r as usize]));
+        let level =
+            |r: u32| (u64::from(r + start as u32).wrapping_mul(0x9e37_79b9_7f4a_7c15) >> 60) as u32;
+        let counts = gup_core::__private::lod_tier_counts(
+            rows as u32,
+            |r| (cx[r as usize], cy[r as usize]),
+            o.sized.then_some(&level),
+        );
         total += ms(t);
         COUNTING.store(false, Ordering::Relaxed);
         peak_per_row = peak_per_row.max(PEAK.load(Ordering::Relaxed) as f64 / rows as f64);
