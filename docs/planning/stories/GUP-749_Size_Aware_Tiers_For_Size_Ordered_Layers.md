@@ -19,7 +19,7 @@ touches:
 
 ## Story Overview
 
-**Initiative**: Track N5: Performance at Scale **Status**: 📋 Planned
+**Initiative**: Track N5: Performance at Scale **Status**: 🚧 In Progress
 **Created**: 2026-11-20
 
 Planned, not New: GUP-742 measured the rule and the coordinator chose it (option

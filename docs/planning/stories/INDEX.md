@@ -664,7 +664,7 @@ GUP-628 and GUP-631 (shared `selection.rs`).
   rect (gate 5%) for +97% instances; not shipped. No change shipped; size-aware
   tiers are GUP-749; size-ordered LOD stays opt-in (`Lod::AutoSized`). Deps:
   GUP-721 ✅.
-- [GUP-749](GUP-749_Size_Aware_Tiers_For_Size_Ordered_Layers.md) 📋 — Each size
+- [GUP-749](GUP-749_Size_Aware_Tiers_For_Size_Ordered_Layers.md) 🚧 — Each size
   bucket keeps representatives on cells scaled by its pixel radius, drawn in
   rank order within a chunk (prototype: random sizes 3.0%, 41k instances of
   300k); flips size-ordered LOD to the default and removes `Lod::AutoSized` at
