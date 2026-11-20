@@ -85,11 +85,20 @@ pub(crate) const MAX_RANGES: usize = 64;
 pub(crate) struct Run {
     pub start: u32,
     pub end: u32,
-    /// The tier of its block: a frame drawing tier `t` draws the runs of
-    /// tiers up to `t`.
-    pub tier: u32,
+    /// The tiers that draw it, `first..=last`: from its block's first
+    /// tier on in a progressive order, its copy's tier alone in a ranked
+    /// one (GUP-749).
+    pub first: u32,
+    pub last: u32,
     pub x: (f64, f64),
     pub y: (f64, f64),
+}
+
+impl Run {
+    /// Whether a frame drawing tier `t` draws it.
+    pub fn draws(&self, t: u32) -> bool {
+        (self.first..=self.last).contains(&t)
+    }
 }
 
 /// The tiers of one chunk: see the [module docs](self).
@@ -317,16 +326,10 @@ impl Tiers {
         if let Some(g) = global {
             first = g;
         }
-        // Rows by bucket and first tier, and how many start at each tier.
-        let buckets = bounds.len() - 1;
-        let mut cells = vec![[0u32; NEVER as usize + 1]; buckets];
+        // How many rows start at each tier.
         let mut starts = [0u32; NEVER as usize + 1];
-        for (g, w) in bounds.windows(2).enumerate() {
-            for &r in &morton[w[0] as usize..w[1] as usize] {
-                let t = usize::from(first[r as usize]);
-                cells[g][t] += 1;
-                starts[t] += 1;
-            }
+        for &t in &first {
+            starts[usize::from(t)] += 1;
         }
 
         // The storage rule: tier 0, then every tier of at most half the rows.
@@ -342,29 +345,65 @@ impl Tiers {
         }
         let stored = counts.len() as u32 - 1;
 
-        // The progressive order: bucket by bucket, a stable counting sort
-        // by first tier of the bucket's rows in key order, so each block
-        // (a bucket's rows of one first tier) is in Morton order.
-        let mut next = vec![[0u32; TMAX as usize + 1]; buckets];
+        // Blocks of `order`: `(start, end, first, last)`, rows in Morton
+        // order that a frame drawing a tier in `first..=last` draws.
         let mut blocks = Vec::new();
-        let mut at = 0;
-        for (g, c) in cells.iter().enumerate() {
+        let mut order;
+        if ranks.is_none() {
+            // The progressive order: a stable counting sort by first tier
+            // of the rows in key order, so each block (the rows of one
+            // first tier) is in Morton order, and tier `t` is a prefix.
+            let mut next = [0u32; TMAX as usize + 1];
+            let mut at = 0;
             for t in 0..=stored as usize {
-                next[g][t] = at;
-                if c[t] > 0 {
-                    blocks.push((at, at + c[t], t as u32));
+                next[t] = at;
+                if starts[t] > 0 {
+                    blocks.push((at, at + starts[t], t as u32, TMAX));
                 }
-                at += c[t];
+                at += starts[t];
             }
-        }
-        let mut order = vec![0u32; at as usize];
-        for (g, w) in bounds.windows(2).enumerate() {
-            for &r in &morton[w[0] as usize..w[1] as usize] {
+            order = vec![0u32; at as usize];
+            for &r in &morton {
                 let t = first[r as usize];
                 if u32::from(t) <= stored {
-                    let at = &mut next[g][usize::from(t)];
+                    let at = &mut next[usize::from(t)];
                     order[*at as usize] = r;
                     *at += 1;
+                }
+            }
+        } else {
+            // Ranked (GUP-749): a copy of each stored tier's
+            // representatives, bucket after bucket (largest first) in
+            // Morton order within one, so a frame draws one range per
+            // chunk in rank order across the tier's blocks. The copies
+            // cost a third more than the finest one (each tier holds about
+            // four times the one before).
+            let mut held = Vec::new();
+            let mut held_bounds = vec![0u32];
+            for w in bounds.windows(2) {
+                for &r in &morton[w[0] as usize..w[1] as usize] {
+                    let t = first[r as usize];
+                    if u32::from(t) <= stored {
+                        held.push((r, t));
+                    }
+                }
+                held_bounds.push(held.len() as u32);
+            }
+            let total: u32 = counts.iter().sum();
+            order = Vec::with_capacity(total as usize);
+            for t in 0..=stored {
+                for w in held_bounds.windows(2) {
+                    let s = order.len() as u32;
+                    order.extend(
+                        held[w[0] as usize..w[1] as usize]
+                            .iter()
+                            .filter(|&&(_, f)| u32::from(f) <= t)
+                            .map(|&(r, _)| r),
+                    );
+                    let e = order.len() as u32;
+                    if e > s {
+                        blocks.push((s, e, t, t));
+                    }
                 }
             }
         }
@@ -462,18 +501,23 @@ fn by_bucket(sorted: Vec<u64>, ranks: &Ranks<'_>) -> (Vec<u64>, Vec<(u32, u8)>, 
     (grouped, shifts, bounds)
 }
 
-/// Each block of `order` (`(start, end, tier)`, a bucket's rows of one
-/// first tier) cut into runs of at most [`RUN_LEN`], with the boxes of
-/// their rows' positions `xy`.
-fn runs(order: &[u32], blocks: &[(u32, u32, u32)], xy: &impl Fn(u32) -> (f64, f64)) -> Vec<Run> {
+/// Each block of `order` (`(start, end, first, last)`, rows that the
+/// tiers `first..=last` draw) cut into runs of at most [`RUN_LEN`], with
+/// the boxes of their rows' positions `xy`.
+fn runs(
+    order: &[u32],
+    blocks: &[(u32, u32, u32, u32)],
+    xy: &impl Fn(u32) -> (f64, f64),
+) -> Vec<Run> {
     let mut runs = Vec::with_capacity(order.len().div_ceil(RUN_LEN as usize) + blocks.len());
-    for &(start, end, tier) in blocks {
+    for &(start, end, first, last) in blocks {
         for s in (start..end).step_by(RUN_LEN as usize) {
             let e = end.min(s + RUN_LEN);
             let mut run = Run {
                 start: s,
                 end: e,
-                tier,
+                first,
+                last,
                 x: (f64::INFINITY, f64::NEG_INFINITY),
                 y: (f64::INFINITY, f64::NEG_INFINITY),
             };
@@ -522,7 +566,7 @@ fn spread(order: &mut [u32], runs: &[Run]) {
 /// representatives to the `rows` they stand for.
 pub(crate) fn in_view(runs: &[Run], t: u32, rows: u32, share: &mut dyn FnMut(&Run) -> f64) -> f64 {
     let (mut reps, mut count) = (0.0, 0u32);
-    for r in runs.iter().filter(|r| r.tier <= t) {
+    for r in runs.iter().filter(|r| r.draws(t)) {
         reps += f64::from(r.end - r.start) * share(r);
         count += r.end - r.start;
     }
@@ -547,7 +591,7 @@ pub(crate) fn ranges(
     seen: &mut dyn FnMut(&Run) -> bool,
 ) -> Vec<std::ops::Range<u32>> {
     let mut out: Vec<std::ops::Range<u32>> = Vec::new();
-    for run in runs.iter().filter(|r| r.tier <= t) {
+    for run in runs.iter().filter(|r| r.draws(t)) {
         if !seen(run) {
             continue;
         }
@@ -1325,7 +1369,8 @@ mod tests {
                 start: 10 * i,
                 end: 10 * i + 10,
                 // Tier `t` is the first `1000 * (t + 1)` instances.
-                tier: i / 100,
+                first: i / 100,
+                last: TMAX,
                 x: (f64::from(i), f64::from(i)),
                 y: (0.0, 0.0),
             })
