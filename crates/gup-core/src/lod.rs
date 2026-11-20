@@ -172,7 +172,18 @@ impl Shifts {
         let (lo, hi) = (*ranks.start(), *ranks.end());
         let mut bounds = Vec::new();
         for s in 1..=TMAX {
-            let want = SHIFT_RADIUS * f64::from(1u32 << s);
+            let div: f64 = std::env::var("GUP749_DIV")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(SHIFT_RADIUS);
+            let smax: u32 = std::env::var("GUP749_MAX")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(TMAX);
+            if s > smax {
+                break;
+            }
+            let want = div * f64::from(1u32 << s);
             let wide = |r: u32| radius(r) >= want;
             if lo > hi || !wide(lo) {
                 break;
@@ -260,6 +271,14 @@ impl Tiers {
             }
         }
         let sorted = radix_sort(pairs, &mut hist);
+        let mut global = None;
+        if let (Some(rk), Ok("largest")) = (ranks, std::env::var("GUP749_RULE").as_deref()) {
+            let mut g = vec![NEVER; rows as usize];
+            first_tiers(&mut sorted.clone(), &mut g, |r| {
+                u64::from((rk.rank)(r)) << 32 | u64::from(r)
+            });
+            global = Some(g);
+        }
         // The pairs of each bucket in turn (one bucket without ranks), in
         // key order within it: `bounds[g]..bounds[g + 1]` for bucket `g`.
         let (mut sorted, shifts, bounds) = match ranks {
@@ -279,7 +298,11 @@ impl Tiers {
         let mut first = vec![NEVER; rows as usize];
         for (g, w) in bounds.windows(2).enumerate() {
             let (a, b) = (w[0] as usize, w[1] as usize);
-            first_tiers(&mut sorted[a..b], &mut first);
+            if ranks.is_some() && std::env::var_os("GUP749_LOWEST").is_none() {
+                first_tiers(&mut sorted[a..b], &mut first, scramble);
+            } else {
+                first_tiers(&mut sorted[a..b], &mut first, u64::from);
+            }
             let shift = shifts.get(g).map_or(0, |&(_, s)| s);
             if shift > 0 {
                 for &r in &morton[a..b] {
@@ -291,6 +314,9 @@ impl Tiers {
             }
         }
         drop(sorted);
+        if let Some(g) = global {
+            first = g;
+        }
         // Rows by bucket and first tier, and how many start at each tier.
         let buckets = bounds.len() - 1;
         let mut cells = vec![[0u32; NEVER as usize + 1]; buckets];
@@ -777,35 +803,41 @@ fn split_tier(a: u32, b: u32) -> u8 {
 }
 
 /// Write `first[row]`, the coarsest tier at which `row` is the lowest row
-/// of its cell, for every row that represents a cell (the rest stay
-/// [`NEVER`]), from the sorted `key << 32 | row` pairs (consumed).
+/// of its cell by `pick(row)` (a total order: a bijection of rows), for
+/// every row that represents a cell (the rest stay [`NEVER`]), from the
+/// sorted `key << 32 | row` pairs (consumed).
 ///
-/// A tier-`t` cell is a run of the sorted keys, and only the first row of
-/// a run of equal keys (its lowest, the sort being stable) can represent
-/// anything; call those rows heads. A head is the lowest row of its
-/// tier-`t` cell unless the nearest head with a lower row on its left, or
-/// on its right, shares the cell (any lower head in the run is at least
-/// that far). So its first tier is the larger of its split tiers with
-/// those two neighbours (0 for a missing one): one pass with a stack of
-/// heads in increasing row order. The stack lives in the pairs already
-/// read (it never holds more heads than were read), and a head's split
-/// tier with its left neighbour waits in `first`. A size bucket's pairs
-/// alone give its own lowest row per cell (GUP-749).
-fn first_tiers(sorted: &mut [u64], first: &mut [u8]) {
+/// A tier-`t` cell is a run of the sorted keys, and only the lowest row of
+/// a run of equal keys can represent anything (the first, for `pick` the
+/// identity, the sort being stable); call those rows heads. A head is the
+/// lowest row of its tier-`t` cell unless the nearest head with a lower
+/// row on its left, or on its right, shares the cell (any lower head in
+/// the run is at least that far). So its first tier is the larger of its
+/// split tiers with those two neighbours (0 for a missing one): one pass
+/// with a stack of heads in increasing row order. The stack lives in the
+/// pairs already read (it never holds more heads than were read), and a
+/// head's split tier with its left neighbour waits in `first`. A size
+/// bucket's pairs alone give its own lowest row per cell (GUP-749).
+fn first_tiers(sorted: &mut [u64], first: &mut [u8], pick: impl Fn(u32) -> u64) {
     let mut top = 0;
-    let mut prev = None;
-    for i in 0..sorted.len() {
-        let pair = sorted[i];
-        let (key, row) = ((pair >> 32) as u32, pair as u32);
-        if prev == Some(key) {
-            continue;
+    let mut i = 0;
+    while i < sorted.len() {
+        let key = (sorted[i] >> 32) as u32;
+        // The run's lowest row.
+        let mut pair = sorted[i];
+        i += 1;
+        while i < sorted.len() && (sorted[i] >> 32) as u32 == key {
+            if pick(sorted[i] as u32) < pick(pair as u32) {
+                pair = sorted[i];
+            }
+            i += 1;
         }
-        prev = Some(key);
+        let row = pair as u32;
         // Heads of higher rows on the stack have their right neighbour.
         let mut left = 0;
         while let Some(&other) = sorted[..top].last() {
             let split = split_tier(key, (other >> 32) as u32);
-            if (other as u32) < row {
+            if pick(other as u32) < pick(row) {
                 left = split;
                 break;
             }
@@ -819,6 +851,19 @@ fn first_tiers(sorted: &mut [u64], first: &mut [u8]) {
     }
 }
 
+/// A bijection of row numbers that scatters them (GUP-749): a size
+/// bucket's representative of a cell is its row of the lowest scrambled
+/// number, a row anywhere in the cell. The lowest row itself is the
+/// leftmost of the cell when rows are sorted by x (a walk, a time series),
+/// which a bucket's cells, several pixels wide for large marks, would show
+/// as the bucket's marks moved left by half a cell. Each step (an odd
+/// multiplication, a right xor-shift) is a bijection.
+fn scramble(r: u32) -> u64 {
+    let mut x = r.wrapping_mul(0x9e37_79b1);
+    x ^= x >> 16;
+    x = x.wrapping_mul(0x85eb_ca6b);
+    u64::from(x ^ (x >> 13))
+}
 #[cfg(test)]
 mod draw_tests;
 
