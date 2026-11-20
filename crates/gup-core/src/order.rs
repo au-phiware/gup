@@ -322,7 +322,7 @@ impl DrawOrder {
     /// (one per chunk, then the rows past an appended chunk's tiers) and
     /// `lod` the ranges of representatives the chunks drawing a tier draw
     /// (GUP-721): such a chunk draws them where its first segment is (the
-    /// representatives are in size order within each block of its tiers),
+    /// representatives are in size order across its tier, GUP-749),
     /// instead of its rows; rows past its tiers draw in place, through
     /// their own entry.
     pub(crate) fn spans(
@@ -429,10 +429,10 @@ pub(crate) struct DrawEntry {
     pub next_first: u32,
     /// Instances the entry can draw.
     pub instances: u32,
-    /// The representatives drawn from the chunk's
-    /// [`LodGpu`](crate::column::LodGpu) (a level-of-detail tier's prefix,
-    /// GUP-715), or `None` to draw the chunk's own rows. Equal to
-    /// `instances` when set. [`draw_entries`] gives `None`.
+    /// The level-of-detail tier the entry draws of the chunk's
+    /// [`LodGpu`](crate::column::LodGpu) (GUP-715; `instances` its
+    /// representatives, of which a frame draws the runs it can see), or
+    /// `None` to draw the chunk's own rows. [`draw_entries`] gives `None`.
     pub lod: Option<u32>,
 }
 

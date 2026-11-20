@@ -14,10 +14,7 @@
 //! bits.
 //!
 //! A cell's representative at a tier is its lowest row, so tiers nest: a
-//! cell's representative is one of its four children's. A layer drawn
-//! largest first (GUP-721) gives each row a rank (its size bucket, larger
-//! first) and a cell's representative is its best `(rank, row)`: any total
-//! order nests alike, as the best of a union is the best of the bests. One stable radix
+//! cell's representative is one of its four children's. One stable radix
 //! sort of `(key, row)` pairs puts every tier's cells in runs of keys, and
 //! a row represents its cell at every tier from its `first_tier` on (see
 //! [`first_tiers`]). Rows are kept in **progressive order**, by
@@ -36,16 +33,24 @@
 //! view took 20.3 ms against 13.9 in row order (GUP-720), as a sorted x
 //! costs more than a shuffled one (RFC-001 "GUP-631 findings").
 //!
-//! A ranked block is ordered by rank first (a stable sort, so Morton order
-//! within one rank), so a tier draws its largest marks first, and its runs
-//! never cross a change of rank.
+//! A layer drawn largest first (GUP-721, GUP-749) gives each row a rank,
+//! its size bucket (larger first), and each bucket keeps its own
+//! representatives, on cells that grow with its marks' pixel radius
+//! ([`Shifts`]): the full draw shows at each pixel the smallest mark
+//! within its own radius, so every size must stay present. A bucket's
+//! representative of a cell is its row of the lowest [`scramble`]d
+//! number; a union of nested families nests. Its order holds a **copy of
+//! each stored tier**, bucket after bucket and Morton order within one,
+//! so a frame draws one range per chunk largest first across all of the
+//! tier's blocks (a third more representatives than the finest tier's).
+//! A [`Run`] holds one bucket of one copy.
 //!
 //! Tiers are stored while they hold at most half the chunk's rows; past
 //! the finest stored tier a chunk draws every row ([`Tiers::prefix`] is
 //! `None`). Tier 0 is always stored.
 //!
-//! Each frame, a visible chunk draws the prefix of the tier [`tier`]
-//! chooses for the view (GUP-716) through the indexed-rows glue (GUP-715).
+//! Each frame, a visible chunk draws the runs of the tier [`tier`] chooses
+//! for the view (GUP-716) through the indexed-rows glue (GUP-715).
 
 /// Rows an appended chunk holds before it builds tiers (GUP-719): below
 /// this a full draw is cheap. It rebuilds each time its rows have doubled.
@@ -152,10 +157,18 @@ pub(crate) struct Ranked<'a> {
 /// The radius, in pixels, from which a size bucket's representatives take
 /// coarser cells (GUP-749): a bucket of marks of radius `r` keeps its
 /// lowest row per cell of the tier `floor(log2(r / SHIFT_RADIUS))` coarser
-/// than the tier drawn (at least 0), so its cells are about as wide as its
-/// marks' radius over `SHIFT_RADIUS` (the drawn tier's cells are 0.5 to 1
-/// px a side, [`LOD_TIER_BIAS`]).
+/// than the tier drawn, from 0 to [`MAX_SHIFT`] (the drawn tier's cells
+/// are 0.5 to 1 px a side, [`LOD_TIER_BIAS`]).
 const SHIFT_RADIUS: f64 = 1.0;
+
+/// The coarsest shift (GUP-749's tuning, 300,000 bubbles at 400 x 300,
+/// share of the plot rect over ΔE00 10 and instances, sizes at random per
+/// row / in clumps): `floor(log2 r)` for radii 1-9 px (up to 3) 2.3% /
+/// 41,000 and 3.5% / 4,100; at most 2, 1.6% / 43,000 and 3.3% / 4,200; at
+/// most 1, 0.27% / 64,000 and 2.6% / 5,700 (the clumps' gate is 3.0%). A
+/// bucket's outline recedes by up to a cell, whatever its radius: the
+/// clumps' large marks showed it first.
+const MAX_SHIFT: u32 = 1;
 
 /// The tier shift of each size bucket of a layer drawn largest first
 /// (GUP-749), from the size encoding's pixel radius of each bucket: the
@@ -180,19 +193,8 @@ impl Shifts {
     pub fn new(ranks: std::ops::RangeInclusive<u32>, radius: &dyn Fn(u32) -> f64) -> Shifts {
         let (lo, hi) = (*ranks.start(), *ranks.end());
         let mut bounds = Vec::new();
-        for s in 1..=TMAX {
-            let div: f64 = std::env::var("GUP749_DIV")
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(SHIFT_RADIUS);
-            let smax: u32 = std::env::var("GUP749_MAX")
-                .ok()
-                .and_then(|v| v.parse().ok())
-                .unwrap_or(TMAX);
-            if s > smax {
-                break;
-            }
-            let want = div * f64::from(1u32 << s);
+        for s in 1..=MAX_SHIFT {
+            let want = SHIFT_RADIUS * f64::from(1u32 << s);
             let wide = |r: u32| radius(r) >= want;
             if lo > hi || !wide(lo) {
                 break;
@@ -280,14 +282,6 @@ impl Tiers {
             }
         }
         let sorted = radix_sort(pairs, &mut hist);
-        let mut global = None;
-        if let (Some(rk), Ok("largest")) = (ranks, std::env::var("GUP749_RULE").as_deref()) {
-            let mut g = vec![NEVER; rows as usize];
-            first_tiers(&mut sorted.clone(), &mut g, |r| {
-                u64::from((rk.rank)(r)) << 32 | u64::from(r)
-            });
-            global = Some(g);
-        }
         // The pairs of each bucket in turn (one bucket without ranks), in
         // key order within it: `bounds[g]..bounds[g + 1]` for bucket `g`.
         let (mut sorted, shifts, bounds) = match ranks {
@@ -307,7 +301,7 @@ impl Tiers {
         let mut first = vec![NEVER; rows as usize];
         for (g, w) in bounds.windows(2).enumerate() {
             let (a, b) = (w[0] as usize, w[1] as usize);
-            if ranks.is_some() && std::env::var_os("GUP749_LOWEST").is_none() {
+            if ranks.is_some() {
                 first_tiers(&mut sorted[a..b], &mut first, scramble);
             } else {
                 first_tiers(&mut sorted[a..b], &mut first, u64::from);
@@ -323,9 +317,6 @@ impl Tiers {
             }
         }
         drop(sorted);
-        if let Some(g) = global {
-            first = g;
-        }
         // How many rows start at each tier.
         let mut starts = [0u32; NEVER as usize + 1];
         for &t in &first {
@@ -1183,9 +1174,9 @@ mod tests {
         assert_eq!(tiers.cap(4), Some(64));
         assert_eq!(tiers.cap(5), None);
         // The estimate scales the representatives seen to the rows.
-        let seen = in_view(&tiers.runs, 64, 256, &mut |_| 0.5);
+        let seen = in_view(&tiers.runs, 3, 256, &mut |_| 0.5);
         assert!((seen - 128.0).abs() < 1e-9, "{seen}");
-        assert_eq!(in_view(&tiers.runs, 0, 256, &mut |_| 1.0), 0.0);
+        assert_eq!(in_view(&tiers.runs[..0], 3, 256, &mut |_| 1.0), 0.0);
         // 1,000 rows, one per cell of a 32 × 32 grid: tier 4 (256) is the
         // finest at most half the rows.
         let grid: Vec<(f64, f64)> = (0..1000)
@@ -1512,14 +1503,14 @@ mod tests {
         assert_eq!(tier(0, 0, 1e-12, 1e-12), Some(0));
     }
 
-    /// GUP-721: ranked tiers. A rank of 16 levels at random: every tier's
-    /// representatives are the best `(rank, row)` of each occupied cell
-    /// (nesting follows: each tier's set is the prefix of the next), each
-    /// block is in rank order, and runs tile blocks without crossing a rank
-    /// change.
+    /// GUP-749: ranked tiers. Ranks of 16 levels at random, each with a
+    /// shift of 0 to 3: every tier's copy holds, for each bucket, its
+    /// lowest row (by [`scramble`]) per cell of the tier `max(t - shift,
+    /// 0)` (brute force), tiers nest, a copy draws its buckets in rank
+    /// order, and runs tile the order, each of one rank, one copy and at
+    /// most `RUN_LEN` long, with its rows' exact box.
     #[test]
-    #[cfg(any())]
-    fn ranked_tiers_keep_each_cells_best_row_and_nest() {
+    fn ranked_tiers_keep_each_buckets_shifted_cells_and_nest() {
         for (name, rows) in [
             ("uniform", uniform(60_000, 3)),
             ("walk", walk(60_000, 4)),
@@ -1527,27 +1518,72 @@ mod tests {
         ] {
             let mut rng = Lcg(77);
             let ranks: Vec<u32> = rows.iter().map(|_| (rng.unit() * 16.0) as u32).collect();
+            let shift_of: Vec<u8> = (0..16).map(|_| (rng.unit() * 4.0) as u8).collect();
             let rank = |r: u32| ranks[r as usize];
-            let tiers = Tiers::build(rows.len() as u32, |r| rows[r as usize], Some(&rank));
+            let shift = |k: u32| shift_of[k as usize];
+            let tiers = Tiers::build(
+                rows.len() as u32,
+                |r| rows[r as usize],
+                Some(&Ranks {
+                    rank: &rank,
+                    shift: &shift,
+                }),
+            );
             let cells = cells(&rows, &tiers);
-            let mut best_of_prev: Option<Vec<u32>> = None;
-            for t in 0..=tiers.stored {
-                let mut best: HashMap<(u32, u32), u32> = HashMap::new();
+            let want = |t: u32| {
+                let mut best: HashMap<(u32, u32, u32), u32> = HashMap::new();
                 for (r, c) in cells.iter().enumerate() {
                     if let Some((cx, cy)) = *c {
-                        let s = TMAX - t;
-                        let e = best.entry((cx >> s, cy >> s)).or_insert(r as u32);
-                        if (ranks[r], r as u32) < (ranks[*e as usize], *e) {
+                        let k = ranks[r];
+                        let s = TMAX - t.saturating_sub(u32::from(shift_of[k as usize]));
+                        let e = best.entry((k, cx >> s, cy >> s)).or_insert(r as u32);
+                        if scramble(r as u32) < scramble(*e) {
                             *e = r as u32;
                         }
                     }
                 }
                 let mut want: Vec<u32> = best.into_values().collect();
                 want.sort_unstable();
-                let mut got = tiers.order[..tiers.counts[t as usize] as usize].to_vec();
+                want
+            };
+            assert_eq!(
+                tiers.shifts,
+                (0..16)
+                    .map(|k| (k, shift_of[k as usize]))
+                    .collect::<Vec<_>>(),
+                "{name}"
+            );
+            let mut prev: Option<Vec<u32>> = None;
+            for t in 0..=TMAX {
+                let want = want(t);
+                if t > tiers.stored {
+                    assert_eq!(tiers.prefix(t), None, "{name}: tier {t}");
+                    if t == tiers.stored + 1 {
+                        assert!(want.len() > rows.len() / 2, "{name}: tier {t} not stored");
+                    }
+                    continue;
+                }
+                assert!(t == 0 || want.len() <= rows.len() / 2, "{name}: tier {t}");
+                assert_eq!(tiers.prefix(t), Some(want.len() as u32), "{name}: tier {t}");
+                // The tier's copy, in draw order.
+                let drawn: Vec<u32> = tiers
+                    .runs
+                    .iter()
+                    .filter(|r| r.draws(t))
+                    .flat_map(|r| {
+                        tiers.order[r.start as usize..r.end as usize]
+                            .iter()
+                            .copied()
+                    })
+                    .collect();
+                assert!(
+                    drawn.windows(2).all(|w| rank(w[0]) <= rank(w[1])),
+                    "{name}: tier {t} is not drawn in rank order"
+                );
+                let mut got = drawn;
                 got.sort_unstable();
                 assert_eq!(got, want, "{name}: tier {t}");
-                if let Some(prev) = &best_of_prev {
+                if let Some(prev) = &prev {
                     // Nesting: every coarser representative is finer too.
                     assert!(
                         prev.iter().all(|r| got.binary_search(r).is_ok()),
@@ -1555,47 +1591,63 @@ mod tests {
                         t - 1
                     );
                 }
-                best_of_prev = Some(got);
-                // The block is in rank order.
-                let start = if t == 0 {
-                    0
-                } else {
-                    tiers.counts[t as usize - 1]
-                };
-                let block = &tiers.order[start as usize..tiers.counts[t as usize] as usize];
-                assert!(
-                    block.windows(2).all(|w| rank(w[0]) <= rank(w[1])),
-                    "{name}: tier {t} block is not in rank order"
-                );
+                prev = Some(got);
             }
-            // Runs tile the order, hold one rank and stay in a block.
             let mut at = 0;
             for run in &tiers.runs {
-                assert_eq!(run.start, at, "{name}");
-                at = run.end;
-                let rs: Vec<u32> = tiers.order[run.start as usize..run.end as usize]
-                    .iter()
-                    .map(|&r| rank(r))
-                    .collect();
-                assert!(rs.iter().all(|&r| r == rs[0]), "{name}: a run mixes ranks");
-                assert!(run.end - run.start <= RUN_LEN);
+                assert_eq!(run.start, at, "{name}: runs tile the order");
+                assert!(run.end > run.start && run.end - run.start <= RUN_LEN);
+                assert_eq!(run.first, run.last, "{name}: a run of one copy");
+                let reps = &tiers.order[run.start as usize..run.end as usize];
                 assert!(
-                    tiers.counts.iter().all(|&c| c <= run.start || c >= run.end),
-                    "{name}: a run crosses a block"
+                    reps.iter().all(|&r| rank(r) == rank(reps[0])),
+                    "{name}: a run mixes ranks"
                 );
+                let along = |f: fn(&(f64, f64)) -> f64| {
+                    let v = reps.iter().map(|&r| f(&rows[r as usize]));
+                    (
+                        v.clone().fold(f64::INFINITY, f64::min),
+                        v.fold(f64::NEG_INFINITY, f64::max),
+                    )
+                };
+                assert_eq!((run.x, run.y), (along(|p| p.0), along(|p| p.1)), "{name}");
+                at = run.end;
             }
             assert_eq!(at as usize, tiers.order.len(), "{name}");
+            let copies: u32 = tiers.counts.iter().sum();
+            assert_eq!(tiers.order.len() as u32, copies, "{name}");
         }
     }
 
-    /// Without ranks, and with a rank equal for every row, the tiers are
-    /// the same.
+    /// A shift's [`Shifts`] bounds: radii 1 to 9 px over 16 ranks (a lower
+    /// rank larger) shift 0 below 2 px and 1 from 2 px ([`MAX_SHIFT`]);
+    /// a radius that is not a number shifts nothing.
     #[test]
-    #[cfg(any())]
-    fn a_constant_rank_changes_nothing() {
+    fn shifts_follow_the_radius() {
+        let radius = |r: u32| 9.0 - 8.0 * f64::from(r.min(15)) / 15.0;
+        let shifts = Shifts::new(0..=1000, &radius);
+        let of: Vec<u8> = (0..16).map(|r| shifts.of(r)).collect();
+        let want: Vec<u8> = (0..16).map(|r| u8::from(radius(r) >= 2.0)).collect();
+        assert_eq!(of, want);
+        assert_eq!(Shifts::new(0..=1000, &|_| f64::NAN), Shifts::default());
+        assert_eq!(Shifts::default().of(0), 0);
+    }
+
+    /// One bucket of shift 0 keeps one row per cell, as the tiers without
+    /// ranks do (another row of each cell: the scrambled lowest).
+    #[test]
+    fn one_bucket_keeps_one_row_per_cell() {
         let rows = uniform(30_000, 9);
-        let rank = |_: u32| 5;
-        let ranked = Tiers::build(rows.len() as u32, |r| rows[r as usize], Some(&rank));
-        assert_eq!(ranked, build(&rows));
+        let ranked = Tiers::build(
+            rows.len() as u32,
+            |r| rows[r as usize],
+            Some(&Ranks {
+                rank: &|_| 5,
+                shift: &|_| 0,
+            }),
+        );
+        let plain = build(&rows);
+        assert_eq!(ranked.counts, plain.counts);
+        assert_eq!(ranked.shifts, [(5, 0)]);
     }
 }

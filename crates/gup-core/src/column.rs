@@ -729,7 +729,7 @@ struct ChunkLod {
 }
 
 /// A chunk's representatives on one context (GUP-715): rows
-/// `order[..counts[stored]]` of its [`Tiers`], each column gathered in
+/// `order` of its [`Tiers`], each column gathered in
 /// the chunk's format against the chunk's origin, so the pipelines that
 /// read the chunk read these with the chunk's `Chunk` uniform entry; then
 /// a `u32` column of each representative's chunk-local row
@@ -773,7 +773,7 @@ impl LodGpu {
         self.ranges[index].clone()
     }
 
-    /// The representatives held: `counts[stored]` of the chunk's tiers.
+    /// The representatives held: the chunk's tiers' `order`.
     #[cfg(test)]
     pub(crate) fn reps(&self) -> u32 {
         let rows = self.ranges.last().expect("the row column");
@@ -2032,7 +2032,7 @@ impl ColumnStore {
     }
 
     /// Gather chunk `k`'s representatives (every stored tier's,
-    /// `order[..counts[stored]]`) into a [`LodGpu`] on `cx`, once per
+    /// `order`) into a [`LodGpu`] on `cx`, once per
     /// context and tiers: one strided copy per column from the chunk's CPU
     /// bytes or its shared columns, then the rows, uploaded as
     /// [`Upload::Column`]. Needs [`lod_tiers`](Self::lod_tiers) first; an
