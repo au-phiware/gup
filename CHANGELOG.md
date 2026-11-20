@@ -195,10 +195,10 @@ what each release contains and what its version number promises.
   builds them from 65,536 rows and again each time its rows double (the rows
   past them draw in full), and an evicted chunk takes its tiers with it. A layer
   drawn largest first (a size channel read from a column) takes it too: each
-  size (in buckets of 12.5%) keeps its own representatives, marks of 2 px radius
+  size (in buckets of 12.5%) keeps its own representatives, marks of 4 px radius
   and more on cells twice as wide, and each chunk draws them largest first, so
-  random sizes per row differ from the full draw in about 0.3% of the plot rect
-  (300,000 rows) and sizes that follow the data in 2.6%.
+  random sizes per row differ from the full draw in about 0.2% of the plot rect
+  (300,000 rows) and sizes that follow the data in 2.2%.
 
 ### Changed
 
@@ -249,7 +249,7 @@ what each release contains and what its version number promises.
   constant-size rects (not lines, areas or rects with per-row extents; the
   newest chunk of a layer that is appended to draws in full under 65,536 rows).
   A dense layer drawn largest first differs more at the outlines of its large
-  marks (about 6% of the plot rect for 3,000,000 bubbles): use `Lod::Off` for
+  marks (about 5% of the plot rect for 3,000,000 bubbles): use `Lod::Off` for
   the exact picture. Lines and areas, and, under `Lod::Off`, SVG output and CPU
   picks, still read every row.
 - No PDF export.

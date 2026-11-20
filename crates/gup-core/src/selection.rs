@@ -178,15 +178,15 @@ impl Retain {
 /// A layer drawn largest first (a size channel read from a column,
 /// GUP-721, GUP-749) keeps representatives for each size (in buckets of
 /// 12.5%), as the full draw shows at each pixel the smallest mark within
-/// its own radius: marks of 2 px radius and more on cells twice as wide.
+/// its own radius: marks of 4 px radius and more on cells twice as wide.
 /// Each chunk draws its representatives largest first, so small marks lie
 /// on top as in the full draw. 300,000 rows with a size drawn at random
-/// for each row differ from the full draw in about 0.3% of a 400 x 300
-/// plot rect (pixels over ΔE00 10), drawing 64,000 marks; sizes that follow
-/// the data (clumps of one size) 2.6%, drawing 5,700. Denser layers differ
-/// more at the outlines of large marks (about 6% for 3,000,000 such rows).
-/// A change of the size scale that moves a bucket's radius across 2 px
-/// rebuilds the layer's tiers.
+/// for each row differ from the full draw in about 0.2% of a 400 x 300
+/// plot rect (pixels over ΔE00 10), drawing 81,000 marks (as many for 10M
+/// rows); sizes that follow the data (clumps of one size) 2.2%, drawing
+/// 7,300. Denser layers differ more at the outlines of their marks (3.8%
+/// and 5.2% for 3,000,000 such rows). A change of the size scale that
+/// moves a bucket's radius across 4 px rebuilds the layer's tiers.
 ///
 /// A layer that grows by appends (GUP-719): its full chunks keep their
 /// tiers whatever the new rows' extent. Its newest chunk draws every row
