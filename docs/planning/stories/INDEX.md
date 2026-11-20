@@ -664,14 +664,22 @@ GUP-628 and GUP-631 (shared `selection.rs`).
   rect (gate 5%) for +97% instances; not shipped. No change shipped; size-aware
   tiers are GUP-749; size-ordered LOD stays opt-in (`Lod::AutoSized`). Deps:
   GUP-721 ✅.
-- [GUP-749](GUP-749_Size_Aware_Tiers_For_Size_Ordered_Layers.md) 🚧 — Each size
-  bucket keeps representatives on cells scaled by its pixel radius, drawn in
-  rank order within a chunk (prototype: random sizes 3.0%, 41k instances of
-  300k); flips size-ordered LOD to the default and removes `Lod::AutoSized` at
-  random ≤ 5%, data-following ≤ 3%. Opus. Deps: GUP-742 ✅, GUP-721 ✅.
+- [GUP-749](GUP-749_Size_Aware_Tiers_For_Size_Ordered_Layers.md) ✅ — Each size
+  bucket keeps its own representatives (marks of 4 px and more one tier
+  coarser), and a ranked chunk stores each tier as a rank-ordered copy (one
+  range a chunk): random sizes 0.24% (80,758 of 300k), data-following 2.24%
+  (7,316); size-ordered LOD is the default, `Lod::AutoSized` removed. Deps:
+  GUP-742 ✅, GUP-721 ✅.
+- [GUP-751](GUP-751_Outlines_Of_Dense_Bubble_Layers_Under_LOD.md) 💡 — 3M
+  data-following bubbles differ 5.2% at clump outlines (a representative
+  anywhere in its cell lets the outline recede); measure an outline-preserving
+  rule that keeps tiers nested. Opus. Deps: GUP-749 ✅.
+- [GUP-752](GUP-752_Ranked_Tier_Build_Time_And_Memory.md) 💡 — A ranked tier
+  build takes 1.8x an unranked one (1,090 against 598 ms per 10M rows) and its
+  copies a third more memory; profile and reduce. Deps: GUP-749 ✅.
 - [GUP-743](GUP-743_Rank_Ordered_Tier_Ranges_Across_Chunks.md) 💡 — Draw a
-  tier's ranges in global rank order across chunks (within a chunk: GUP-749).
-  Deps: GUP-721 ✅, GUP-749 📋.
+  tier's ranges in global rank order across chunks (within a chunk: GUP-749, one
+  range a chunk). Deps: GUP-721 ✅, GUP-749 ✅.
 - [GUP-730](GUP-730_Tier_Builds_Off_The_Frame_Path.md) ✅ — Build tiers on
   worker threads (native) so an owned layer above 10M rows does not add about 1
   s per 10M rows to its first frame and hosted frames never wait for a build.
