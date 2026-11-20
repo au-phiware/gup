@@ -1718,10 +1718,11 @@ fn main() -> gup_core::Result<()> {
                         let (xs, ys) = (&data.xs[c.rows.clone()], &data.ys[c.rows.clone()]);
                         let at =
                             |v: &[f64], r: u32| v[0] + f64::from((v[r as usize] - v[0]) as f32);
-                        let counts =
-                            gup_core::__private::lod_tier_counts(c.rows.len() as u32, |r| {
-                                (at(xs, r), at(ys, r))
-                            });
+                        let counts = gup_core::__private::lod_tier_counts(
+                            c.rows.len() as u32,
+                            |r| (at(xs, r), at(ys, r)),
+                            None,
+                        );
                         u64::from(counts.last().copied().unwrap_or(0))
                     })
                     .sum();

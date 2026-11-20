@@ -555,16 +555,6 @@ fn unchanged(rows: usize, add: impl Fn(&mut Plot, &ScaleRef<Linear>, &ScaleRef<L
     );
 }
 
-/// A size-ordered layer takes a level of detail under `Lod::AutoSized`
-/// only (GUP-721): `Auto` still draws every row.
-fn sized(lod: Lod) -> Lod {
-    if lod == Lod::Auto {
-        Lod::AutoSized
-    } else {
-        lod
-    }
-}
-
 /// `n` bubbles (GUP-721): the walk's positions (a thin curve, so marks
 /// overlap heavily) in 100 clumps of 16 sizes (the third value, 0..16), a
 /// clump's size drawn at random. A cell of the thinned draw holds one size
@@ -604,13 +594,17 @@ fn bubble_plot(rows: Vec<Row>, lod: Lod) -> Plot {
             Linear::new().range(Px(1.0), Px(9.0)).encode(|r: &Row| r.2),
         )
         .attr(Circle::FILL, colour.encode(|r: &Row| r.2))
-        .lod(sized(lod));
+        .lod(lod);
     plot
 }
 
+/// A layer drawn by size takes a level of detail under `Auto` (GUP-749),
+/// one draw call per chunk.
 #[test]
-fn a_layer_drawn_by_size_ignores_auto() {
-    unchanged(1_000_000, |plot, x, y, lod| {
+fn a_layer_drawn_by_size_takes_lod() {
+    let cx = Context::new_blocking().unwrap();
+    let draw_by = |lod| {
+        let (mut plot, x, y) = plot();
         plot.add(Selection::<Row, Circle>::new(walk(1_000_000)))
             .attr(Circle::X, x.encode(|r: &Row| r.0))
             .attr(Circle::Y, y.encode(|r: &Row| r.1))
@@ -619,11 +613,19 @@ fn a_layer_drawn_by_size_ignores_auto() {
                 Linear::new().range(Px(1.0), Px(3.0)).encode(|r: &Row| r.2),
             )
             .lod(lod);
-    });
+        let d = draw(&cx, &mut plot);
+        (builds(&mut plot), d)
+    };
+    let ((auto_builds, a), (off_builds, o)) = (draw_by(Lod::Auto), draw_by(Lod::Off));
+    assert_eq!((auto_builds, off_builds), (a.chunks as u64, 0));
+    assert!(a.instances < 100_000, "{} instances", a.instances);
+    assert_eq!(o.instances, 1_000_000);
+    // One range a chunk, as a layer in data order draws.
+    assert_eq!(a.draw_calls, o.draw_calls, "{} chunks", a.chunks);
 }
 
 #[test]
-fn a_layer_drawn_by_size_takes_lod_under_auto_sized() {
+fn a_layer_drawn_by_size_matches_the_exact_draw() {
     let cx = Context::new_blocking().unwrap();
     let rows = bubbles(300_000);
     let (mut auto, mut off) = (
@@ -633,24 +635,22 @@ fn a_layer_drawn_by_size_takes_lod_under_auto_sized() {
     let (a, o) = (draw(&cx, &mut auto), draw(&cx, &mut off));
     save(&a.image, "lod-bubbles-auto.png");
     save(&o.image, "lod-bubbles-off.png");
+    save_diff(&a.image, &o.image, "lod-bubbles-diff.png");
     assert_eq!(o.instances, rows.len() as u64);
-    assert!(
-        (a.instances as f64) < rows.len() as f64 / 10.0,
-        "{} instances of {} rows",
-        a.instances,
-        rows.len()
-    );
     let (image, rect) = shares(&a.image, &o.image, &auto);
     eprintln!(
-        "300000 bubbles: {} representatives; ΔE00 > 10: {image:.3}% of the image, \
-         {rect:.3}% of the plot rect",
-        a.instances
+        "300000 bubbles: {} representatives, {} draw calls ({} Off); ΔE00 > 10: \
+         {image:.3}% of the image, {rect:.3}% of the plot rect",
+        a.instances, a.draw_calls, o.draw_calls
     );
-    // Measured 2.303%: the outlines of bubbles of 16 viridis colours, whose
-    // thinned edges are up to a pixel narrower (the same marks in one colour
-    // differ 0.884%, `a_layer_drawn_by_size_in_one_colour_...`); the gate
-    // is 1.3x as GUP-717's are.
+    // Measured 2.244% and 7,316 representatives (GUP-721's largest mark of
+    // each cell: 2.303% and 11,371): the outlines of bubbles of 16 viridis
+    // colours, whose thinned edges recede by up to a cell, two for marks
+    // of 4 px and more (the same marks in one colour differ less,
+    // `a_layer_drawn_by_size_in_one_colour_...`); the gate is GUP-721's.
     assert!(rect <= 3.0, "{rect:.3}% of the plot rect differs");
+    assert!(a.instances <= 8_000, "{} representatives", a.instances);
+    assert_eq!(a.draw_calls, o.draw_calls, "one range a chunk");
 }
 
 /// The bubbles of [`a_layer_drawn_by_size_takes_lod`] in one colour: the
@@ -668,7 +668,7 @@ fn a_layer_drawn_by_size_in_one_colour_matches_the_exact_draw() {
                 Circle::RADIUS,
                 Linear::new().range(Px(1.0), Px(9.0)).encode(|r: &Row| r.2),
             )
-            .lod(sized(lod));
+            .lod(lod);
         plot
     };
     let (mut auto, mut off) = (one(Lod::Auto), one(Lod::Off));
@@ -1601,7 +1601,7 @@ fn bubbles_appended(first: &[Row], chunk: u32, lod: Lod) -> (Plot, gup_core::App
                 .encode(|r: &Row| r.2),
         )
         .attr(Circle::FILL, colour.encode(|r: &Row| r.2))
-        .lod(sized(lod));
+        .lod(lod);
     let layer = plot.layer_mut::<Row, Circle>().unwrap();
     layer.max_chunk_rows(chunk);
     let feed = layer.appender();
@@ -1649,9 +1649,9 @@ fn appends_to_a_size_ordered_layer_draw_the_tiers_and_the_rows_past_them() {
     for (name, x, y) in [("tiers", &a, &o), ("past the tiers", &b, &ob)] {
         let (_, rect) = shares(&x.image, &y.image, &auto);
         eprintln!("appended bubbles, {name}: {rect:.3}% of the plot rect");
-        // Measured 3.258% and 3.363%; the same scene built at once (a
-        // smaller picture of the same rows, so more rows a pixel) differs
-        // 2.927%.
+        // Measured 2.777% and 2.888% (GUP-721: 3.258% and 3.363%); the
+        // same scene built at once (a smaller picture of the same rows,
+        // so more rows a pixel) differed 2.927% under GUP-721.
         assert!(rect <= 4.5, "{name}: {rect:.3}% of the plot rect differs");
     }
 }
@@ -1695,7 +1695,7 @@ fn fixed_bubbles(rows: Vec<Row>, lod: Lod) -> Plot {
                 .encode(|r: &Row| r.2),
         )
         .attr(Circle::FILL, colour.encode(|r: &Row| r.2))
-        .lod(sized(lod));
+        .lod(lod);
     plot
 }
 
@@ -1743,7 +1743,8 @@ fn a_rolling_window_over_a_size_ordered_layer_takes_lod() {
     );
     save(&a.image, "lod-window-bubbles-auto.png");
     save(&o.image, "lod-window-bubbles-fresh.png");
-    // Measured 2.437%; the gate is 1.3x.
+    save_diff(&a.image, &o.image, "lod-window-bubbles-diff.png");
+    // Measured 2.812% (GUP-721: 2.437%); the gate is 1.3x that.
     assert!(rect <= 3.2, "{rect:.3}% of the plot rect differs");
 
     // A pick names a held data row drawn where its data says.
@@ -1763,4 +1764,106 @@ fn a_rolling_window_over_a_size_ordered_layer_takes_lod() {
     }
     assert!(hits > 100, "{hits} grid points hit a bubble");
     assert_eq!(near, hits, "a picked row is not a held row under the pixel");
+}
+
+/// Save, under `GUP_LOD_PNG_DIR`, the pixels of `auto` over ΔE00 10 from
+/// `off` in red over a faded `off`.
+fn save_diff(auto: &image::RgbaImage, off: &image::RgbaImage, name: &str) {
+    if std::env::var_os("GUP_LOD_PNG_DIR").is_none() {
+        return;
+    }
+    let mut diff = auto.clone();
+    for (x, y, p) in diff.enumerate_pixels_mut() {
+        let q = off.get_pixel(x, y);
+        let pa = gup_visual_regression::Rgba8::new(p[0], p[1], p[2], p[3]);
+        let pb = gup_visual_regression::Rgba8::new(q[0], q[1], q[2], q[3]);
+        *p = if pa.delta_e(pb) > 10.0 {
+            image::Rgba([255, 0, 0, 255])
+        } else {
+            image::Rgba([q[0] / 3 + 170, q[1] / 3 + 170, q[2] / 3 + 170, 255])
+        };
+    }
+    save(&diff, name);
+}
+
+/// GUP-749: 300,000 bubbles on the walk with a size drawn at random for
+/// each row, so every cell holds all 16 sizes and the full draw shows, at
+/// each pixel, the smallest mark within its own radius (a gradient rim
+/// through every size around the band). Each size keeps its own
+/// representatives and a chunk draws them largest first.
+#[test]
+fn random_sizes_match_the_exact_draw() {
+    let cx = Context::new_blocking().unwrap();
+    let mut s = 0x1234_5678_9abc_def1u64;
+    let rows: Vec<Row> = walk(300_000)
+        .into_iter()
+        .map(|(x, y, _)| {
+            s ^= s << 13;
+            s ^= s >> 7;
+            s ^= s << 17;
+            (x, y, f64::from(((s >> 11) % 16) as u32))
+        })
+        .collect();
+    let (mut auto, mut off) = (
+        bubble_plot(rows.clone(), Lod::Auto),
+        bubble_plot(rows, Lod::Off),
+    );
+    let (a, o) = (draw(&cx, &mut auto), draw(&cx, &mut off));
+    save(&a.image, "lod-random-sizes-auto.png");
+    save(&o.image, "lod-random-sizes-off.png");
+    save_diff(&a.image, &o.image, "lod-random-sizes-diff.png");
+    let (image, rect) = shares(&a.image, &o.image, &auto);
+    eprintln!(
+        "300000 bubbles of random sizes: {} representatives, {} draw calls ({} Off); \
+         ΔE00 > 10: {image:.3}% of the image, {rect:.3}% of the plot rect",
+        a.instances, a.draw_calls, o.draw_calls
+    );
+    // Measured 0.235% and 80,758 representatives (the largest mark of
+    // each cell, GUP-721: 23.0% and 11,375); the gates are GUP-742's 5% and twice the
+    // instances of its prototype, 82,000.
+    assert!(rect <= 5.0, "{rect:.3}% of the plot rect differs");
+    assert!(a.instances <= 82_000, "{} representatives", a.instances);
+    assert_eq!(a.draw_calls, o.draw_calls, "one range a chunk");
+}
+
+/// GUP-749: a bucket's shift comes from its radius through the size scale
+/// when the tiers are built, so a change of the size scale that moves a
+/// bucket across 4 px rebuilds them (a change that moves none does not),
+/// and the picture stays that of the full draw.
+#[test]
+fn a_size_scale_change_rebuilds_the_tiers_it_moves() {
+    let cx = Context::new_blocking().unwrap();
+    let rows = bubbles(300_000);
+    let sized = |lod| {
+        let (mut plot, x, y) = plot();
+        let radius = ScaleRef::new(Linear::new().domain(0.0, 15.0).range(Px(1.0), Px(9.0)));
+        plot.add(Selection::<Row, Circle>::new(rows.clone()))
+            .attr(Circle::X, x.encode(|r: &Row| r.0))
+            .attr(Circle::Y, y.encode(|r: &Row| r.1))
+            .attr(Circle::RADIUS, radius.encode(|r: &Row| r.2))
+            .attr(Circle::FILL, Sequential::viridis().encode(|r: &Row| r.2))
+            .lod(lod);
+        (plot, radius)
+    };
+    let (mut auto, radius) = sized(Lod::Auto);
+    let (mut off, off_radius) = sized(Lod::Off);
+    draw(&cx, &mut auto);
+    assert_eq!(builds(&mut auto), 1);
+    // Level 6 is 4.2 px, level 5 3.67 px: 4.1 px keeps them apart.
+    radius.write().set_domain(0.0, 15.3).unwrap();
+    draw(&cx, &mut auto);
+    assert_eq!(builds(&mut auto), 1, "no bucket crossed 4 px");
+    // Levels 6 to 11 now draw under 4 px.
+    for r in [&radius, &off_radius] {
+        r.write().set_domain(0.0, 30.0).unwrap();
+    }
+    let a = draw(&cx, &mut auto);
+    assert_eq!(
+        builds(&mut auto),
+        2,
+        "the buckets that crossed 4 px rebuilt"
+    );
+    let o = draw(&cx, &mut off);
+    let (_, rect) = shares(&a.image, &o.image, &auto);
+    assert!(rect <= 3.0, "{rect:.3}% of the plot rect differs");
 }

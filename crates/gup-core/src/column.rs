@@ -51,8 +51,7 @@
 
 use crate::context::{Context, ContextId, Upload};
 use crate::error::{Error, Result};
-use crate::lod::Tiers;
-use crate::order::DrawOrder;
+use crate::lod::{Ranked, Ranks, Shifts, Tiers};
 use std::borrow::{Borrow, Cow};
 use std::collections::HashMap;
 use std::fmt::Display;
@@ -730,7 +729,7 @@ struct ChunkLod {
 }
 
 /// A chunk's representatives on one context (GUP-715): rows
-/// `order[..counts[stored]]` of its [`Tiers`], each column gathered in
+/// `order` of its [`Tiers`], each column gathered in
 /// the chunk's format against the chunk's origin, so the pipelines that
 /// read the chunk read these with the chunk's `Chunk` uniform entry; then
 /// a `u32` column of each representative's chunk-local row
@@ -774,7 +773,7 @@ impl LodGpu {
         self.ranges[index].clone()
     }
 
-    /// The representatives held: `counts[stored]` of the chunk's tiers.
+    /// The representatives held: the chunk's tiers' `order`.
     #[cfg(test)]
     pub(crate) fn reps(&self) -> u32 {
         let rows = self.ranges.last().expect("the row column");
@@ -1310,15 +1309,15 @@ fn cells_of<'a>(
 /// sees it, or `None` for a constant axis (read as 0).
 type TierAxes<'a> = [Option<(Cells<'a>, &'a ChunkColumn)>; 2];
 
-/// The tiers (GUP-714) of a chunk's rows `0..len` over `xy`; `rank`: see
+/// The tiers (GUP-714) of a chunk's rows `0..len` over `xy`; `ranks`: see
 /// [`Tiers::build`].
-fn build_tiers(len: u32, xy: &TierAxes<'_>, rank: Option<&dyn Fn(u32) -> u32>) -> Tiers {
+fn build_tiers(len: u32, xy: &TierAxes<'_>, ranks: Option<&Ranks<'_>>) -> Tiers {
     let at = |a: usize, r: u32| {
         xy[a]
             .as_ref()
             .map_or(0.0, |(cells, col)| cells.get(col, r as usize))
     };
-    Tiers::build(len, |r| (at(0, r), at(1, r)), rank)
+    Tiers::build(len, |r| (at(0, r), at(1, r)), ranks)
 }
 
 /// Every column's cells of a chunk's rows `order` (GUP-715), packed one
@@ -1934,9 +1933,25 @@ impl ColumnStore {
     }
 
     /// Whether chunk `k` has [`lod_tiers`](Self::lod_tiers) over `xy` for
-    /// all of its current rows.
-    pub(crate) fn has_tiers(&self, k: usize, xy: [Option<usize>; 2]) -> bool {
-        self.tier_rows(k, xy) == Some(self.chunks[k].len)
+    /// all of its current rows, built with the buckets' `shifts` (a layer
+    /// drawn largest first, GUP-749).
+    pub(crate) fn has_tiers(
+        &self,
+        k: usize,
+        xy: [Option<usize>; 2],
+        shifts: Option<&Shifts>,
+    ) -> bool {
+        self.tier_rows(k, xy) == Some(self.chunks[k].len) && self.shifts_hold(k, shifts)
+    }
+
+    /// Whether chunk `k`'s tiers, if any, were built with the buckets'
+    /// shifts `shifts` gives now (GUP-749): a change of the size scale
+    /// that moves a bucket across a power of two needs a rebuild.
+    pub(crate) fn shifts_hold(&self, k: usize, shifts: Option<&Shifts>) -> bool {
+        self.chunks[k]
+            .lod
+            .as_ref()
+            .is_none_or(|l| l.tiers.shifts_hold(shifts))
     }
 
     /// The rows chunk `k`'s tiers over `xy` were built for (fewer than its
@@ -1979,15 +1994,15 @@ impl ColumnStore {
     /// copy was released and its columns are not shared (GUP-716 builds
     /// before release).
     ///
-    /// `order` (a layer drawn largest first, GUP-721) ranks rows by size
-    /// bucket: see [`Tiers::build`].
+    /// `ranked` (a layer drawn largest first, GUP-721, GUP-749) ranks rows
+    /// by size bucket and shifts each bucket's tiers: see [`Tiers::build`].
     pub(crate) fn lod_tiers(
         &mut self,
         k: usize,
         xy: [Option<usize>; 2],
-        order: Option<&DrawOrder>,
+        ranked: Option<Ranked<'_>>,
     ) -> Result<&Tiers> {
-        let fresh = self.has_tiers(k, xy);
+        let fresh = self.has_tiers(k, xy, ranked.map(|r| r.shifts));
         if !fresh {
             let read = |c: Option<usize>| -> Result<Option<(Cells<'_>, &ChunkColumn)>> {
                 let Some(c) = c else { return Ok(None) };
@@ -1996,11 +2011,16 @@ impl ColumnStore {
             };
             let axes = [read(xy[0])?, read(xy[1])?];
             let base = self.chunks[k].row_base;
-            let rank = |r: u32| order.map_or(0, |o| o.lod_rank(base + u64::from(r)));
+            let rank = |r: u32| ranked.map_or(0, |o| o.order.lod_rank(base + u64::from(r)));
+            let shift = |rank: u32| ranked.map_or(0, |o| o.shifts.of(rank));
+            let ranks = Ranks {
+                rank: &rank,
+                shift: &shift,
+            };
             let tiers = Arc::new(build_tiers(
                 self.chunks[k].len,
                 &axes,
-                order.is_some().then_some(&rank),
+                ranked.is_some().then_some(&ranks),
             ));
             self.chunks[k].lod = Some(Box::new(ChunkLod {
                 xy,
@@ -2012,7 +2032,7 @@ impl ColumnStore {
     }
 
     /// Gather chunk `k`'s representatives (every stored tier's,
-    /// `order[..counts[stored]]`) into a [`LodGpu`] on `cx`, once per
+    /// `order`) into a [`LodGpu`] on `cx`, once per
     /// context and tiers: one strided copy per column from the chunk's CPU
     /// bytes or its shared columns, then the rows, uploaded as
     /// [`Upload::Column`]. Needs [`lod_tiers`](Self::lod_tiers) first; an
@@ -2134,6 +2154,8 @@ impl ColumnStore {
 struct Building {
     /// The store columns of x and y it builds over.
     xy: [Option<usize>; 2],
+    /// The buckets' shifts it builds with (GUP-749).
+    shifts: Option<Shifts>,
     task: crate::lod::pool::Task<Built>,
 }
 
@@ -2160,8 +2182,9 @@ struct BuildSource {
     cpu: Option<Arc<ChunkCpu>>,
     shared: Option<SharedColumns>,
     xy: [Option<usize>; 2],
-    /// The rows' size keys, for a layer drawn by size (GUP-721).
-    keys: Option<Vec<f32>>,
+    /// The rows' size keys and the buckets' shifts, for a layer drawn by
+    /// size (GUP-721, GUP-749).
+    keys: Option<(Vec<f32>, Shifts)>,
 }
 
 /// A test seam: milliseconds each worker build sleeps before it starts
@@ -2189,9 +2212,14 @@ impl BuildSource {
         };
         let axis = |a: Option<usize>| a.and_then(|c| Some((cells(c)?, &self.columns[c])));
         let axes = [axis(self.xy[0]), axis(self.xy[1])];
-        let keys = self.keys.as_deref();
-        let rank = |r: u32| keys.map_or(0, |k| crate::order::lod_rank_of(k[r as usize]));
-        let tiers = build_tiers(self.len, &axes, keys.is_some().then_some(&rank));
+        let keys = self.keys.as_ref();
+        let rank = |r: u32| keys.map_or(0, |k| crate::order::lod_rank_of(k.0[r as usize]));
+        let shift = |rank: u32| keys.map_or(0, |k| k.1.of(rank));
+        let ranks = Ranks {
+            rank: &rank,
+            shift: &shift,
+        };
+        let tiers = build_tiers(self.len, &axes, keys.is_some().then_some(&ranks));
         let (bytes, ranges) = gather(&self.formats, &self.columns, &cells, &tiers.order)
             .expect("a build's source has every column");
         Built {
@@ -2215,10 +2243,16 @@ impl ColumnStore {
         &mut self,
         k: usize,
         xy: [Option<usize>; 2],
-        order: Option<&DrawOrder>,
+        ranked: Option<Ranked<'_>>,
         waker: Option<&std::task::Waker>,
     ) -> Result<()> {
-        if self.has_tiers(k, xy) || self.chunks[k].building.as_ref().is_some_and(|b| b.xy == xy) {
+        let shifts = ranked.map(|r| r.shifts);
+        if self.has_tiers(k, xy, shifts)
+            || self.chunks[k]
+                .building
+                .as_ref()
+                .is_some_and(|b| b.xy == xy && b.shifts.as_ref() == shifts)
+        {
             return Ok(());
         }
         let c = &self.chunks[k];
@@ -2233,10 +2267,19 @@ impl ColumnStore {
             cpu: c.cpu.clone(),
             shared: self.shared.clone(),
             xy,
-            keys: order.map(|o| o.lod_keys(c.row_base..c.row_base + u64::from(c.len))),
+            keys: ranked.map(|o| {
+                (
+                    o.order.lod_keys(c.row_base..c.row_base + u64::from(c.len)),
+                    o.shifts.clone(),
+                )
+            }),
         };
         let task = crate::lod::pool::Task::spawn(move || source.build(), waker.cloned());
-        self.chunks[k].building = Some(Box::new(Building { xy, task }));
+        self.chunks[k].building = Some(Box::new(Building {
+            xy,
+            shifts: shifts.cloned(),
+            task,
+        }));
         Ok(())
     }
 
@@ -2287,12 +2330,12 @@ impl ColumnStore {
                 ),
             )
         })?;
-        // Tiers built since on this thread (a forced tier) are newer.
-        if chunk
-            .lod
-            .as_ref()
-            .is_some_and(|l| l.xy == xy && l.tiers.rows >= built.tiers.rows)
-        {
+        // Tiers built since on this thread (a forced tier) are newer; tiers
+        // of other shifts are older (a build starts only when they are
+        // stale).
+        if chunk.lod.as_ref().is_some_and(|l| {
+            l.xy == xy && l.tiers.rows >= built.tiers.rows && l.tiers.shifts == built.tiers.shifts
+        }) {
             return Ok((false, false));
         }
         let replaced = chunk.lod.is_some();
@@ -3312,13 +3355,13 @@ mod tests {
         LOD_BUILD_DELAY_MS.store(200, std::sync::atomic::Ordering::Relaxed);
         worker.spawn_lod(0, xy, None, None).unwrap();
         LOD_BUILD_DELAY_MS.store(0, std::sync::atomic::Ordering::Relaxed);
-        assert!(worker.lod_building(0) && !worker.has_tiers(0, xy));
+        assert!(worker.lod_building(0) && !worker.has_tiers(0, xy, None));
         assert_eq!(worker.release(), 2);
         assert!(worker.chunks()[0].bytes().is_none(), "released at once");
         assert!(copy.upgrade().is_some(), "the build holds the copy");
         assert_eq!(worker.install_lod(&cx, 0, true).unwrap(), (true, false));
         assert!(copy.upgrade().is_none(), "freed once the build is done");
-        assert!(!worker.lod_building(0) && worker.has_tiers(0, xy));
+        assert!(!worker.lod_building(0) && worker.has_tiers(0, xy, None));
         assert_eq!(worker.chunks()[0].tiers().map(|t| &**t), Some(&tiers));
         let bytes =
             |s: &ColumnStore| read_buffer(&cx, s.chunks()[0].lod_gpu(&cx).unwrap().buffer());

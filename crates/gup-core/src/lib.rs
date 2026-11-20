@@ -453,9 +453,20 @@ pub mod __private {
     pub use encase;
 
     /// Build one chunk's level-of-detail tiers (GUP-714) and return the
-    /// representatives of each stored tier, for `scale_bench --lod`.
-    pub fn lod_tier_counts(rows: u32, xy: impl Fn(u32) -> (f64, f64)) -> Vec<u32> {
-        let tiers = crate::lod::Tiers::build(rows, xy, None);
+    /// representatives of each stored tier, for `scale_bench --lod`;
+    /// `level` ranks the rows as a layer drawn largest first does (GUP-749),
+    /// levels below 8 on cells one tier coarser.
+    pub fn lod_tier_counts(
+        rows: u32,
+        xy: impl Fn(u32) -> (f64, f64),
+        level: Option<&dyn Fn(u32) -> u32>,
+    ) -> Vec<u32> {
+        let shift = |rank: u32| u8::from(rank < 8);
+        let ranks = level.map(|rank| crate::lod::Ranks {
+            rank,
+            shift: &shift,
+        });
+        let tiers = crate::lod::Tiers::build(rows, xy, ranks.as_ref());
         (0..).map_while(|t| tiers.prefix(t)).collect()
     }
 
