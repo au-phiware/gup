@@ -1825,3 +1825,45 @@ fn random_sizes_match_the_exact_draw() {
     assert!(a.instances <= 82_000, "{} representatives", a.instances);
     assert_eq!(a.draw_calls, o.draw_calls, "one range a chunk");
 }
+
+/// GUP-749: a bucket's shift comes from its radius through the size scale
+/// when the tiers are built, so a change of the size scale that moves a
+/// bucket across 4 px rebuilds them (a change that moves none does not),
+/// and the picture stays that of the full draw.
+#[test]
+fn a_size_scale_change_rebuilds_the_tiers_it_moves() {
+    let cx = Context::new_blocking().unwrap();
+    let rows = bubbles(300_000);
+    let sized = |lod| {
+        let (mut plot, x, y) = plot();
+        let radius = ScaleRef::new(Linear::new().domain(0.0, 15.0).range(Px(1.0), Px(9.0)));
+        plot.add(Selection::<Row, Circle>::new(rows.clone()))
+            .attr(Circle::X, x.encode(|r: &Row| r.0))
+            .attr(Circle::Y, y.encode(|r: &Row| r.1))
+            .attr(Circle::RADIUS, radius.encode(|r: &Row| r.2))
+            .attr(Circle::FILL, Sequential::viridis().encode(|r: &Row| r.2))
+            .lod(lod);
+        (plot, radius)
+    };
+    let (mut auto, radius) = sized(Lod::Auto);
+    let (mut off, off_radius) = sized(Lod::Off);
+    draw(&cx, &mut auto);
+    assert_eq!(builds(&mut auto), 1);
+    // Level 6 is 4.2 px, level 5 3.67 px: 4.1 px keeps them apart.
+    radius.write().set_domain(0.0, 15.3).unwrap();
+    draw(&cx, &mut auto);
+    assert_eq!(builds(&mut auto), 1, "no bucket crossed 4 px");
+    // Levels 6 to 11 now draw under 4 px.
+    for r in [&radius, &off_radius] {
+        r.write().set_domain(0.0, 30.0).unwrap();
+    }
+    let a = draw(&cx, &mut auto);
+    assert_eq!(
+        builds(&mut auto),
+        2,
+        "the buckets that crossed 4 px rebuilt"
+    );
+    let o = draw(&cx, &mut off);
+    let (_, rect) = shares(&a.image, &o.image, &auto);
+    assert!(rect <= 3.0, "{rect:.3}% of the plot rect differs");
+}
