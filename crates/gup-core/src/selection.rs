@@ -1156,6 +1156,8 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
                 col += 1;
             }
         }
+        // The buckets' tier shifts of a layer drawn by size (GUP-749).
+        let shifts = self.order.as_ref().map(|o| self.lod_shifts(o));
         let ask = TierAsk {
             forced: self.forced_tier,
             release: !self.retain.keeps_columns(rows),
@@ -1163,7 +1165,11 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             xy,
             mark: M::NAME,
             polyline: M::GEOMETRY == Geometry::Polyline,
-            order: self.order.as_ref(),
+            ranked: self
+                .order
+                .as_ref()
+                .zip(shifts.as_ref())
+                .map(|(order, shifts)| lod::Ranked { order, shifts }),
         };
         // Pixels per data unit of each chunk along x and y over its extent
         // (0: no span; `None`: not known, so the chunk draws every row). A
@@ -1238,6 +1244,29 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
             self.lod_items = 0;
         }
         Ok(entries)
+    }
+
+    /// The buckets' tier shifts of a layer drawn largest first (GUP-749):
+    /// each bucket's pixel radius is its value through the size encoding,
+    /// read when a chunk's tiers are built, so a change of the size scale
+    /// that moves a bucket across a power of two rebuilds them. Every
+    /// shift 0 for an encoding without an image (its radius unknown).
+    fn lod_shifts(&self, order: &DrawOrder) -> lod::Shifts {
+        let size = M::CHANNELS
+            .iter()
+            .zip(&self.encodings)
+            .find_map(|(d, e)| match e {
+                Some(Encoding::Column(c)) if d.role == Some(Role::Size) => Some(c.as_ref()),
+                _ => None,
+            });
+        let Some(size) = size else {
+            return lod::Shifts::default();
+        };
+        let radius = |rank: u32| {
+            let v = order.lod_value(rank);
+            size.image((v, v)).map_or(0.0, |(a, _)| a)
+        };
+        lod::Shifts::new(DrawOrder::lod_finite_ranks(), &radius)
     }
 
     /// Whether the mark takes a level of detail: a quad with one position
@@ -2040,8 +2069,8 @@ struct TierAsk<'a> {
     xy: [Option<usize>; 2],
     mark: &'static str,
     polyline: bool,
-    /// Whether the layer draws by size.
-    order: Option<&'a DrawOrder>,
+    /// Whether the layer draws by size, and its buckets' tier shifts.
+    ranked: Option<lod::Ranked<'a>>,
 }
 
 /// What [`tier_entries`] did.
@@ -2073,16 +2102,16 @@ fn chunk_tiers(
     store: &mut ColumnStore,
     k: usize,
     xy: [Option<usize>; 2],
-    order: Option<&DrawOrder>,
+    ranked: Option<lod::Ranked<'_>>,
     done: &mut TierDone,
 ) -> Result<(i32, i32)> {
-    if !store.has_tiers(k, xy) {
+    if !store.has_tiers(k, xy, ranked.map(|r| r.shifts)) {
         done.builds += 1;
         if store.chunks()[k].tiers().is_some() {
             done.rebuilds += 1;
         }
     }
-    store.lod_tiers(k, xy, order).map(|t| (t.ex, t.ey))
+    store.lod_tiers(k, xy, ranked).map(|t| (t.ex, t.ey))
 }
 
 /// Point a layer's `entries` at their chunks' representatives as
@@ -2121,11 +2150,11 @@ fn tier_entries(
             return Err(no_lod(ask.mark));
         }
         for e in entries.iter_mut().filter(|e| e.first == 0) {
-            chunk_tiers(store, e.this, ask.xy, ask.order, &mut done)?;
-            if let Some(n) = store.lod_tiers(e.this, ask.xy, ask.order)?.prefix(t) {
+            chunk_tiers(store, e.this, ask.xy, ask.ranked, &mut done)?;
+            if let Some(n) = store.lod_tiers(e.this, ask.xy, ask.ranked)?.prefix(t) {
                 store.upload_lod(cx, e.this)?;
                 e.instances = n;
-                e.lod = Some(n);
+                e.lod = Some(t);
             }
         }
         return Ok(done);
@@ -2152,7 +2181,11 @@ fn tier_entries(
             }
             let rows = store.chunks()[e.this].rows();
             let tail = ask.appended && e.this == last && !store.chunk_full(last);
+            // Tiers of a bucket shift the size scale no longer gives
+            // rebuild (GUP-749), drawing meanwhile.
+            let stale = !store.shifts_hold(e.this, ask.ranked.map(|r| r.shifts));
             let want = match store.tier_rows(e.this, ask.xy) {
+                Some(_) if stale => true,
                 Some(b) if b == rows => false,
                 Some(b) => !tail || rows >= b.saturating_mul(2),
                 None => !tail || rows >= lod::TAIL_MIN_ROWS,
@@ -2194,12 +2227,13 @@ fn tier_entries(
         if let Some(n) = tiers.prefix(t) {
             store.upload_lod(cx, e.this)?;
             e.instances = n;
-            e.lod = Some(n);
+            e.lod = Some(t);
         } else if let Some(n) = tiers.cap(t) {
             // One tier past the stored tiers: the finest stored tier's
-            // prefix instead of every row, if the rows in view are many.
-            seen += lod::in_view(&tiers.runs, n, rows, &mut |run| share(run));
-            capped.push((i, n));
+            // representatives instead of every row, if the rows in view
+            // are many.
+            seen += lod::in_view(&tiers.runs, tiers.stored, rows, &mut |run| share(run));
+            capped.push((i, n, tiers.stored));
         }
     }
     // GUP-720: drawing every row of a chunk past its tiers costs its rows,
@@ -2208,10 +2242,10 @@ fn tier_entries(
     // the threshold under which the layer draws every row at all) take the
     // cap.
     if seen > Lod::AUTO_MIN_ROWS as f64 {
-        for (i, n) in capped {
+        for (i, n, t) in capped {
             store.upload_lod(cx, entries[i].this)?;
             entries[i].instances = n;
-            entries[i].lod = Some(n);
+            entries[i].lod = Some(t);
         }
     }
     Ok(done)
@@ -2236,12 +2270,12 @@ fn build_wanted(
     done: &mut TierDone,
 ) -> Result<()> {
     for &k in wanted {
-        store.spawn_lod(k, ask.xy, ask.order, frame.waker)?;
+        store.spawn_lod(k, ask.xy, ask.ranked, frame.waker)?;
     }
     if ask.release {
         for k in 0..store.chunks().len() {
             if store.releasable(k) {
-                store.spawn_lod(k, ask.xy, ask.order, frame.waker)?;
+                store.spawn_lod(k, ask.xy, ask.ranked, frame.waker)?;
             }
         }
     }
@@ -2268,14 +2302,14 @@ fn build_wanted(
     if ask.release {
         for k in 0..store.chunks().len() {
             if store.releasable(k) {
-                chunk_tiers(store, k, ask.xy, ask.order, done)?;
+                chunk_tiers(store, k, ask.xy, ask.ranked, done)?;
                 store.upload_lod(cx, k)?;
             }
         }
     }
     let budget = if frame.waker.is_some() { 1 } else { usize::MAX };
     for &k in wanted.iter().take(budget) {
-        chunk_tiers(store, k, ask.xy, ask.order, done)?;
+        chunk_tiers(store, k, ask.xy, ask.ranked, done)?;
     }
     done.pending = wanted.len() > budget;
     Ok(())
@@ -2308,9 +2342,9 @@ fn lod_ranges(
 ) -> Vec<(usize, Vec<std::ops::Range<u32>>)> {
     let mut out = Vec::new();
     for (i, e) in entries.iter().enumerate() {
-        let Some(n) = e.lod else { continue };
+        let Some(t) = e.lod else { continue };
         let tiers = store.chunks()[e.this].tiers().expect("a tier draws");
-        let ranges = lod::ranges(&tiers.runs, n, &mut |run| {
+        let ranges = lod::ranges(&tiers.runs, t, &mut |run| {
             plot.is_none_or(|plot| {
                 PixelBox {
                     x: image(0, run.x),

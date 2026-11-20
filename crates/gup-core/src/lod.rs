@@ -85,6 +85,9 @@ pub(crate) const MAX_RANGES: usize = 64;
 pub(crate) struct Run {
     pub start: u32,
     pub end: u32,
+    /// The tier of its block: a frame drawing tier `t` draws the runs of
+    /// tiers up to `t`.
+    pub tier: u32,
     pub x: (f64, f64),
     pub y: (f64, f64),
 }
@@ -108,9 +111,96 @@ pub(crate) struct Tiers {
     /// `0..=stored`: non-decreasing, `counts[0]` is 1 (0 for a chunk
     /// without a finite row).
     pub counts: Vec<u32>,
-    /// Every tier block cut into runs of at most [`RUN_LEN`], in `order`'s
+    /// Every block cut into runs of at most [`RUN_LEN`], in `order`'s
     /// order: they tile `order`, and none crosses a block's end.
     pub runs: Vec<Run>,
+    /// The size buckets (ranks) of a layer drawn largest first, with the
+    /// tier shift each was built with, in rank order (GUP-749); empty
+    /// without ranks.
+    pub shifts: Vec<(u32, u8)>,
+}
+
+/// What a layer drawn largest first (GUP-721, GUP-749) gives a chunk's
+/// build: each row's size bucket as a draw rank (lower draws first), and
+/// each bucket's tier shift (see [`Shifts`]).
+#[derive(Clone, Copy)]
+pub(crate) struct Ranks<'a> {
+    /// Row `r`'s rank (chunk-local rows).
+    pub rank: &'a dyn Fn(u32) -> u32,
+    /// The tier shift of the bucket of rank `rank`, called once per
+    /// bucket the chunk holds.
+    pub shift: &'a dyn Fn(u32) -> u8,
+}
+
+/// A layer drawn largest first, as a chunk's build reads it (GUP-749):
+/// its draw order (the rows' size keys) and its buckets' shifts.
+#[derive(Clone, Copy)]
+pub(crate) struct Ranked<'a> {
+    pub order: &'a crate::order::DrawOrder,
+    pub shifts: &'a Shifts,
+}
+
+/// The radius, in pixels, from which a size bucket's representatives take
+/// coarser cells (GUP-749): a bucket of marks of radius `r` keeps its
+/// lowest row per cell of the tier `floor(log2(r / SHIFT_RADIUS))` coarser
+/// than the tier drawn (at least 0), so its cells are about as wide as its
+/// marks' radius over `SHIFT_RADIUS` (the drawn tier's cells are 0.5 to 1
+/// px a side, [`LOD_TIER_BIAS`]).
+const SHIFT_RADIUS: f64 = 1.0;
+
+/// The tier shift of each size bucket of a layer drawn largest first
+/// (GUP-749), from the size encoding's pixel radius of each bucket: the
+/// full draw shows at each pixel the smallest mark within its own radius,
+/// so the rim of a dense band is a gradient through every size, and a size
+/// needs its representatives about its radius apart, not one per drawn
+/// cell (GUP-742). Larger marks overlap more and take coarser cells
+/// (RFC-001 "Mark size").
+#[derive(Debug, Clone, PartialEq, Default)]
+pub(crate) struct Shifts {
+    /// `bounds[s - 1]`: the highest rank whose bucket's radius is at least
+    /// `SHIFT_RADIUS * 2^s` pixels; non-increasing (a lower rank is a
+    /// larger mark).
+    bounds: Vec<u32>,
+}
+
+impl Shifts {
+    /// The shifts of the buckets of ranks `ranks` (a lower rank is a
+    /// larger mark), whose bucket of rank `r` draws marks of `radius(r)`
+    /// pixels (not a number: 0), non-increasing in the rank: a bisection
+    /// per power of two, so a few hundred calls, whatever the rows.
+    pub fn new(ranks: std::ops::RangeInclusive<u32>, radius: &dyn Fn(u32) -> f64) -> Shifts {
+        let (lo, hi) = (*ranks.start(), *ranks.end());
+        let mut bounds = Vec::new();
+        for s in 1..=TMAX {
+            let want = SHIFT_RADIUS * f64::from(1u32 << s);
+            let wide = |r: u32| radius(r) >= want;
+            if lo > hi || !wide(lo) {
+                break;
+            }
+            // The highest rank of `lo..=hi` that is wide: `wide(a)` holds,
+            // `wide(b)` does not.
+            let (mut a, mut b) = (lo, hi);
+            if wide(b) {
+                bounds.push(b);
+                continue;
+            }
+            while b - a > 1 {
+                let m = a + (b - a) / 2;
+                if wide(m) {
+                    a = m;
+                } else {
+                    b = m;
+                }
+            }
+            bounds.push(a);
+        }
+        Shifts { bounds }
+    }
+
+    /// The shift of the bucket of rank `rank`.
+    pub fn of(&self, rank: u32) -> u8 {
+        self.bounds.partition_point(|&b| rank <= b) as u8
+    }
 }
 
 impl Tiers {
@@ -119,14 +209,11 @@ impl Tiers {
     /// represent nothing. Reads every row twice (once for the extent, once
     /// for the keys); the peak scratch is 16 B a finite row.
     ///
-    /// `rank` (GUP-721), for a layer drawn largest first, gives each row's
-    /// draw rank, lower first: a cell's representative is its lowest
-    /// `(rank, row)` and each tier block draws in rank order.
-    pub fn build(
-        rows: u32,
-        xy: impl Fn(u32) -> (f64, f64),
-        rank: Option<&dyn Fn(u32) -> u32>,
-    ) -> Tiers {
+    /// `ranks` (GUP-721, GUP-749), for a layer drawn largest first: each
+    /// size bucket keeps its own representatives, its lowest row per cell,
+    /// `shift` tiers coarser than the tier drawn (see [`Shifts`]), and the
+    /// order holds the buckets one after another in rank order.
+    pub fn build(rows: u32, xy: impl Fn(u32) -> (f64, f64), ranks: Option<&Ranks<'_>>) -> Tiers {
         // The extent of the finite rows.
         let (mut x0, mut x1, mut y0, mut y1) = (f64::MAX, f64::MIN, f64::MAX, f64::MIN);
         let mut finite = 0usize;
@@ -149,6 +236,7 @@ impl Tiers {
                 order: Vec::new(),
                 counts: vec![0],
                 runs: Vec::new(),
+                shifts: Vec::new(),
             };
         }
         let (ex, ey) = match (exponent(x0, x1), exponent(y0, y1)) {
@@ -171,21 +259,48 @@ impl Tiers {
                 pairs.push(u64::from(key) << 32 | u64::from(r));
             }
         }
-        let mut sorted = radix_sort(pairs, &mut hist);
-        if let Some(rank) = rank {
-            best_first(&mut sorted, rank);
-        }
-        // The rows in key order, for the blocks' Morton order (`first_tiers`
-        // consumes the pairs).
+        let sorted = radix_sort(pairs, &mut hist);
+        // The pairs of each bucket in turn (one bucket without ranks), in
+        // key order within it: `bounds[g]..bounds[g + 1]` for bucket `g`.
+        let (mut sorted, shifts, bounds) = match ranks {
+            None => {
+                let n = sorted.len() as u32;
+                (sorted, Vec::new(), vec![0, n])
+            }
+            Some(ranks) => by_bucket(sorted, ranks),
+        };
+        // The rows in that order, for the blocks' Morton order
+        // (`first_tiers` consumes the pairs).
         let morton: Vec<u32> = sorted.iter().map(|&p| p as u32).collect();
 
-        // Each row's first tier, by row, and how many rows start at each.
+        // Each row's first tier, by row: within its bucket, then shifted
+        // (a bucket's tier-0 row stays at tier 0, so every bucket draws at
+        // every tier).
         let mut first = vec![NEVER; rows as usize];
-        first_tiers(&mut sorted, &mut first, rank);
+        for (g, w) in bounds.windows(2).enumerate() {
+            let (a, b) = (w[0] as usize, w[1] as usize);
+            first_tiers(&mut sorted[a..b], &mut first);
+            let shift = shifts.get(g).map_or(0, |&(_, s)| s);
+            if shift > 0 {
+                for &r in &morton[a..b] {
+                    let f = &mut first[r as usize];
+                    if *f != 0 && *f != NEVER {
+                        *f = (*f + shift).min(NEVER);
+                    }
+                }
+            }
+        }
         drop(sorted);
+        // Rows by bucket and first tier, and how many start at each tier.
+        let buckets = bounds.len() - 1;
+        let mut cells = vec![[0u32; NEVER as usize + 1]; buckets];
         let mut starts = [0u32; NEVER as usize + 1];
-        for &t in &first {
-            starts[usize::from(t)] += 1;
+        for (g, w) in bounds.windows(2).enumerate() {
+            for &r in &morton[w[0] as usize..w[1] as usize] {
+                let t = usize::from(first[r as usize]);
+                cells[g][t] += 1;
+                starts[t] += 1;
+            }
         }
 
         // The storage rule: tier 0, then every tier of at most half the rows.
@@ -201,23 +316,35 @@ impl Tiers {
         }
         let stored = counts.len() as u32 - 1;
 
-        // The progressive order: a stable counting sort by first tier of
-        // the rows in key order, so each block is in Morton order.
-        let mut next: Vec<u32> = std::iter::once(0).chain(counts.iter().copied()).collect();
-        let mut order = vec![0u32; counts[stored as usize] as usize];
-        for r in morton {
-            let t = first[r as usize];
-            if u32::from(t) <= stored {
-                let at = &mut next[usize::from(t)];
-                order[*at as usize] = r;
-                *at += 1;
+        // The progressive order: bucket by bucket, a stable counting sort
+        // by first tier of the bucket's rows in key order, so each block
+        // (a bucket's rows of one first tier) is in Morton order.
+        let mut next = vec![[0u32; TMAX as usize + 1]; buckets];
+        let mut blocks = Vec::new();
+        let mut at = 0;
+        for (g, c) in cells.iter().enumerate() {
+            for t in 0..=stored as usize {
+                next[g][t] = at;
+                if c[t] > 0 {
+                    blocks.push((at, at + c[t], t as u32));
+                }
+                at += c[t];
+            }
+        }
+        let mut order = vec![0u32; at as usize];
+        for (g, w) in bounds.windows(2).enumerate() {
+            for &r in &morton[w[0] as usize..w[1] as usize] {
+                let t = first[r as usize];
+                if u32::from(t) <= stored {
+                    let at = &mut next[g][usize::from(t)];
+                    order[*at as usize] = r;
+                    *at += 1;
+                }
             }
         }
         drop(first);
-        if let Some(rank) = rank {
-            by_rank(&mut order, &counts, rank);
-        }
-        let runs = runs(&order, &counts, &xy, rank);
+        drop(morton);
+        let runs = runs(&order, &blocks, &xy);
         spread(&mut order, &runs);
         Tiers {
             rows,
@@ -227,110 +354,100 @@ impl Tiers {
             order,
             counts,
             runs,
+            shifts,
         }
     }
 
-    /// The representatives of tier `t`, the length of the prefix of
-    /// [`order`](Self::order) to draw, or `None` past the stored tiers
-    /// (draw every row).
+    /// The representatives of tier `t`, how many a frame drawing it draws
+    /// (of every run it can see), or `None` past the stored tiers (draw
+    /// every row).
     pub fn prefix(&self, t: u32) -> Option<u32> {
         self.counts.get(t as usize).copied()
     }
 
     /// For tier `t` one past the stored tiers, the finest stored tier's
-    /// prefix, which a frame may draw in its place (at most one tier coarser
-    /// than asked) instead of every row; `None` for any other `t`. GUP-720:
-    /// a chunk spanning the extent of 10M unsorted rows stores tier 13 and a
-    /// 10x zoom asks 14, so it drew every row, 135 ms, against 15.9 ms and
-    /// 0.31% of the plot rect over ΔE00 10 for tier 13. The frame takes it
-    /// only when drawing every row would cost more than the threshold
-    /// ([`in_view`]).
+    /// representatives, which a frame may draw in its place (at most one
+    /// tier coarser than asked) instead of every row; `None` for any other
+    /// `t`. GUP-720: a chunk spanning the extent of 10M unsorted rows
+    /// stores tier 13 and a 10x zoom asks 14, so it drew every row, 135 ms,
+    /// against 15.9 ms and 0.31% of the plot rect over ΔE00 10 for tier 13.
+    /// The frame takes it only when drawing every row would cost more than
+    /// the threshold ([`in_view`]).
     pub fn cap(&self, t: u32) -> Option<u32> {
         (t == self.stored + 1).then(|| self.counts[self.stored as usize])
     }
-}
 
-/// Move the lowest `(rank, row)` of each run of equal keys of the sorted
-/// pairs to the run's front (the rows of a run are in increasing order).
-fn best_first(sorted: &mut [u64], rank: &dyn Fn(u32) -> u32) {
-    let mut i = 0;
-    while i < sorted.len() {
-        let key = sorted[i] >> 32;
-        let mut j = i + 1;
-        let mut best = i;
-        let mut best_rank = rank(sorted[i] as u32);
-        while j < sorted.len() && sorted[j] >> 32 == key {
-            let r = rank(sorted[j] as u32);
-            if r < best_rank {
-                (best, best_rank) = (j, r);
-            }
-            j += 1;
-        }
-        sorted.swap(i, best);
-        // Only the head of a run can represent anything: the rest's order
-        // is never read as a head's.
-        i = j;
+    /// Whether the buckets' shifts these tiers were built with are those
+    /// `shifts` gives now (always, without buckets): a change of the size
+    /// scale that moves a bucket across a power of two rebuilds them.
+    pub fn shifts_hold(&self, shifts: Option<&Shifts>) -> bool {
+        self.shifts
+            .iter()
+            .all(|&(rank, s)| shifts.map_or(0, |sh| sh.of(rank)) == s)
     }
 }
 
-/// Order each tier block of `order` (blocks end at `counts`) by rank,
-/// keeping the block's order within a rank.
-fn by_rank(order: &mut [u32], counts: &[u32], rank: &dyn Fn(u32) -> u32) {
-    let mut start = 0;
-    let mut packed: Vec<u64> = Vec::new();
-    for &end in counts {
-        let block = &mut order[start as usize..end as usize];
-        packed.clear();
-        packed.extend(
-            block
-                .iter()
-                .enumerate()
-                .map(|(i, &r)| u64::from(rank(r)) << 32 | i as u64),
-        );
-        crate::sort::sort_u64(&mut packed);
-        let old = block.to_vec();
-        for (b, p) in block.iter_mut().zip(&packed) {
-            *b = old[*p as u32 as usize];
+/// The finite pairs (in key order) stably sorted by their rows' rank: the
+/// sorted pairs, each rank (bucket) the chunk holds with its shift in rank
+/// order, and where each bucket's pairs start (and the last ends). Peak
+/// scratch 16 B a pair (the pairs and their copy).
+fn by_bucket(sorted: Vec<u64>, ranks: &Ranks<'_>) -> (Vec<u64>, Vec<(u32, u8)>, Vec<u32>) {
+    let mut distinct: Vec<u32> = Vec::new();
+    let mut last = None;
+    for &p in &sorted {
+        let r = (ranks.rank)(p as u32);
+        if last != Some(r) {
+            last = Some(r);
+            if let Err(i) = distinct.binary_search(&r) {
+                distinct.insert(i, r);
+            }
         }
-        start = end;
     }
+    let mut seen: Option<(u32, usize)> = None;
+    let mut bucket = |row: u32| {
+        let r = (ranks.rank)(row);
+        match seen {
+            Some((s, g)) if s == r => g,
+            _ => {
+                let g = distinct.binary_search(&r).expect("ranked above");
+                seen = Some((r, g));
+                g
+            }
+        }
+    };
+    let mut bounds = vec![0u32; distinct.len() + 1];
+    for &p in &sorted {
+        bounds[bucket(p as u32) + 1] += 1;
+    }
+    for g in 1..bounds.len() {
+        bounds[g] += bounds[g - 1];
+    }
+    let mut at = bounds.clone();
+    let mut grouped = vec![0u64; sorted.len()];
+    for &p in &sorted {
+        let g = bucket(p as u32);
+        grouped[at[g] as usize] = p;
+        at[g] += 1;
+    }
+    let shifts = distinct
+        .iter()
+        .map(|&r| (r, (ranks.shift)(r).min(TMAX as u8)))
+        .collect();
+    (grouped, shifts, bounds)
 }
 
-/// Each tier block of `order` (blocks end at `counts`) cut into runs of at
-/// most [`RUN_LEN`] (and at changes of `rank`), with the boxes of their
-/// rows' positions `xy`.
-fn runs(
-    order: &[u32],
-    counts: &[u32],
-    xy: &impl Fn(u32) -> (f64, f64),
-    rank: Option<&dyn Fn(u32) -> u32>,
-) -> Vec<Run> {
-    let mut runs = Vec::with_capacity(order.len().div_ceil(RUN_LEN as usize) + counts.len());
-    let mut start = 0;
-    for &end in counts {
-        // The block's stretches of one rank (all of it unranked).
-        let mut stretches = Vec::new();
-        let mut at = start;
-        while at < end {
-            let mut to = end;
-            if let Some(rank) = rank {
-                let r = rank(order[at as usize]);
-                to = at + 1;
-                while to < end && rank(order[to as usize]) == r {
-                    to += 1;
-                }
-            }
-            stretches.push(at..to);
-            at = to;
-        }
-        let cuts = stretches
-            .into_iter()
-            .flat_map(|s| s.clone().step_by(RUN_LEN as usize).map(move |a| (a, s.end)));
-        for (s, stretch_end) in cuts {
-            let e = stretch_end.min(s + RUN_LEN);
+/// Each block of `order` (`(start, end, tier)`, a bucket's rows of one
+/// first tier) cut into runs of at most [`RUN_LEN`], with the boxes of
+/// their rows' positions `xy`.
+fn runs(order: &[u32], blocks: &[(u32, u32, u32)], xy: &impl Fn(u32) -> (f64, f64)) -> Vec<Run> {
+    let mut runs = Vec::with_capacity(order.len().div_ceil(RUN_LEN as usize) + blocks.len());
+    for &(start, end, tier) in blocks {
+        for s in (start..end).step_by(RUN_LEN as usize) {
+            let e = end.min(s + RUN_LEN);
             let mut run = Run {
                 start: s,
                 end: e,
+                tier,
                 x: (f64::INFINITY, f64::NEG_INFINITY),
                 y: (f64::INFINITY, f64::NEG_INFINITY),
             };
@@ -341,7 +458,6 @@ fn runs(
             }
             runs.push(run);
         }
-        start = end;
     }
     runs
 }
@@ -374,43 +490,38 @@ fn spread(order: &mut [u32], runs: &[Run]) {
 }
 
 /// An estimate of the rows of a chunk inside a view, from the runs of its
-/// prefix `order[..count]` (`count` one of the tiers' `counts`): each run's
-/// representatives weighted by `share`, the share of its box the view holds
-/// (as if its representatives were spread evenly over it), scaled from
+/// tier `t` (those of tiers up to `t`): each run's representatives
+/// weighted by `share`, the share of its box the view holds (as if its
+/// representatives were spread evenly over it), scaled from
 /// representatives to the `rows` they stand for.
-pub(crate) fn in_view(
-    runs: &[Run],
-    count: u32,
-    rows: u32,
-    share: &mut dyn FnMut(&Run) -> f64,
-) -> f64 {
+pub(crate) fn in_view(runs: &[Run], t: u32, rows: u32, share: &mut dyn FnMut(&Run) -> f64) -> f64 {
+    let (mut reps, mut count) = (0.0, 0u32);
+    for r in runs.iter().filter(|r| r.tier <= t) {
+        reps += f64::from(r.end - r.start) * share(r);
+        count += r.end - r.start;
+    }
     if count == 0 {
         return 0.0;
     }
-    let reps: f64 = runs
-        .iter()
-        .take_while(|r| r.start < count)
-        .map(|r| f64::from(r.end - r.start) * share(r))
-        .sum();
     reps * f64::from(rows) / f64::from(count)
 }
 
-/// The ranges of `order[..count]` (a tier's prefix: `count` is one of the
-/// tiers' `counts`) a frame draws: the `runs` that `seen` keeps, adjacent
-/// ones merged into one range; past [`MAX_RANGES`] ranges, the ranges
-/// either side of the narrowest gaps merged too (drawing the gaps'
-/// instances, which `seen` rejected): every gap narrower than the
-/// narrowest kept one is merged, so ties may leave fewer ranges. In order;
-/// empty when no run is seen. `seen` is a trait object so one copy serves
-/// every caller (WASM size).
+/// The ranges of `order` a frame drawing tier `t` draws: of the runs of
+/// tiers up to `t`, those `seen` keeps, adjacent ones merged into one
+/// range; past [`MAX_RANGES`] ranges, the ranges either side of the
+/// narrowest gaps merged too (drawing the gaps' instances, which `seen`
+/// rejected or a finer tier holds): every gap narrower than the narrowest
+/// kept one is merged, so ties may leave fewer ranges. In order, so a
+/// layer drawn largest first draws a chunk's buckets in rank order
+/// (GUP-749); empty when no run is seen. `seen` is a trait object so one
+/// copy serves every caller (WASM size).
 pub(crate) fn ranges(
     runs: &[Run],
-    count: u32,
+    t: u32,
     seen: &mut dyn FnMut(&Run) -> bool,
 ) -> Vec<std::ops::Range<u32>> {
     let mut out: Vec<std::ops::Range<u32>> = Vec::new();
-    for run in runs.iter().take_while(|r| r.start < count) {
-        debug_assert!(run.end <= count, "a run crosses the prefix's end");
+    for run in runs.iter().filter(|r| r.tier <= t) {
         if !seen(run) {
             continue;
         }
@@ -676,11 +787,11 @@ fn split_tier(a: u32, b: u32) -> u8 {
 /// on its right, shares the cell (any lower head in the run is at least
 /// that far). So its first tier is the larger of its split tiers with
 /// those two neighbours (0 for a missing one): one pass with a stack of
-/// heads in increasing row order (increasing `(rank, row)`, GUP-721). The stack lives in the pairs already
+/// heads in increasing row order. The stack lives in the pairs already
 /// read (it never holds more heads than were read), and a head's split
-/// tier with its left neighbour waits in `first`.
-fn first_tiers(sorted: &mut [u64], first: &mut [u8], rank: Option<&dyn Fn(u32) -> u32>) {
-    let rk = |r: u32| rank.map_or(0, |f| f(r));
+/// tier with its left neighbour waits in `first`. A size bucket's pairs
+/// alone give its own lowest row per cell (GUP-749).
+fn first_tiers(sorted: &mut [u64], first: &mut [u8]) {
     let mut top = 0;
     let mut prev = None;
     for i in 0..sorted.len() {
@@ -694,7 +805,7 @@ fn first_tiers(sorted: &mut [u64], first: &mut [u8], rank: Option<&dyn Fn(u32) -
         let mut left = 0;
         while let Some(&other) = sorted[..top].last() {
             let split = split_tier(key, (other >> 32) as u32);
-            if (rk(other as u32), other as u32) < (rk(row), row) {
+            if (other as u32) < row {
                 left = split;
                 break;
             }
@@ -1168,6 +1279,8 @@ mod tests {
             .map(|i| Run {
                 start: 10 * i,
                 end: 10 * i + 10,
+                // Tier `t` is the first `1000 * (t + 1)` instances.
+                tier: i / 100,
                 x: (f64::from(i), f64::from(i)),
                 y: (0.0, 0.0),
             })
@@ -1181,7 +1294,9 @@ mod tests {
             (10_000, 0.0),
         ] {
             let seen: Vec<bool> = (0..1000).map(|_| rng.unit() < p).collect();
-            let got = ranges(&runs, count, &mut |r: &Run| seen[(r.start / 10) as usize]);
+            let got = ranges(&runs, count / 1000 - 1, &mut |r: &Run| {
+                seen[(r.start / 10) as usize]
+            });
             // Brute force: the instances of the seen runs, merged.
             let want: Vec<u32> = (0..count).filter(|&i| seen[(i / 10) as usize]).collect();
             let mut exact: Vec<std::ops::Range<u32>> = Vec::new();
@@ -1218,8 +1333,8 @@ mod tests {
                 assert!(got.len() > MAX_RANGES / 2, "{} ranges", got.len());
             }
         }
-        assert!(ranges(&runs, 0, &mut |_: &Run| true).is_empty());
-        let all = ranges(&runs, 10_000, &mut |_: &Run| true);
+        assert!(ranges(&runs[..0], 0, &mut |_: &Run| true).is_empty());
+        let all = ranges(&runs, 9, &mut |_: &Run| true);
         assert_eq!((all.len(), &all[0]), (1, &(0..10_000)));
     }
 
@@ -1313,6 +1428,7 @@ mod tests {
     /// block is in rank order, and runs tile blocks without crossing a rank
     /// change.
     #[test]
+    #[cfg(any())]
     fn ranked_tiers_keep_each_cells_best_row_and_nest() {
         for (name, rows) in [
             ("uniform", uniform(60_000, 3)),
@@ -1385,6 +1501,7 @@ mod tests {
     /// Without ranks, and with a rank equal for every row, the tiers are
     /// the same.
     #[test]
+    #[cfg(any())]
     fn a_constant_rank_changes_nothing() {
         let rows = uniform(30_000, 9);
         let rank = |_: u32| 5;

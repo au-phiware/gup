@@ -189,6 +189,22 @@ impl DrawOrder {
         lod_rank_of(self.keys[stored as usize])
     }
 
+    /// The size value of the bucket of rank `rank` ([`lod_rank_of`]): its
+    /// key with the low bits cleared, negated back for a reversed order,
+    /// which the size encoding turns into the bucket's pixel radius
+    /// (GUP-749).
+    pub(crate) fn lod_value(&self, rank: u32) -> f64 {
+        let o = !rank;
+        let bits = if o >> 31 == 1 { o & !(1 << 31) } else { !o };
+        let q = f64::from(f32::from_bits(bits));
+        if self.reversed { -q } else { q }
+    }
+
+    /// The ranks of finite keys, the largest first.
+    pub(crate) fn lod_finite_ranks() -> std::ops::RangeInclusive<u32> {
+        lod_rank_of(f32::MAX)..=lod_rank_of(-f32::MAX)
+    }
+
     /// The sort keys of stored rows `stored`, for a level-of-detail build
     /// on a worker ([`lod_rank_of`] ranks each, GUP-730).
     #[cfg(not(target_arch = "wasm32"))]
