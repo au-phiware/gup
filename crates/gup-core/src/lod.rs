@@ -154,20 +154,30 @@ pub(crate) struct Ranked<'a> {
     pub shifts: &'a Shifts,
 }
 
-/// The radius, in pixels, from which a size bucket's representatives take
+/// The radius, in pixels, over which a size bucket's representatives take
 /// coarser cells (GUP-749): a bucket of marks of radius `r` keeps its
 /// lowest row per cell of the tier `floor(log2(r / SHIFT_RADIUS))` coarser
 /// than the tier drawn, from 0 to [`MAX_SHIFT`] (the drawn tier's cells
-/// are 0.5 to 1 px a side, [`LOD_TIER_BIAS`]).
-const SHIFT_RADIUS: f64 = 1.0;
+/// are 0.5 to 1 px a side, [`LOD_TIER_BIAS`]): marks of 4 px and more on
+/// cells twice as wide.
+///
+/// GUP-749's tuning (400 x 300; share of the plot rect over ΔE00 10 and
+/// representatives; 300,000 bubbles of radius 1-9 px with sizes at random
+/// per row, then in clumps of one size; gates 5.0% and 3.0%):
+///
+/// | shift                   | random         | clumps        |
+/// | ----------------------- | -------------- | ------------- |
+/// | `floor(log2 r)`, 0 to 3 | 2.30%, 40,965  | 3.54%, 4,059  |
+/// | the same, at most 2     | 1.63%, 42,633  | 3.30%, 4,208  |
+/// | the same, at most 1     | 0.27%, 64,214  | 2.57%, 5,749  |
+/// | 1 from 4 px (this)      | 0.24%, 80,758  | 2.24%, 7,316  |
+///
+/// A bucket's outline recedes by up to one of its cells, whatever its
+/// radius, which the clumps' large marks show; "at most 1" left a rolling
+/// window of 1M bubbles at 3.21% (gate 3.2%), this rule 2.81%.
+const SHIFT_RADIUS: f64 = 2.0;
 
-/// The coarsest shift (GUP-749's tuning, 300,000 bubbles at 400 x 300,
-/// share of the plot rect over ΔE00 10 and instances, sizes at random per
-/// row / in clumps): `floor(log2 r)` for radii 1-9 px (up to 3) 2.3% /
-/// 41,000 and 3.5% / 4,100; at most 2, 1.6% / 43,000 and 3.3% / 4,200; at
-/// most 1, 0.27% / 64,000 and 2.6% / 5,700 (the clumps' gate is 3.0%). A
-/// bucket's outline recedes by up to a cell, whatever its radius: the
-/// clumps' large marks showed it first.
+/// The coarsest shift: see [`SHIFT_RADIUS`].
 const MAX_SHIFT: u32 = 1;
 
 /// The tier shift of each size bucket of a layer drawn largest first
@@ -1620,14 +1630,14 @@ mod tests {
     }
 
     /// A shift's [`Shifts`] bounds: radii 1 to 9 px over 16 ranks (a lower
-    /// rank larger) shift 0 below 2 px and 1 from 2 px ([`MAX_SHIFT`]);
+    /// rank larger) shift 0 below 4 px and 1 from 4 px ([`MAX_SHIFT`]);
     /// a radius that is not a number shifts nothing.
     #[test]
     fn shifts_follow_the_radius() {
         let radius = |r: u32| 9.0 - 8.0 * f64::from(r.min(15)) / 15.0;
         let shifts = Shifts::new(0..=1000, &radius);
         let of: Vec<u8> = (0..16).map(|r| shifts.of(r)).collect();
-        let want: Vec<u8> = (0..16).map(|r| u8::from(radius(r) >= 2.0)).collect();
+        let want: Vec<u8> = (0..16).map(|r| u8::from(radius(r) >= 4.0)).collect();
         assert_eq!(of, want);
         assert_eq!(Shifts::new(0..=1000, &|_| f64::NAN), Shifts::default());
         assert_eq!(Shifts::default().of(0), 0);

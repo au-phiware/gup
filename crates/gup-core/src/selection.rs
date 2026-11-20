@@ -176,15 +176,17 @@ impl Retain {
 /// whatever the setting.
 ///
 /// A layer drawn largest first (a size channel read from a column,
-/// GUP-721) draws every row under `Auto`: opt in with
-/// [`AutoSized`](Lod::AutoSized), where a cell's representative is its
-/// largest mark (in buckets of 12.5% of size, then the lowest row) and a
-/// tier draws each of its blocks of representatives largest first, so large
-/// marks lie beneath small ones as in the full draw. Where every cell holds
-/// marks of many sizes (sizes drawn at random for each row of a dense
-/// layer) the full draw shows the smallest marks on top and the thinned one
-/// only its largest, so the picture differs (about 23% of a 400 x 300 plot
-/// rect for 300,000 such rows; 1% to 2.5% when sizes follow the data).
+/// GUP-721, GUP-749) keeps representatives for each size (in buckets of
+/// 12.5%), as the full draw shows at each pixel the smallest mark within
+/// its own radius: marks of 2 px radius and more on cells twice as wide.
+/// Each chunk draws its representatives largest first, so small marks lie
+/// on top as in the full draw. 300,000 rows with a size drawn at random
+/// for each row differ from the full draw in about 0.3% of a 400 x 300
+/// plot rect (pixels over ΔE00 10), drawing 64,000 marks; sizes that follow
+/// the data (clumps of one size) 2.6%, drawing 5,700. Denser layers differ
+/// more at the outlines of large marks (about 6% for 3,000,000 such rows).
+/// A change of the size scale that moves a bucket's radius across 2 px
+/// rebuilds the layer's tiers.
 ///
 /// A layer that grows by appends (GUP-719): its full chunks keep their
 /// tiers whatever the new rows' extent. Its newest chunk draws every row
@@ -227,18 +229,6 @@ pub enum Lod {
     /// Draw representatives above [`Lod::AUTO_MIN_ROWS`] visible rows.
     #[default]
     Auto,
-    /// As [`Auto`](Lod::Auto), and also for a layer drawn largest first (a
-    /// size channel read from a column, GUP-721): a cell's representative is
-    /// its largest mark and each tier draws its largest marks first. Opt-in,
-    /// because one mark per cell cannot show a cell of many sizes as the full
-    /// draw does (it shows the smallest marks on top, the thinned draw its
-    /// largest): 300,000 rows with a size drawn at random for each row differ
-    /// from the full draw in about 23% of a 400 x 300 plot rect (pixels over
-    /// ΔE00 10), against 1% to 2.5% when sizes follow the data (nearby rows
-    /// share a size, as in a bubble chart of regions). Until GUP-742 keeps a
-    /// second representative for mixed cells, `Auto` draws every row of such
-    /// a layer.
-    AutoSized,
     /// Draw every row (the exact output).
     Off,
 }
@@ -1133,9 +1123,7 @@ impl<T: Send + Sync + 'static, M: Mark> Selection<T, M> {
         self.lod_pending = false;
         self.lod_drawn.clear();
         self.lod_items = 0;
-        let auto = (self.lod == Lod::AutoSized || (self.lod == Lod::Auto && self.order.is_none()))
-            && self.lod_mark()
-            && rows > Lod::AUTO_MIN_ROWS;
+        let auto = self.lod == Lod::Auto && self.lod_mark() && rows > Lod::AUTO_MIN_ROWS;
         if self.forced_tier.is_none() && !auto {
             return Ok(entries);
         }

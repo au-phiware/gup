@@ -194,9 +194,11 @@ what each release contains and what its version number promises.
   `RowWindow::LastRows` keeps it: full chunks keep their tiers, the newest chunk
   builds them from 65,536 rows and again each time its rows double (the rows
   past them draw in full), and an evicted chunk takes its tiers with it. A layer
-  drawn largest first (a size channel read from a column) takes it too: a cell's
-  representative is its largest mark (in buckets of 12.5%), and each tier block
-  draws its largest marks first.
+  drawn largest first (a size channel read from a column) takes it too: each
+  size (in buckets of 12.5%) keeps its own representatives, marks of 2 px radius
+  and more on cells twice as wide, and each chunk draws them largest first, so
+  random sizes per row differ from the full draw in about 0.3% of the plot rect
+  (300,000 rows) and sizes that follow the data in 2.6%.
 
 ### Changed
 
@@ -246,10 +248,10 @@ what each release contains and what its version number promises.
 - Nothing above 30M rows is measured. The level of detail covers circles and
   constant-size rects (not lines, areas or rects with per-row extents; the
   newest chunk of a layer that is appended to draws in full under 65,536 rows).
-  Where every cell holds marks of many sizes, a layer drawn largest first shows
-  its smallest marks on top in the full draw and only its largest in the thinned
-  one: use `Lod::Off` there. Lines and areas, and, under `Lod::Off`, SVG output
-  and CPU picks, still read every row.
+  A dense layer drawn largest first differs more at the outlines of its large
+  marks (about 6% of the plot rect for 3,000,000 bubbles): use `Lod::Off` for
+  the exact picture. Lines and areas, and, under `Lod::Off`, SVG output and CPU
+  picks, still read every row.
 - No PDF export.
 - Accessibility: no screen reader has been tested by hand, nothing outside the
   browser speaks `focus_text`, and keyboard focus skips a layer that dropped its
